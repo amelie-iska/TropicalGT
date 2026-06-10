@@ -14,7 +14,7 @@ from tqdm.auto import tqdm
 from .data import encode_bytes, make_dataset
 from .model import TropicalGTConfig, TropicalGTModel
 from .tokenizer import TokenGTTokenizer
-from .visualization import write_reasoning_visualizations
+from .visualization import write_metric_visualizations, write_reasoning_visualizations
 
 
 def load_config(path: str | Path) -> dict[str, Any]:
@@ -74,6 +74,7 @@ def train(config_path: str | Path) -> dict[str, Any]:
     loader = DataLoader(train_ds, batch_size=batch_size, shuffle=True, collate_fn=lambda r: collate_records(r, seq_len, tokenizer))
     max_steps = int(cfg.get("max_steps", 5))
     metrics_last: dict[str, float] = {}
+    history: list[dict[str, float]] = []
     model.train(); step = 0
     pbar = tqdm(total=max_steps, desc="TropicalGT-I train", dynamic_ncols=True)
     while step < max_steps:
@@ -91,6 +92,7 @@ def train(config_path: str | Path) -> dict[str, Any]:
             metrics_last["step"] = step
             if torch.cuda.is_available():
                 metrics_last["gpu_mem_mb"] = torch.cuda.max_memory_allocated() / 1e6
+            history.append(dict(metrics_last))
             if wb:
                 wb.log(metrics_last, step=step)
             pbar.set_postfix({"loss": f"{metrics_last['loss']:.3f}", "nll": f"{metrics_last.get('nll', 0):.3f}"})
@@ -103,7 +105,8 @@ def train(config_path: str | Path) -> dict[str, Any]:
     eval_report = evaluate_model(model, val_ds, tokenizer, seq_len, batch_size, device)
     metrics_last.update({f"eval_{k}": v for k, v in eval_report.items() if isinstance(v, (int, float))})
     vis_paths = write_reasoning_visualizations(model, val_ds, tokenizer, seq_len, device, out_dir, limit=int(cfg.get("viz_limit", 8)))
-    report = {"checkpoint": str(ckpt_path), "metrics": metrics_last, "eval": eval_report, "visualizations": vis_paths, "device": str(device)}
+    vis_paths.update(write_metric_visualizations(history, out_dir))
+    report = {"checkpoint": str(ckpt_path), "metrics": metrics_last, "history": history, "eval": eval_report, "visualizations": vis_paths, "device": str(device)}
     (out_dir / "train_report.json").write_text(json.dumps(report, indent=2), encoding="utf-8")
     if wb:
         for key, path in vis_paths.items():

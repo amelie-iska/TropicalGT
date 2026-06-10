@@ -8,6 +8,7 @@
 - Moved `/home/iska/Documents/amelie/bio/ToricGT/data` to `TropicalGT-I/data/toricgt`.
 - Added the TropicalGT-I package, configs, scripts, tests, README updates, paper implementation addendum, and reference synthesis.
 - Added a minimal Parameter-Golf TokenGT adapter in the external fork.
+- Iteration 2 adds explicit filtered simplicial objects to reasoning visualization payloads, per-step Plotly metric dashboards, and an opt-in Parameter-Golf graph adapter path controlled by `TROPICALGT_GRAPH_ADAPTER`.
 
 ## Verification evidence
 - Unit tests: `/home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests -q` -> `6 passed`.
@@ -17,6 +18,12 @@
 - W&B run: https://wandb.ai/amelie-iska-math/TropicalGT-I/runs/52scyeiw
 - GPU eval: checkpoint `TropicalGT-I/checkpoints/tropicalgt_i_gpu_smoke.pt` evaluated with validation NLL `5.374286810557048` and BPB proxy `7.753456929905617`.
 - Paper: compiled locally from the remote TeX source to 45 pages and copied back to `TropicalGT-I/assets/tropicalgt_neurips_research_paper.pdf`.
+- Iteration 2 unit tests: `/home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests -q` -> `8 passed`.
+- Parameter-Golf adapter check: `py_compile train_gpt.py tropicalgt_tokengt_adapter.py` succeeded; tiny `GPT(..., use_graph_adapter=True)` forward/backward returned finite loss `3.4679651260375977` with `880` adapter parameters.
+- CPU smoke after iteration 2 wrote `history`, `reasoning_trajectory_payloads.json`, and `training_metrics.html`; payload keys were `filtered_simplicial_objects`, `hover`, and `points`.
+- GPU smoke after iteration 2 completed on CUDA with W&B run https://wandb.ai/amelie-iska-math/TropicalGT-I/runs/p762tx2d, validation NLL `5.408573945363362`, BPB proxy `7.8029228092569785`, and checkpoint `TropicalGT-I/checkpoints/tropicalgt_i_gpu_smoke.pt`.
+- Separate GPU validation/eval/infer/render commands completed. The final GPU payload contained `6` filtered simplicial objects; the first summary was `15` vertices, `14` edges, `13` directed path \(2\)-simplices, and `28` thresholds.
+- Process/GPU cleanup check after the smoke run found no lingering training or GPU compute process.
 
 ## Remaining research risks
 - The model is a first functional iteration, not a competitive Parameter-Golf artifact.

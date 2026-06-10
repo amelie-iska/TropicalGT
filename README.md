@@ -70,6 +70,8 @@ This writes:
 - `TropicalGT-I/outputs/smoke/train_report.json`
 - `TropicalGT-I/outputs/smoke/reasoning_trajectory_3d.html`
 - `TropicalGT-I/outputs/smoke/reasoning_trajectory_pca_nll.html`
+- `TropicalGT-I/outputs/smoke/reasoning_trajectory_payloads.json`
+- `TropicalGT-I/outputs/smoke/training_metrics.html`
 
 ## GPU smoke with W&B
 
@@ -81,6 +83,8 @@ TropicalGT-I/scripts/train_tropicalgt_i.py \
 ```
 
 The script reads the W&B API key from `keys.txt` when W&B is enabled. It logs NLL, BPB proxy, GFlowNet trajectory-balance loss, GraphCG losses, tropical support entropy, tropical margins, graph token counts, GPU memory, and generated HTML artifacts.
+
+The reasoning payload JSON stores the hover text, PCA/NLL point coordinates, and the full finite filtered simplicial object for each visualized record. In v1 these objects include 0-simplices for graph vertices, 1-simplices for graph edges, directed length-2 path 2-simplices, filtration thresholds, and per-record summaries.
 
 ## Eval, inference, validation, visualization
 
@@ -99,3 +103,14 @@ PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python Tropic
 - `external/Tropical-Attention`: Tropical Attention fork used for kernel/reference comparison.
 
 These are separate git repositories and should be pushed separately from TropicalGT.
+
+### Parameter-Golf TokenGT adapter
+
+The Parameter-Golf baseline keeps its default language-model path unchanged. To enable graph conditioning in experiments that pass TokenGT-style graph tensors into `GPT.forward`, set:
+
+```bash
+TROPICALGT_GRAPH_ADAPTER=1
+TROPICALGT_GRAPH_FEATURE_DIM=48
+```
+
+The optional `graph_tokens` argument is a tuple `(token_features, token_type_ids, graph_mask)`. The adapter pools graph node/edge tokens into a model-width context vector and adds it to each text-token embedding before the baseline transformer stack.

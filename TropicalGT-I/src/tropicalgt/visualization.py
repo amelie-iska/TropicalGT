@@ -9,6 +9,7 @@ from sklearn.decomposition import PCA
 import plotly.graph_objects as go
 
 from .data import encode_bytes
+from .simplicial import build_filtered_simplicial_object
 
 
 def collect_states(model, dataset, tokenizer, seq_len: int, device: torch.device, limit: int = 8):
@@ -20,17 +21,30 @@ def collect_states(model, dataset, tokenizer, seq_len: int, device: torch.device
     states = out["graph_state"].detach().cpu().numpy()
     nll_value = float(out.get("nll", torch.tensor(0.0)).detach().cpu())
     nll = np.full((len(records),), nll_value)
-    hover = graph_batch.hover_payloads or [r.to_hover_html() for r in records]
-    return states, nll, hover
+    filtered_objects = [build_filtered_simplicial_object(r) for r in records]
+    hover = []
+    base_hover = graph_batch.hover_payloads or [r.to_hover_html() for r in records]
+    for html, obj in zip(base_hover, filtered_objects):
+        summary = obj["summary"]
+        hover.append(
+            html
+            + "<br><b>Filtered simplicial object</b>"
+            + f"<br>0-simplices: {summary['num_vertices']}"
+            + f"<br>1-simplices: {summary['num_edges']}"
+            + f"<br>2-simplices: {summary['num_two_simplices']}"
+            + f"<br>filtration thresholds: {summary['num_thresholds']}"
+        )
+    return states, nll, hover, filtered_objects
 
 
 def write_reasoning_visualizations(model, dataset, tokenizer, seq_len: int, device: torch.device, output_dir: str | Path, limit: int = 8) -> dict[str, str]:
     output_dir = Path(output_dir); output_dir.mkdir(parents=True, exist_ok=True)
-    states, nll, hover = collect_states(model, dataset, tokenizer, seq_len, device, limit)
+    states, nll, hover, filtered_objects = collect_states(model, dataset, tokenizer, seq_len, device, limit)
     if states.shape[0] < 2:
         states = np.concatenate([states, states], axis=0)
         nll = np.concatenate([nll, nll])
         hover = hover + hover
+        filtered_objects = filtered_objects + filtered_objects
     n_components = min(3, states.shape[0], states.shape[1])
     pca = PCA(n_components=n_components).fit_transform(states)
     if pca.shape[1] < 3:
@@ -42,5 +56,68 @@ def write_reasoning_visualizations(model, dataset, tokenizer, seq_len: int, devi
     fig2.update_layout(title="TropicalGT-I PCA with NLL height", scene=dict(xaxis_title="PC1", yaxis_title="PC2", zaxis_title="NLL"))
     p2 = output_dir / "reasoning_trajectory_pca_nll.html"; fig2.write_html(p2)
     payload = output_dir / "reasoning_trajectory_payloads.json"
-    payload.write_text(json.dumps({"hover": hover}, indent=2), encoding="utf-8")
+    points = []
+    for idx, obj in enumerate(filtered_objects):
+        points.append(
+            {
+                "index": idx,
+                "record_id": obj.get("record_id"),
+                "pca": {"pc1": float(pca[idx, 0]), "pc2": float(pca[idx, 1]), "pc3": float(pca[idx, 2])},
+                "nll": float(nll[idx]),
+                "filtered_summary": obj["summary"],
+            }
+        )
+    payload.write_text(
+        json.dumps(
+            {
+                "hover": hover,
+                "points": points,
+                "filtered_simplicial_objects": filtered_objects,
+            },
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
     return {"pca_3d": str(p3), "pca_nll": str(p2), "payloads": str(payload)}
+
+
+def write_metric_visualizations(history: list[dict[str, float]], output_dir: str | Path) -> dict[str, str]:
+    output_dir = Path(output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    metric_path = output_dir / "training_metrics.html"
+    if not history:
+        metric_path.write_text("<html><body><p>No training metrics recorded.</p></body></html>", encoding="utf-8")
+        return {"metrics": str(metric_path)}
+
+    steps = [int(row.get("step", idx + 1)) for idx, row in enumerate(history)]
+    metrics = [
+        "loss",
+        "nll",
+        "ppl",
+        "gflownet_tb",
+        "graphcg_loss",
+        "margin_mean",
+        "support_entropy",
+        "gpu_mem_mb",
+    ]
+    fig = go.Figure()
+    for name in metrics:
+        values = [row.get(name) for row in history]
+        if any(v is not None for v in values):
+            fig.add_trace(
+                go.Scatter(
+                    x=steps,
+                    y=[float(v) if v is not None else None for v in values],
+                    mode="lines+markers",
+                    name=name,
+                )
+            )
+    fig.update_layout(
+        title="TropicalGT-I smoke training metrics",
+        xaxis_title="step",
+        yaxis_title="value",
+        legend_title="metric",
+        hovermode="x unified",
+    )
+    fig.write_html(metric_path)
+    return {"metrics": str(metric_path)}

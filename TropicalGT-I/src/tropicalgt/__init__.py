@@ -4,6 +4,7 @@ from .tokenizer import TokenGTTokenizer
 from .attention import TropicalRingAttention, tropical_support_entropy
 from .losses import GFlowNetPolicy, GraphCGLoss
 from .model import TropicalGTConfig, TropicalGTModel
+from .simplicial import build_filtered_simplicial_object
 
 __all__ = [
     "GraphRecord",
@@ -15,4 +16,5 @@ __all__ = [
     "GraphCGLoss",
     "TropicalGTConfig",
     "TropicalGTModel",
+    "build_filtered_simplicial_object",
 ]
