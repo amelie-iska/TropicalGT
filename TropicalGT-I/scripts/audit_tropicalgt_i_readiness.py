@@ -20,7 +20,7 @@ from tropicalgt.data import make_dataset, parquet_manifest
 from tropicalgt.diagnostics import gflownet_diagnostics, graphcg_diagnostics, record_diagnostics
 from tropicalgt.metrics import batch_bpb_metrics
 from tropicalgt.records import GraphRecord
-from tropicalgt.run import collate_records, evaluate_model, load_checkpoint, load_config
+from tropicalgt.run import build_model, collate_records, evaluate_model, load_checkpoint, load_config, load_keys
 from tropicalgt.scaling import run_inference_scaling
 from tropicalgt.tokenizer import TokenGTTokenizer
 from tropicalgt.visualization import write_inference_audit_artifacts, write_reasoning_visualizations
@@ -41,6 +41,8 @@ def main() -> None:
     parser.add_argument("--audit-ph-backend", choices=["auto", "gudhi", "ripser", "none"], default="")
     parser.add_argument("--audit-max-simplices", type=int, default=0)
     parser.add_argument("--check-ablation-tools", action="store_true")
+    parser.add_argument("--check-wandb-key", action="store_true")
+    parser.add_argument("--train-dry-run", action="store_true", help="Build the configured model and run one optimizer step on sampled records")
     parser.add_argument("--require-cuda", action="store_true")
     parser.add_argument("--require-checkpoint", action="store_true")
     parser.add_argument("--render-visualizations", action="store_true")
@@ -61,6 +63,8 @@ def main() -> None:
         audit_ph_backend=args.audit_ph_backend,
         audit_max_simplices=args.audit_max_simplices,
         check_ablation_tools=args.check_ablation_tools,
+        check_wandb_key=args.check_wandb_key,
+        train_dry_run=args.train_dry_run,
         require_cuda=args.require_cuda,
         require_checkpoint=args.require_checkpoint,
         render_visualizations=args.render_visualizations,
@@ -91,6 +95,8 @@ def build_readiness_report(
     audit_ph_backend: str = "",
     audit_max_simplices: int = 0,
     check_ablation_tools: bool = False,
+    check_wandb_key: bool = False,
+    train_dry_run: bool = False,
     require_cuda: bool,
     require_checkpoint: bool,
     render_visualizations: bool,
@@ -121,6 +127,15 @@ def build_readiness_report(
     add_gate(gates, "core_scripts_present", all(item["exists"] for item in report["tooling"]["core_scripts"].values()), "train/eval/infer/validate/render/analyze/grid")
     if check_ablation_tools:
         add_gate(gates, "ablation_tools_present", all(item["exists"] for item in report["tooling"]["ablation_scripts"].values()), "BPB analyzer and grid runner")
+    if check_wandb_key:
+        wandb_enabled = bool(cfg.get("wandb", {}).get("enabled", False))
+        keys = load_keys(cfg.get("keys_path", "keys.txt"))
+        add_gate(
+            gates,
+            "wandb_key_available",
+            (not wandb_enabled) or bool(keys.get("wandb")),
+            "enabled" if wandb_enabled else "wandb disabled",
+        )
 
     root = cfg.get("data_root")
     require_data = bool(cfg.get("require_data", bool(root)))
@@ -182,6 +197,9 @@ def build_readiness_report(
     }
     add_gate(gates, "paper_sources_present", paper_tex.exists() and paper_pdf.exists(), "TeX and PDF assets")
 
+    if train_dry_run:
+        add_train_dry_run_section(report, gates, cfg, records, tokenizer, require_cuda=require_cuda)
+
     if checkpoint_path is None:
         add_gate(gates, "checkpoint_reload", not require_checkpoint, "skipped: no checkpoint provided")
     else:
@@ -209,6 +227,64 @@ def build_readiness_report(
     report["failed_gates"] = failed
     report["status"] = "ready" if not failed else "blocked"
     return report
+
+
+def add_train_dry_run_section(
+    report: dict[str, Any],
+    gates: list[dict[str, Any]],
+    cfg: dict[str, Any],
+    records: list[GraphRecord],
+    tokenizer: TokenGTTokenizer,
+    *,
+    require_cuda: bool,
+) -> None:
+    if not records:
+        add_gate(gates, "train_dry_run_records", False, "no sampled records")
+        return
+    device = torch.device("cuda" if torch.cuda.is_available() and cfg.get("device", "auto") != "cpu" else "cpu")
+    add_gate(gates, "train_dry_run_device", (device.type == "cuda") or not require_cuda, str(device))
+    try:
+        model = build_model(cfg).to(device)
+        model.train()
+        opt = torch.optim.AdamW(
+            model.parameters(),
+            lr=float(cfg.get("lr", 3e-4)),
+            weight_decay=float(cfg.get("weight_decay", 0.01)),
+        )
+        batch_size = max(1, min(int(cfg.get("batch_size", 2)), len(records)))
+        x, y, graph_batch, batch_records = collate_records(records[:batch_size], int(cfg.get("seq_len", 128)), tokenizer)
+        x = x.to(device)
+        y = y.to(device)
+        opt.zero_grad(set_to_none=True)
+        out = model(x, graph_batch, y)
+        loss = out["loss"]
+        loss.backward()
+        grad_norm = torch.nn.utils.clip_grad_norm_(model.parameters(), float(cfg.get("grad_clip", 1.0)))
+        opt.step()
+        compression = batch_bpb_metrics(out["nll"].detach().cpu(), y.detach().cpu(), graph_batch, batch_records, float(cfg.get("graph_bpb_side_weight", 1.0)))
+        dry = {
+            "device": str(device),
+            "batch_size": batch_size,
+            "seq_len": int(cfg.get("seq_len", 128)),
+            "loss": float(loss.detach().cpu()),
+            "nll": float(out["nll"].detach().cpu()),
+            "grad_norm": float(grad_norm.detach().cpu()) if torch.is_tensor(grad_norm) else float(grad_norm),
+            "graph_tokens": int(graph_batch.graph_token_counts.sum().item()),
+            "node_tokens": int(graph_batch.node_counts.sum().item()),
+            "edge_tokens": int(graph_batch.edge_counts.sum().item()),
+            "compression": compression,
+        }
+        if torch.cuda.is_available():
+            dry["gpu_mem_mb"] = float(torch.cuda.max_memory_allocated() / 1e6)
+        report["train_dry_run"] = dry
+        add_gate(gates, "train_dry_run_forward_backward", True, f"loss {dry['loss']:.4f}")
+        add_gate(gates, "train_dry_run_finite_loss", _finite_number(dry["loss"]) and _finite_number(dry["nll"]), f"nll {dry['nll']:.4f}")
+        add_gate(gates, "train_dry_run_finite_grad", _finite_number(dry["grad_norm"]), f"grad {dry['grad_norm']:.4f}")
+        add_gate(gates, "train_dry_run_reports_bpb", _finite_number(compression.get("bpb")), f"BPB {compression.get('bpb')}")
+        add_gate(gates, "train_dry_run_reports_graph_bpb", _finite_number(compression.get("graph_bpb")), f"graph BPB {compression.get('graph_bpb')}")
+    except Exception as exc:
+        report["train_dry_run"] = {"error": f"{type(exc).__name__}: {exc}"}
+        add_gate(gates, "train_dry_run_forward_backward", False, report["train_dry_run"]["error"])
 
 
 def add_checkpoint_sections(
@@ -429,6 +505,8 @@ def render_markdown(report: dict[str, Any]) -> str:
             f"- Eval NLL: `{report.get('eval', {}).get('nll', 'n/a')}`",
             f"- Eval BPB: `{report.get('eval', {}).get('bpb', 'n/a')}`",
             f"- Eval graph-BPB: `{report.get('eval', {}).get('graph_bpb', 'n/a')}`",
+            f"- Train dry-run BPB: `{report.get('train_dry_run', {}).get('compression', {}).get('bpb', 'n/a')}`",
+            f"- Train dry-run graph-BPB: `{report.get('train_dry_run', {}).get('compression', {}).get('graph_bpb', 'n/a')}`",
             f"- Inference scaling candidates: `{report.get('inference', {}).get('scaling', {}).get('evaluated_candidates', 'n/a')}`",
             f"- Failed gates: `{', '.join(report.get('failed_gates', [])) or 'none'}`",
             "",

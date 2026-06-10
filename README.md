@@ -140,7 +140,29 @@ PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python Tropic
 
 ## Data-backed training launch
 
-After the preflight report is clean, launch the first full TropicalGT-I run with:
+Before launching the first full run, execute a CUDA dry-run readiness audit against `train.json`. This does not write a training checkpoint; it samples moved parquet data, builds the configured model, runs one optimizer step, checks the W&B key can be found, and gates finite train loss/BPB/graph-BPB:
+
+```bash
+PYTHONPATH=TropicalGT-I/src \
+/home/iska/miniconda3/envs/tokengt/bin/python \
+TropicalGT-I/scripts/audit_tropicalgt_i_readiness.py \
+--config TropicalGT-I/configs/train.json \
+--split train \
+--sample-limit 8 \
+--details-limit 0 \
+--trace-limit 8 \
+--scale-depth 0 \
+--audit-level topology \
+--audit-ph-backend gudhi \
+--audit-max-simplices 128 \
+--check-ablation-tools \
+--check-wandb-key \
+--train-dry-run \
+--require-cuda \
+--output TropicalGT-I/outputs/train/readiness_train_dry_run.json
+```
+
+After the dry-run preflight report is clean, launch the first full TropicalGT-I run with:
 
 ```bash
 PYTHONPATH=TropicalGT-I/src \
@@ -227,7 +249,7 @@ TropicalGT-I/scripts/run_bpb_ablation_grid.py \
 
 By default the grid runner disables W&B media/network logging for the variants and keeps a shared seed across all runs. Add `--wandb` only when online logging for every ablation variant is desired. Add `--fixture --device cpu` for a quick local sanity check that writes configs and reports without touching the moved parquet dataset.
 
-Before a long run, write a single readiness proof bundle that checks the environment, packages, data manifest, sample TokenGT conversion, sequential text graphification, paper artifacts, checkpoint reload, finite eval, BPB/graph-BPB accounting, bounded inference scaling, optional topological audits, ablation-tool availability, and visualization generation:
+For a checkpoint-backed smoke proof bundle, write a readiness report that checks the environment, packages, data manifest, sample TokenGT conversion, sequential text graphification, paper artifacts, checkpoint reload, finite eval, BPB/graph-BPB accounting, bounded inference scaling, optional topological audits, ablation-tool availability, and visualization generation:
 
 ```bash
 PYTHONPATH=TropicalGT-I/src \
@@ -249,7 +271,7 @@ TropicalGT-I/scripts/audit_tropicalgt_i_readiness.py \
 --output TropicalGT-I/outputs/gpu_smoke/readiness_audit.json
 ```
 
-The command also writes `readiness_audit.md` next to the JSON report and exits nonzero if any required gate fails. In the latest GPU-smoke readiness bundle, both `eval_reports_bpb` and `eval_reports_graph_bpb` are hard gates; auxiliary tropical, topological, GraphCG, GFlowNet, and memory metrics remain candidates to ablate against those compression targets.
+The command also writes `readiness_audit.md` next to the JSON report and exits nonzero if any required gate fails. In the latest GPU-smoke readiness bundle, both `eval_reports_bpb` and `eval_reports_graph_bpb` are hard gates; in the train-config dry-run bundle, `train_dry_run_reports_bpb` and `train_dry_run_reports_graph_bpb` are hard gates. Auxiliary tropical, topological, GraphCG, GFlowNet, and memory metrics remain candidates to ablate against those compression targets.
 
 ## External forks
 

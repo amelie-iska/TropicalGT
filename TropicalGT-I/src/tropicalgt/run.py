@@ -36,9 +36,26 @@ def load_keys(path: str | Path = "keys.txt") -> dict[str, str]:
     if not p.exists():
         return out
     for line in p.read_text().splitlines():
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
         if "=" in line:
             k, v = line.split("=", 1)
-            out[k.strip()] = v.strip()
+        elif ":" in line:
+            k, v = line.split(":", 1)
+        else:
+            continue
+        key = k.strip()
+        value = v.strip()
+        out[key] = value
+        lowered = key.lower()
+        out[lowered] = value
+        if lowered in {"wandb_api_key", "wandb-key"}:
+            out["wandb"] = value
+        elif lowered in {"gh", "github", "github_token"}:
+            out["github"] = value
+        elif lowered in {"hf", "huggingface", "huggingface_token", "hf_token"}:
+            out["huggingface"] = value
     return out
 
 
