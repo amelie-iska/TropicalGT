@@ -51,4 +51,6 @@ def test_bpb_ablation_artifacts_write_json_markdown_and_html(tmp_path: Path):
     paths = write_bpb_ablation_artifacts([report_path], tmp_path / "ablation", render_html=True)
     assert Path(paths["json"]).exists()
     assert Path(paths["markdown"]).read_text(encoding="utf-8").startswith("# TropicalGT-I BPB")
-    assert Path(paths["html"]).exists()
+    html = Path(paths["html"]).read_text(encoding="utf-8")
+    assert "color-scheme: dark" in html
+    assert "BPB/graph-BPB metric correlation screen" in html

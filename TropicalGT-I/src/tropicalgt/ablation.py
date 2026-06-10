@@ -328,11 +328,11 @@ def _write_correlation_html(report: dict[str, Any], path: Path) -> None:
     try:
         import plotly.graph_objects as go
     except Exception:
-        path.write_text("<html><body><p>Plotly unavailable.</p></body></html>", encoding="utf-8")
+        _write_dark_html(path, "<p>Plotly unavailable.</p>")
         return
     rows = report.get("aggregate_metric_rankings", [])
     if not rows:
-        path.write_text("<html><body><p>No correlations available.</p></body></html>", encoding="utf-8")
+        _write_dark_html(path, "<p>No correlations available.</p>")
         return
     labels = [f"{row['target']}::{row['metric']}" for row in rows]
     values = [float(row.get("mean_spearman", 0.0)) for row in rows]
@@ -348,12 +348,60 @@ def _write_correlation_html(report: dict[str, Any], path: Path) -> None:
     )
     fig.update_layout(
         template="plotly_dark",
+        paper_bgcolor="#090b12",
+        plot_bgcolor="#090b12",
+        font=dict(color="#e8eef8"),
         title="BPB/graph-BPB metric correlation screen",
         xaxis_title="mean Spearman correlation with target",
         yaxis_title="target::metric",
         height=max(420, 22 * len(rows)),
     )
-    fig.write_html(path)
+    _write_dark_html(
+        path,
+        "<h1>BPB/graph-BPB metric correlation screen</h1>"
+        + fig.to_html(full_html=False, include_plotlyjs=True, config={"responsive": True}),
+    )
+
+
+def _write_dark_html(path: Path, body: str) -> None:
+    path.write_text(
+        f"""<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    :root {{
+      color-scheme: dark;
+      background: #090b12;
+      color: #e8eef8;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }}
+    body {{
+      margin: 0;
+      min-height: 100vh;
+      background: #090b12;
+      color: #e8eef8;
+    }}
+    p {{
+      margin: 24px;
+      color: #cbd5e1;
+    }}
+    h1 {{
+      margin: 24px 24px 0;
+      font-size: 24px;
+      letter-spacing: 0;
+      color: #e8eef8;
+    }}
+  </style>
+</head>
+<body>
+{body}
+</body>
+</html>
+""",
+        encoding="utf-8",
+    )
 
 
 def _fmt(value: Any) -> str:

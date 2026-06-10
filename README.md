@@ -35,6 +35,7 @@ Use the `tokengt` environment directly in noninteractive shells:
 - `TropicalGT-I/scripts/` contains training, eval, inference, validation, visualization, and readiness-audit CLIs.
 - `TropicalGT-I/configs/smoke.json` is a CPU fixture smoke config.
 - `TropicalGT-I/configs/gpu_smoke.json` is the RTX 4090 data-backed smoke config.
+- `TropicalGT-I/configs/gpu_ablation.json` is a bounded data-backed RTX 4090 config for matched BPB/graph-BPB ablation grids.
 - `TropicalGT-I/configs/train.json` is the first full data-backed training config.
 - `TropicalGT-I/assets/tropicalgt_neurips_research_paper.tex` is the paper source.
 - `planning/` contains reference synthesis and implementation notes.
@@ -242,14 +243,15 @@ To generate a matched ablation grid and optionally train the variants in sequenc
 PYTHONPATH=TropicalGT-I/src \
 /home/iska/miniconda3/envs/tokengt/bin/python \
 TropicalGT-I/scripts/run_bpb_ablation_grid.py \
---config TropicalGT-I/configs/gpu_smoke.json \
---output-dir TropicalGT-I/outputs/gpu_smoke/bpb_ablation_grid \
---variants baseline,no_graphcg,no_gflownet,no_certificate,no_tropical_regularizers,no_auxiliary \
---max-steps 4 \
+--config TropicalGT-I/configs/gpu_ablation.json \
+--output-dir TropicalGT-I/outputs/gpu_ablation/grid_iter19 \
+--variants baseline,no_graphcg,no_gflownet,no_tropical_regularizers,no_auxiliary \
+--max-steps 8 \
+--seed 1729 \
 --run
 ```
 
-By default the grid runner disables W&B media/network logging for the variants and keeps a shared seed across all runs. Add `--wandb` only when online logging for every ablation variant is desired. Add `--fixture --device cpu` for a quick local sanity check that writes configs and reports without touching the moved parquet dataset.
+By default the grid runner disables W&B media/network logging for the variants and keeps a shared seed across all runs. Add `--wandb` only when online logging for every ablation variant is desired. Add `--fixture --device cpu` for a quick local sanity check that writes configs and reports without touching the moved parquet dataset. The `gpu_ablation.json` config is intentionally bounded (`train_limit`, `val_limit`, and `max_steps`) so it can test whether an auxiliary is directionally helpful before a longer `train.json` run; it should not be treated as final leaderboard evidence.
 
 For a checkpoint-backed smoke proof bundle, write a readiness report that checks the environment, packages, data manifest, sample TokenGT conversion, sequential text graphification, paper artifacts, checkpoint reload, finite eval, BPB/graph-BPB accounting, bounded inference scaling, optional topological audits, ablation-tool availability, and visualization generation:
 
