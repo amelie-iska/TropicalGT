@@ -117,19 +117,47 @@ def train(config_path: str | Path, resume_from: str | Path | None = None, max_st
     pbar = tqdm(total=max_steps, initial=min(step, max_steps), desc="TropicalGT-I train", dynamic_ncols=True)
     checkpoint_every = int(cfg.get("checkpoint_every", 0))
     latest_ckpt_path = ckpt_dir / f"{run_name}.latest.pt"
+    examples_seen = int(sum(int(row.get("batch_size", 0)) for row in history))
+    tokens_seen_total = int(sum(int(row.get("tokens_seen", 0)) for row in history))
+    graph_tokens_seen_total = int(sum(int(row.get("graph_tokens_seen", 0)) for row in history))
     while step < max_steps:
         for x, y, graph_batch, _records in loader:
+            step_started = time.perf_counter()
             step += 1
             x = x.to(device); y = y.to(device)
             opt.zero_grad(set_to_none=True)
             out = model(x, graph_batch, y)
             out["loss"].backward()
-            torch.nn.utils.clip_grad_norm_(model.parameters(), float(cfg.get("grad_clip", 1.0)))
+            grad_norm = torch.nn.utils.clip_grad_norm_(model.parameters(), float(cfg.get("grad_clip", 1.0)))
             opt.step()
             metrics_last = {k: float(v.detach().cpu()) for k, v in out.items() if torch.is_tensor(v) and v.ndim == 0}
             metrics_last["loss"] = float(out["loss"].detach().cpu())
             metrics_last["ppl"] = float(math.exp(min(metrics_last.get("nll", metrics_last["loss"]), 20)))
             metrics_last["step"] = step
+            elapsed = max(time.perf_counter() - step_started, 1e-9)
+            token_count = int((y != 0).sum().item())
+            example_count = len(_records)
+            graph_token_count = int(graph_batch.graph_token_counts.sum().item())
+            fallback_count = sum(1 for record in _records if (record.metadata or {}).get("graph_json_fallback", False))
+            examples_seen += example_count
+            tokens_seen_total += token_count
+            graph_tokens_seen_total += graph_token_count
+            metrics_last["step_time_s"] = elapsed
+            metrics_last["examples_per_sec"] = example_count / elapsed
+            metrics_last["tokens_per_sec"] = token_count / elapsed
+            metrics_last["graph_tokens_per_sec"] = graph_token_count / elapsed
+            metrics_last["tokens_seen"] = token_count
+            metrics_last["tokens_seen_total"] = tokens_seen_total
+            metrics_last["graph_tokens_seen"] = graph_token_count
+            metrics_last["graph_tokens_seen_total"] = graph_tokens_seen_total
+            metrics_last["examples_seen"] = examples_seen
+            metrics_last["batch_size"] = example_count
+            metrics_last["optimizer_lr"] = float(opt.param_groups[0].get("lr", 0.0))
+            metrics_last["grad_norm"] = float(grad_norm.detach().cpu()) if torch.is_tensor(grad_norm) else float(grad_norm)
+            metrics_last["graph_json_fallback_rate"] = fallback_count / max(example_count, 1)
+            metrics_last["graph_token_node_edge_ratio"] = (
+                float(graph_batch.node_counts.float().sum() / graph_batch.edge_counts.float().sum().clamp_min(1.0))
+            )
             if torch.cuda.is_available():
                 metrics_last["gpu_mem_mb"] = torch.cuda.max_memory_allocated() / 1e6
             history.append(dict(metrics_last))

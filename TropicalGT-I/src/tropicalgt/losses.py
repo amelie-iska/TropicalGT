@@ -15,11 +15,30 @@ class GFlowNetPolicy(nn.Module):
     def forward(self, state: Tensor) -> Tensor:
         return self.policy(state)
 
-    def trajectory_balance_loss(self, states: Tensor, actions: Tensor, rewards: Tensor) -> Tensor:
+    def trajectory_balance_loss(self, states: Tensor, actions: Tensor, rewards: Tensor, return_metrics: bool = False):
         logits = self(states)
-        logp = F.log_softmax(logits, dim=-1).gather(-1, actions[..., None]).squeeze(-1).sum(dim=-1)
+        log_probs = F.log_softmax(logits, dim=-1)
+        logp = log_probs.gather(-1, actions[..., None]).squeeze(-1).sum(dim=-1)
         log_reward = rewards.clamp_min(1e-8).log()
-        return ((self.log_z + logp - log_reward) ** 2).mean()
+        residual = self.log_z + logp - log_reward
+        loss = (residual ** 2).mean()
+        if not return_metrics:
+            return loss
+        probs = torch.softmax(logits, dim=-1)
+        entropy = -(probs * probs.clamp_min(1e-8).log()).sum(dim=-1)
+        first_action = actions[..., 0]
+        top_actions = logits[..., 0, :].argmax(dim=-1) if logits.ndim == 3 else logits.argmax(dim=-1)
+        metrics = {
+            "gflownet_logp_mean": logp.detach().mean(),
+            "gflownet_log_reward_mean": log_reward.detach().mean(),
+            "gflownet_tb_residual_abs_mean": residual.detach().abs().mean(),
+            "gflownet_log_z": self.log_z.detach(),
+            "gflownet_action_entropy_mean": entropy.detach().mean(),
+            "gflownet_reward_mean": rewards.detach().mean(),
+            "gflownet_reward_std": rewards.detach().std(unbiased=False),
+            "gflownet_top_action_match_rate": (top_actions.detach() == first_action.detach()).float().mean(),
+        }
+        return loss, metrics
 
 
 class GraphCGLoss(nn.Module):

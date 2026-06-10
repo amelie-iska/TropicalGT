@@ -98,7 +98,9 @@ TropicalGT-I/scripts/train_tropicalgt_i.py \
 --config TropicalGT-I/configs/gpu_smoke.json
 ```
 
-The script reads the W&B API key from `keys.txt` when W&B is enabled. It logs NLL, BPB proxy, GFlowNet trajectory-balance loss, GraphCG losses, tropical support entropy, tropical margins, graph token counts, GPU memory, and generated HTML artifacts.
+The script reads the W&B API key from `keys.txt` when W&B is enabled. It logs NLL, BPB proxy, GFlowNet trajectory-balance loss, GraphCG losses, finite graph-certificate loss/agreement, tropical support entropy, tropical margins, margin-threshold wall-hit rate, graph token counts, graph JSON fallback rate, examples/sec, tokens/sec, GPU memory, and generated HTML artifacts.
+
+The certificate metrics are finite graph-structure checks: edge tokens are rewarded when their active tropical support lies on the edge itself or one of its endpoint vertex tokens. These certificates are useful for auditing whether tropical supports follow the TokenGT graph skeleton, but they are not semantic correctness proofs and must be interpreted beside task loss, verifier scores, and held-out BPB.
 
 The reasoning payload JSON stores the hover text, PCA/NLL point coordinates, and the full finite filtered simplicial object for each visualized record. In v1 these objects include 0-simplices for graph vertices, 1-simplices for graph edges, directed length-2 path 2-simplices, filtration thresholds, and per-record summaries.
 
@@ -129,7 +131,7 @@ TropicalGT-I/scripts/train_tropicalgt_i.py \
 --resume-from TropicalGT-I/checkpoints/tropicalgt_i_train.latest.pt
 ```
 
-The training report includes a parquet manifest for the train and validation splits in addition to losses, graph-token counts, W&B metadata, visualization paths, and checkpoint paths.
+The training report includes a parquet manifest for the train and validation splits in addition to losses, graph-token counts, certificate metrics, throughput metrics, W&B metadata, visualization paths, and checkpoint paths.
 
 ## Eval, inference, validation, visualization
 

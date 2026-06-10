@@ -1,7 +1,7 @@
 import torch
 from tropicalgt.data import FixtureGraphDataset, encode_bytes
 from tropicalgt.losses import GFlowNetPolicy, GraphCGLoss
-from tropicalgt.model import TropicalGTConfig, TropicalGTModel
+from tropicalgt.model import TropicalGTConfig, TropicalGTModel, tropical_certificate_objective, tropical_certificate_targets
 from tropicalgt.tokenizer import TokenGTTokenizer
 
 
@@ -28,3 +28,39 @@ def test_model_forward_fixture():
     out = model(torch.stack(xs), gb, torch.stack(ys))
     assert out["logits"].shape[:2] == (2, 32)
     assert torch.isfinite(out["loss"])
+    for key in [
+        "certificate_loss",
+        "certificate_agreement",
+        "certificate_edge_agreement",
+        "certificate_coverage",
+        "wall_hit_rate",
+        "support_boundary_hit_rate",
+        "margin_min",
+        "margin_p05",
+        "node_edge_ratio",
+        "loss_regularizer_total",
+        "loss_regularizer_ratio",
+        "loss_certificate_weighted",
+        "gflownet_tb_residual_abs_mean",
+        "gflownet_log_z",
+    ]:
+        assert key in out
+        assert torch.isfinite(out[key])
+
+
+def test_tropical_certificate_targets_allow_edge_endpoints():
+    graph = {"nodes": [{"id": "a"}, {"id": "b"}], "edges": [{"source": "a", "target": "b"}]}
+    record = FixtureGraphDataset(1)[0]
+    record.graph_json = graph
+    tok = TokenGTTokenizer(feature_dim=48)
+    gb = tok.batch_encode([record])
+    targets = tropical_certificate_targets(gb)
+    # Token order is graph, node a, node b, edge a->b.
+    assert targets[0, 3, 1]
+    assert targets[0, 3, 2]
+    assert targets[0, 3, 3]
+    scores = torch.zeros(1, 4, 4)
+    support = torch.tensor([[0, 1, 2, 1]])
+    loss, metrics = tropical_certificate_objective(scores, support, gb)
+    assert torch.isfinite(loss)
+    assert torch.isclose(metrics["certificate_edge_agreement"], torch.tensor(1.0))

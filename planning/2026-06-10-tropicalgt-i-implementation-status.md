@@ -13,6 +13,8 @@
 - Iteration 4 adds bounded inference-time scaling: a GFlowNet-guided graph-of-thought candidate controller that expands prompt graphs with action paths, scores candidates with NLL/margin/action-probability/token-budget terms, and emits the best scaled candidate plus trace artifacts.
 - Iteration 5 adds resumable training checkpoints with optimizer state, step, metric history, config, RNG state, periodic `.latest.pt` saves, and CLI `--resume-from` / `--max-steps` support.
 - Iteration 6 hardens data-backed training: parquet shards are row-group metadata-indexed and read through a bounded row-group cache, data-backed configs set `require_data: true`, validation emits a train/validation/test shard manifest, and `configs/train.json` is the first full data-backed training launch config.
+- Iteration 7 adds richer train-time instrumentation: a finite TokenGT skeleton certificate loss/agreement metric, node/edge/margin-threshold wall-hit tropical support diagnostics, graph-json fallback rate, examples/sec, tokens/sec, and expanded metric visualization/W&B traces.
+- Certificate agreement is currently structural unless teacher tropical supports or external verifier labels are supplied, and the wall-hit statistic is a margin-threshold proxy rather than an exact normal-fan wall distance.
 
 ## Verification evidence
 - Unit tests: `/home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests -q` -> `6 passed`.
@@ -54,6 +56,12 @@
 - GPU eval, scaled inference, and visualization rendering completed after the row-group loader smoke; artifact inspection confirmed `2` eval detail records, `6` scaled candidates, best path `['reject', 'merge']`, `6` reasoning payload objects, and `training_metrics.html` present.
 - Paper compiled locally from the updated TeX source to `46` pages and was copied back to `TropicalGT-I/assets/tropicalgt_neurips_research_paper.pdf`.
 - Process/GPU cleanup check after iteration 6 found no lingering training or GPU compute process.
+- Iteration 7 unit tests: `/home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests -q` -> `21 passed`.
+- Iteration 7 train-config preflight wrote `TropicalGT-I/outputs/train/validate_train_iter7.json`; it validated `64` required-data train records with `0` graph-json fallbacks and saw `117` train files / `4,633,582` train rows, `578,319` validation rows, and `578,835` test rows.
+- Iteration 7 GPU smoke completed on CUDA with W&B run https://wandb.ai/amelie-iska-math/TropicalGT-I/runs/brff88ia, final step `2`, NLL `5.591689109802246`, validation NLL `5.523931344350179`, BPB proxy `7.969348356705108`, graph-json fallback rate `0.0`, certificate loss `3.0246293544769287`, certificate agreement `0.04411764815449715`, margin-threshold wall-hit rate `0.029411764815449715`, GFlowNet residual mean `1.105578899383545`, examples/sec `253.63708732761884`, tokens/sec `32465.547177935212`, graph tokens/sec `8623.66096913904`, grad norm `1.5729289054870605`, and GPU memory `32.651776` MB.
+- Iteration 7 standalone eval wrote `TropicalGT-I/outputs/gpu_smoke/eval_validation.json` with `2` detail records and invalid graph rate `0.0`; standalone inference wrote `TropicalGT-I/outputs/gpu_smoke/inference_iter7.json` with `6` evaluated scaling candidates, best path `['refine', 'refine']`, best NLL `5.563009262084961`, and a best filtered object with `4` vertices, `3` edges, `2` directed path \(2\)-simplices, and `6` thresholds.
+- Iteration 7 visualization rendering wrote `TropicalGT-I/outputs/gpu_smoke/reasoning_trajectory_3d.html`, `TropicalGT-I/outputs/gpu_smoke/reasoning_trajectory_pca_nll.html`, `TropicalGT-I/outputs/gpu_smoke/reasoning_trajectory_payloads.json`, and `TropicalGT-I/outputs/gpu_smoke/training_metrics.html`.
+- Paper compiled locally from the iteration 7 TeX source to `46` pages and was copied back to `TropicalGT-I/assets/tropicalgt_neurips_research_paper.pdf`.
 
 ## Remaining research risks
 - The model is a first functional iteration, not a competitive Parameter-Golf artifact.

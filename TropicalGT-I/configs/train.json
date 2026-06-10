@@ -21,7 +21,7 @@
   "keys_path": "keys.txt",
   "viz_limit": 16,
   "tokengt": {"max_nodes": 64, "max_edges": 128, "node_id_dim": 16, "feature_dim": 48, "graph_token": true},
-  "model": {"dim": 128, "hidden_dim": 128, "graph_feature_dim": 48, "num_actions": 8, "gflownet_weight": 0.02, "graphcg_weight": 0.02},
+  "model": {"dim": 128, "hidden_dim": 128, "graph_feature_dim": 48, "num_actions": 8, "gflownet_weight": 0.02, "graphcg_weight": 0.02, "certificate_weight": 0.001, "wall_margin_threshold": 0.001},
   "inference_scaling": {"depth": 2, "width": 4, "branch_factor": 2},
   "wandb": {"enabled": true, "mode": "online", "project": "TropicalGT-I"}
 }

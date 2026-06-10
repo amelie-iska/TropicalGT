@@ -40,6 +40,7 @@ class TropicalRingAttention(nn.Module):
         support = scores.argmax(dim=-1)
         top2 = torch.topk(scores, k=min(2, scores.shape[-1]), dim=-1).values
         margin = top2[..., 0] - (top2[..., 1] if top2.shape[-1] > 1 else top2[..., 0])
+        margin = torch.nan_to_num(margin, nan=0.0, neginf=0.0, posinf=0.0)
         context = torch.max(scores.unsqueeze(-1) + v[:, None, :, :], dim=2).values
         context = torch.nan_to_num(context, neginf=0.0, posinf=0.0)
         return TropicalAttentionOutput(self.out_proj(context), support, margin, scores)
@@ -64,6 +65,7 @@ class TropicalRingAttention(nn.Module):
         support = scores_full.argmax(dim=-1)
         top2 = torch.topk(scores_full, k=min(2, scores_full.shape[-1]), dim=-1).values
         margin = top2[..., 0] - (top2[..., 1] if top2.shape[-1] > 1 else top2[..., 0])
+        margin = torch.nan_to_num(margin, nan=0.0, neginf=0.0, posinf=0.0)
         return TropicalAttentionOutput(self.out_proj(torch.nan_to_num(best_context, neginf=0.0, posinf=0.0)), support, margin, scores_full)
 
 
@@ -80,3 +82,18 @@ def tropical_support_entropy(support: Tensor, mask: Tensor | None = None) -> Ten
     counts = torch.bincount(flat.clamp_min(0), minlength=int(flat.max().item()) + 1).float()
     p = counts[counts > 0] / counts.sum()
     return -(p * p.log()).sum()
+
+
+def soft_tropical_support_entropy(scores: Tensor, query_mask: Tensor | None = None, key_mask: Tensor | None = None, temperature: float = 1.0) -> Tensor:
+    """Differentiable entropy of the tropical support distribution."""
+    temp = max(float(temperature), 1e-6)
+    masked_scores = scores
+    if key_mask is not None:
+        masked_scores = masked_scores.masked_fill(~key_mask[:, None, :], -torch.inf)
+    probs = torch.softmax(masked_scores / temp, dim=-1)
+    probs = torch.nan_to_num(probs, nan=0.0, posinf=0.0, neginf=0.0)
+    entropy = -(probs * probs.clamp_min(1e-8).log()).sum(dim=-1)
+    if query_mask is not None:
+        valid = entropy.masked_select(query_mask)
+        return valid.mean() if valid.numel() else entropy.sum() * 0.0
+    return entropy.mean()
