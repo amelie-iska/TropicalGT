@@ -6,6 +6,7 @@ import torch
 import torch.nn.functional as F
 
 from .attention import tropical_support_entropy
+from .algebra import compute_topological_algebra_report
 from .records import GraphRecord, GraphTokenBatch
 from .simplicial import build_filtered_simplicial_object
 from .tokenizer import TokenGTTokenizer
@@ -178,6 +179,10 @@ def graphcg_diagnostics(model, graph_state: torch.Tensor, top_k: int = 3) -> dic
         "direction_norms": [float(v) for v in norms.tolist()],
         "mean_abs_offdiag_cosine": float(offdiag.abs().mean()),
         "top_directions": top,
+        "projection_scores": [
+            [{"direction": int(idx), "cosine": float(value)} for idx, value in enumerate(row.tolist())]
+            for row in scores
+        ],
     }
 
 
@@ -189,6 +194,9 @@ def record_diagnostics(
     target_ids: torch.Tensor | None = None,
     max_records: int | None = None,
     max_trace_tokens: int | None = 16,
+    audit_level: str = "none",
+    ph_backend: str = "auto",
+    audit_max_simplices: int = 1024,
 ) -> list[dict[str, Any]]:
     support = out["support"].detach().cpu()
     margin = out["margin"].detach().cpu()
@@ -200,20 +208,28 @@ def record_diagnostics(
     limit = len(records) if max_records is None else min(max_records, len(records))
     for idx in range(limit):
         mask = graph_batch.attention_mask[idx].detach().cpu()
-        rows.append(
-            {
-                "record_id": records[idx].record_id,
-                "nll": float(nll[idx]) if nll is not None else None,
-                "token_count": int(token_counts[idx]) if token_counts is not None else None,
-                "graph_tokens": int(graph_batch.graph_token_counts[idx].item()),
-                "node_tokens": int(graph_batch.node_counts[idx].item()),
-                "edge_tokens": int(graph_batch.edge_counts[idx].item()),
-                "graph_json_fallback": bool((records[idx].metadata or {}).get("graph_json_fallback", False)),
-                "tropical": tropical_record_summary(support[idx : idx + 1], margin[idx : idx + 1], mask[None, :]),
-                "graph_token_trace": traces[idx],
-                "filtered_simplicial_object": build_filtered_simplicial_object(records[idx]),
-            }
-        )
+        filtered_object = build_filtered_simplicial_object(records[idx])
+        row = {
+            "record_id": records[idx].record_id,
+            "nll": float(nll[idx]) if nll is not None else None,
+            "token_count": int(token_counts[idx]) if token_counts is not None else None,
+            "graph_tokens": int(graph_batch.graph_token_counts[idx].item()),
+            "node_tokens": int(graph_batch.node_counts[idx].item()),
+            "edge_tokens": int(graph_batch.edge_counts[idx].item()),
+            "graph_json_fallback": bool((records[idx].metadata or {}).get("graph_json_fallback", False)),
+            "graph_json_sequentialized": bool((records[idx].metadata or {}).get("graph_json_sequentialized", False)),
+            "tropical": tropical_record_summary(support[idx : idx + 1], margin[idx : idx + 1], mask[None, :]),
+            "graph_token_trace": traces[idx],
+            "filtered_simplicial_object": filtered_object,
+        }
+        if (audit_level or "none").lower() != "none":
+            row["topological_algebra"] = compute_topological_algebra_report(
+                filtered_object,
+                audit_level=audit_level,
+                ph_backend=ph_backend,
+                max_simplices=audit_max_simplices,
+            )
+        rows.append(row)
     return rows
 
 

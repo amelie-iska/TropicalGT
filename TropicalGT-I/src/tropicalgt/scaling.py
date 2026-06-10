@@ -7,9 +7,10 @@ import torch
 import torch.nn.functional as F
 
 from .data import encode_bytes
+from .algebra import compute_topological_algebra_report
 from .diagnostics import ACTION_NAMES, graph_token_trace, per_record_nll, record_diagnostics
 from .records import GraphRecord, GraphTokenBatch
-from .simplicial import build_filtered_simplicial_object
+from .simplicial import build_filtered_simplicial_object, build_reasoning_trajectory_complex
 from .tokenizer import TokenGTTokenizer
 
 
@@ -74,6 +75,9 @@ def run_inference_scaling(
     width: int = 3,
     branch_factor: int = 2,
     trace_limit: int = 16,
+    audit_level: str = "none",
+    ph_backend: str = "auto",
+    audit_max_simplices: int = 1024,
 ) -> dict[str, Any]:
     depth = max(int(depth), 0)
     width = max(int(width), 1)
@@ -83,7 +87,17 @@ def run_inference_scaling(
     evaluated: list[dict[str, Any]] = []
     for level in range(depth + 1):
         records = [item["record"] for item in frontier]
-        scored = score_records(model, records, tokenizer, seq_len, device, trace_limit=trace_limit)
+        scored = score_records(
+            model,
+            records,
+            tokenizer,
+            seq_len,
+            device,
+            trace_limit=trace_limit,
+            audit_level=audit_level,
+            ph_backend=ph_backend,
+            audit_max_simplices=audit_max_simplices,
+        )
         for item, score in zip(frontier, scored, strict=True):
             score.update({"path": item["path"], "parent": item["parent"], "level": level})
         scored = sorted(scored, key=lambda row: row["score"], reverse=True)[:width]
@@ -114,6 +128,35 @@ def run_inference_scaling(
                 )
         frontier = next_frontier or frontier
     best = max(evaluated, key=lambda row: row["score"])
+    public_candidates = [_public_candidate(row) for row in evaluated]
+    trajectory_complex = build_reasoning_trajectory_complex(public_candidates)
+    trajectory_algebra = (
+        compute_topological_algebra_report(
+            trajectory_complex,
+            audit_level=audit_level,
+            ph_backend=ph_backend,
+            max_simplices=audit_max_simplices,
+        )
+        if (audit_level or "none").lower() != "none"
+        else None
+    )
+    trajectory_growth = []
+    if trajectory_algebra is not None:
+        max_level = max((int(row.get("level", 0) or 0) for row in public_candidates), default=0)
+        for level in range(max_level + 1):
+            level_complex = build_reasoning_trajectory_complex(public_candidates, up_to_level=level)
+            trajectory_growth.append(
+                {
+                    "level": level,
+                    "filtered_simplicial_object": level_complex,
+                    "topological_algebra": compute_topological_algebra_report(
+                        level_complex,
+                        audit_level=audit_level,
+                        ph_backend=ph_backend,
+                        max_simplices=audit_max_simplices,
+                    ),
+                }
+            )
     return {
         "enabled": depth > 0,
         "depth": depth,
@@ -122,6 +165,10 @@ def run_inference_scaling(
         "evaluated_candidates": len(evaluated),
         "levels": levels,
         "best": _public_candidate(best),
+        "candidates": public_candidates,
+        "trajectory_filtered_simplicial_object": trajectory_complex,
+        "trajectory_topological_algebra": trajectory_algebra,
+        "trajectory_growth": trajectory_growth,
     }
 
 
@@ -132,6 +179,9 @@ def score_records(
     seq_len: int,
     device: torch.device,
     trace_limit: int = 16,
+    audit_level: str = "none",
+    ph_backend: str = "auto",
+    audit_max_simplices: int = 1024,
 ) -> list[dict[str, Any]]:
     xs, ys = zip(*(encode_bytes(record.text, seq_len) for record in records))
     x = torch.stack(xs).to(device)
@@ -144,6 +194,7 @@ def score_records(
     nll, token_counts = per_record_nll(out_cpu["logits"], torch.stack(ys))
     gfn_logits = model.gfn(out["graph_state"]).detach().cpu()
     gfn_probs = torch.softmax(gfn_logits, dim=-1)
+    graphcg_projection = _graphcg_projection(model, out["graph_state"])
     traces = graph_token_trace(records, graph_batch_cpu, out_cpu["support"], out_cpu["margin"], tokenizer, max_tokens=trace_limit)
     rows = []
     for idx, record in enumerate(records):
@@ -166,6 +217,8 @@ def score_records(
                 "edge_tokens": int(graph_batch_cpu.edge_counts[idx].item()),
                 "margin_mean": margin_mean,
                 "gflownet_action_probs": action_probs,
+                "embedding": [float(v) for v in out_cpu["graph_state"][idx].tolist()],
+                "graphcg_projection": graphcg_projection[idx],
                 "graph_token_trace": traces[idx],
                 "filtered_simplicial_object": build_filtered_simplicial_object(record),
                 "record_diagnostics": record_diagnostics(
@@ -176,6 +229,9 @@ def score_records(
                     target_ids=torch.stack([ys[idx]]),
                     max_records=1,
                     max_trace_tokens=trace_limit,
+                    audit_level=audit_level,
+                    ph_backend=ph_backend,
+                    audit_max_simplices=audit_max_simplices,
                 )[0],
             }
         )
@@ -199,8 +255,11 @@ def _public_candidate(row: dict[str, Any]) -> dict[str, Any]:
         "edge_tokens": row["edge_tokens"],
         "margin_mean": row["margin_mean"],
         "gflownet_action_probs": row["gflownet_action_probs"],
+        "embedding": row.get("embedding"),
+        "graphcg_projection": row.get("graphcg_projection"),
         "graph_token_trace": row["graph_token_trace"],
         "filtered_simplicial_object": row["filtered_simplicial_object"],
+        "topological_algebra": row.get("record_diagnostics", {}).get("topological_algebra"),
     }
 
 
@@ -227,6 +286,32 @@ def _action_probs(row: torch.Tensor) -> list[dict[str, Any]]:
         }
         for idx, value in sorted(enumerate(row.tolist()), key=lambda item: item[1], reverse=True)
     ]
+
+
+def _graphcg_projection(model, graph_state: torch.Tensor, top_k: int = 4) -> list[dict[str, Any]]:
+    dirs = F.normalize(model.graphcg.directions.detach(), dim=-1)
+    states = F.normalize(graph_state.detach(), dim=-1)
+    scores = (states @ dirs.t()).detach().cpu()
+    norms = model.graphcg.directions.detach().norm(dim=-1).cpu()
+    gram = (dirs @ dirs.t()).detach().cpu()
+    offdiag = gram - torch.eye(gram.shape[0])
+    rows = []
+    for row in scores:
+        k = min(top_k, row.numel())
+        values, indices = torch.topk(row, k=k)
+        rows.append(
+            {
+                "direction_norms": [float(v) for v in norms.tolist()],
+                "mean_abs_offdiag_cosine": float(offdiag.abs().mean()),
+                "max_abs_offdiag_cosine": float(offdiag.abs().max()),
+                "top_directions": [
+                    {"direction": int(idx), "cosine": float(value)}
+                    for value, idx in zip(values, indices)
+                ],
+                "all_direction_cosines": [float(v) for v in row.tolist()],
+            }
+        )
+    return rows
 
 
 def _last_node_id(nodes: list[dict[str, Any]]) -> str | None:

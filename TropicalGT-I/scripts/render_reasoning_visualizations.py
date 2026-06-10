@@ -18,6 +18,11 @@ def main() -> None:
     parser.add_argument("--config", default=str(ROOT / "configs" / "smoke.json"))
     parser.add_argument("--checkpoint", required=True)
     parser.add_argument("--split", default="validation")
+    parser.add_argument("--output-dir", default="")
+    parser.add_argument("--limit", type=int, default=None)
+    parser.add_argument("--audit-level", choices=["none", "basic", "topology", "algebra", "full"], default="none")
+    parser.add_argument("--ph-backend", choices=["auto", "gudhi", "ripser", "none"], default="auto")
+    parser.add_argument("--audit-max-simplices", type=int, default=1024)
     args = parser.parse_args()
     cfg = load_config(args.config)
     device = torch.device("cuda" if torch.cuda.is_available() and cfg.get("device", "auto") != "cpu" else "cpu")
@@ -32,7 +37,18 @@ def main() -> None:
         cache_shards=int(cfg.get("cache_shards", 2)),
     )
     tok = TokenGTTokenizer(**cfg.get("tokengt", {}))
-    paths = write_reasoning_visualizations(model, ds, tok, int(cfg.get("seq_len", 128)), device, cfg.get("output_dir", "TropicalGT-I/outputs/smoke"), limit=int(cfg.get("viz_limit", 8)))
+    paths = write_reasoning_visualizations(
+        model,
+        ds,
+        tok,
+        int(cfg.get("seq_len", 128)),
+        device,
+        args.output_dir or cfg.get("output_dir", "TropicalGT-I/outputs/smoke"),
+        limit=int(args.limit if args.limit is not None else cfg.get("viz_limit", 8)),
+        audit_level=args.audit_level,
+        ph_backend=args.ph_backend,
+        audit_max_simplices=args.audit_max_simplices,
+    )
     print(json.dumps(paths, indent=2))
 
 

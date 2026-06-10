@@ -60,5 +60,22 @@ class GraphCGLoss(nn.Module):
         eye = torch.eye(gram.shape[0], device=z.device)
         orth = ((gram - eye) ** 2).mean()
         sparse = self.directions.abs().mean()
+        offdiag = gram - eye
+        norms = self.directions.norm(dim=-1)
+        centered = dirs - dirs.mean(dim=0, keepdim=True)
+        covariance = centered @ centered.t() / max(dirs.shape[-1] - 1, 1)
+        eigvals = torch.linalg.eigvalsh((gram + gram.t()) * 0.5).real
         loss = contrastive + 0.05 * orth + 0.001 * sparse
-        return loss, {"graphcg_contrastive": contrastive.detach(), "graphcg_orthogonality": orth.detach(), "graphcg_sparsity": sparse.detach()}
+        return loss, {
+            "graphcg_contrastive": contrastive.detach(),
+            "graphcg_orthogonality": orth.detach(),
+            "graphcg_sparsity": sparse.detach(),
+            "graphcg_direction_norm_mean": norms.detach().mean(),
+            "graphcg_direction_norm_min": norms.detach().min(),
+            "graphcg_direction_norm_max": norms.detach().max(),
+            "graphcg_direction_norm_std": norms.detach().std(unbiased=False),
+            "graphcg_direction_gram_offdiag_mean_abs": offdiag.detach().abs().mean(),
+            "graphcg_direction_gram_offdiag_max_abs": offdiag.detach().abs().max(),
+            "graphcg_direction_covariance_mean_abs": covariance.detach().abs().mean(),
+            "graphcg_direction_gram_condition_proxy": (eigvals.detach().max() / eigvals.detach().abs().clamp_min(1e-8).min()),
+        }

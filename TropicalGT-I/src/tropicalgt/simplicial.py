@@ -87,3 +87,104 @@ def build_filtered_simplicial_object(record: GraphRecord) -> dict[str, Any]:
         "simplices": simplices,
     }
 
+
+def build_reasoning_trajectory_complex(candidates: list[dict[str, Any]], up_to_level: int | None = None) -> dict[str, Any]:
+    """Build a filtered complex whose points are graph-of-thought states."""
+
+    usable = []
+    for idx, row in enumerate(candidates):
+        level = int(row.get("level", 0) or 0)
+        if up_to_level is not None and level > up_to_level:
+            continue
+        record_id = str(row.get("record_id", f"candidate-{idx}"))
+        usable.append((record_id, row))
+
+    ids = [rid for rid, _ in usable]
+    id_set = set(ids)
+    vertices = []
+    for order, (record_id, row) in enumerate(usable):
+        level = int(row.get("level", 0) or 0)
+        score = float(row.get("score", 0.0) or 0.0)
+        nll = float(row.get("nll", 0.0) or 0.0)
+        vertices.append(
+            {
+                "simplex": [record_id],
+                "dimension": 0,
+                "filtration": round(_trajectory_filtration(level, score, order), 6),
+                "type": "got_state",
+                "level": level,
+                "score": score,
+                "nll": nll,
+                "path": row.get("path", []),
+                "weight": round(1.0 / (1.0 + max(nll, 0.0)), 6),
+            }
+        )
+
+    one_simplices = []
+    parent_lookup: dict[str, str] = {}
+    row_lookup = {rid: row for rid, row in usable}
+    for record_id, row in usable:
+        parent = row.get("parent")
+        if isinstance(parent, str) and parent in id_set:
+            parent_lookup[record_id] = parent
+            child_level = int(row.get("level", 0) or 0)
+            parent_level = int(row_lookup[parent].get("level", 0) or 0)
+            action_path = row.get("path", [])
+            action = action_path[-1] if isinstance(action_path, list) and action_path else "transition"
+            one_simplices.append(
+                {
+                    "simplex": [parent, record_id],
+                    "dimension": 1,
+                    "filtration": round(max(_trajectory_filtration(parent_level, float(row_lookup[parent].get("score", 0.0) or 0.0), 0), _trajectory_filtration(child_level, float(row.get("score", 0.0) or 0.0), 0)), 6),
+                    "type": f"got_{action}",
+                    "weight": 1.0,
+                }
+            )
+
+    two_simplices = []
+    for child, parent in parent_lookup.items():
+        grandparent = parent_lookup.get(parent)
+        if grandparent is None:
+            continue
+        rows = [row_lookup[grandparent], row_lookup[parent], row_lookup[child]]
+        filt = max(
+            _trajectory_filtration(int(row.get("level", 0) or 0), float(row.get("score", 0.0) or 0.0), 0)
+            for row in rows
+        )
+        two_simplices.append(
+            {
+                "simplex": [grandparent, parent, child],
+                "dimension": 2,
+                "filtration": round(min(filt + 0.05, 1.0), 6),
+                "type": "got_length_two_path",
+                "weight": 1.0,
+            }
+        )
+
+    simplices = vertices + one_simplices + two_simplices
+    thresholds = sorted({simplex["filtration"] for simplex in simplices})
+    return {
+        "record_id": "graph_of_thought_trajectory",
+        "summary": {
+            "num_vertices": len(vertices),
+            "num_edges": len(one_simplices),
+            "num_two_simplices": len(two_simplices),
+            "num_thresholds": len(thresholds),
+            "max_level": max((int(row.get("level", 0) or 0) for _, row in usable), default=0),
+        },
+        "thresholds": thresholds,
+        "simplices": simplices,
+    }
+
+
+def _trajectory_filtration(level: int, score: float, order: int) -> float:
+    level_term = max(level, 0) / 8.0
+    score_term = 1.0 / (1.0 + np_exp_safe(score))
+    order_term = min(order, 128) / 1024.0
+    return max(0.0, min(1.0, 0.72 * level_term + 0.25 * score_term + 0.03 * order_term))
+
+
+def np_exp_safe(value: float) -> float:
+    import math
+
+    return math.exp(max(min(value, 30.0), -30.0))

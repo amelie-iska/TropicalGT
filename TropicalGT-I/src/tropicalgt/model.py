@@ -10,6 +10,7 @@ from .attention import TropicalRingAttention, soft_tropical_support_entropy, tro
 from .data import VOCAB_SIZE
 from .records import GraphTokenBatch
 from .losses import GFlowNetPolicy, GraphCGLoss
+from .memory import AnalogicalMemoryHead
 
 
 @dataclass
@@ -25,6 +26,7 @@ class TropicalGTConfig:
     entropy_weight: float = 0.001
     certificate_weight: float = 0.001
     wall_margin_threshold: float = 1.0e-3
+    memory_dim: int = 32
 
 
 class TropicalGTModel(nn.Module):
@@ -39,6 +41,7 @@ class TropicalGTModel(nn.Module):
         self.out = nn.Linear(config.hidden_dim, config.vocab_size)
         self.gfn = GFlowNetPolicy(config.dim, config.num_actions)
         self.graphcg = GraphCGLoss(config.dim, config.num_actions)
+        self.memory = AnalogicalMemoryHead(config.dim, config.memory_dim)
 
     def forward(self, input_ids: Tensor, graph_batch: GraphTokenBatch, target_ids: Tensor | None = None) -> dict[str, Tensor]:
         graph_batch = graph_batch.to(input_ids.device)
@@ -78,6 +81,7 @@ class TropicalGTModel(nn.Module):
             "wall_hit_rate": wall_hit_rate.detach(),
             "wall_margin_threshold": torch.tensor(self.config.wall_margin_threshold, device=input_ids.device),
             "support_boundary_hit_rate": boundary_hit_rate.detach(),
+            "analogical_memory_query_norm": self.memory(graph_state).detach().norm(dim=-1).mean(),
             **certificate_metrics,
         }
         loss = None

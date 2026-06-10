@@ -46,6 +46,16 @@ def test_training_history_contains_certificate_and_throughput_metrics(tmp_path: 
         "grad_norm",
         "optimizer_lr",
         "loss_regularizer_total",
+        "bpb",
+        "text_bpb",
+        "graph_bpb",
+        "graph_sideinfo_bpb",
+        "graph_conditioned_bpb_no_side_cost",
+        "graph_token_structural_bytes",
+        "explicit_graph_json_bytes",
+        "analogical_memory_query_norm",
     ]:
         assert key in row
         assert row[key] == row[key]
+    assert report["eval"]["bpb"] == report["eval"]["bpb_proxy"]
+    assert report["eval"]["graph_bpb"] == report["eval"]["graph_bpb"]

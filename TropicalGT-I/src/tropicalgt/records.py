@@ -31,6 +31,8 @@ class GraphRecord:
             metadata["graph_json_fallback"] = True
         else:
             metadata["graph_json_fallback"] = False
+        graph_obj, sequence_added = attach_sequential_text_graph(graph_obj, text=text, question=question, answer=answer)
+        metadata["graph_json_sequentialized"] = sequence_added
         if "dataset" in row:
             metadata["dataset"] = _string(row.get("dataset"))
         return cls(rid, text, question, answer, reasoning, metadata, graph_obj)
@@ -90,6 +92,44 @@ def conservative_graph(question: str = "", reasoning: str = "", answer: str = ""
     return {"nodes": nodes, "edges": edges}
 
 
+def attach_sequential_text_graph(
+    graph: dict[str, Any] | None,
+    text: str = "",
+    question: str = "",
+    answer: str = "",
+    max_chunks: int = 24,
+    chunk_chars: int = 220,
+) -> tuple[dict[str, Any], bool]:
+    """Attach a bounded path graph for the underlying text sequence."""
+
+    graph_obj = graph if isinstance(graph, dict) else {"nodes": [], "edges": []}
+    nodes = list(graph_obj.get("nodes", []))
+    edges = list(graph_obj.get("edges", []))
+    if any(str(node.get("type", "")) == "sequence_chunk" for node in nodes):
+        return {**graph_obj, "nodes": nodes, "edges": edges}, False
+
+    source_text = text or question or answer
+    chunks = _text_chunks(source_text, chunk_chars=chunk_chars, max_chunks=max_chunks)
+    if not chunks:
+        return {**graph_obj, "nodes": nodes, "edges": edges}, False
+
+    existing_ids = {str(node.get("id", idx)) for idx, node in enumerate(nodes)}
+    prefix = "seq"
+    while f"{prefix}_root" in existing_ids:
+        prefix = f"{prefix}_x"
+
+    root_id = f"{prefix}_root"
+    nodes.append({"id": root_id, "type": "sequence_document", "text": _clip(source_text, 512)})
+    previous = root_id
+    for idx, chunk in enumerate(chunks):
+        node_id = f"{prefix}_{idx:03d}"
+        nodes.append({"id": node_id, "type": "sequence_chunk", "text": chunk, "position": idx})
+        edges.append({"source": previous, "target": node_id, "type": "next_text_chunk" if previous != root_id else "starts_text"})
+        previous = node_id
+
+    return {**graph_obj, "nodes": nodes, "edges": edges}, True
+
+
 def _parse_graph(value: Any) -> dict[str, Any] | None:
     if isinstance(value, dict):
         return value
@@ -100,6 +140,25 @@ def _parse_graph(value: Any) -> dict[str, Any] | None:
         except Exception:
             return None
     return None
+
+
+def _text_chunks(text: str, chunk_chars: int, max_chunks: int) -> list[str]:
+    clean = " ".join((text or "").replace("\r", "\n").split())
+    if not clean:
+        return []
+    chunks = []
+    start = 0
+    while start < len(clean) and len(chunks) < max_chunks:
+        stop = min(len(clean), start + chunk_chars)
+        if stop < len(clean):
+            boundary = clean.rfind(" ", start, stop)
+            if boundary > start + chunk_chars // 2:
+                stop = boundary
+        chunks.append(clean[start:stop].strip())
+        start = stop
+        while start < len(clean) and clean[start].isspace():
+            start += 1
+    return [chunk for chunk in chunks if chunk]
 
 
 def _string(value: Any) -> str:
