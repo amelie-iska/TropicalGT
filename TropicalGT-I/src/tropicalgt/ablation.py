@@ -47,12 +47,14 @@ def build_bpb_ablation_report(
     correlations.extend(_final_metric_correlations(bundles, target_names))
     aggregate = _aggregate_correlations(correlations, top_k=top_k)
     deltas = [_delta_row(baseline_bundle, bundle, target_names) for bundle in bundles]
+    baseline_metrics = _flatten_report_metrics(baseline_bundle.report)
     return {
         "version": 1,
         "targets": list(target_names),
         "baseline": str(baseline_bundle.path),
         "runs": runs,
         "deltas_vs_baseline": deltas,
+        "best_by_target": _best_by_target(runs, target_names, baseline_metrics),
         "history_correlations": correlations,
         "aggregate_metric_rankings": aggregate,
         "interpretation": {
@@ -115,6 +117,45 @@ def _delta_row(baseline: ReportBundle, bundle: ReportBundle, targets: tuple[str,
         "improves_bpb": bool(deltas.get("delta_bpb", 0.0) < 0.0) if "delta_bpb" in deltas else None,
         "improves_graph_bpb": bool(deltas.get("delta_graph_bpb", 0.0) < 0.0) if "delta_graph_bpb" in deltas else None,
     }
+
+
+def _best_by_target(
+    runs: list[dict[str, Any]],
+    targets: tuple[str, ...],
+    baseline_metrics: dict[str, float],
+) -> list[dict[str, Any]]:
+    best_rows: list[dict[str, Any]] = []
+    for target in targets:
+        ranked = sorted(
+            (
+                (float((row.get("targets") or {}).get(target)), row)
+                for row in runs
+                if _is_finite_number((row.get("targets") or {}).get(target))
+            ),
+            key=lambda pair: pair[0],
+        )
+        if not ranked:
+            continue
+        value, row = ranked[0]
+        baseline_value = baseline_metrics.get(target)
+        delta_vs_baseline = value - float(baseline_value) if _is_finite_number(baseline_value) else None
+        runner_up_value = ranked[1][0] if len(ranked) > 1 else None
+        best_rows.append(
+            {
+                "target": target,
+                "name": row.get("name"),
+                "path": row.get("path"),
+                "value": value,
+                "baseline_value": float(baseline_value) if _is_finite_number(baseline_value) else None,
+                "delta_vs_baseline": delta_vs_baseline,
+                "improves_baseline": bool(delta_vs_baseline < 0.0) if delta_vs_baseline is not None else None,
+                "runner_up_name": ranked[1][1].get("name") if len(ranked) > 1 else None,
+                "runner_up_value": runner_up_value,
+                "margin_to_runner_up": (runner_up_value - value) if runner_up_value is not None else None,
+                "lower_is_better": True,
+            }
+        )
+    return best_rows
 
 
 def _history_correlations(bundle: ReportBundle, targets: tuple[str, ...]) -> list[dict[str, Any]]:
@@ -305,6 +346,17 @@ def _markdown_report(report: dict[str, Any]) -> str:
                 graph_bpb=_fmt(targets.get("graph_bpb")),
                 eval_bpb=_fmt(targets.get("eval_bpb")),
                 eval_graph_bpb=_fmt(targets.get("eval_graph_bpb")),
+            )
+        )
+    lines.extend(["", "## Best By Target", "", "| target | best run | value | delta vs baseline | runner-up margin |", "|---|---|---:|---:|---:|"])
+    for row in report.get("best_by_target", []):
+        lines.append(
+            "| `{target}` | {name} | {value} | {delta} | {margin} |".format(
+                target=row.get("target"),
+                name=row.get("name"),
+                value=_fmt(row.get("value")),
+                delta=_fmt(row.get("delta_vs_baseline")),
+                margin=_fmt(row.get("margin_to_runner_up")),
             )
         )
     lines.extend(["", "## Top Correlation Screens", "", "| target | metric | mean Spearman | interpretation |", "|---|---|---:|---|"])

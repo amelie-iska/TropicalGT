@@ -40,6 +40,10 @@ def test_bpb_ablation_report_ranks_correlated_metrics(tmp_path: Path):
     assert report["baseline"].endswith("baseline_train_report.json")
     assert len(report["runs"]) == 3
     assert report["deltas_vs_baseline"][1]["deltas"]["delta_bpb"] < 0
+    best = {row["target"]: row for row in report["best_by_target"]}
+    assert best["bpb"]["name"].endswith("variant_train_report")
+    assert best["bpb"]["delta_vs_baseline"] < 0
+    assert best["eval_graph_bpb"]["runner_up_name"].endswith("baseline_train_report")
     ranked = {(row["target"], row["metric"]): row for row in report["aggregate_metric_rankings"]}
     assert ("bpb", "margin_mean") in ranked
     assert ranked[("bpb", "margin_mean")]["mean_spearman"] < 0
@@ -50,7 +54,9 @@ def test_bpb_ablation_artifacts_write_json_markdown_and_html(tmp_path: Path):
     report_path = _write_report(tmp_path / "train_report.json")
     paths = write_bpb_ablation_artifacts([report_path], tmp_path / "ablation", render_html=True)
     assert Path(paths["json"]).exists()
-    assert Path(paths["markdown"]).read_text(encoding="utf-8").startswith("# TropicalGT-I BPB")
+    markdown = Path(paths["markdown"]).read_text(encoding="utf-8")
+    assert markdown.startswith("# TropicalGT-I BPB")
+    assert "## Best By Target" in markdown
     html = Path(paths["html"]).read_text(encoding="utf-8")
     assert "color-scheme: dark" in html
     assert "BPB/graph-BPB metric correlation screen" in html

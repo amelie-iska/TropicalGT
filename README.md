@@ -133,7 +133,7 @@ Sequential text path graphs are deterministic from the byte stream and are exclu
 
 The certificate metrics are finite graph-structure checks: edge tokens are rewarded when their active tropical support lies on the edge itself or one of its endpoint vertex tokens. These certificates are useful for auditing whether tropical supports follow the TokenGT graph skeleton, but they are not semantic correctness proofs and must be interpreted beside task loss, verifier scores, and held-out BPB.
 
-The reasoning HTML artifacts are dark-mode interactive Plotly views. Hovering over a reasoning node updates a side panel that renders the node's filtered simplicial object as an SVG with vertices, edges, 2-simplices, and filtration-colored structure; the PCA/NLL views also include a smoothed NLL heatmap surface below or through the trajectory. The payload JSON stores hover text, PCA/NLL point coordinates, NLL-surface metadata, and the full finite filtered simplicial object for each visualized record. In v1 these objects include 0-simplices for graph vertices, 1-simplices for graph edges, directed length-2 path 2-simplices, filtration thresholds, and per-record summaries.
+The reasoning HTML artifacts are dark-mode interactive Plotly views. Hovering over a reasoning node now opens a cursor-following dark hover card with the node's filtered simplicial object rendered as SVG, while also updating the persistent side panel. The SVG shows vertices, edges, 2-simplices, filtration-colored structure, and filtration-layer ticks rather than only textual metadata; the PCA/NLL views also include a smoothed NLL heatmap surface below or through the trajectory. The payload JSON stores hover text, PCA/NLL point coordinates, NLL-surface metadata, and the full finite filtered simplicial object for each visualized record. In v1 these objects include 0-simplices for graph vertices, 1-simplices for graph edges, directed length-2 path 2-simplices, filtration thresholds, and per-record summaries.
 
 Training checkpoints contain model state, optimizer state, current step, metrics, history, config, and RNG state. Resume a run by pointing `train_tropicalgt_i.py` at a final or `.latest.pt` checkpoint:
 
@@ -221,7 +221,7 @@ TropicalGT-I/scripts/infer_tropicalgt_i.py \
 --output TropicalGT-I/outputs/gpu_smoke/inference_full_audit.json
 ```
 
-This writes a dark-mode graph-of-thought PCA trajectory whose nodes are reasoning candidates and whose edges are parent-child expansions. Hovering over a node renders the filtered simplicial complex attached to that reasoning step in the side panel, and the 3D trajectory includes a smoothed NLL heatmapped surface below the reasoning graph. The JSON payload stores the full complex, multiparameter persistence report, commutative-algebra proxies, derived-equivalence signature, GraphCG direction diagnostics, NLL-surface metadata, and analogical memory retrieval details.
+This writes a dark-mode graph-of-thought PCA trajectory whose nodes are reasoning candidates and whose edges are parent-child expansions. Hovering over a node renders the filtered simplicial complex attached to that reasoning step directly in a cursor-following hover card and in the side panel, and the 3D trajectory includes a smoothed NLL heatmapped surface below the reasoning graph. The JSON payload stores the full complex, multiparameter persistence report, commutative-algebra proxies, derived-equivalence signature, GraphCG direction diagnostics, NLL-surface metadata, and analogical memory retrieval details.
 
 ## BPB ablation analysis
 
@@ -235,7 +235,7 @@ TropicalGT-I/outputs/gpu_smoke/train_report.json \
 --output-dir TropicalGT-I/outputs/gpu_smoke/bpb_ablation
 ```
 
-For multiple matched runs, pass every `train_report.json` and set `--baseline` to the baseline report. The tool writes JSON, Markdown, and Plotly HTML rankings for correlations against `bpb`, `graph_bpb`, `eval_bpb`, and `eval_graph_bpb`. Treat the output as a screen for the next ablation, not as causal evidence; promote an auxiliary only when the matched run improves held-out `bpb` or `graph_bpb`.
+For multiple matched runs, pass every `train_report.json` and set `--baseline` to the baseline report. The tool writes JSON, Markdown, and Plotly HTML rankings for correlations against `bpb`, `graph_bpb`, `eval_bpb`, and `eval_graph_bpb`, plus a best-by-target table with the lowest run, baseline delta, runner-up, and runner-up margin for each compression target. Treat the output as a screen for the next ablation, not as causal evidence; promote an auxiliary only when the matched run improves held-out `bpb` or `graph_bpb`.
 
 To generate a matched ablation grid and optionally train the variants in sequence:
 

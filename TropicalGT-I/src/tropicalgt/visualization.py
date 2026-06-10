@@ -813,10 +813,46 @@ def _write_plotly_dark_html(path: Path, fig: go.Figure, title: str, panel_items:
       box-shadow: inset 0 0 0 1px rgba(255,255,255,0.03), 0 18px 36px rgba(0,0,0,0.24);
     }}
     .simplicial-object-panel svg {{ width: 100%; height: auto; display: block; }}
+    .hover-simplicial-card {{
+      position: fixed;
+      z-index: 40;
+      width: min(380px, calc(100vw - 24px));
+      pointer-events: none;
+      opacity: 0;
+      transform: translate3d(12px, 12px, 0) scale(0.98);
+      transition: opacity 100ms ease, transform 100ms ease;
+      border: 1px solid rgba(94, 234, 212, 0.26);
+      border-radius: 8px;
+      background: rgba(7, 10, 18, 0.96);
+      box-shadow: 0 18px 42px rgba(0,0,0,0.42), inset 0 0 0 1px rgba(255,255,255,0.04);
+      padding: 10px;
+      backdrop-filter: blur(10px);
+    }}
+    .hover-simplicial-card.visible {{
+      opacity: 1;
+      transform: translate3d(0, 0, 0) scale(1);
+    }}
+    .hover-simplicial-card h2 {{
+      margin: 0 0 6px;
+      font-size: 12px;
+      font-weight: 650;
+      color: var(--ink);
+      letter-spacing: 0;
+    }}
+    .hover-simplicial-card .hover-summary {{
+      color: var(--muted);
+      font-size: 10px;
+      line-height: 1.35;
+      max-height: 58px;
+      overflow: hidden;
+      margin-bottom: 6px;
+    }}
+    .hover-simplicial-card svg {{ width: 100%; height: auto; display: block; }}
     @media (max-width: 900px) {{
       .layout {{ grid-template-columns: 1fr; }}
       .chart {{ min-height: 68vh; border-right: 0; border-bottom: 1px solid var(--edge); }}
       .panel {{ min-height: auto; }}
+      .hover-simplicial-card {{ display: none; }}
     }}
   </style>
 </head>
@@ -829,17 +865,49 @@ def _write_plotly_dark_html(path: Path, fig: go.Figure, title: str, panel_items:
       <div class="simplicial-object-panel" id="simplicial-svg">{initial["svg"]}</div>
     </aside>
   </main>
+  <div class="hover-simplicial-card" id="hover-simplicial-card" role="tooltip" aria-label="hovered filtered simplicial object">
+    <h2 id="hover-simplicial-title">{html.escape(initial["title"])}</h2>
+    <div class="hover-summary" id="hover-simplicial-summary">{initial["summary"]}</div>
+    <div id="hover-simplicial-svg">{initial["svg"]}</div>
+  </div>
   <script>
     const simplicialPanels = {json.dumps(items)};
     const panelTitle = document.getElementById("simplicial-title");
     const panelSummary = document.getElementById("simplicial-summary");
     const panelSvg = document.getElementById("simplicial-svg");
+    const hoverCard = document.getElementById("hover-simplicial-card");
+    const hoverTitle = document.getElementById("hover-simplicial-title");
+    const hoverSummary = document.getElementById("hover-simplicial-summary");
+    const hoverSvg = document.getElementById("hover-simplicial-svg");
     function setPanel(index) {{
       const item = simplicialPanels[index];
       if (!item) return;
       panelTitle.textContent = item.title || "Filtered simplicial object";
       panelSummary.innerHTML = item.summary || "";
       panelSvg.innerHTML = item.svg || "";
+    }}
+    function positionHoverCard(pointerEvent) {{
+      if (!hoverCard || !pointerEvent) return;
+      const margin = 14;
+      const bounds = hoverCard.getBoundingClientRect();
+      let left = pointerEvent.clientX + margin;
+      let top = pointerEvent.clientY + margin;
+      if (left + bounds.width > window.innerWidth - margin) left = pointerEvent.clientX - bounds.width - margin;
+      if (top + bounds.height > window.innerHeight - margin) top = pointerEvent.clientY - bounds.height - margin;
+      hoverCard.style.left = Math.max(margin, left) + "px";
+      hoverCard.style.top = Math.max(margin, top) + "px";
+    }}
+    function renderHoverCard(index, pointerEvent) {{
+      const item = simplicialPanels[index];
+      if (!item || !hoverCard) return;
+      hoverTitle.textContent = item.title || "Filtered simplicial object";
+      hoverSummary.innerHTML = item.compact_summary || item.summary || "";
+      hoverSvg.innerHTML = item.svg || "";
+      positionHoverCard(pointerEvent);
+      hoverCard.classList.add("visible");
+    }}
+    function hideHoverCard() {{
+      if (hoverCard) hoverCard.classList.remove("visible");
     }}
     const plot = document.querySelector("#chart .plotly-graph-div");
     if (plot && simplicialPanels.length) {{
@@ -848,8 +916,13 @@ def _write_plotly_dark_html(path: Path, fig: go.Figure, title: str, panel_items:
         if (!point) return;
         const raw = Array.isArray(point.customdata) ? point.customdata[0] : point.customdata;
         const idx = Number(raw);
-        if (Number.isFinite(idx)) setPanel(idx);
+        if (Number.isFinite(idx)) {{
+          setPanel(idx);
+          renderHoverCard(idx, event.event);
+        }}
       }});
+      plot.on("plotly_unhover", hideHoverCard);
+      plot.on("plotly_relayout", hideHoverCard);
     }}
   </script>
 </body>
@@ -874,13 +947,21 @@ def _simplicial_panel_items(objects: list[dict[str, object]], hover: list[str]) 
     for idx, obj in enumerate(objects):
         summary = obj.get("summary", {}) if isinstance(obj, dict) else {}
         title = str(obj.get("record_id", f"reasoning-state-{idx}")) if isinstance(obj, dict) else f"reasoning-state-{idx}"
-        summary_html = (
+        compact_summary = (
             f"V={summary.get('num_vertices', 0)} | E={summary.get('num_edges', 0)} | "
             f"T={summary.get('num_two_simplices', 0)} | thresholds={summary.get('num_thresholds', 0)}"
         )
+        summary_html = compact_summary
         if idx < len(hover):
             summary_html += f"<br>{hover[idx]}"
-        items.append({"title": title, "summary": summary_html, "svg": _simplicial_object_svg(obj if isinstance(obj, dict) else {})})
+        items.append(
+            {
+                "title": title,
+                "summary": summary_html,
+                "compact_summary": compact_summary,
+                "svg": _simplicial_object_svg(obj if isinstance(obj, dict) else {}),
+            }
+        )
     return items
 
 
@@ -893,8 +974,10 @@ def _simplicial_object_svg(obj: dict[str, object], width: int = 380, height: int
     if not labels:
         labels = ["empty"]
     labels = labels[:18]
-    cx, cy = width / 2.0, height / 2.0 + 4.0
-    radius = max(min(width, height) * 0.34, 48.0)
+    summary = obj.get("summary", {}) if isinstance(obj, dict) else {}
+    thresholds = obj.get("thresholds", []) if isinstance(obj, dict) else []
+    cx, cy = width / 2.0, height / 2.0 - 4.0
+    radius = max(min(width, height) * 0.30, 42.0)
     coords: dict[str, tuple[float, float]] = {}
     for idx, label in enumerate(labels):
         angle = -np.pi / 2 + 2 * np.pi * idx / max(len(labels), 1)
@@ -906,14 +989,18 @@ def _simplicial_object_svg(obj: dict[str, object], width: int = 380, height: int
     parts = [
         f"<svg viewBox='0 0 {width} {height}' role='img' aria-label='rendered filtered simplicial object'>",
         "<rect width='100%' height='100%' rx='12' fill='#070a12'/>",
-        "<defs><filter id='glow'><feGaussianBlur stdDeviation='2.5' result='b'/><feMerge><feMergeNode in='b'/><feMergeNode in='SourceGraphic'/></feMerge></filter></defs>",
+        "<defs>"
+        "<filter id='glow'><feGaussianBlur stdDeviation='2.5' result='b'/><feMerge><feMergeNode in='b'/><feMergeNode in='SourceGraphic'/></feMerge></filter>"
+        "<linearGradient id='complex-bg' x1='0' x2='1' y1='0' y2='1'><stop offset='0%' stop-color='#0f172a'/><stop offset='100%' stop-color='#020617'/></linearGradient>"
+        "</defs>",
+        "<rect x='8' y='8' width='364' height='222' rx='10' fill='url(#complex-bg)' stroke='rgba(125,211,252,0.16)'/>",
     ]
     for tri in triangles[:18]:
         simplex = tri.get("simplex", [])
         pts = [point(v) for v in simplex]
         if len(pts) == 3 and all(p is not None for p in pts):
             poly = " ".join(f"{p[0]:.1f},{p[1]:.1f}" for p in pts if p is not None)
-            parts.append(f"<polygon points='{poly}' fill='rgba(94,234,212,0.13)' stroke='rgba(94,234,212,0.38)' stroke-width='1.2'/>")
+            parts.append(f"<polygon class='two-simplex' points='{poly}' fill='rgba(94,234,212,0.16)' stroke='rgba(94,234,212,0.46)' stroke-width='1.2'/>")
     for edge in edges[:48]:
         simplex = edge.get("simplex", [])
         if len(simplex) < 2:
@@ -923,7 +1010,11 @@ def _simplicial_object_svg(obj: dict[str, object], width: int = 380, height: int
             continue
         filt = float(edge.get("filtration", 0.0) or 0.0)
         color = _filtration_color(filt)
-        parts.append(f"<line x1='{a[0]:.1f}' y1='{a[1]:.1f}' x2='{b[0]:.1f}' y2='{b[1]:.1f}' stroke='{color}' stroke-width='2.2' stroke-opacity='0.82'/>")
+        edge_type = html.escape(str(edge.get("type", "edge"))[:30])
+        parts.append(
+            f"<line class='one-simplex' x1='{a[0]:.1f}' y1='{a[1]:.1f}' x2='{b[0]:.1f}' y2='{b[1]:.1f}' "
+            f"stroke='{color}' stroke-width='2.2' stroke-opacity='0.82'><title>{edge_type} filtration={filt:.3f}</title></line>"
+        )
     for idx, label in enumerate(labels):
         x, y = coords[label]
         filt = 0.0
@@ -931,13 +1022,48 @@ def _simplicial_object_svg(obj: dict[str, object], width: int = 380, height: int
             filt = float(vertices[idx].get("filtration", 0.0) or 0.0)
         color = _filtration_color(filt)
         safe = html.escape(label[:18])
-        parts.append(f"<circle cx='{x:.1f}' cy='{y:.1f}' r='8.5' fill='{color}' stroke='#e8eef8' stroke-width='1.2' filter='url(#glow)'/>")
+        vertex_type = html.escape(str(vertices[idx].get("type", "vertex"))[:30]) if idx < len(vertices) else "vertex"
+        parts.append(
+            f"<circle class='zero-simplex' cx='{x:.1f}' cy='{y:.1f}' r='8.5' fill='{color}' stroke='#e8eef8' "
+            f"stroke-width='1.2' filter='url(#glow)'><title>{vertex_type} filtration={filt:.3f}</title></circle>"
+        )
         parts.append(f"<text x='{x:.1f}' y='{y + 22:.1f}' text-anchor='middle' fill='#dbe7f4' font-size='9'>{safe}</text>")
-    thresholds = obj.get("thresholds", []) if isinstance(obj, dict) else []
-    parts.append("<text x='14' y='22' fill='#9fb3c8' font-size='11'>filtered simplicial complex</text>")
-    parts.append(f"<text x='14' y='{height - 14}' fill='#7dd3fc' font-size='10'>thresholds: {html.escape(_json_clip(thresholds[:8], 120))}</text>")
+    parts.append("<text x='16' y='24' fill='#dbeafe' font-size='11' font-weight='650'>filtered simplicial complex</text>")
+    parts.append(
+        f"<text x='16' y='40' fill='#9fb3c8' font-size='9'>"
+        f"dim0={summary.get('num_vertices', len(vertices))} dim1={summary.get('num_edges', len(edges))} dim2={summary.get('num_two_simplices', len(triangles))}</text>"
+    )
+    parts.extend(_filtration_layer_svg(thresholds, width=width, y=238))
+    parts.append(f"<text x='14' y='{height - 10}' fill='#7dd3fc' font-size='9'>thresholds: {html.escape(_json_clip(thresholds[:8], 116))}</text>")
     parts.append("</svg>")
     return "".join(parts)
+
+
+def _filtration_layer_svg(thresholds: object, width: int, y: int) -> list[str]:
+    raw_thresholds = thresholds if isinstance(thresholds, (list, tuple)) else []
+    values = [float(v) for v in raw_thresholds if isinstance(v, (int, float))]
+    if not values:
+        values = [0.0]
+    values = sorted(values[:14])
+    x0 = 14.0
+    bar_width = max(width - 28.0, 1.0)
+    parts = [
+        f"<g class='filtration-layer' aria-label='filtration layers'>",
+        f"<line x1='{x0:.1f}' y1='{y:.1f}' x2='{x0 + bar_width:.1f}' y2='{y:.1f}' stroke='rgba(148,163,184,0.34)' stroke-width='2'/>",
+    ]
+    max_value = max(max(values), 1e-9)
+    for idx, value in enumerate(values):
+        frac = 0.0 if max_value <= 1e-9 else max(0.0, min(1.0, value / max_value))
+        x = x0 + frac * bar_width
+        color = _filtration_color(frac)
+        height = 10 + 3 * (idx % 3)
+        parts.append(
+            f"<rect x='{x - 2.0:.1f}' y='{y - height:.1f}' width='4.0' height='{height:.1f}' rx='1.4' "
+            f"fill='{color}' opacity='0.92'><title>filtration threshold {value:.3f}</title></rect>"
+        )
+    parts.append("<text x='14' y='256' fill='#9fb3c8' font-size='8'>filtration layers</text>")
+    parts.append("</g>")
+    return parts
 
 
 def _filtration_color(value: float) -> str:

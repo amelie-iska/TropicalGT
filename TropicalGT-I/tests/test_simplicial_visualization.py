@@ -31,8 +31,13 @@ def test_visualization_payload_contains_filtered_objects(tmp_path: Path):
     assert payload["points"][0]["filtered_summary"]["num_vertices"] >= 1
     html = Path(paths["pca_nll"]).read_text(encoding="utf-8")
     assert "simplicial-object-panel" in html
+    assert "hover-simplicial-card" in html
+    assert 'color-scheme: dark' in html
     assert "plotly_hover" in html
+    assert "renderHoverCard" in html
     assert "<svg" in html
+    assert "zero-simplex" in html
+    assert "filtration-layer" in html
     assert "Smoothed NLL surface" in html
 
 
@@ -70,7 +75,10 @@ def test_got_trajectory_visualization_renders_simplicial_panel_and_nll_surface(t
     html = Path(paths["got_trajectory_3d"]).read_text(encoding="utf-8")
     payload = json.loads(Path(paths["got_payloads"]).read_text(encoding="utf-8"))
     assert "simplicial-object-panel" in html
+    assert "hover-simplicial-card" in html
+    assert 'aria-label="hovered filtered simplicial object"' in html
     assert "<svg" in html
+    assert "filtration-layer" in html
     assert "Smoothed trajectory NLL surface" in html
     assert payload["nll_surface"]["available"] is True
     assert payload["nodes"][1]["filtered_simplicial_object"]["summary"]["num_vertices"] >= 1
