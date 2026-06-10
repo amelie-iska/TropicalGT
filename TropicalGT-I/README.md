@@ -15,7 +15,9 @@ The main optimization metric remains byte-level BPB for the OpenAI Parameter-Gol
 - `graph_sideinfo_bpb`: side-information-charged BPB on text bytes.
 - `graph_conditioned_bpb_no_side_cost`: optimistic graph-conditioned BPB when graph structure is treated as already present in context.
 
-All tropical margins, GraphCG factors, GFlowNet rewards, persistence summaries, and analogical memory metrics should be ablated by whether they improve held-out `bpb` and `graph_bpb`.
+The graph structural byte budget is derived from the actual TokenGT graph tuple: masks determine live graph tokens, node counts determine endpoint-id width, and edge endpoint ids are charged when supplied.
+
+All tropical margins, GraphCG factors, GFlowNet rewards, persistence summaries, and analogical memory metrics should be ablated by whether they improve held-out `bpb` and `graph_bpb`. GraphCG training now includes an explicit full-rank singular-value barrier and logs effective rank, numerical rank, singular min/max, and condition proxies so latent steering directions cannot collapse unnoticed.
 
 Run `scripts/analyze_bpb_ablations.py` on one or more `train_report.json` files to generate JSON/Markdown/HTML screens ranking which logged metrics correlate with `bpb`, `graph_bpb`, `eval_bpb`, and `eval_graph_bpb`. Use those rankings to choose matched ablations; do not treat correlations as causal wins. Run `scripts/run_bpb_ablation_grid.py` to generate same-seed variants such as `no_graphcg`, `no_gflownet`, `no_certificate`, `no_tropical_regularizers`, and `no_auxiliary`, optionally train them in sequence, and immediately analyze their BPB deltas.
 
@@ -32,7 +34,7 @@ The readiness audit should be treated as the pre-training acceptance check for t
 
 For the full `configs/train.json` path, run the readiness audit with `--train-dry-run --require-cuda --check-wandb-key` before launching the long job. That dry run samples the moved parquet train split, builds the configured model, performs one optimizer step on CUDA, and gates finite train loss, BPB, graph-BPB, and gradient norm.
 
-Full inference audits can optionally emit graph-of-thought PCA trajectories, tropical support heatmaps, persistence barcodes, multiparameter algebra JSON, GraphCG direction plots, and analogical memory retrieval artifacts:
+Full inference audits can optionally emit graph-of-thought PCA trajectories, tropical support heatmaps, persistence barcodes, multiparameter algebra JSON, GraphCG direction plots, and analogical memory retrieval artifacts. The trajectory HTML is dark-mode; hovering over a reasoning node renders the node's filtered simplicial object as an SVG panel, and the 3D NLL view includes a smoothed NLL heatmapped surface under the reasoning graph:
 
 ```bash
 PYTHONPATH=TropicalGT-I/src \

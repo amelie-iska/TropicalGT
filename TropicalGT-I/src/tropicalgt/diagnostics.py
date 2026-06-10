@@ -170,6 +170,12 @@ def graphcg_diagnostics(model, graph_state: torch.Tensor, top_k: int = 3) -> dic
     scores = (state_norm @ dirs_norm.t()).cpu()
     gram = (dirs_norm @ dirs_norm.t()).cpu()
     offdiag = gram - torch.eye(gram.shape[0])
+    singular_values = torch.linalg.svdvals(dirs_norm).cpu()
+    rank_margin = float(getattr(model.graphcg, "full_rank_margin", 0.05))
+    rank_target = min(dirs_norm.shape[0], dirs_norm.shape[1])
+    active = singular_values[:rank_target].clamp_min(1e-8)
+    probs = active / active.sum().clamp_min(1e-8)
+    effective_rank = torch.exp(-(probs * probs.log()).sum())
     top = []
     for row in scores:
         k = min(top_k, row.numel())
@@ -178,6 +184,14 @@ def graphcg_diagnostics(model, graph_state: torch.Tensor, top_k: int = 3) -> dic
     return {
         "direction_norms": [float(v) for v in norms.tolist()],
         "mean_abs_offdiag_cosine": float(offdiag.abs().mean()),
+        "full_rank_margin": rank_margin,
+        "rank_target": int(rank_target),
+        "numerical_rank": int(singular_values[:rank_target].gt(rank_margin).sum().item()),
+        "effective_rank": float(effective_rank),
+        "singular_values": [float(v) for v in singular_values.tolist()],
+        "singular_min": float(active.min()),
+        "singular_max": float(active.max()),
+        "svd_condition_proxy": float(active.max() / active.min().clamp_min(1e-8)),
         "top_directions": top,
         "projection_scores": [
             [{"direction": int(idx), "cosine": float(value)} for idx, value in enumerate(row.tolist())]

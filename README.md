@@ -109,7 +109,7 @@ TropicalGT-I/scripts/train_tropicalgt_i.py \
 --config TropicalGT-I/configs/gpu_smoke.json
 ```
 
-The script reads the W&B API key from `keys.txt` when W&B is enabled. It logs NLL, exact text BPB, graph-BPB, graph side-information BPB, optimistic graph-conditioned BPB, GFlowNet trajectory-balance loss, GraphCG losses and direction geometry, finite graph-certificate loss/agreement, tropical support entropy, tropical margins, margin-threshold wall-hit rate, graph token counts, graph structural byte counts, explicit graph JSON byte counts, graph JSON fallback/sequentialization rates, algebraic persistence summaries, analogical-memory query norms, examples/sec, tokens/sec, GPU memory, and generated HTML artifacts.
+The script reads the W&B API key from `keys.txt` when W&B is enabled. It logs NLL, exact text BPB, graph-BPB, graph side-information BPB, optimistic graph-conditioned BPB, GFlowNet trajectory-balance loss, GraphCG losses, full-rank singular-spectrum diagnostics, direction geometry, finite graph-certificate loss/agreement, tropical support entropy, tropical margins, margin-threshold wall-hit rate, graph token counts, graph structural byte counts, explicit graph JSON byte counts, graph JSON fallback/sequentialization rates, algebraic persistence summaries, analogical-memory query norms, examples/sec, tokens/sec, GPU memory, and generated HTML artifacts.
 
 The primary Parameter-Golf-style metric is text BPB:
 
@@ -126,11 +126,13 @@ graph_sideinfo_bpb = (NLL_bits + side_info_bits) / predicted_target_bytes
 graph_conditioned_bpb_no_side_cost = NLL_bits / (predicted_target_bytes + graph_token_structural_bytes)
 ```
 
+`graph_token_structural_bytes` is computed from the actual TokenGT tuple: live-token masks, node counts, and edge endpoint ids determine the structural byte budget.
+
 Sequential text path graphs are deterministic from the byte stream and are excluded from explicit side-information byte accounting. All auxiliary metrics should be ablated by whether they improve held-out `bpb` and `graph_bpb`; a prettier trajectory or cleaner algebraic invariant is not a win by itself.
 
 The certificate metrics are finite graph-structure checks: edge tokens are rewarded when their active tropical support lies on the edge itself or one of its endpoint vertex tokens. These certificates are useful for auditing whether tropical supports follow the TokenGT graph skeleton, but they are not semantic correctness proofs and must be interpreted beside task loss, verifier scores, and held-out BPB.
 
-The reasoning payload JSON stores the hover text, PCA/NLL point coordinates, and the full finite filtered simplicial object for each visualized record. In v1 these objects include 0-simplices for graph vertices, 1-simplices for graph edges, directed length-2 path 2-simplices, filtration thresholds, and per-record summaries.
+The reasoning HTML artifacts are dark-mode interactive Plotly views. Hovering over a reasoning node updates a side panel that renders the node's filtered simplicial object as an SVG with vertices, edges, 2-simplices, and filtration-colored structure; the PCA/NLL views also include a smoothed NLL heatmap surface below or through the trajectory. The payload JSON stores hover text, PCA/NLL point coordinates, NLL-surface metadata, and the full finite filtered simplicial object for each visualized record. In v1 these objects include 0-simplices for graph vertices, 1-simplices for graph edges, directed length-2 path 2-simplices, filtration thresholds, and per-record summaries.
 
 Training checkpoints contain model state, optimizer state, current step, metrics, history, config, and RNG state. Resume a run by pointing `train_tropicalgt_i.py` at a final or `.latest.pt` checkpoint:
 
@@ -218,7 +220,7 @@ TropicalGT-I/scripts/infer_tropicalgt_i.py \
 --output TropicalGT-I/outputs/gpu_smoke/inference_full_audit.json
 ```
 
-This writes a graph-of-thought PCA trajectory whose nodes are reasoning candidates and whose edges are parent-child expansions. Hover payloads summarize the filtered simplicial complex attached to that reasoning step, while the JSON payload stores the full complex, multiparameter persistence report, commutative-algebra proxies, derived-equivalence signature, GraphCG direction diagnostics, and analogical memory retrieval details.
+This writes a dark-mode graph-of-thought PCA trajectory whose nodes are reasoning candidates and whose edges are parent-child expansions. Hovering over a node renders the filtered simplicial complex attached to that reasoning step in the side panel, and the 3D trajectory includes a smoothed NLL heatmapped surface below the reasoning graph. The JSON payload stores the full complex, multiparameter persistence report, commutative-algebra proxies, derived-equivalence signature, GraphCG direction diagnostics, NLL-surface metadata, and analogical memory retrieval details.
 
 ## BPB ablation analysis
 
@@ -291,4 +293,14 @@ TROPICALGT_GRAPH_ADAPTER=1
 TROPICALGT_GRAPH_FEATURE_DIM=48
 ```
 
-The optional `graph_tokens` argument is a tuple `(token_features, token_type_ids, graph_mask)`. The adapter pools graph node/edge tokens into a model-width context vector and adds it to each text-token embedding before the baseline transformer stack.
+The optional `graph_tokens` argument accepts either `(token_features, token_type_ids, graph_mask)` or `(token_features, token_type_ids, endpoint_ids, graph_mask)`. The four-tensor form is the TokenGT incidence path: endpoint ids attach edge tokens to vertex-token ids, with `-1` used as endpoint padding. The adapter pools graph node/edge tokens into a model-width context vector and adds it to each text-token embedding before the baseline transformer stack. `tropicalgt_tokengt_adapter.py` also exposes `graph_bpb_metrics(...)`, which reports ordinary text BPB, graph-BPB, graph side-information BPB, optimistic graph-conditioned BPB, graph structural bytes, explicit graph JSON bytes, and side-information bits.
+
+To build an OpenAI Parameter-Golf stripped package without the full TropicalGT-I research stack, run from `external/parameter-golf`:
+
+```bash
+/home/iska/miniconda3/envs/tokengt/bin/python scripts/export_tropicalgt_parameter_golf.py \
+  --model-artifact final_model.int8.ptz \
+  --output-dir parameter_golf_export
+```
+
+The export zip contains only `train_gpt.py`, `tropicalgt_tokengt_adapter.py`, `final_model.int8.ptz`, and `manifest.json`. The manifest checks the local 16,000,000-byte competition cap against code bytes plus compressed artifact bytes and records the BPB/graph-BPB metric contract. Datasets, checkpoints other than the final compressed artifact, W&B runs, topological audit JSON, and visualization HTML are intentionally excluded from the stripped package.

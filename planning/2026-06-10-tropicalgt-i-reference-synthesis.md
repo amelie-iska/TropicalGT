@@ -212,7 +212,7 @@ Implemented evidence:
 - `TropicalGT-I/src/tropicalgt/scaling.py`: bounded graph-of-thought inference-time scaling.
 - `TropicalGT-I/src/tropicalgt/simplicial.py` and `visualization.py`: filtered simplicial objects and interactive Plotly PCA/NLL audits.
 - `TropicalGT-I/scripts/audit_tropicalgt_i_readiness.py`: data/package/checkpoint/eval/inference/visual readiness gates.
-- `external/parameter-golf`: optional TokenGT-style graph adapter that preserves the default baseline path.
+- `external/parameter-golf`: optional TokenGT-style graph adapter that preserves the default baseline path, accepts both 3-tensor and endpoint-aware 4-tensor graph tuples, exposes graph-BPB helpers, and can export a stripped Parameter-Golf zip containing only the baseline script, graph adapter, compressed model artifact, and cap-check manifest.
 
 Important limitations:
 

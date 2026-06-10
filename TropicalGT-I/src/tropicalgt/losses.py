@@ -42,14 +42,31 @@ class GFlowNetPolicy(nn.Module):
 
 
 class GraphCGLoss(nn.Module):
-    def __init__(self, dim: int, num_directions: int = 8) -> None:
+    def __init__(self, dim: int, num_directions: int = 8, full_rank_margin: float = 0.05) -> None:
         super().__init__()
         self.directions = nn.Parameter(torch.randn(num_directions, dim) * 0.02)
+        self.full_rank_margin = full_rank_margin
 
     def forward(self, z: Tensor) -> tuple[Tensor, dict[str, Tensor]]:
         if z.shape[0] < 2:
             zero = z.sum() * 0.0
-            return zero, {"graphcg_contrastive": zero, "graphcg_orthogonality": zero, "graphcg_sparsity": zero}
+            return zero, {
+                "graphcg_contrastive": zero,
+                "graphcg_orthogonality": zero,
+                "graphcg_sparsity": zero,
+                "graphcg_full_rank": zero,
+                "graphcg_direction_effective_rank": zero,
+                "graphcg_effective_rank": zero,
+                "graphcg_direction_numerical_rank": zero,
+                "graphcg_numerical_rank": zero,
+                "graphcg_direction_singular_min": zero,
+                "graphcg_min_singular_value": zero,
+                "graphcg_direction_singular_max": zero,
+                "graphcg_max_singular_value": zero,
+                "graphcg_full_rank_penalty": zero,
+                "graphcg_rank_target": zero,
+                "graphcg_singular_value_floor": zero,
+            }
         dirs = F.normalize(self.directions, dim=-1)
         z_norm = F.normalize(z, dim=-1)
         shifted = F.normalize(z_norm[:, None, :] + 0.1 * dirs[None, :, :], dim=-1)
@@ -64,12 +81,34 @@ class GraphCGLoss(nn.Module):
         norms = self.directions.norm(dim=-1)
         centered = dirs - dirs.mean(dim=0, keepdim=True)
         covariance = centered @ centered.t() / max(dirs.shape[-1] - 1, 1)
+        singular_values = torch.linalg.svdvals(dirs)
+        rank_target = min(dirs.shape[0], dirs.shape[1])
+        active_singular_values = singular_values[:rank_target]
+        full_rank = F.relu(self.full_rank_margin - active_singular_values).pow(2).mean()
+        spectral_mass = active_singular_values.clamp_min(1e-8)
+        spectral_probs = spectral_mass / spectral_mass.sum().clamp_min(1e-8)
+        effective_rank = torch.exp(-(spectral_probs * spectral_probs.log()).sum())
+        numerical_rank = active_singular_values.gt(self.full_rank_margin).float().sum()
+        condition_proxy = active_singular_values.max() / active_singular_values.abs().clamp_min(1e-8).min()
         eigvals = torch.linalg.eigvalsh((gram + gram.t()) * 0.5).real
-        loss = contrastive + 0.05 * orth + 0.001 * sparse
+        loss = contrastive + 0.05 * orth + 0.05 * full_rank + 0.001 * sparse
         return loss, {
             "graphcg_contrastive": contrastive.detach(),
             "graphcg_orthogonality": orth.detach(),
             "graphcg_sparsity": sparse.detach(),
+            "graphcg_full_rank": full_rank.detach(),
+            "graphcg_full_rank_penalty": full_rank.detach(),
+            "graphcg_direction_rank_target": torch.tensor(float(rank_target), device=z.device),
+            "graphcg_rank_target": torch.tensor(float(rank_target), device=z.device),
+            "graphcg_direction_effective_rank": effective_rank.detach(),
+            "graphcg_effective_rank": effective_rank.detach(),
+            "graphcg_direction_numerical_rank": numerical_rank.detach(),
+            "graphcg_numerical_rank": numerical_rank.detach(),
+            "graphcg_direction_singular_min": active_singular_values.detach().min(),
+            "graphcg_min_singular_value": active_singular_values.detach().min(),
+            "graphcg_direction_singular_max": active_singular_values.detach().max(),
+            "graphcg_max_singular_value": active_singular_values.detach().max(),
+            "graphcg_singular_value_floor": torch.tensor(float(self.full_rank_margin), device=z.device),
             "graphcg_direction_norm_mean": norms.detach().mean(),
             "graphcg_direction_norm_min": norms.detach().min(),
             "graphcg_direction_norm_max": norms.detach().max(),
@@ -78,4 +117,5 @@ class GraphCGLoss(nn.Module):
             "graphcg_direction_gram_offdiag_max_abs": offdiag.detach().abs().max(),
             "graphcg_direction_covariance_mean_abs": covariance.detach().abs().mean(),
             "graphcg_direction_gram_condition_proxy": (eigvals.detach().max() / eigvals.detach().abs().clamp_min(1e-8).min()),
+            "graphcg_direction_svd_condition_proxy": condition_proxy.detach(),
         }

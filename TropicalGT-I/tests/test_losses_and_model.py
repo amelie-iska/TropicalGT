@@ -18,6 +18,43 @@ def test_losses_backpropagate():
     assert torch.isfinite(total)
 
 
+def test_graphcg_loss_reports_full_rank_terms():
+    z = torch.randn(5, 16, requires_grad=True)
+    loss, metrics = GraphCGLoss(16, num_directions=4)(z)
+    assert torch.isfinite(loss)
+    for key in [
+        "graphcg_full_rank",
+        "graphcg_full_rank_penalty",
+        "graphcg_effective_rank",
+        "graphcg_numerical_rank",
+        "graphcg_rank_target",
+        "graphcg_min_singular_value",
+        "graphcg_max_singular_value",
+        "graphcg_direction_effective_rank",
+        "graphcg_direction_numerical_rank",
+        "graphcg_direction_rank_target",
+        "graphcg_direction_singular_min",
+        "graphcg_direction_singular_max",
+        "graphcg_direction_svd_condition_proxy",
+    ]:
+        assert key in metrics
+        assert torch.isfinite(metrics[key])
+    assert metrics["graphcg_direction_rank_target"].item() == 4.0
+    loss.backward()
+    assert z.grad is not None
+
+
+def test_graphcg_full_rank_penalty_detects_collapsed_directions():
+    z = torch.randn(5, 16, requires_grad=True)
+    graphcg = GraphCGLoss(16, num_directions=4)
+    with torch.no_grad():
+        graphcg.directions.fill_(0.0)
+        graphcg.directions[:, 0] = 1.0
+    _loss, metrics = graphcg(z)
+    assert metrics["graphcg_full_rank_penalty"] > 0
+    assert metrics["graphcg_numerical_rank"] < metrics["graphcg_rank_target"]
+
+
 def test_model_forward_fixture():
     ds = FixtureGraphDataset(2)
     records = [ds[0], ds[1]]
@@ -43,6 +80,10 @@ def test_model_forward_fixture():
         "loss_certificate_weighted",
         "gflownet_tb_residual_abs_mean",
         "gflownet_log_z",
+        "graphcg_full_rank",
+        "graphcg_direction_effective_rank",
+        "graphcg_direction_numerical_rank",
+        "graphcg_direction_singular_min",
     ]:
         assert key in out
         assert torch.isfinite(out[key])
