@@ -24,6 +24,7 @@ Use the `tokengt` environment directly in noninteractive shells:
 - `TropicalGT-I/scripts/` contains training, eval, inference, validation, and visualization CLIs.
 - `TropicalGT-I/configs/smoke.json` is a CPU fixture smoke config.
 - `TropicalGT-I/configs/gpu_smoke.json` is the RTX 4090 data-backed smoke config.
+- `TropicalGT-I/configs/train.json` is the first full data-backed training config.
 - `TropicalGT-I/assets/tropicalgt_neurips_research_paper.tex` is the paper source.
 - `planning/` contains reference synthesis and implementation notes.
 - `external/` contains separate fork checkouts and is intentionally gitignored by this repo.
@@ -43,6 +44,20 @@ TropicalGT-I/data/toricgt/curated_hf_shards
 ```
 
 Data is gitignored. Do not commit datasets, checkpoints, W&B runs, or `keys.txt`.
+
+Data-backed configs set `require_data: true`, so missing or unreadable parquet shards fail loudly instead of silently training on fixture examples. The parquet loader builds a row-group metadata index over train/validation/test shards and reads records through a bounded row-group cache controlled by `cache_shards`; it does not concatenate the full moved dataset into memory. The full `train.json` config streams rows in shard order by default; use an offline-shuffled shard order or a shard-aware sampler before enabling fully random access at large scale.
+
+Generate a shard manifest and tokenization preflight report before a long run:
+
+```bash
+PYTHONPATH=TropicalGT-I/src \
+/home/iska/miniconda3/envs/tokengt/bin/python \
+TropicalGT-I/scripts/validate_tropicalgt_i.py \
+--config TropicalGT-I/configs/train.json \
+--split train \
+--limit 64 \
+--output TropicalGT-I/outputs/train/validate_train.json
+```
 
 ## Install/runtime notes
 
@@ -92,6 +107,29 @@ Training checkpoints contain model state, optimizer state, current step, metrics
 ```bash
 PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python TropicalGT-I/scripts/train_tropicalgt_i.py --config TropicalGT-I/configs/gpu_smoke.json --resume-from TropicalGT-I/checkpoints/tropicalgt_i_gpu_smoke.latest.pt --max-steps 8
 ```
+
+## Data-backed training launch
+
+After the preflight report is clean, launch the first full TropicalGT-I run with:
+
+```bash
+PYTHONPATH=TropicalGT-I/src \
+/home/iska/miniconda3/envs/tokengt/bin/python \
+TropicalGT-I/scripts/train_tropicalgt_i.py \
+--config TropicalGT-I/configs/train.json
+```
+
+Resume it with:
+
+```bash
+PYTHONPATH=TropicalGT-I/src \
+/home/iska/miniconda3/envs/tokengt/bin/python \
+TropicalGT-I/scripts/train_tropicalgt_i.py \
+--config TropicalGT-I/configs/train.json \
+--resume-from TropicalGT-I/checkpoints/tropicalgt_i_train.latest.pt
+```
+
+The training report includes a parquet manifest for the train and validation splits in addition to losses, graph-token counts, W&B metadata, visualization paths, and checkpoint paths.
 
 ## Eval, inference, validation, visualization
 

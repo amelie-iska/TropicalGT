@@ -1,6 +1,10 @@
 {
   "run_name": "tropicalgt_i_cpu_smoke",
   "data_root": null,
+  "require_data": false,
+  "cache_shards": 1,
+  "shuffle": true,
+  "num_workers": 0,
   "fixture_size": 8,
   "train_limit": 8,
   "val_limit": 4,

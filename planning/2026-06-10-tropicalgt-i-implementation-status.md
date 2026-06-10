@@ -12,6 +12,7 @@
 - Iteration 3 adds richer validation, evaluation, and inference diagnostics: graph-json fallback rates, per-record NLL, graph-token traces, tropical support histograms, GFlowNet action probabilities, GraphCG direction summaries, and prompt-level filtered simplicial objects.
 - Iteration 4 adds bounded inference-time scaling: a GFlowNet-guided graph-of-thought candidate controller that expands prompt graphs with action paths, scores candidates with NLL/margin/action-probability/token-budget terms, and emits the best scaled candidate plus trace artifacts.
 - Iteration 5 adds resumable training checkpoints with optimizer state, step, metric history, config, RNG state, periodic `.latest.pt` saves, and CLI `--resume-from` / `--max-steps` support.
+- Iteration 6 hardens data-backed training: parquet shards are row-group metadata-indexed and read through a bounded row-group cache, data-backed configs set `require_data: true`, validation emits a train/validation/test shard manifest, and `configs/train.json` is the first full data-backed training launch config.
 
 ## Verification evidence
 - Unit tests: `/home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests -q` -> `6 passed`.
@@ -46,6 +47,13 @@
 - Post-restore W&B-order check: resumed the same GPU run from `start_step=4` to `final_step=5` after moving W&B initialization behind checkpoint restore; W&B run https://wandb.ai/amelie-iska-math/TropicalGT-I/runs/7cwfuwrk reported validation NLL `5.395662784576416`, BPB proxy `7.784295941617531`, and graph-json fallback rate `0.0`.
 - GPU eval, scaled inference, and visualization rendering completed after the resumed checkpoint; artifact inspection confirmed `6` scaled candidates, best path `['retrieve', 'retrieve']`, `2` eval detail records, `6` reasoning payload objects, and `training_metrics.html` present.
 - Process/GPU cleanup check after iteration 5 found no lingering training or GPU compute process.
+- Iteration 6 unit tests: `/home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests -q` -> `17 passed`.
+- Row-group loader inspection over the moved train split crossed row-group boundaries with `8193` indexed examples, `3` row groups, projected columns `answer`, `dataset`, `estimated_tokens`, `graph_json`, `metadata_json`, `question`, `reasoning`, `record_id`, `solution`, and `text`.
+- Train-config preflight wrote `TropicalGT-I/outputs/train/validate_train.json`; it validated `64` required-data train records with `0` graph-json fallbacks and saw `117` train files / `4,633,582` train rows, `578,319` validation rows, and `578,835` test rows.
+- Iteration 6 GPU smoke completed on CUDA with W&B run https://wandb.ai/amelie-iska-math/TropicalGT-I/runs/34y08j3l, final step `2`, validation NLL `5.5390974680582685`, graph-json fallback rate `0.0`, and compact train manifest rows `4,633,582`.
+- GPU eval, scaled inference, and visualization rendering completed after the row-group loader smoke; artifact inspection confirmed `2` eval detail records, `6` scaled candidates, best path `['reject', 'merge']`, `6` reasoning payload objects, and `training_metrics.html` present.
+- Paper compiled locally from the updated TeX source to `46` pages and was copied back to `TropicalGT-I/assets/tropicalgt_neurips_research_paper.pdf`.
+- Process/GPU cleanup check after iteration 6 found no lingering training or GPU compute process.
 
 ## Remaining research risks
 - The model is a first functional iteration, not a competitive Parameter-Golf artifact.

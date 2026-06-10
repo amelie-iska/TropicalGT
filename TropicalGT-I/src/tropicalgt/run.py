@@ -11,7 +11,7 @@ import torch
 from torch.utils.data import DataLoader
 from tqdm.auto import tqdm
 
-from .data import encode_bytes, make_dataset
+from .data import encode_bytes, make_dataset, parquet_manifest
 from .diagnostics import record_diagnostics
 from .model import TropicalGTConfig, TropicalGTModel
 from .tokenizer import TokenGTTokenizer
@@ -62,8 +62,24 @@ def train(config_path: str | Path, resume_from: str | Path | None = None, max_st
     if resume_from is None:
         resume_from = cfg.get("resume_from")
     root = cfg.get("data_root")
-    train_ds = make_dataset(root, "train", limit=cfg.get("train_limit"), fixture_size=cfg.get("fixture_size", 8))
-    val_ds = make_dataset(root, "validation", limit=cfg.get("val_limit", cfg.get("train_limit", 4)), fixture_size=cfg.get("fixture_size", 8))
+    require_data = bool(cfg.get("require_data", bool(root)))
+    cache_shards = int(cfg.get("cache_shards", 2))
+    train_ds = make_dataset(
+        root,
+        "train",
+        limit=cfg.get("train_limit"),
+        fixture_size=cfg.get("fixture_size", 8),
+        require_data=require_data,
+        cache_shards=cache_shards,
+    )
+    val_ds = make_dataset(
+        root,
+        "validation",
+        limit=cfg.get("val_limit", cfg.get("train_limit", 4)),
+        fixture_size=cfg.get("fixture_size", 8),
+        require_data=require_data,
+        cache_shards=cache_shards,
+    )
     tokenizer = TokenGTTokenizer(**cfg.get("tokengt", {}))
     seq_len = int(cfg.get("seq_len", 128))
     batch_size = int(cfg.get("batch_size", 2))
@@ -73,7 +89,13 @@ def train(config_path: str | Path, resume_from: str | Path | None = None, max_st
     run_name = cfg.get("run_name", f"tropicalgt-i-{int(time.time())}")
     out_dir = Path(cfg.get("output_dir", "TropicalGT-I/outputs/smoke")); out_dir.mkdir(parents=True, exist_ok=True)
     ckpt_dir = Path(cfg.get("checkpoint_dir", "TropicalGT-I/checkpoints")); ckpt_dir.mkdir(parents=True, exist_ok=True)
-    loader = DataLoader(train_ds, batch_size=batch_size, shuffle=True, collate_fn=lambda r: collate_records(r, seq_len, tokenizer))
+    loader = DataLoader(
+        train_ds,
+        batch_size=batch_size,
+        shuffle=bool(cfg.get("shuffle", True)),
+        num_workers=int(cfg.get("num_workers", 0)),
+        collate_fn=lambda r: collate_records(r, seq_len, tokenizer),
+    )
     max_steps = int(max_steps_override if max_steps_override is not None else cfg.get("max_steps", 5))
     metrics_last: dict[str, float] = {}
     history: list[dict[str, float]] = []
@@ -137,6 +159,7 @@ def train(config_path: str | Path, resume_from: str | Path | None = None, max_st
         "history": history,
         "eval": eval_report,
         "visualizations": vis_paths,
+        "dataset_manifest": parquet_manifest(root, ("train", "validation"), include_shards=False) if root else {},
         "device": str(device),
     }
     (out_dir / "train_report.json").write_text(json.dumps(report, indent=2), encoding="utf-8")

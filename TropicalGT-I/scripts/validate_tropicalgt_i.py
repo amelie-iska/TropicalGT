@@ -8,7 +8,7 @@ sys.path.insert(0, str(ROOT / "src"))
 
 
 from tropicalgt.run import load_config
-from tropicalgt.data import make_dataset
+from tropicalgt.data import make_dataset, parquet_manifest
 from tropicalgt.diagnostics import describe_graph_tokens
 from tropicalgt.tokenizer import TokenGTTokenizer
 
@@ -18,9 +18,20 @@ def main() -> None:
     parser.add_argument("--split", default="train")
     parser.add_argument("--output", default="")
     parser.add_argument("--sample-limit", type=int, default=4)
+    parser.add_argument("--limit", type=int, default=None)
     args = parser.parse_args()
     cfg = load_config(args.config)
-    ds = make_dataset(cfg.get("data_root"), args.split, limit=cfg.get("train_limit", 4), fixture_size=cfg.get("fixture_size", 8))
+    root = cfg.get("data_root")
+    require_data = bool(cfg.get("require_data", bool(root)))
+    limit = args.limit if args.limit is not None else cfg.get("train_limit", 4)
+    ds = make_dataset(
+        root,
+        args.split,
+        limit=limit,
+        fixture_size=cfg.get("fixture_size", 8),
+        require_data=require_data,
+        cache_shards=int(cfg.get("cache_shards", 2)),
+    )
     all_records = [ds[i] for i in range(len(ds))]
     records = all_records[: min(len(all_records), int(cfg.get("batch_size", 2)))]
     tok = TokenGTTokenizer(**cfg.get("tokengt", {}))
@@ -43,6 +54,8 @@ def main() -> None:
     report = {
         "records": len(ds),
         "split": args.split,
+        "dataset_required": require_data,
+        "manifest": parquet_manifest(root) if root else {},
         "graph_json_fallback_records": fallback_count,
         "invalid_graph_rate": fallback_count / max(len(ds), 1),
         "token_count_stats": stats(token_counts),
