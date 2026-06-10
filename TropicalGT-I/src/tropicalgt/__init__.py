@@ -6,6 +6,7 @@ from .losses import GFlowNetPolicy, GraphCGLoss
 from .model import TropicalGTConfig, TropicalGTModel
 from .simplicial import build_filtered_simplicial_object
 from .diagnostics import graph_token_trace, record_diagnostics
+from .scaling import apply_reasoning_action, run_inference_scaling
 
 __all__ = [
     "GraphRecord",
@@ -20,4 +21,6 @@ __all__ = [
     "build_filtered_simplicial_object",
     "graph_token_trace",
     "record_diagnostics",
+    "apply_reasoning_action",
+    "run_inference_scaling",
 ]

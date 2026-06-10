@@ -10,6 +10,7 @@
 - Added a minimal Parameter-Golf TokenGT adapter in the external fork.
 - Iteration 2 adds explicit filtered simplicial objects to reasoning visualization payloads, per-step Plotly metric dashboards, and an opt-in Parameter-Golf graph adapter path controlled by `TROPICALGT_GRAPH_ADAPTER`.
 - Iteration 3 adds richer validation, evaluation, and inference diagnostics: graph-json fallback rates, per-record NLL, graph-token traces, tropical support histograms, GFlowNet action probabilities, GraphCG direction summaries, and prompt-level filtered simplicial objects.
+- Iteration 4 adds bounded inference-time scaling: a GFlowNet-guided graph-of-thought candidate controller that expands prompt graphs with action paths, scores candidates with NLL/margin/action-probability/token-budget terms, and emits the best scaled candidate plus trace artifacts.
 
 ## Verification evidence
 - Unit tests: `/home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests -q` -> `6 passed`.
@@ -32,6 +33,12 @@
 - GPU evaluation wrote `TropicalGT-I/outputs/gpu_smoke/eval_validation.json` with per-record diagnostics; GPU inference wrote `TropicalGT-I/outputs/gpu_smoke/inference_audit.json` with graph-token trace, tropical support histogram, GFlowNet top actions, GraphCG direction summaries, and the prompt-level filtered simplicial object.
 - Standalone visualization rendering after iteration 3 completed and artifact inspection confirmed validation keys, eval record details, inference audit keys, payload keys `filtered_simplicial_objects`, `hover`, `points`, and existing metric HTML.
 - Process/GPU cleanup check after the iteration 3 smoke run found no lingering training or GPU compute process.
+- Iteration 4 unit tests: `/home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests -q` -> `13 passed`.
+- CPU smoke and scaled inference audit completed; `TropicalGT-I/outputs/smoke/inference_scaling_audit.json` contained `6` evaluated candidates, three search levels, a best action path, and filtered-object evidence.
+- GPU smoke completed on CUDA with W&B run https://wandb.ai/amelie-iska-math/TropicalGT-I/runs/b7w6wiui, validation NLL `5.402032852172852`, BPB proxy `7.793486006549036`, and graph-token total `234`.
+- GPU scaled inference wrote `TropicalGT-I/outputs/gpu_smoke/inference_scaling_audit.json`; artifact inspection confirmed `6` evaluated candidates, three levels, best path `['retrieve']`, `6` graph tokens in the selected candidate, and a filtered simplicial object.
+- GPU validation/eval/render commands completed after iteration 4; inspection confirmed scaled inference, eval record details, and reasoning payload objects.
+- Process/GPU cleanup check after iteration 4 found no lingering training or GPU compute process.
 
 ## Remaining research risks
 - The model is a first functional iteration, not a competitive Parameter-Golf artifact.
