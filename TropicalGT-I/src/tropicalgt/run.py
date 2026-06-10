@@ -16,7 +16,7 @@ from tqdm.auto import tqdm
 from .algebra import compute_topological_algebra_report, summarize_algebra_reports
 from .data import ChunkShuffleSampler, ParquetGraphDataset, dataset_manifest, encode_record_bytes, make_dataset_from_config
 from .diagnostics import record_diagnostics
-from .memory import AnalogicalMemoryBank, memory_records_from_scaling_report
+from .memory import AnalogicalMemoryBank, memory_records_from_scaling_report, query_signature_from_report
 from .metrics import aggregate_bpb_metrics, batch_bpb_metrics, explicit_graph_json_bytes, graph_token_structural_bytes
 from .model import TropicalGTConfig, TropicalGTModel
 from .scaling import run_inference_scaling
@@ -363,6 +363,14 @@ def train(config_path: str | Path, resume_from: str | Path | None = None, max_st
     memory_bank_path = str(cfg.get("memory_bank_path", ""))
     memory_bank = AnalogicalMemoryBank(memory_bank_path, max_records=int(cfg.get("memory_max_records", 2048))) if memory_bank_path else None
     memory_records_added = 0
+    periodic_artifacts: list[dict[str, Any]] = []
+    validation_every = int(cfg.get("validation_every_steps", cfg.get("eval_every_steps", 0)) or 0)
+    visualization_every = int(cfg.get("visualization_every_steps", validation_every) or 0)
+    periodic_eval_limit = int(cfg.get("periodic_eval_details_limit", cfg.get("eval_details_limit", 4)) or 0)
+    periodic_viz_limit = int(cfg.get("periodic_viz_limit", cfg.get("viz_limit", 8)) or 0)
+    periodic_audit_level = str(cfg.get("periodic_audit_level", cfg.get("audit_level", "none")))
+    periodic_ph_backend = str(cfg.get("periodic_ph_backend", ph_backend))
+    periodic_audit_max_simplices = int(cfg.get("periodic_audit_max_simplices", audit_max_simplices))
     step = 0
     loaded_step = 0
     resume_path = str(resume_from) if resume_from else ""
@@ -464,6 +472,52 @@ def train(config_path: str | Path, resume_from: str | Path | None = None, max_st
                 wb.log(organize_wandb_metrics(metrics_last), step=step)
             pbar.set_postfix({"loss": f"{metrics_last['loss']:.3f}", "nll": f"{metrics_last.get('nll', 0):.3f}"})
             pbar.update(1)
+            should_validate = validation_every > 0 and step % validation_every == 0
+            should_visualize = visualization_every > 0 and step % visualization_every == 0
+            if should_validate or should_visualize:
+                periodic_report = _run_periodic_validation_round(
+                    model=model,
+                    val_ds=val_ds,
+                    tokenizer=tokenizer,
+                    seq_len=seq_len,
+                    batch_size=batch_size,
+                    device=device,
+                    out_dir=out_dir,
+                    cfg=cfg,
+                    history=history,
+                    step=step,
+                    seed=seed,
+                    graph_bpb_side_weight=graph_bpb_side_weight,
+                    graph_autoregressive=bool(cfg.get("graph_autoregressive_decoding", True)),
+                    run_name=run_name,
+                    memory_bank=memory_bank,
+                    memory_records_added=memory_records_added,
+                    render_visualizations=should_visualize,
+                    details_limit=periodic_eval_limit,
+                    viz_limit=periodic_viz_limit,
+                    audit_level=periodic_audit_level,
+                    ph_backend=periodic_ph_backend,
+                    audit_max_simplices=periodic_audit_max_simplices,
+                )
+                periodic_artifacts.append(periodic_report)
+                memory_records_added = int(periodic_report.get("memory_records_added_total", memory_records_added))
+                periodic_metrics = {
+                    key: value
+                    for key, value in periodic_report.get("metrics", {}).items()
+                    if isinstance(value, (int, float))
+                }
+                metrics_last.update(periodic_metrics)
+                history[-1].update(periodic_metrics)
+                if wb:
+                    wb.log(organize_wandb_metrics(metrics_last), step=step)
+                    _log_wandb_html_artifacts(
+                        wb,
+                        periodic_report.get("visualizations", {}),
+                        cfg,
+                        prefix=f"periodic_eval/step_{step:08d}",
+                        step=step,
+                    )
+                model.train()
             if checkpoint_every > 0 and step % checkpoint_every == 0:
                 _save_training_checkpoint(latest_ckpt_path, model, opt, cfg, metrics_last, history, step, run_name)
             if step >= max_steps:
@@ -548,6 +602,7 @@ def train(config_path: str | Path, resume_from: str | Path | None = None, max_st
         "history": history,
         "eval": eval_report,
         "visualizations": vis_paths,
+        "periodic_artifacts": periodic_artifacts,
         "dataset_manifest": {
             "train": dataset_manifest(train_ds, root, ("train", "validation")),
             "validation": dataset_manifest(val_ds, root, ("train", "validation")),
@@ -564,23 +619,180 @@ def train(config_path: str | Path, resume_from: str | Path | None = None, max_st
         }
     (out_dir / "train_report.json").write_text(json.dumps(report, indent=2), encoding="utf-8")
     if wb:
-        html_limit = int(cfg.get("wandb_html_artifact_limit", 5))
-        uploaded_html = 0
-        for key, path in _wandb_html_items(vis_paths):
-            if uploaded_html >= html_limit:
-                break
-            try:
-                import wandb
-                html_path = Path(path)
-                max_bytes = int(cfg.get("wandb_html_max_bytes", 5_000_000))
-                if html_path.suffix.lower() != ".html" or html_path.stat().st_size > max_bytes:
-                    continue
-                wb.log({key: wandb.Html(html_path.read_text(encoding="utf-8"))})
-                uploaded_html += 1
-            except Exception:
-                pass
+        _log_wandb_html_artifacts(wb, vis_paths, cfg, prefix="final_artifacts", step=step)
         wb.finish()
     return report
+
+
+def _run_periodic_validation_round(
+    *,
+    model: TropicalGTModel,
+    val_ds,
+    tokenizer: TokenGTTokenizer,
+    seq_len: int,
+    batch_size: int,
+    device: torch.device,
+    out_dir: Path,
+    cfg: dict[str, Any],
+    history: list[dict[str, float]],
+    step: int,
+    seed: int,
+    graph_bpb_side_weight: float,
+    graph_autoregressive: bool,
+    run_name: str,
+    memory_bank: AnalogicalMemoryBank | None,
+    memory_records_added: int,
+    render_visualizations: bool,
+    details_limit: int,
+    viz_limit: int,
+    audit_level: str,
+    ph_backend: str,
+    audit_max_simplices: int,
+) -> dict[str, Any]:
+    step_dir = out_dir / "periodic" / f"step_{step:08d}"
+    step_dir.mkdir(parents=True, exist_ok=True)
+    eval_report = evaluate_model(
+        model,
+        val_ds,
+        tokenizer,
+        seq_len,
+        batch_size,
+        device,
+        details_limit=details_limit,
+        graph_bpb_side_weight=graph_bpb_side_weight,
+        audit_level=audit_level,
+        ph_backend=ph_backend,
+        audit_max_simplices=audit_max_simplices,
+        graph_autoregressive=graph_autoregressive,
+        ar_seed=seed + step,
+    )
+    eval_path = step_dir / "validation_report.json"
+    eval_path.write_text(json.dumps(eval_report, indent=2), encoding="utf-8")
+    metrics = {f"eval_{key}": value for key, value in eval_report.items() if isinstance(value, (int, float))}
+    vis_paths: dict[str, str] = {}
+    memory_added_this_round = 0
+    if render_visualizations:
+        vis_paths.update(
+            {
+                f"reasoning_{key}": value
+                for key, value in write_reasoning_visualizations(
+                    model,
+                    val_ds,
+                    tokenizer,
+                    seq_len,
+                    device,
+                    step_dir / "reasoning",
+                    limit=viz_limit,
+                    audit_level=audit_level,
+                    ph_backend=ph_backend,
+                    audit_max_simplices=audit_max_simplices,
+                ).items()
+            }
+        )
+        vis_paths.update({f"metrics_{key}": value for key, value in write_metric_visualizations(history, step_dir / "metrics").items()})
+        vis_paths.update({f"graphcg_{key}": value for key, value in write_graphcg_training_visualizations(model, step_dir / "graphcg").items()})
+        if bool(cfg.get("periodic_viz_got_scaling", cfg.get("viz_got_scaling", False))) and len(val_ds) > 0:
+            scaling = run_inference_scaling(
+                model,
+                val_ds[0],
+                tokenizer,
+                seq_len,
+                device,
+                depth=int(cfg.get("periodic_viz_scale_depth", cfg.get("viz_scale_depth", 1))),
+                width=int(cfg.get("periodic_viz_scale_width", cfg.get("viz_scale_width", 3))),
+                branch_factor=int(cfg.get("periodic_viz_scale_branch_factor", cfg.get("viz_scale_branch_factor", 2))),
+                trace_limit=int(cfg.get("viz_trace_limit", 24)),
+                audit_level=audit_level,
+                ph_backend=ph_backend,
+                audit_max_simplices=audit_max_simplices,
+            )
+            audit_result: dict[str, Any] = {
+                "inference_scaling": scaling,
+                "topological_algebra": scaling.get("best", {}).get("topological_algebra"),
+            }
+            if memory_bank is not None:
+                records = memory_records_from_scaling_report(
+                    scaling,
+                    source=f"periodic:{run_name}:step{step}",
+                    min_score=cfg.get("memory_min_score"),
+                    max_records=int(cfg.get("memory_records_per_audit", 8)),
+                )
+                memory_bank.extend(records)
+                memory_bank.save()
+                memory_added_this_round = len(records)
+                query_embedding, query_signature = query_signature_from_report(audit_result)
+                audit_result["analogical_memory_retrieval"] = {
+                    "bank_path": str(memory_bank.path),
+                    "bank_size": len(memory_bank.records),
+                    "records_added": memory_added_this_round,
+                    "top_k": int(cfg.get("periodic_memory_retrieve_top_k", 5)),
+                    "retrieved": memory_bank.retrieve(
+                        query_embedding,
+                        query_signature,
+                        top_k=int(cfg.get("periodic_memory_retrieve_top_k", 5)),
+                    ),
+                }
+            vis_paths.update(
+                {
+                    f"got_audit_{key}": value
+                    for key, value in write_inference_audit_artifacts(
+                        audit_result,
+                        step_dir / "got_audit",
+                        render_html=True,
+                    ).items()
+                }
+            )
+            if memory_bank is not None:
+                memory_records_added += memory_added_this_round
+                metrics["analogical_memory_records_added"] = float(memory_records_added)
+                metrics["analogical_memory_bank_size"] = float(len(memory_bank.records))
+    report = {
+        "step": step,
+        "validation": str(eval_path),
+        "metrics": metrics,
+        "visualizations": vis_paths,
+        "audit_level": audit_level,
+        "ph_backend": ph_backend,
+        "audit_max_simplices": audit_max_simplices,
+        "memory_records_added_this_round": memory_added_this_round,
+        "memory_records_added_total": memory_records_added,
+    }
+    report_path = step_dir / "periodic_validation_artifacts.json"
+    report_path.write_text(json.dumps(report, indent=2), encoding="utf-8")
+    manifest_path = out_dir / "periodic" / "manifest.jsonl"
+    with manifest_path.open("a", encoding="utf-8") as fh:
+        fh.write(json.dumps({"step": step, "report": str(report_path), "visualization_count": len(vis_paths)}) + "\n")
+    return report
+
+
+def _log_wandb_html_artifacts(
+    wb: Any,
+    vis_paths: dict[str, str],
+    cfg: dict[str, Any],
+    prefix: str,
+    step: int | None = None,
+) -> None:
+    html_limit = int(cfg.get("wandb_html_artifact_limit", 5))
+    uploaded_html = 0
+    payload: dict[str, Any] = {}
+    for key, path in _wandb_html_items(vis_paths):
+        if uploaded_html >= html_limit:
+            break
+        try:
+            import wandb
+
+            html_path = Path(path)
+            max_bytes = int(cfg.get("wandb_html_max_bytes", 5_000_000))
+            if html_path.suffix.lower() != ".html" or html_path.stat().st_size > max_bytes:
+                continue
+            payload[f"{prefix}/{key}"] = wandb.Html(html_path.read_text(encoding="utf-8"))
+            uploaded_html += 1
+        except Exception:
+            pass
+    if payload:
+        if step is not None:
+            payload["step"] = step
+        wb.log(payload, step=step)
 
 
 def _wandb_html_items(paths: dict[str, str]) -> list[tuple[str, str]]:

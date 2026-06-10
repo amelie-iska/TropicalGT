@@ -69,24 +69,48 @@ TropicalGT-I/scripts/parameter_golf_codex_review_loop.py \
 
 Each boundary writes `active_training_contract_step_*.json/.md` with the active metrics, hyperparameters, losses, objectives, regularizers, dataset rates, VRAM/throughput, and restart decision. If `eval.bpb` is absent or above `1.18`, the generated Codex prompt requests a single-agent review of metrics, losses, hyperparameters, BPB behavior, and restart strategy.
 
-Full inference audits can optionally emit graph-of-thought PCA trajectories, tropical support heatmaps, persistence barcodes, multiparameter algebra JSON, GraphCG direction plots, and analogical memory retrieval artifacts. The trajectory HTML is dark-mode; hovering over a reasoning node renders the node's filtered simplicial object as an SVG in a cursor-following hover card and in the persistent side panel, and the 3D NLL view includes a smoothed NLL heatmapped surface under the reasoning graph:
+The full training config validates and renders artifacts every `250` steps. Each periodic validation round writes a step-local bundle under `TropicalGT-I/outputs/train/periodic/step_XXXXXXXX/`:
+
+- `validation_report.json`: validation NLL, BPB, graph-BPB, graph source rates, and optional detailed record diagnostics.
+- `reasoning/reasoning_trajectory_3d.html`: dark-mode PCA of graph-of-thought/graph-state embeddings with hover-rendered filtered simplicial complexes.
+- `reasoning/reasoning_trajectory_pca_nll.html`: 2D PCA with NLL as height and a smoothed heatmapped NLL surface.
+- `reasoning/reasoning_topological_algebra.json`: per-node persistence and algebra diagnostics when the audit level is enabled.
+- `got_audit/`: graph-of-thought scaling tree, GoT trajectory PCA, GraphCG direction cosines, tropical support heatmap, persistence barcodes, commutative algebra/free-resolution JSON, derived signatures, trajectory-growth topology, analogical memory retrieval, and an `inference_audit.html` dashboard.
+- `graphcg/`: full-rank GraphCG Gram, PCA, and singular-value plots.
+- `metrics/training_metrics.html`: live dark-mode metric traces up to the current step.
+- `periodic_validation_artifacts.json`: manifest of every artifact path for that step.
+
+The rolling manifest is `TropicalGT-I/outputs/train/periodic/manifest.jsonl`. W&B logs the scalar validation metrics at the same step and uploads the first configured HTML artifacts under `periodic_eval/step_XXXXXXXX/...`.
+
+Full inference audits can optionally emit the same family of graph-of-thought PCA trajectories, tropical support heatmaps, persistence barcodes, multiparameter algebra/free-resolution JSON, derived signatures, GraphCG direction plots, and analogical memory retrieval artifacts. The trajectory HTML is dark-mode; hovering over a reasoning node renders the node's filtered simplicial object as an SVG in a cursor-following hover card and in the persistent side panel, and the 3D NLL view includes a smoothed NLL heatmapped surface under the reasoning graph. Use `--audit-all` for the complete optional bundle:
 
 ```bash
 PYTHONPATH=TropicalGT-I/src \
 /home/iska/miniconda3/envs/tokengt/bin/python \
 TropicalGT-I/scripts/infer_tropicalgt_i.py \
---config TropicalGT-I/configs/gpu_smoke.json \
---checkpoint TropicalGT-I/checkpoints/tropicalgt_i_gpu_smoke.pt \
+--config TropicalGT-I/configs/train.json \
+--checkpoint TropicalGT-I/checkpoints/tropicalgt_i_train.pt \
 --prompt "Question: add 2 and 3 Answer:" \
+--audit-all \
 --scale-depth 2 \
 --scale-width 3 \
 --scale-branch-factor 2 \
+--memory-save \
+--audit-output-dir TropicalGT-I/outputs/train/inference_full_audit \
+--output TropicalGT-I/outputs/train/inference_full_audit.json
+```
+
+Standalone evaluation can also render the validation visualizations:
+
+```bash
+PYTHONPATH=TropicalGT-I/src \
+/home/iska/miniconda3/envs/tokengt/bin/python \
+TropicalGT-I/scripts/eval_tropicalgt_i.py \
+--config TropicalGT-I/configs/train.json \
+--checkpoint TropicalGT-I/checkpoints/tropicalgt_i_train.pt \
+--split validation \
 --audit-level full \
 --audit-ph-backend gudhi \
---audit-render-html \
---memory-bank TropicalGT-I/outputs/gpu_smoke/analogical_memory/reasoning_memory.jsonl \
---memory-save \
---memory-retrieve-top-k 3 \
---audit-output-dir TropicalGT-I/outputs/gpu_smoke/inference_full_audit \
---output TropicalGT-I/outputs/gpu_smoke/inference_full_audit.json
+--render-visualizations \
+--visualization-output-dir TropicalGT-I/outputs/train
 ```

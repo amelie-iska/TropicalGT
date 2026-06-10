@@ -33,12 +33,27 @@ def main() -> None:
     parser.add_argument("--audit-ph-backend", choices=["auto", "gudhi", "ripser", "none"], default="auto")
     parser.add_argument("--audit-max-simplices", type=int, default=1024)
     parser.add_argument("--audit-render-html", action="store_true")
+    parser.add_argument("--no-audit-render-html", action="store_true")
+    parser.add_argument(
+        "--audit-all",
+        action="store_true",
+        help="Emit full optional inference artifacts: GoT PCA, NLL surfaces, tropical support, GraphCG, analogical memory, free-resolution/algebra JSON, derived signatures, persistence plots, and dashboard HTML.",
+    )
     parser.add_argument("--memory-bank", default="", help="JSONL analogical reasoning memory bank to query or update")
     parser.add_argument("--memory-save", action="store_true", help="Append inference-scaling candidates to the memory bank")
     parser.add_argument("--memory-retrieve-top-k", type=int, default=0, help="Retrieve this many analogical memories")
     parser.add_argument("--memory-max-records", type=int, default=2048)
     args = parser.parse_args()
     cfg = load_config(args.config)
+    if args.audit_all and args.audit_level == "none":
+        args.audit_level = "full"
+    if args.audit_all and args.audit_output_dir == "":
+        args.audit_output_dir = str(Path(cfg.get("output_dir", "TropicalGT-I/outputs/smoke")) / "inference_audit")
+    if args.audit_all and args.memory_bank == "":
+        args.memory_bank = str(cfg.get("memory_bank_path", ""))
+    if args.audit_all and args.memory_retrieve_top_k <= 0:
+        args.memory_retrieve_top_k = int(cfg.get("inference_memory_retrieve_top_k", cfg.get("periodic_memory_retrieve_top_k", 5)))
+    render_html = (args.audit_render_html or args.audit_all or bool(args.audit_output_dir)) and not args.no_audit_render_html
     device = torch.device("cuda" if torch.cuda.is_available() and cfg.get("device", "auto") != "cpu" else "cpu")
     model, _ = load_checkpoint(args.checkpoint, device)
     rec = GraphRecord.from_mapping(
@@ -87,6 +102,15 @@ def main() -> None:
     result = {
         "prompt": args.prompt,
         "decoded_argmax": text,
+        "optional_outputs": {
+            "audit_all": bool(args.audit_all),
+            "audit_level": args.audit_level,
+            "render_html": bool(render_html),
+            "inference_scaling_enabled": bool(scale_depth > 0),
+            "memory_bank": args.memory_bank,
+            "memory_retrieve_top_k": int(args.memory_retrieve_top_k),
+            "artifacts_dir": args.audit_output_dir,
+        },
         "support": out["support"].detach().cpu().tolist(),
         "margin_mean": float(out["margin_mean"].detach().cpu()),
         "tropical": record_report["tropical"],
@@ -142,7 +166,7 @@ def main() -> None:
         result["audit_artifacts"] = write_inference_audit_artifacts(
             result,
             args.audit_output_dir,
-            render_html=args.audit_render_html,
+            render_html=render_html,
         )
     if args.output:
         Path(args.output).parent.mkdir(parents=True, exist_ok=True)
