@@ -15,6 +15,7 @@
 - Iteration 6 hardens data-backed training: parquet shards are row-group metadata-indexed and read through a bounded row-group cache, data-backed configs set `require_data: true`, validation emits a train/validation/test shard manifest, and `configs/train.json` is the first full data-backed training launch config.
 - Iteration 7 adds richer train-time instrumentation: a finite TokenGT skeleton certificate loss/agreement metric, node/edge/margin-threshold wall-hit tropical support diagnostics, graph-json fallback rate, examples/sec, tokens/sec, and expanded metric visualization/W&B traces.
 - Certificate agreement is currently structural unless teacher tropical supports or external verifier labels are supplied, and the wall-hit statistic is a margin-threshold proxy rather than an exact normal-fan wall distance.
+- Iteration 8 adds a reproducible readiness audit CLI that writes JSON/Markdown gates for environment packages, CUDA policy, data manifests, sample TokenGT conversion, paper artifacts, checkpoint reload, finite eval, bounded inference scaling, and optional visualization generation before long training launches.
 
 ## Verification evidence
 - Unit tests: `/home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests -q` -> `6 passed`.
@@ -62,6 +63,9 @@
 - Iteration 7 standalone eval wrote `TropicalGT-I/outputs/gpu_smoke/eval_validation.json` with `2` detail records and invalid graph rate `0.0`; standalone inference wrote `TropicalGT-I/outputs/gpu_smoke/inference_iter7.json` with `6` evaluated scaling candidates, best path `['refine', 'refine']`, best NLL `5.563009262084961`, and a best filtered object with `4` vertices, `3` edges, `2` directed path \(2\)-simplices, and `6` thresholds.
 - Iteration 7 visualization rendering wrote `TropicalGT-I/outputs/gpu_smoke/reasoning_trajectory_3d.html`, `TropicalGT-I/outputs/gpu_smoke/reasoning_trajectory_pca_nll.html`, `TropicalGT-I/outputs/gpu_smoke/reasoning_trajectory_payloads.json`, and `TropicalGT-I/outputs/gpu_smoke/training_metrics.html`.
 - Paper compiled locally from the iteration 7 TeX source to `46` pages and was copied back to `TropicalGT-I/assets/tropicalgt_neurips_research_paper.pdf`.
+- Iteration 8 unit tests: `/home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests -q` -> `22 passed`.
+- Iteration 8 readiness audit: `audit_tropicalgt_i_readiness.py --config TropicalGT-I/configs/gpu_smoke.json --checkpoint TropicalGT-I/checkpoints/tropicalgt_i_gpu_smoke.pt --split validation --sample-limit 16 --details-limit 2 --scale-depth 1 --scale-width 2 --scale-branch-factor 2 --require-cuda --render-visualizations --output TropicalGT-I/outputs/gpu_smoke/readiness_audit.json` -> status `ready`, `17` gates passed, failed gates `none`, fallback rate `0.0`, checkpoint step `2`, eval NLL `5.510255873203278`, BPB proxy `7.949618822299653`, `3` inference-scaling candidates, best path `['refine']`, and refreshed PCA/filtered-object visualization artifacts.
+- Paper compiled locally from the iteration 8 TeX source to `46` pages and was copied back to `TropicalGT-I/assets/tropicalgt_neurips_research_paper.pdf`.
 
 ## Remaining research risks
 - The model is a first functional iteration, not a competitive Parameter-Golf artifact.
