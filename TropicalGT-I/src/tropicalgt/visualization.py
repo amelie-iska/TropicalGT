@@ -325,6 +325,12 @@ def write_got_trajectory_visualization(scaling_report: dict[str, object], output
             for idx, row in enumerate(candidates)
             if row.get("parent") is not None
         ],
+        "filtered_simplicial_objects": [
+            candidates[idx].get("filtered_simplicial_object")
+            if isinstance(candidates[idx].get("filtered_simplicial_object"), dict)
+            else {}
+            for idx in range(len(candidates))
+        ],
         "nll_surface": nll_surface_meta,
     }
     payload_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
@@ -467,9 +473,87 @@ def write_analogical_memory_visualization(memory: dict[str, object], output_dir:
 
 def _write_inference_dashboard(paths: dict[str, str], output_dir: Path) -> Path:
     dash = output_dir / "inference_audit.html"
-    links = "\n".join(f'<li><a href="{Path(path).name}">{name}</a></li>' for name, path in sorted(paths.items()))
+    links = "\n".join(
+        f'<li><a href="{Path(path).name}"><span>{name}</span><code>{Path(path).name}</code></a></li>'
+        for name, path in sorted(paths.items())
+    )
     dash.write_text(
-        f"<html><body style='background:#090b12;color:#eef;font-family:sans-serif'><h1>TropicalGT-I Inference Audit</h1><ul>{links}</ul></body></html>",
+        f"""<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>TropicalGT-I Inference Audit</title>
+  <style>
+    :root {{
+      color-scheme: dark;
+      background: #090b12;
+      color: #eef2ff;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }}
+    body {{
+      margin: 0;
+      min-height: 100vh;
+      background:
+        radial-gradient(circle at 18% 12%, rgba(85, 214, 190, 0.12), transparent 32%),
+        linear-gradient(145deg, #090b12 0%, #111827 58%, #071015 100%);
+      color: #eef2ff;
+    }}
+    main {{
+      width: min(980px, calc(100% - 40px));
+      margin: 0 auto;
+      padding: 42px 0 56px;
+    }}
+    h1 {{
+      margin: 0 0 10px;
+      font-size: 28px;
+      letter-spacing: 0;
+    }}
+    p {{
+      margin: 0 0 26px;
+      color: #aab6d3;
+      line-height: 1.55;
+    }}
+    ul {{
+      display: grid;
+      gap: 10px;
+      list-style: none;
+      padding: 0;
+      margin: 0;
+    }}
+    a {{
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 14px 16px;
+      border: 1px solid rgba(148, 163, 184, 0.28);
+      border-radius: 8px;
+      background: rgba(15, 23, 42, 0.72);
+      color: #dbeafe;
+      text-decoration: none;
+      box-shadow: 0 14px 30px rgba(0, 0, 0, 0.22);
+    }}
+    a:hover {{
+      border-color: rgba(85, 214, 190, 0.62);
+      background: rgba(17, 34, 50, 0.92);
+    }}
+    code {{
+      color: #55d6be;
+      font-size: 12px;
+      white-space: nowrap;
+    }}
+  </style>
+</head>
+<body>
+  <main>
+    <h1>TropicalGT-I Inference Audit</h1>
+    <p>Dark-mode index for the generated topology, algebra, GraphCG, tropical support, memory, and Graph-of-Thought trajectory artifacts.</p>
+    <ul>{links}</ul>
+  </main>
+</body>
+</html>
+""",
         encoding="utf-8",
     )
     return dash
@@ -778,7 +862,8 @@ def _write_plotly_dark_html(path: Path, fig: go.Figure, title: str, panel_items:
 def _write_dark_empty(path: Path, message: str) -> None:
     path.write_text(
         "<!doctype html><html><head><meta charset='utf-8'><meta name='viewport' content='width=device-width, initial-scale=1'>"
-        "<style>body{margin:0;background:#090b12;color:#e8eef8;font-family:Inter,ui-sans-serif,system-ui;padding:24px}</style>"
+        "<style>:root{color-scheme:dark;background:#090b12;color:#e8eef8}"
+        "body{margin:0;background:#090b12;color:#e8eef8;font-family:Inter,ui-sans-serif,system-ui;padding:24px}</style>"
         f"</head><body><p>{html.escape(message)}</p></body></html>",
         encoding="utf-8",
     )
