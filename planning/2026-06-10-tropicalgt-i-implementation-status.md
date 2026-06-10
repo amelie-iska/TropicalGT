@@ -17,6 +17,7 @@
 - Certificate agreement is currently structural unless teacher tropical supports or external verifier labels are supplied, and the wall-hit statistic is a margin-threshold proxy rather than an exact normal-fan wall distance.
 - Iteration 8 adds a reproducible readiness audit CLI that writes JSON/Markdown gates for environment packages, CUDA policy, data manifests, sample TokenGT conversion, paper artifacts, checkpoint reload, finite eval, bounded inference scaling, and optional visualization generation before long training launches.
 - Iteration 9 deepens the literature audit and source crosswalk: each required reference now has page/source metadata, mathematical takeaways, ported TropicalGT-I components, intentionally omitted toric/non-v1 components, and paper-update requirements.  The paper now explicitly cites the Su-Liu tropical expressivity paper and the local TokenGT expressivity extension as the lineage for the graph-token tropical expressivity claims.
+- Iteration 10 adds a parquet row-group-aware chunk-shuffle sampler for data-backed training.  The full training config randomizes row-group order while preserving row-group-local reads, and the GPU smoke config also shuffles rows within its small bounded sample to exercise the sampler path.
 
 ## Verification evidence
 - Unit tests: `/home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests -q` -> `6 passed`.
@@ -70,6 +71,12 @@
 - Iteration 9 reference review used `pdfinfo`/`pdftotext` on all required local PDFs plus direct TeX inspection of `references/toricgt_paper_pg_softmoe_final.tex`; the expanded synthesis is tracked in `planning/2026-06-10-tropicalgt-i-reference-synthesis.md`.
 - Iteration 9 unit tests: `/home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests -q` -> `22 passed`.
 - Paper compiled locally from the iteration 9 TeX source to `46` pages and was copied back to `TropicalGT-I/assets/tropicalgt_neurips_research_paper.pdf`.
+- Iteration 10 unit tests: `/home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests -q` -> `23 passed`.
+- Iteration 10 train-config preflight wrote `TropicalGT-I/outputs/train/validate_train_chunk_shuffle.json`; it validated `64` required-data train records with `0` graph-json fallbacks and saw `117` train files / `4,633,582` train rows, `578,319` validation rows, and `578,835` test rows.
+- Iteration 10 GPU sampler smoke completed on CUDA with W&B run https://wandb.ai/amelie-iska-math/TropicalGT-I/runs/449dss7g, final step `2`, validation NLL `5.484238147735596`, BPB proxy `7.912083178792218`, sampler kind `chunk_shuffle`, sampler seed `2026`, chunk-shuffle metric `1.0`, and graph-json fallback rate `0.0`.
+- Iteration 10 readiness audit: `audit_tropicalgt_i_readiness.py --config TropicalGT-I/configs/gpu_smoke.json --checkpoint TropicalGT-I/checkpoints/tropicalgt_i_gpu_smoke.pt --split validation --sample-limit 16 --details-limit 2 --scale-depth 1 --scale-width 2 --scale-branch-factor 2 --require-cuda --render-visualizations --output TropicalGT-I/outputs/gpu_smoke/readiness_audit_chunk_shuffle.json` -> status `ready`, failed gates `none`.
+- Paper compiled locally from the iteration 10 TeX source to `46` pages and was copied back to `TropicalGT-I/assets/tropicalgt_neurips_research_paper.pdf`.
+- Cleanup/capacity check removed generated caches, stale outputs, stale checkpoints, and local W&B run directories while preserving the moved dataset and external repos; `free -h` reported `49Gi` available memory and `df -h /` reported `197G` available disk on a `3.6T` filesystem at `95%` use.
 
 ## Remaining research risks
 - The model is a first functional iteration, not a competitive Parameter-Golf artifact.

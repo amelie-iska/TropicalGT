@@ -2,7 +2,7 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
-from tropicalgt.data import ParquetGraphDataset, make_dataset, parquet_manifest
+from tropicalgt.data import ChunkShuffleSampler, ParquetGraphDataset, make_dataset, parquet_manifest
 
 
 def test_parquet_loader_reads_graph_json(tmp_path: Path):
@@ -36,6 +36,32 @@ def test_parquet_loader_indexes_multiple_shards_with_limit(tmp_path: Path):
     assert ds[2].record_id == "r2"
     assert ds.manifest()["files"] == 2
     assert ds.manifest()["rows"] == 3
+
+
+def test_chunk_shuffle_sampler_is_deterministic_and_chunk_local(tmp_path: Path):
+    root = tmp_path / "shards" / "train"
+    root.mkdir(parents=True)
+    for shard in range(3):
+        rows = [
+            {"record_id": f"r{shard}-{i}", "text": f"text {shard}-{i}", "graph_json": '{"nodes":[{"id":"a"}],"edges":[]}'}
+            for i in range(2)
+        ]
+        pd.DataFrame(rows).to_parquet(root / f"train-{shard:03d}.parquet")
+
+    ds = ParquetGraphDataset(tmp_path / "shards", "train", cache_shards=1)
+    indices_a = list(ChunkShuffleSampler(ds, seed=7, shuffle_rows=False))
+    indices_b = list(ChunkShuffleSampler(ds, seed=7, shuffle_rows=False))
+
+    assert indices_a == indices_b
+    assert sorted(indices_a) == list(range(len(ds)))
+
+    positions = {index: position for position, index in enumerate(indices_a)}
+    for start, end in ds.chunk_bounds():
+        chunk_positions = [positions[index] for index in range(start, end)]
+        assert chunk_positions == list(range(min(chunk_positions), max(chunk_positions) + 1))
+
+    within_chunk = list(ChunkShuffleSampler(ds, seed=7, shuffle_rows=True))
+    assert sorted(within_chunk) == list(range(len(ds)))
 
 
 def test_parquet_manifest_counts_rows_without_loading_records(tmp_path: Path):

@@ -1,14 +1,15 @@
 from __future__ import annotations
 
 import bisect
+import random
 from collections import OrderedDict
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any, Iterable, Iterator
 
 import pyarrow.parquet as pq
 import torch
-from torch.utils.data import Dataset
+from torch.utils.data import Dataset, Sampler
 
 from .records import GraphRecord
 
@@ -111,6 +112,14 @@ class ParquetGraphDataset(Dataset):
             ],
         }
 
+    def chunk_bounds(self) -> list[tuple[int, int]]:
+        bounds: list[tuple[int, int]] = []
+        previous = 0
+        for end in self._cumulative_rows:
+            bounds.append((previous, end))
+            previous = end
+        return bounds
+
     def _load_chunk(self, chunk: ParquetChunk):
         key = (chunk.path, chunk.row_group)
         cached = self._cache.get(key)
@@ -123,6 +132,51 @@ class ParquetGraphDataset(Dataset):
             while len(self._cache) > self.cache_shards:
                 self._cache.popitem(last=False)
         return frame
+
+
+class ChunkShuffleSampler(Sampler[int]):
+    """Shuffle parquet row groups while preserving cache-friendly reads."""
+
+    def __init__(
+        self,
+        dataset: ParquetGraphDataset,
+        seed: int = 0,
+        shuffle_rows: bool = False,
+        epoch: int = 0,
+    ) -> None:
+        self.dataset = dataset
+        self.seed = int(seed)
+        self.shuffle_rows = bool(shuffle_rows)
+        self.epoch = int(epoch)
+
+    def __iter__(self) -> Iterator[int]:
+        rng = random.Random(self.seed + self.epoch)
+        order = list(range(len(self.dataset.chunks)))
+        rng.shuffle(order)
+        bounds = self.dataset.chunk_bounds()
+        for chunk_index in order:
+            start, end = bounds[chunk_index]
+            if self.shuffle_rows:
+                indices = list(range(start, end))
+                rng.shuffle(indices)
+                yield from indices
+            else:
+                yield from range(start, end)
+
+    def __len__(self) -> int:
+        return len(self.dataset)
+
+    def set_epoch(self, epoch: int) -> None:
+        self.epoch = int(epoch)
+
+    def state_dict(self) -> dict[str, Any]:
+        return {
+            "seed": self.seed,
+            "shuffle_rows": self.shuffle_rows,
+            "epoch": self.epoch,
+            "chunks": len(self.dataset.chunks),
+            "rows": len(self.dataset),
+        }
 
 
 class FixtureGraphDataset(Dataset):

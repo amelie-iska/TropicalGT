@@ -2,6 +2,17 @@
 
 TropicalGT develops reasoning agents that use tropical geometry in transformer embedding space: TokenGT-style graph tokenization, tropical ring attention, graph-of-thought trajectories, GFlowNet training, GraphCG latent steering, and auditable reasoning visualizations.
 
+[![Paper: TropicalGT main](https://img.shields.io/badge/arXiv--style-main%20paper-b31b1b?style=for-the-badge&logo=readthedocs&logoColor=white)](https://github.com/amelie-iska/TropicalGT/raw/tropicalgt-i-implementation/references/main.pdf)
+[![Paper: TropicalGT-I](https://img.shields.io/badge/arXiv--style-TropicalGT--I-b31b1b?style=for-the-badge&logo=readthedocs&logoColor=white)](https://github.com/amelie-iska/TropicalGT/raw/tropicalgt-i-implementation/TropicalGT-I/assets/tropicalgt_neurips_research_paper.pdf)
+[![Paper: TropicalGT-II](https://img.shields.io/badge/arXiv--style-TropicalGT--II-b31b1b?style=for-the-badge&logo=readthedocs&logoColor=white)](https://github.com/amelie-iska/TropicalGT/raw/tropicalgt-i-implementation/TropicalGT-II/assets/tropicalgt_ii_dynamical_tropical_geometry.pdf)
+[![Paper: TropicalGT-III](https://img.shields.io/badge/arXiv--style-TropicalGT--III-b31b1b?style=for-the-badge&logo=readthedocs&logoColor=white)](https://github.com/amelie-iska/TropicalGT/raw/tropicalgt-i-implementation/TropicalGT-III/assets/tropicalgt_iii_context_protocols_memory_retrieval.pdf)
+[![Paper: TropicalGT-IV](https://img.shields.io/badge/arXiv--style-TropicalGT--IV-b31b1b?style=for-the-badge&logo=readthedocs&logoColor=white)](https://github.com/amelie-iska/TropicalGT/raw/tropicalgt-i-implementation/TropicalGT-IV/assets/tropicalgt_iv_oracle_trajectory_classifiers.pdf)
+[![Hugging Face dataset](https://img.shields.io/badge/Hugging%20Face-dataset-ffcc4d?style=for-the-badge&logo=huggingface&logoColor=111111)](https://huggingface.co/datasets/AmeliSchreiber/TropicalGT)
+[![Hugging Face checkpoints](https://img.shields.io/badge/Hugging%20Face-checkpoints-ffcc4d?style=for-the-badge&logo=huggingface&logoColor=111111)](https://huggingface.co/AmeliSchreiber/TropicalGT)
+[![GitHub codebase](https://img.shields.io/badge/GitHub-codebase-24292f?style=for-the-badge&logo=github&logoColor=white)](https://github.com/amelie-iska/TropicalGT)
+
+![Dark 3D tropical hypersurface with Newton polytope](./assets/tropical_curve_newton_polytope_dark.png)
+
 ## Remote workspace
 
 All implementation work for this repo is under:
@@ -45,7 +56,7 @@ TropicalGT-I/data/toricgt/curated_hf_shards
 
 Data is gitignored. Do not commit datasets, checkpoints, W&B runs, or `keys.txt`.
 
-Data-backed configs set `require_data: true`, so missing or unreadable parquet shards fail loudly instead of silently training on fixture examples. The parquet loader builds a row-group metadata index over train/validation/test shards and reads records through a bounded row-group cache controlled by `cache_shards`; it does not concatenate the full moved dataset into memory. The full `train.json` config streams rows in shard order by default; use an offline-shuffled shard order or a shard-aware sampler before enabling fully random access at large scale.
+Data-backed configs set `require_data: true`, so missing or unreadable parquet shards fail loudly instead of silently training on fixture examples. The parquet loader builds a row-group metadata index over train/validation/test shards and reads records through a bounded row-group cache controlled by `cache_shards`; it does not concatenate the full moved dataset into memory. The full `train.json` config enables `chunk_shuffle`, which randomizes parquet row-group order while preserving row-group-local reads. Use `shuffle_rows_within_chunk` for small smoke/debug runs, but avoid PyTorch `shuffle: true` on full parquet unless deliberate random-access cache pressure is acceptable.
 
 Generate a shard manifest and tokenization preflight report before a long run:
 

@@ -11,7 +11,7 @@ import torch
 from torch.utils.data import DataLoader
 from tqdm.auto import tqdm
 
-from .data import encode_bytes, make_dataset, parquet_manifest
+from .data import ChunkShuffleSampler, ParquetGraphDataset, encode_bytes, make_dataset, parquet_manifest
 from .diagnostics import record_diagnostics
 from .model import TropicalGTConfig, TropicalGTModel
 from .tokenizer import TokenGTTokenizer
@@ -89,10 +89,35 @@ def train(config_path: str | Path, resume_from: str | Path | None = None, max_st
     run_name = cfg.get("run_name", f"tropicalgt-i-{int(time.time())}")
     out_dir = Path(cfg.get("output_dir", "TropicalGT-I/outputs/smoke")); out_dir.mkdir(parents=True, exist_ok=True)
     ckpt_dir = Path(cfg.get("checkpoint_dir", "TropicalGT-I/checkpoints")); ckpt_dir.mkdir(parents=True, exist_ok=True)
+    sampler = None
+    loader_shuffle = bool(cfg.get("shuffle", True))
+    sampler_report: dict[str, Any] = {"kind": "torch_shuffle" if loader_shuffle else "sequential"}
+    if bool(cfg.get("chunk_shuffle", False)):
+        if isinstance(train_ds, ParquetGraphDataset):
+            sampler = ChunkShuffleSampler(
+                train_ds,
+                seed=int(cfg.get("chunk_shuffle_seed", 0)),
+                shuffle_rows=bool(cfg.get("shuffle_rows_within_chunk", False)),
+            )
+            loader_shuffle = False
+            sampler_report = {
+                "kind": "chunk_shuffle",
+                "seed": sampler.seed,
+                "shuffle_rows_within_chunk": sampler.shuffle_rows,
+                "chunks": len(train_ds.chunks),
+                "rows": len(train_ds),
+            }
+        else:
+            sampler_report = {
+                "kind": "requested_chunk_shuffle_unavailable",
+                "reason": type(train_ds).__name__,
+                "fallback_shuffle": loader_shuffle,
+            }
     loader = DataLoader(
         train_ds,
         batch_size=batch_size,
-        shuffle=bool(cfg.get("shuffle", True)),
+        shuffle=loader_shuffle if sampler is None else False,
+        sampler=sampler,
         num_workers=int(cfg.get("num_workers", 0)),
         collate_fn=lambda r: collate_records(r, seq_len, tokenizer),
     )
@@ -120,7 +145,10 @@ def train(config_path: str | Path, resume_from: str | Path | None = None, max_st
     examples_seen = int(sum(int(row.get("batch_size", 0)) for row in history))
     tokens_seen_total = int(sum(int(row.get("tokens_seen", 0)) for row in history))
     graph_tokens_seen_total = int(sum(int(row.get("graph_tokens_seen", 0)) for row in history))
+    epoch = int(cfg.get("sampler_epoch", 0))
     while step < max_steps:
+        if sampler is not None:
+            sampler.set_epoch(epoch)
         for x, y, graph_batch, _records in loader:
             step_started = time.perf_counter()
             step += 1
@@ -154,6 +182,9 @@ def train(config_path: str | Path, resume_from: str | Path | None = None, max_st
             metrics_last["batch_size"] = example_count
             metrics_last["optimizer_lr"] = float(opt.param_groups[0].get("lr", 0.0))
             metrics_last["grad_norm"] = float(grad_norm.detach().cpu()) if torch.is_tensor(grad_norm) else float(grad_norm)
+            metrics_last["chunk_shuffle_enabled"] = 1.0 if sampler_report.get("kind") == "chunk_shuffle" else 0.0
+            metrics_last["sampler_chunks"] = float(sampler_report.get("chunks", 0))
+            metrics_last["shuffle_rows_within_chunk"] = 1.0 if sampler_report.get("shuffle_rows_within_chunk") else 0.0
             metrics_last["graph_json_fallback_rate"] = fallback_count / max(example_count, 1)
             metrics_last["graph_token_node_edge_ratio"] = (
                 float(graph_batch.node_counts.float().sum() / graph_batch.edge_counts.float().sum().clamp_min(1.0))
@@ -169,6 +200,7 @@ def train(config_path: str | Path, resume_from: str | Path | None = None, max_st
                 _save_training_checkpoint(latest_ckpt_path, model, opt, cfg, metrics_last, history, step, run_name)
             if step >= max_steps:
                 break
+        epoch += 1
     pbar.close()
     ckpt_path = ckpt_dir / f"{run_name}.pt"
     _save_training_checkpoint(ckpt_path, model, opt, cfg, metrics_last, history, step, run_name)
@@ -188,6 +220,7 @@ def train(config_path: str | Path, resume_from: str | Path | None = None, max_st
         "eval": eval_report,
         "visualizations": vis_paths,
         "dataset_manifest": parquet_manifest(root, ("train", "validation"), include_shards=False) if root else {},
+        "sampler": sampler_report,
         "device": str(device),
     }
     (out_dir / "train_report.json").write_text(json.dumps(report, indent=2), encoding="utf-8")
