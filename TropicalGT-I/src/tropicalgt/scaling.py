@@ -192,6 +192,7 @@ def score_records(
     graph_batch_cpu = graph_batch.to("cpu")
     out_cpu = {k: v.detach().cpu() if torch.is_tensor(v) else v for k, v in out.items()}
     nll, token_counts = per_record_nll(out_cpu["logits"], torch.stack(ys))
+    decoded_argmax = [_decode_shifted_bytes(row) for row in out_cpu["logits"].argmax(dim=-1)]
     gfn_logits = model.gfn(out["graph_state"]).detach().cpu()
     gfn_probs = torch.softmax(gfn_logits, dim=-1)
     graphcg_projection = _graphcg_projection(model, out["graph_state"])
@@ -212,6 +213,10 @@ def score_records(
                 "score": score,
                 "nll": float(nll[idx]),
                 "token_count": int(token_counts[idx]),
+                "input_text": record.text,
+                "target_text": _decode_shifted_bytes(ys[idx]),
+                "decoded_argmax": decoded_argmax[idx],
+                "graph_json_summary": _graph_json_summary(record.graph_json),
                 "graph_tokens": graph_tokens,
                 "node_tokens": int(graph_batch_cpu.node_counts[idx].item()),
                 "edge_tokens": int(graph_batch_cpu.edge_counts[idx].item()),
@@ -256,6 +261,10 @@ def _public_candidate(row: dict[str, Any]) -> dict[str, Any]:
         "margin_mean": row["margin_mean"],
         "gflownet_action_probs": row["gflownet_action_probs"],
         "embedding": row.get("embedding"),
+        "input_text": row.get("input_text", ""),
+        "target_text": row.get("target_text", ""),
+        "decoded_argmax": row.get("decoded_argmax", ""),
+        "graph_json_summary": row.get("graph_json_summary", {}),
         "graphcg_projection": row.get("graphcg_projection"),
         "graph_token_trace": row["graph_token_trace"],
         "filtered_simplicial_object": row["filtered_simplicial_object"],
@@ -272,6 +281,8 @@ def _compact_candidates(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
             "nll": row["nll"],
             "graph_tokens": row["graph_tokens"],
             "margin_mean": row["margin_mean"],
+            "input_preview": str(row.get("input_text", ""))[:240],
+            "decoded_preview": str(row.get("decoded_argmax", ""))[:240],
             "top_action": row["gflownet_action_probs"][0] if row["gflownet_action_probs"] else None,
         }
         for row in rows
@@ -312,6 +323,37 @@ def _graphcg_projection(model, graph_state: torch.Tensor, top_k: int = 4) -> lis
             }
         )
     return rows
+
+
+def _decode_shifted_bytes(ids: object) -> str:
+    if torch.is_tensor(ids):
+        values = ids.detach().cpu().reshape(-1).tolist()
+    else:
+        values = list(ids) if isinstance(ids, (list, tuple)) else []
+    raw = bytearray()
+    for value in values:
+        try:
+            token = int(value)
+        except Exception:
+            continue
+        if token <= 0:
+            continue
+        raw.append(max(0, min(255, token - 1)))
+    return bytes(raw).decode("utf-8", "ignore")
+
+
+def _graph_json_summary(graph_json: dict[str, Any] | None) -> dict[str, Any]:
+    graph = graph_json if isinstance(graph_json, dict) else {}
+    nodes = graph.get("nodes", []) if isinstance(graph.get("nodes", []), list) else []
+    edges = graph.get("edges", []) if isinstance(graph.get("edges", []), list) else []
+    return {
+        "node_count": len(nodes),
+        "edge_count": len(edges),
+        "node_types": sorted({str(node.get("type", "")) for node in nodes if isinstance(node, dict)})[:12],
+        "edge_types": sorted({str(edge.get("type", "")) for edge in edges if isinstance(edge, dict)})[:12],
+        "nodes_preview": nodes[:6],
+        "edges_preview": edges[:8],
+    }
 
 
 def _last_node_id(nodes: list[dict[str, Any]]) -> str | None:
