@@ -18,6 +18,41 @@ from tropicalgt.run import load_config, train
 
 VARIANTS: dict[str, dict[str, Any]] = {
     "baseline": {},
+    "aux_0p5x": {
+        "model.gflownet_weight": 0.01,
+        "model.graphcg_weight": 0.01,
+        "model.margin_weight": 0.001,
+        "model.entropy_weight": 0.0005,
+        "model.certificate_weight": 0.0005,
+    },
+    "aux_0p25x": {
+        "model.gflownet_weight": 0.005,
+        "model.graphcg_weight": 0.005,
+        "model.margin_weight": 0.0005,
+        "model.entropy_weight": 0.00025,
+        "model.certificate_weight": 0.00025,
+    },
+    "gflownet_0p25x": {
+        "model.gflownet_weight": 0.005,
+        "model.graphcg_weight": 0.0,
+        "model.margin_weight": 0.0,
+        "model.entropy_weight": 0.0,
+        "model.certificate_weight": 0.0,
+    },
+    "graphcg_0p25x": {
+        "model.gflownet_weight": 0.0,
+        "model.graphcg_weight": 0.005,
+        "model.margin_weight": 0.0,
+        "model.entropy_weight": 0.0,
+        "model.certificate_weight": 0.0,
+    },
+    "tropical_0p25x": {
+        "model.gflownet_weight": 0.0,
+        "model.graphcg_weight": 0.0,
+        "model.margin_weight": 0.0005,
+        "model.entropy_weight": 0.00025,
+        "model.certificate_weight": 0.00025,
+    },
     "no_graphcg": {"model.graphcg_weight": 0.0},
     "no_gflownet": {"model.gflownet_weight": 0.0},
     "no_certificate": {"model.certificate_weight": 0.0},

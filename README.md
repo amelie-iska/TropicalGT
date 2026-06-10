@@ -245,13 +245,13 @@ PYTHONPATH=TropicalGT-I/src \
 TropicalGT-I/scripts/run_bpb_ablation_grid.py \
 --config TropicalGT-I/configs/gpu_ablation.json \
 --output-dir TropicalGT-I/outputs/gpu_ablation/grid_iter19 \
---variants baseline,no_graphcg,no_gflownet,no_tropical_regularizers,no_auxiliary \
+--variants baseline,aux_0p5x,aux_0p25x,gflownet_0p25x,graphcg_0p25x,tropical_0p25x,no_auxiliary \
 --max-steps 8 \
 --seed 1729 \
 --run
 ```
 
-By default the grid runner disables W&B media/network logging for the variants and keeps a shared seed across all runs. Add `--wandb` only when online logging for every ablation variant is desired. Add `--fixture --device cpu` for a quick local sanity check that writes configs and reports without touching the moved parquet dataset. The `gpu_ablation.json` config is intentionally bounded (`train_limit`, `val_limit`, and `max_steps`) so it can test whether an auxiliary is directionally helpful before a longer `train.json` run; it should not be treated as final leaderboard evidence.
+By default the grid runner disables W&B media/network logging for the variants and keeps a shared seed across all runs. Add `--wandb` only when online logging for every ablation variant is desired. Add `--fixture --device cpu` for a quick local sanity check that writes configs and reports without touching the moved parquet dataset. The `gpu_ablation.json` config is intentionally bounded (`train_limit`, `val_limit`, and `max_steps`) so it can test whether an auxiliary is directionally helpful before a longer `train.json` run; it should not be treated as final leaderboard evidence. The built-in variant ladder includes zero-ablation variants plus nonzero half/quarter-weight and isolated low-weight GFlowNet, GraphCG, and tropical-regularizer settings.
 
 For a checkpoint-backed smoke proof bundle, write a readiness report that checks the environment, packages, data manifest, sample TokenGT conversion, sequential text graphification, paper artifacts, checkpoint reload, finite eval, BPB/graph-BPB accounting, bounded inference scaling, optional topological audits, ablation-tool availability, and visualization generation:
 
