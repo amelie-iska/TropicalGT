@@ -12,6 +12,7 @@
   "device": "auto",
   "output_dir": "TropicalGT-I/outputs/gpu_smoke",
   "checkpoint_dir": "TropicalGT-I/checkpoints",
+  "checkpoint_every": 1,
   "keys_path": "keys.txt",
   "viz_limit": 6,
   "tokengt": {"max_nodes": 48, "max_edges": 96, "node_id_dim": 16, "feature_dim": 48, "graph_token": true},

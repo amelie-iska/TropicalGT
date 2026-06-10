@@ -11,6 +11,7 @@
 - Iteration 2 adds explicit filtered simplicial objects to reasoning visualization payloads, per-step Plotly metric dashboards, and an opt-in Parameter-Golf graph adapter path controlled by `TROPICALGT_GRAPH_ADAPTER`.
 - Iteration 3 adds richer validation, evaluation, and inference diagnostics: graph-json fallback rates, per-record NLL, graph-token traces, tropical support histograms, GFlowNet action probabilities, GraphCG direction summaries, and prompt-level filtered simplicial objects.
 - Iteration 4 adds bounded inference-time scaling: a GFlowNet-guided graph-of-thought candidate controller that expands prompt graphs with action paths, scores candidates with NLL/margin/action-probability/token-budget terms, and emits the best scaled candidate plus trace artifacts.
+- Iteration 5 adds resumable training checkpoints with optimizer state, step, metric history, config, RNG state, periodic `.latest.pt` saves, and CLI `--resume-from` / `--max-steps` support.
 
 ## Verification evidence
 - Unit tests: `/home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests -q` -> `6 passed`.
@@ -39,6 +40,12 @@
 - GPU scaled inference wrote `TropicalGT-I/outputs/gpu_smoke/inference_scaling_audit.json`; artifact inspection confirmed `6` evaluated candidates, three levels, best path `['retrieve']`, `6` graph tokens in the selected candidate, and a filtered simplicial object.
 - GPU validation/eval/render commands completed after iteration 4; inspection confirmed scaled inference, eval record details, and reasoning payload objects.
 - Process/GPU cleanup check after iteration 4 found no lingering training or GPU compute process.
+- Iteration 5 unit tests: `/home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests -q` -> `14 passed`.
+- CPU resume smoke: first ran `train_tropicalgt_i.py --config TropicalGT-I/configs/smoke.json --max-steps 1`, then resumed from `TropicalGT-I/checkpoints/tropicalgt_i_cpu_smoke.latest.pt` with `--max-steps 3`; the resumed report had `start_step=1`, `final_step=3`, `history_len=3`, and both final/latest checkpoints present.
+- GPU resume smoke completed on CUDA from `TropicalGT-I/checkpoints/tropicalgt_i_gpu_smoke.latest.pt` with `--max-steps 4`; W&B run https://wandb.ai/amelie-iska-math/TropicalGT-I/runs/1zpwg1it reported `start_step=1`, `final_step=4`, `history_len=4`, validation NLL `5.437278588612874`, and BPB proxy `7.8443348557235355`.
+- Post-restore W&B-order check: resumed the same GPU run from `start_step=4` to `final_step=5` after moving W&B initialization behind checkpoint restore; W&B run https://wandb.ai/amelie-iska-math/TropicalGT-I/runs/7cwfuwrk reported validation NLL `5.395662784576416`, BPB proxy `7.784295941617531`, and graph-json fallback rate `0.0`.
+- GPU eval, scaled inference, and visualization rendering completed after the resumed checkpoint; artifact inspection confirmed `6` scaled candidates, best path `['retrieve', 'retrieve']`, `2` eval detail records, `6` reasoning payload objects, and `training_metrics.html` present.
+- Process/GPU cleanup check after iteration 5 found no lingering training or GPU compute process.
 
 ## Remaining research risks
 - The model is a first functional iteration, not a competitive Parameter-Golf artifact.

@@ -57,8 +57,10 @@ def build_model(cfg: dict[str, Any]) -> TropicalGTModel:
     return TropicalGTModel(TropicalGTConfig(**cfg.get("model", {})))
 
 
-def train(config_path: str | Path) -> dict[str, Any]:
+def train(config_path: str | Path, resume_from: str | Path | None = None, max_steps_override: int | None = None) -> dict[str, Any]:
     cfg = load_config(config_path)
+    if resume_from is None:
+        resume_from = cfg.get("resume_from")
     root = cfg.get("data_root")
     train_ds = make_dataset(root, "train", limit=cfg.get("train_limit"), fixture_size=cfg.get("fixture_size", 8))
     val_ds = make_dataset(root, "validation", limit=cfg.get("val_limit", cfg.get("train_limit", 4)), fixture_size=cfg.get("fixture_size", 8))
@@ -69,15 +71,30 @@ def train(config_path: str | Path) -> dict[str, Any]:
     model = build_model(cfg).to(device)
     opt = torch.optim.AdamW(model.parameters(), lr=float(cfg.get("lr", 3e-4)), weight_decay=float(cfg.get("weight_decay", 0.01)))
     run_name = cfg.get("run_name", f"tropicalgt-i-{int(time.time())}")
-    wb = setup_wandb(cfg, run_name)
     out_dir = Path(cfg.get("output_dir", "TropicalGT-I/outputs/smoke")); out_dir.mkdir(parents=True, exist_ok=True)
     ckpt_dir = Path(cfg.get("checkpoint_dir", "TropicalGT-I/checkpoints")); ckpt_dir.mkdir(parents=True, exist_ok=True)
     loader = DataLoader(train_ds, batch_size=batch_size, shuffle=True, collate_fn=lambda r: collate_records(r, seq_len, tokenizer))
-    max_steps = int(cfg.get("max_steps", 5))
+    max_steps = int(max_steps_override if max_steps_override is not None else cfg.get("max_steps", 5))
     metrics_last: dict[str, float] = {}
     history: list[dict[str, float]] = []
-    model.train(); step = 0
-    pbar = tqdm(total=max_steps, desc="TropicalGT-I train", dynamic_ncols=True)
+    step = 0
+    loaded_step = 0
+    resume_path = str(resume_from) if resume_from else ""
+    if resume_from:
+        resume_obj = torch.load(resume_from, map_location=device)
+        model.load_state_dict(resume_obj["model"])
+        if "optimizer" in resume_obj:
+            opt.load_state_dict(resume_obj["optimizer"])
+        step = int(resume_obj.get("step", resume_obj.get("metrics", {}).get("step", 0)))
+        loaded_step = step
+        history = list(resume_obj.get("history", []))
+        metrics_last = dict(resume_obj.get("metrics", {}))
+        _restore_rng_state(resume_obj)
+    wb = setup_wandb(cfg, run_name)
+    model.train()
+    pbar = tqdm(total=max_steps, initial=min(step, max_steps), desc="TropicalGT-I train", dynamic_ncols=True)
+    checkpoint_every = int(cfg.get("checkpoint_every", 0))
+    latest_ckpt_path = ckpt_dir / f"{run_name}.latest.pt"
     while step < max_steps:
         for x, y, graph_batch, _records in loader:
             step += 1
@@ -98,16 +115,30 @@ def train(config_path: str | Path) -> dict[str, Any]:
                 wb.log(metrics_last, step=step)
             pbar.set_postfix({"loss": f"{metrics_last['loss']:.3f}", "nll": f"{metrics_last.get('nll', 0):.3f}"})
             pbar.update(1)
+            if checkpoint_every > 0 and step % checkpoint_every == 0:
+                _save_training_checkpoint(latest_ckpt_path, model, opt, cfg, metrics_last, history, step, run_name)
             if step >= max_steps:
                 break
     pbar.close()
     ckpt_path = ckpt_dir / f"{run_name}.pt"
-    torch.save({"model": model.state_dict(), "config": cfg, "metrics": metrics_last}, ckpt_path)
+    _save_training_checkpoint(ckpt_path, model, opt, cfg, metrics_last, history, step, run_name)
     eval_report = evaluate_model(model, val_ds, tokenizer, seq_len, batch_size, device)
     metrics_last.update({f"eval_{k}": v for k, v in eval_report.items() if isinstance(v, (int, float))})
     vis_paths = write_reasoning_visualizations(model, val_ds, tokenizer, seq_len, device, out_dir, limit=int(cfg.get("viz_limit", 8)))
     vis_paths.update(write_metric_visualizations(history, out_dir))
-    report = {"checkpoint": str(ckpt_path), "metrics": metrics_last, "history": history, "eval": eval_report, "visualizations": vis_paths, "device": str(device)}
+    report = {
+        "checkpoint": str(ckpt_path),
+        "latest_checkpoint": str(latest_ckpt_path) if latest_ckpt_path.exists() else "",
+        "resume_from": resume_path,
+        "resumed": bool(resume_path),
+        "start_step": loaded_step,
+        "final_step": step,
+        "metrics": metrics_last,
+        "history": history,
+        "eval": eval_report,
+        "visualizations": vis_paths,
+        "device": str(device),
+    }
     (out_dir / "train_report.json").write_text(json.dumps(report, indent=2), encoding="utf-8")
     if wb:
         for key, path in vis_paths.items():
@@ -177,3 +208,42 @@ def load_checkpoint(path: str | Path, device: torch.device):
     model.load_state_dict(obj["model"])
     model.eval()
     return model, obj
+
+
+def _save_training_checkpoint(
+    path: Path,
+    model: TropicalGTModel,
+    opt: torch.optim.Optimizer,
+    cfg: dict[str, Any],
+    metrics: dict[str, float],
+    history: list[dict[str, float]],
+    step: int,
+    run_name: str,
+) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    torch.save(
+        {
+            "model": model.state_dict(),
+            "optimizer": opt.state_dict(),
+            "config": cfg,
+            "metrics": metrics,
+            "history": history,
+            "step": int(step),
+            "run_name": run_name,
+            "rng_state": torch.get_rng_state(),
+            "cuda_rng_state_all": torch.cuda.get_rng_state_all() if torch.cuda.is_available() else [],
+            "saved_at": time.time(),
+        },
+        path,
+    )
+
+
+def _restore_rng_state(obj: dict[str, Any]) -> None:
+    rng_state = obj.get("rng_state")
+    if isinstance(rng_state, torch.Tensor):
+        torch.set_rng_state(rng_state.detach().cpu().to(torch.uint8))
+    cuda_states = obj.get("cuda_rng_state_all")
+    if torch.cuda.is_available() and isinstance(cuda_states, list) and cuda_states:
+        normalized = [state.detach().cpu().to(torch.uint8) for state in cuda_states if isinstance(state, torch.Tensor)]
+        if normalized:
+            torch.cuda.set_rng_state_all(normalized)

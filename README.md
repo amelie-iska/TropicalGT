@@ -67,6 +67,7 @@ TropicalGT-I/scripts/train_tropicalgt_i.py \
 This writes:
 
 - `TropicalGT-I/checkpoints/tropicalgt_i_cpu_smoke.pt`
+- `TropicalGT-I/checkpoints/tropicalgt_i_cpu_smoke.latest.pt`
 - `TropicalGT-I/outputs/smoke/train_report.json`
 - `TropicalGT-I/outputs/smoke/reasoning_trajectory_3d.html`
 - `TropicalGT-I/outputs/smoke/reasoning_trajectory_pca_nll.html`
@@ -85,6 +86,12 @@ TropicalGT-I/scripts/train_tropicalgt_i.py \
 The script reads the W&B API key from `keys.txt` when W&B is enabled. It logs NLL, BPB proxy, GFlowNet trajectory-balance loss, GraphCG losses, tropical support entropy, tropical margins, graph token counts, GPU memory, and generated HTML artifacts.
 
 The reasoning payload JSON stores the hover text, PCA/NLL point coordinates, and the full finite filtered simplicial object for each visualized record. In v1 these objects include 0-simplices for graph vertices, 1-simplices for graph edges, directed length-2 path 2-simplices, filtration thresholds, and per-record summaries.
+
+Training checkpoints contain model state, optimizer state, current step, metrics, history, config, and RNG state. Resume a run by pointing `train_tropicalgt_i.py` at a final or `.latest.pt` checkpoint:
+
+```bash
+PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python TropicalGT-I/scripts/train_tropicalgt_i.py --config TropicalGT-I/configs/gpu_smoke.json --resume-from TropicalGT-I/checkpoints/tropicalgt_i_gpu_smoke.latest.pt --max-steps 8
+```
 
 ## Eval, inference, validation, visualization
 

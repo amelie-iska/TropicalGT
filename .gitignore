@@ -5,6 +5,7 @@ TropicalGT-I/outputs/
 TropicalGT-I/checkpoints/
 TropicalGT-I/wandb/
 wandb/
+tea_debug.log
 *.pt
 *.pth
 *.ckpt

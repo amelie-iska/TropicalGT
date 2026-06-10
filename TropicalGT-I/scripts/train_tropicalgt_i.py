@@ -12,8 +12,10 @@ from tropicalgt.run import train
 def main() -> None:
     parser = argparse.ArgumentParser(description="Train TropicalGT-I")
     parser.add_argument("--config", default=str(ROOT / "configs" / "smoke.json"))
+    parser.add_argument("--resume-from", default="")
+    parser.add_argument("--max-steps", type=int, default=None)
     args = parser.parse_args()
-    report = train(args.config)
+    report = train(args.config, resume_from=args.resume_from or None, max_steps_override=args.max_steps)
     print(json.dumps(report, indent=2))
 
 
