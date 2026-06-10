@@ -7,7 +7,13 @@ from tropicalgt.data import FixtureGraphDataset
 from tropicalgt.model import TropicalGTConfig, TropicalGTModel
 from tropicalgt.simplicial import build_filtered_simplicial_object
 from tropicalgt.tokenizer import TokenGTTokenizer
-from tropicalgt.visualization import _simplicial_object_svg, write_got_trajectory_visualization, write_reasoning_visualizations
+from tropicalgt.visualization import (
+    _simplicial_object_svg,
+    write_analogical_memory_visualization,
+    write_got_trajectory_visualization,
+    write_persistence_visualizations,
+    write_reasoning_visualizations,
+)
 
 
 def test_filtered_simplicial_object_contains_path_faces():
@@ -120,3 +126,91 @@ def test_simplicial_svg_wraps_long_topological_paths():
     assert "layout=wrapped_topological_path" in svg
     assert svg.count("zero-simplex") == 50
     assert svg.count("one-simplex") == 49
+
+
+def test_trajectory_persistence_uses_growth_and_free_resolution(tmp_path: Path):
+    record = FixtureGraphDataset(1)[0]
+    obj = build_filtered_simplicial_object(record)
+    topo0 = _toy_topology(intervals=[])
+    topo1 = _toy_topology(intervals=[{"dimension": 0, "birth": 0.0, "death": None, "infinite": True}])
+    paths = write_persistence_visualizations(
+        topo1,
+        tmp_path,
+        growth=[
+            {"level": 0, "filtered_simplicial_object": obj, "topological_algebra": topo0},
+            {"level": 1, "filtered_simplicial_object": obj, "topological_algebra": topo1},
+        ],
+        title_prefix="Trajectory ",
+    )
+    barcode_html = Path(paths["persistence_barcode"]).read_text(encoding="utf-8")
+    module_html = Path(paths["persistence_module_betti"]).read_text(encoding="utf-8")
+    assert "persistent homology growth barcode" in barcode_html
+    assert "trajectory growth level" in barcode_html
+    assert "multiparameter persistence and free-resolution growth" in module_html
+    assert "free-resolution proxy" in module_html
+    assert "simplicial-object-panel" in module_html
+
+
+def test_analogical_memory_visualization_renders_simplicial_maps(tmp_path: Path):
+    record = FixtureGraphDataset(1)[0]
+    obj = build_filtered_simplicial_object(record)
+    topo = _toy_topology(intervals=[{"dimension": 0, "birth": 0.0, "death": None, "infinite": True}])
+    memory = {
+        "bank_path": "",
+        "retrieved": [
+            {
+                "memory_id": "mem0",
+                "record_id": "rec0",
+                "retrieval_score": 0.9,
+                "embedding_similarity": 0.8,
+                "signature_similarity": 0.7,
+                "quality_score": 0.6,
+                "filtered_simplicial_object": obj,
+                "topological_algebra": topo,
+                "derived_signature": topo["derived_equivalence_signature"],
+            }
+        ],
+    }
+    paths = write_analogical_memory_visualization(
+        memory,
+        tmp_path,
+        query_context={"filtered_simplicial_object": obj, "topological_algebra": topo, "label": "query trajectory"},
+    )
+    html = Path(paths["analogical_memory_retrieval_html"]).read_text(encoding="utf-8")
+    maps = json.loads(Path(paths["analogical_simplicial_maps"]).read_text(encoding="utf-8"))
+    assert "Analogical reasoning memory retrieval as simplicial maps" in html
+    assert "simplicial map candidate" in html
+    assert "persistent homology similarity" in html
+    assert "free-resolution similarity" in html
+    assert "simplicial-object-panel" in html
+    assert maps["maps"][0]["edge_preservation_rate"] >= 0.0
+    assert maps["maps"][0]["derived_signature_similarity"] >= 0.0
+
+
+def _toy_topology(intervals):
+    return {
+        "persistence": {"backend": "toy", "available": True, "intervals": intervals},
+        "persistence_module": {
+            "states": [
+                {"threshold": 0.0, "chain_group_ranks": {"0": 1}, "betti": {"0": 1}, "euler_characteristic": 1},
+                {"threshold": 1.0, "chain_group_ranks": {"0": 2, "1": 1}, "betti": {"0": 1, "1": 0}, "euler_characteristic": 1},
+            ]
+        },
+        "derived_equivalence_signature": {
+            "betti_vector": [1, 0, 0, 0],
+            "persistence_finite_interval_count": 0,
+            "persistence_infinite_interval_count": 1,
+            "persistence_total_finite_length": 0.0,
+            "multiparameter_grid_points": 2,
+            "multiparameter_h0_rank_sample": [{"h0_rank": 1}],
+        },
+        "commutative_algebra": {
+            "multiparameter_free_resolution_proxy": {
+                "ring": "F2[x_filtration,x_dimension,x_position]",
+                "free_chain_modules": [
+                    {"homological_degree": 0, "rank": 2},
+                    {"homological_degree": 1, "rank": 1},
+                ],
+            }
+        },
+    }

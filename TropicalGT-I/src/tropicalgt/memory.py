@@ -114,7 +114,11 @@ class AnalogicalMemoryBank:
                     "nll": record.nll,
                     "trajectory_edges": record.trajectory_edges,
                     "trajectory_paths": record.trajectory_paths,
+                    "trajectory_embeddings": record.trajectory_embeddings,
                     "filtered_summary": record.filtered_simplicial_object.get("summary", {}),
+                    "filtered_simplicial_object": record.filtered_simplicial_object,
+                    "topological_algebra": record.topological_algebra,
+                    "signature_vector": record.signature_vector,
                     "derived_signature": record.derived_signature,
                     "metadata": record.metadata,
                 }

@@ -10,6 +10,7 @@ import numpy as np
 import torch
 from sklearn.decomposition import PCA
 import plotly.graph_objects as go
+from plotly.subplots import make_subplots
 
 from .data import encode_bytes
 from .diagnostics import per_record_nll, record_diagnostics
@@ -200,6 +201,7 @@ def write_inference_audit_artifacts(
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
     paths: dict[str, str] = {}
+    trajectory_growth = None
 
     audit_path = output_dir / "inference_audit.json"
     audit_path.write_text(json.dumps(result, indent=2), encoding="utf-8")
@@ -257,9 +259,30 @@ def write_inference_audit_artifacts(
             paths.update(write_persistence_visualizations(topology, output_dir))
         trajectory_topology = scaling.get("trajectory_topological_algebra") if isinstance(scaling, dict) else None
         if isinstance(trajectory_topology, dict):
-            paths.update({f"trajectory_{key}": value for key, value in write_persistence_visualizations(trajectory_topology, output_dir / "trajectory_persistence").items()})
+            paths.update(
+                {
+                    f"trajectory_{key}": value
+                    for key, value in write_persistence_visualizations(
+                        trajectory_topology,
+                        output_dir / "trajectory_persistence",
+                        growth=trajectory_growth if isinstance(trajectory_growth, list) else None,
+                        title_prefix="Trajectory ",
+                    ).items()
+                }
+            )
         if isinstance(memory, dict):
-            paths.update(write_analogical_memory_visualization(memory, output_dir))
+            query_context = {}
+            if isinstance(scaling, dict):
+                best = scaling.get("best") if isinstance(scaling.get("best"), dict) else {}
+                query_context = {
+                    "label": "query trajectory",
+                    "embedding": best.get("embedding", []) if isinstance(best, dict) else [],
+                    "filtered_simplicial_object": scaling.get("trajectory_filtered_simplicial_object")
+                    or (best.get("filtered_simplicial_object") if isinstance(best, dict) else {}),
+                    "topological_algebra": scaling.get("trajectory_topological_algebra")
+                    or (best.get("topological_algebra") if isinstance(best, dict) else {}),
+                }
+            paths.update(write_analogical_memory_visualization(memory, output_dir, query_context=query_context))
         paths["dashboard"] = str(_write_inference_dashboard(paths, output_dir))
     return paths
 
@@ -426,11 +449,21 @@ def write_tropical_support_heatmap(result: dict[str, object], output_dir: str | 
     return {"tropical_support_heatmap": str(path)}
 
 
-def write_persistence_visualizations(topology: dict[str, object], output_dir: str | Path) -> dict[str, str]:
+def write_persistence_visualizations(
+    topology: dict[str, object],
+    output_dir: str | Path,
+    growth: list[object] | None = None,
+    title_prefix: str = "",
+) -> dict[str, str]:
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
     barcode = output_dir / "persistence_barcode.html"
     module_path = output_dir / "persistence_module_betti.html"
+    if growth:
+        _write_growth_persistence_barcode(barcode, topology, growth, title_prefix=title_prefix)
+        _write_growth_persistence_module(module_path, topology, growth, title_prefix=title_prefix)
+        return {"persistence_barcode": str(barcode), "persistence_module_betti": str(module_path)}
+
     intervals = topology.get("persistence", {}).get("intervals", []) if isinstance(topology.get("persistence"), dict) else []
     fig = go.Figure()
     display_intervals, barcode_meta = _prepare_barcode_intervals(intervals)
@@ -515,6 +548,174 @@ def write_persistence_visualizations(topology: dict[str, object], output_dir: st
     return {"persistence_barcode": str(barcode), "persistence_module_betti": str(module_path)}
 
 
+def _write_growth_persistence_barcode(path: Path, topology: dict[str, object], growth: list[object], title_prefix: str = "") -> None:
+    rows = _trajectory_growth_rows(topology, growth)
+    fig = go.Figure()
+    colors = {0: "#55d6be", 1: "#7aa2ff", 2: "#fbbf24", 3: "#fb7185"}
+    panel_objects = []
+    panel_hover = []
+    max_death = 1.0
+    for row in rows:
+        for interval in row["intervals"]:
+            death = interval.get("display_death")
+            if isinstance(death, (int, float)) and math.isfinite(float(death)):
+                max_death = max(max_death, float(death))
+    for row_idx, row in enumerate(rows):
+        level = int(row["level"])
+        obj = row.get("filtered_simplicial_object", {})
+        topo = row.get("topological_algebra", {})
+        panel_objects.append(obj if isinstance(obj, dict) else {})
+        panel_hover.append(_topology_growth_hover(level, obj if isinstance(obj, dict) else {}, topo if isinstance(topo, dict) else {}))
+        for interval_idx, interval in enumerate(row["intervals"]):
+            dim = int(interval.get("dimension", 0))
+            birth = float(interval.get("birth", 0.0))
+            death = float(interval.get("display_death", max_death))
+            z = float(dim) + 0.08 * interval_idx
+            true_death = "inf" if interval.get("infinite") else f"{float(interval.get('death', death)):.4g}"
+            hover = (
+                f"<b>trajectory growth level {level}</b>"
+                f"<br>H{dim} interval [{birth:.4g}, {true_death}]"
+                f"<br>complex: {_summary_line(obj if isinstance(obj, dict) else {})}"
+                f"<br>{_derived_signature_line(topo if isinstance(topo, dict) else {})}"
+                f"<br>{_free_resolution_line(topo if isinstance(topo, dict) else {})}"
+            )
+            fig.add_trace(
+                go.Scatter3d(
+                    x=[birth, death],
+                    y=[level, level],
+                    z=[z, z],
+                    mode="lines+markers",
+                    line=dict(width=8, color=colors.get(dim, "#cbd5e1")),
+                    marker=dict(size=5, color=colors.get(dim, "#cbd5e1")),
+                    name=f"L{level} H{dim}",
+                    hovertext=[hover, hover],
+                    hoverinfo="text",
+                    customdata=[row_idx, row_idx],
+                    showlegend=interval_idx == 0,
+                )
+            )
+            if interval.get("infinite"):
+                fig.add_trace(
+                    go.Scatter3d(
+                        x=[death],
+                        y=[level],
+                        z=[z],
+                        mode="markers",
+                        marker=dict(symbol="diamond", size=7, color=colors.get(dim, "#cbd5e1")),
+                        hovertext=hover + "<br>infinite interval displayed at finite cap",
+                        hoverinfo="text",
+                        customdata=[row_idx],
+                        showlegend=False,
+                    )
+                )
+    if not rows:
+        fig.add_annotation(text="No trajectory growth topology available.", xref="paper", yref="paper", x=0.5, y=0.5, showarrow=False)
+    fig.update_layout(
+        template="plotly_dark",
+        title=f"{title_prefix}persistent homology growth barcode",
+        scene=dict(
+            xaxis_title="filtration birth/death",
+            yaxis_title="trajectory growth level",
+            zaxis_title="homology dimension",
+        ),
+        legend=dict(itemsizing="constant"),
+    )
+    _write_plotly_dark_html(
+        path,
+        fig,
+        f"{title_prefix}persistent homology growth barcode",
+        _simplicial_panel_items(panel_objects, panel_hover),
+    )
+
+
+def _write_growth_persistence_module(path: Path, topology: dict[str, object], growth: list[object], title_prefix: str = "") -> None:
+    rows = _trajectory_growth_rows(topology, growth)
+    fig = make_subplots(
+        rows=1,
+        cols=2,
+        specs=[[{"type": "scatter3d"}, {"type": "scatter3d"}]],
+        subplot_titles=(
+            "Persistence module Betti ranks across trajectory growth",
+            "Multigraded free-chain / free-resolution proxy ranks",
+        ),
+        horizontal_spacing=0.02,
+    )
+    panel_objects = []
+    panel_hover = []
+    for row_idx, row in enumerate(rows):
+        level = int(row["level"])
+        obj = row.get("filtered_simplicial_object", {})
+        topo = row.get("topological_algebra", {})
+        panel_objects.append(obj if isinstance(obj, dict) else {})
+        panel_hover.append(_topology_growth_hover(level, obj if isinstance(obj, dict) else {}, topo if isinstance(topo, dict) else {}))
+        states = row.get("states", [])
+        for dim, color in [(0, "#55d6be"), (1, "#7aa2ff"), (2, "#fbbf24"), (3, "#fb7185")]:
+            xs = [float(state.get("threshold", 0.0)) for state in states if isinstance(state, dict)]
+            zs = [int(state.get("betti", {}).get(str(dim), 0)) for state in states if isinstance(state, dict)]
+            if xs and any(value != 0 for value in zs):
+                ys = [level] * len(xs)
+                hover = [
+                    f"<b>trajectory level {level}</b><br>beta_{dim}={z}<br>filtration={x:.4g}<br>{_summary_line(obj if isinstance(obj, dict) else {})}"
+                    for x, z in zip(xs, zs)
+                ]
+                fig.add_trace(
+                    go.Scatter3d(
+                        x=xs,
+                        y=ys,
+                        z=zs,
+                        mode="lines+markers",
+                        line=dict(width=4, color=color),
+                        marker=dict(size=4, color=color),
+                        name=f"L{level} beta_{dim}",
+                        hovertext=hover,
+                        hoverinfo="text",
+                        customdata=[row_idx] * len(xs),
+                    ),
+                    row=1,
+                    col=1,
+                )
+        free_modules = _free_resolution_modules(topo if isinstance(topo, dict) else {})
+        for module in free_modules:
+            degree = int(module.get("homological_degree", 0))
+            rank = int(module.get("rank", module.get("rank_upper_bound", 0)))
+            hover = (
+                f"<b>trajectory level {level}</b>"
+                f"<br>homological degree={degree}"
+                f"<br>free rank={rank}"
+                f"<br>{_free_resolution_line(topo if isinstance(topo, dict) else {})}"
+                f"<br>{_derived_signature_line(topo if isinstance(topo, dict) else {})}"
+            )
+            fig.add_trace(
+                go.Scatter3d(
+                    x=[degree],
+                    y=[level],
+                    z=[rank],
+                    mode="markers+text",
+                    marker=dict(size=max(5, min(18, 4 + math.log1p(max(rank, 0)))), color=[rank], colorscale="Viridis", showscale=False),
+                    text=[f"F{degree}"],
+                    textposition="top center",
+                    name=f"L{level} F{degree}",
+                    hovertext=hover,
+                    hoverinfo="text",
+                    customdata=[row_idx],
+                    showlegend=False,
+                ),
+                row=1,
+                col=2,
+            )
+    if not rows:
+        fig.add_annotation(text="No trajectory growth persistence module available.", xref="paper", yref="paper", x=0.5, y=0.5, showarrow=False)
+    fig.update_layout(template="plotly_dark", title=f"{title_prefix}multiparameter persistence and free-resolution growth")
+    fig.update_scenes(xaxis_title="filtration", yaxis_title="growth level", zaxis_title="Betti rank", row=1, col=1)
+    fig.update_scenes(xaxis_title="homological degree", yaxis_title="growth level", zaxis_title="free rank", row=1, col=2)
+    _write_plotly_dark_html(
+        path,
+        fig,
+        f"{title_prefix}multiparameter persistence and free-resolution growth",
+        _simplicial_panel_items(panel_objects, panel_hover),
+    )
+
+
 def _prepare_barcode_intervals(intervals: list[object], epsilon: float = 1e-9) -> tuple[list[dict[str, object]], dict[str, object]]:
     raw: list[dict[str, object]] = [row for row in intervals if isinstance(row, dict)]
     finite_deaths = [
@@ -571,6 +772,99 @@ def _prepare_barcode_intervals(intervals: list[object], epsilon: float = 1e-9) -
     }
 
 
+def _trajectory_growth_rows(topology: dict[str, object], growth: list[object] | None) -> list[dict[str, object]]:
+    rows: list[dict[str, object]] = []
+    raw_growth = growth if isinstance(growth, list) else []
+    for idx, item in enumerate(raw_growth):
+        if not isinstance(item, dict):
+            continue
+        topo = item.get("topological_algebra") if isinstance(item.get("topological_algebra"), dict) else {}
+        obj = item.get("filtered_simplicial_object") if isinstance(item.get("filtered_simplicial_object"), dict) else {}
+        intervals, _ = _prepare_barcode_intervals(_intervals_or_synthetic_h0(topo), epsilon=0.0)
+        rows.append(
+            {
+                "level": int(item.get("level", idx)),
+                "filtered_simplicial_object": obj,
+                "topological_algebra": topo,
+                "intervals": intervals,
+                "states": topo.get("persistence_module", {}).get("states", []) if isinstance(topo.get("persistence_module"), dict) else [],
+            }
+        )
+    if not rows and isinstance(topology, dict):
+        intervals, _ = _prepare_barcode_intervals(_intervals_or_synthetic_h0(topology), epsilon=0.0)
+        rows.append(
+            {
+                "level": 0,
+                "filtered_simplicial_object": {},
+                "topological_algebra": topology,
+                "intervals": intervals,
+                "states": topology.get("persistence_module", {}).get("states", []) if isinstance(topology.get("persistence_module"), dict) else [],
+            }
+        )
+    return rows
+
+
+def _intervals_or_synthetic_h0(topology: dict[str, object]) -> list[dict[str, object]]:
+    intervals = topology.get("persistence", {}).get("intervals", []) if isinstance(topology.get("persistence"), dict) else []
+    if intervals:
+        return [row for row in intervals if isinstance(row, dict)]
+    states = topology.get("persistence_module", {}).get("states", []) if isinstance(topology.get("persistence_module"), dict) else []
+    if not states:
+        return []
+    first = states[0] if isinstance(states[0], dict) else {}
+    betti0 = int(first.get("betti", {}).get("0", 0)) if isinstance(first.get("betti"), dict) else 0
+    if betti0 <= 0:
+        return []
+    birth = float(first.get("threshold", 0.0) or 0.0)
+    return [{"dimension": 0, "birth": birth, "death": None, "infinite": True, "synthetic": "module_beta0"}]
+
+
+def _topology_growth_hover(level: int, obj: dict[str, object], topology: dict[str, object]) -> str:
+    return (
+        f"<b>trajectory growth level {level}</b>"
+        f"<br>{_summary_line(obj)}"
+        f"<br>{_derived_signature_line(topology)}"
+        f"<br>{_free_resolution_line(topology)}"
+    )
+
+
+def _summary_line(obj: dict[str, object]) -> str:
+    summary = obj.get("summary", {}) if isinstance(obj, dict) else {}
+    return (
+        f"V={summary.get('num_vertices', 0)} E={summary.get('num_edges', 0)} "
+        f"T={summary.get('num_two_simplices', 0)} thresholds={summary.get('num_thresholds', 0)}"
+    )
+
+
+def _derived_signature_line(topology: dict[str, object]) -> str:
+    sig = topology.get("derived_equivalence_signature", {}) if isinstance(topology, dict) else {}
+    betti = sig.get("betti_vector", [])
+    finite = sig.get("persistence_finite_interval_count", 0)
+    infinite = sig.get("persistence_infinite_interval_count", 0)
+    grid = sig.get("multiparameter_grid_points", 0)
+    return f"derived signature: betti={betti} finitePH={finite} infinitePH={infinite} multiparameter_grid={grid}"
+
+
+def _free_resolution_line(topology: dict[str, object]) -> str:
+    modules = _free_resolution_modules(topology)
+    ranks = [f"F{int(row.get('homological_degree', 0))}:{int(row.get('rank', row.get('rank_upper_bound', 0)))}" for row in modules[:6]]
+    ca = topology.get("commutative_algebra", {}) if isinstance(topology, dict) else {}
+    proxy = ca.get("multiparameter_free_resolution_proxy", {}) if isinstance(ca.get("multiparameter_free_resolution_proxy"), dict) else {}
+    ring = proxy.get("ring", "F2[x_filtration,x_dimension,x_position]")
+    return f"free-resolution proxy over {ring}: " + (", ".join(ranks) if ranks else "no displayed free modules")
+
+
+def _free_resolution_modules(topology: dict[str, object]) -> list[dict[str, object]]:
+    ca = topology.get("commutative_algebra", {}) if isinstance(topology, dict) else {}
+    proxy = ca.get("multiparameter_free_resolution_proxy", {}) if isinstance(ca.get("multiparameter_free_resolution_proxy"), dict) else {}
+    modules = proxy.get("free_chain_modules", []) if isinstance(proxy, dict) else []
+    if modules:
+        return [row for row in modules if isinstance(row, dict)]
+    taylor = ca.get("taylor_resolution_upper_bound", {}) if isinstance(ca.get("taylor_resolution_upper_bound"), dict) else {}
+    ranks = taylor.get("ranks", []) if isinstance(taylor, dict) else []
+    return [row for row in ranks if isinstance(row, dict)]
+
+
 def write_graphcg_trajectory_visualization(scaling_report: dict[str, object], output_dir: str | Path) -> dict[str, str]:
     output_dir = Path(output_dir)
     path = output_dir / "graphcg_direction_cosines.html"
@@ -600,40 +894,481 @@ def write_graphcg_trajectory_visualization(scaling_report: dict[str, object], ou
     return {"graphcg_direction_cosines": str(path)}
 
 
-def write_analogical_memory_visualization(memory: dict[str, object], output_dir: str | Path) -> dict[str, str]:
+def write_analogical_memory_visualization(
+    memory: dict[str, object],
+    output_dir: str | Path,
+    query_context: dict[str, object] | None = None,
+) -> dict[str, str]:
     output_dir = Path(output_dir)
     path = output_dir / "analogical_memory_retrieval.html"
+    map_path = output_dir / "analogical_simplicial_maps.json"
     rows = [row for row in memory.get("retrieved", []) if isinstance(row, dict)]
     if not rows:
         _write_dark_empty(path, "No analogical memories retrieved.")
-        return {"analogical_memory_retrieval_html": str(path)}
-    labels = [str(row.get("memory_id", idx)) for idx, row in enumerate(rows)]
+        map_path.write_text(json.dumps({"query": {}, "maps": []}, indent=2), encoding="utf-8")
+        return {"analogical_memory_retrieval_html": str(path), "analogical_simplicial_maps": str(map_path)}
+    bank_records = _load_memory_bank_records(memory.get("bank_path", ""))
+    enriched = [_enrich_memory_row(row, bank_records) for row in rows]
+    query = query_context if isinstance(query_context, dict) else {}
+    query_complex = query.get("filtered_simplicial_object") if isinstance(query.get("filtered_simplicial_object"), dict) else {}
+    query_topology = query.get("topological_algebra") if isinstance(query.get("topological_algebra"), dict) else {}
+    if not query_complex and enriched:
+        query_complex = enriched[0].get("filtered_simplicial_object", {}) if isinstance(enriched[0].get("filtered_simplicial_object"), dict) else {}
+    if not query_topology and enriched:
+        query_topology = enriched[0].get("topological_algebra", {}) if isinstance(enriched[0].get("topological_algebra"), dict) else {}
+
     fig = go.Figure()
-    for key, color in [
-        ("retrieval_score", "#55d6be"),
-        ("embedding_similarity", "#7aa2ff"),
-        ("signature_similarity", "#ffb86b"),
-        ("quality_score", "#ff6b9a"),
-    ]:
+    panel_items: list[dict[str, object]] = []
+    map_reports: list[dict[str, object]] = []
+    query_layout = _complex_3d_layout(query_complex, slab=0.0)
+    query_hover = (
+        "<b>query trajectory filtered complex</b>"
+        f"<br>{_summary_line(query_complex)}"
+        f"<br>{_derived_signature_line(query_topology)}"
+        f"<br>{_free_resolution_line(query_topology)}"
+    )
+    panel_items.extend(_simplicial_panel_items([query_complex], [query_hover]))
+    _add_complex_3d_traces(
+        fig,
+        query_complex,
+        query_layout,
+        panel_idx=0,
+        name="query trajectory complex",
+        color="#55d6be",
+        hover_prefix="query trajectory",
+    )
+    for idx, row in enumerate(enriched):
+        panel_idx = idx + 1
+        slab = float(idx + 1) * 2.4
+        mem_complex = row.get("filtered_simplicial_object", {}) if isinstance(row.get("filtered_simplicial_object"), dict) else {}
+        mem_topology = row.get("topological_algebra", {}) if isinstance(row.get("topological_algebra"), dict) else {}
+        mem_layout = _complex_3d_layout(mem_complex, slab=slab)
+        sim = _topological_similarity_summary(query_topology, mem_topology, row)
+        sim_map = _simplicial_map_between_complexes(query_complex, mem_complex)
+        map_reports.append({"memory_id": row.get("memory_id"), "record_id": row.get("record_id"), **sim, **sim_map})
+        panel_hover = (
+            f"<b>retrieved memory {idx + 1}</b>: {html.escape(str(row.get('memory_id', idx)))}"
+            f"<br>retrieval={float(row.get('retrieval_score', 0.0)):.4f}"
+            f"<br>persistent homology similarity={sim['persistent_homology_similarity']:.4f}"
+            f"<br>free-resolution similarity={sim['free_resolution_similarity']:.4f}"
+            f"<br>derived signature similarity={sim['derived_signature_similarity']:.4f}"
+            f"<br>simplicial edge preservation={sim_map['edge_preservation_rate']:.4f}"
+            f"<br>{_summary_line(mem_complex)}"
+            f"<br>{_derived_signature_line(mem_topology)}"
+            f"<br>{_free_resolution_line(mem_topology)}"
+        )
+        panel_items.extend(_simplicial_panel_items([mem_complex], [panel_hover]))
+        _add_complex_3d_traces(
+            fig,
+            mem_complex,
+            mem_layout,
+            panel_idx=panel_idx,
+            name=f"memory {idx + 1} complex",
+            color=_memory_color(idx),
+            hover_prefix=f"memory {idx + 1}",
+        )
+        _add_simplicial_map_traces(fig, query_layout, mem_layout, sim_map, panel_idx, row, sim)
+        marker = dict(size=11, color=float(row.get("retrieval_score", 0.0)), colorscale="Viridis", showscale=idx == 0)
+        if idx == 0:
+            marker["colorbar"] = dict(title="retrieval")
         fig.add_trace(
-            go.Bar(
-                x=labels,
-                y=[float(row.get(key, 0.0)) for row in rows],
-                name=key,
-                marker_color=color,
-                hovertext=[_json_clip(row, 1100) for row in rows],
-                hoverinfo="text+y",
+            go.Scatter3d(
+                x=[slab],
+                y=[-1.28],
+                z=[1.25],
+                mode="markers+text",
+                marker=marker,
+                text=[f"memory {idx + 1}"],
+                textposition="top center",
+                hovertext=panel_hover,
+                hoverinfo="text",
+                customdata=[panel_idx],
+                name=f"memory {idx + 1} invariants",
             )
         )
     fig.update_layout(
         template="plotly_dark",
-        title="Analogical reasoning memory retrieval",
-        xaxis_title="memory",
-        yaxis_title="score",
-        barmode="group",
+        title="Analogical reasoning memory retrieval as simplicial maps between filtered complexes",
+        scene=dict(
+            xaxis_title="query / retrieved memory slab",
+            yaxis_title="filtered-complex layout x",
+            zaxis_title="filtered-complex layout y",
+        ),
+        legend=dict(itemsizing="constant"),
     )
-    _write_plotly_dark_html(path, fig, "Analogical reasoning memory retrieval")
-    return {"analogical_memory_retrieval_html": str(path)}
+    _write_plotly_dark_html(
+        path,
+        fig,
+        "Analogical simplicial map retrieval",
+        panel_items,
+    )
+    map_path.write_text(
+        json.dumps(
+            {
+                "query_summary": query_complex.get("summary", {}) if isinstance(query_complex, dict) else {},
+                "query_derived_signature": query_topology.get("derived_equivalence_signature", {}) if isinstance(query_topology, dict) else {},
+                "maps": map_reports,
+            },
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+    return {"analogical_memory_retrieval_html": str(path), "analogical_simplicial_maps": str(map_path)}
+
+
+def _load_memory_bank_records(bank_path: object) -> dict[str, dict[str, object]]:
+    path = Path(str(bank_path)) if bank_path else None
+    if path is None or not path.exists():
+        return {}
+    records: dict[str, dict[str, object]] = {}
+    for line in path.read_text(encoding="utf-8").splitlines():
+        if not line.strip():
+            continue
+        try:
+            row = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(row, dict) and row.get("memory_id") is not None:
+            records[str(row["memory_id"])] = row
+    return records
+
+
+def _enrich_memory_row(row: dict[str, object], bank_records: dict[str, dict[str, object]]) -> dict[str, object]:
+    memory_id = str(row.get("memory_id", ""))
+    bank_row = bank_records.get(memory_id, {})
+    enriched = {**bank_row, **row}
+    if not isinstance(enriched.get("filtered_simplicial_object"), dict) and isinstance(bank_row.get("filtered_simplicial_object"), dict):
+        enriched["filtered_simplicial_object"] = bank_row["filtered_simplicial_object"]
+    if not isinstance(enriched.get("topological_algebra"), dict) and isinstance(bank_row.get("topological_algebra"), dict):
+        enriched["topological_algebra"] = bank_row["topological_algebra"]
+    if "derived_signature" not in enriched and isinstance(enriched.get("topological_algebra"), dict):
+        enriched["derived_signature"] = enriched["topological_algebra"].get("derived_equivalence_signature", {})
+    return enriched
+
+
+def _complex_3d_layout(obj: dict[str, object], slab: float, max_vertices: int = 54) -> dict[str, tuple[float, float, float]]:
+    vertices = _complex_vertex_records(obj)[:max_vertices]
+    labels = [row["label"] for row in vertices]
+    edges = [
+        {"simplex": list(pair)}
+        for pair in _complex_edge_pairs(obj)
+        if pair[0] in set(labels) and pair[1] in set(labels)
+    ]
+    coords2d, _ = _simplicial_layout(labels, edges, width=360, height=260)
+    coords: dict[str, tuple[float, float, float]] = {}
+    for label in labels:
+        x2, y2 = coords2d.get(label, (180.0, 130.0))
+        coords[label] = (slab, (x2 - 180.0) / 150.0, (130.0 - y2) / 110.0)
+    return coords
+
+
+def _add_complex_3d_traces(
+    fig: go.Figure,
+    obj: dict[str, object],
+    coords: dict[str, tuple[float, float, float]],
+    panel_idx: int,
+    name: str,
+    color: str,
+    hover_prefix: str,
+) -> None:
+    edge_x: list[float | None] = []
+    edge_y: list[float | None] = []
+    edge_z: list[float | None] = []
+    for a, b in _complex_edge_pairs(obj):
+        if a not in coords or b not in coords:
+            continue
+        ax, ay, az = coords[a]
+        bx, by, bz = coords[b]
+        edge_x.extend([ax, bx, None])
+        edge_y.extend([ay, by, None])
+        edge_z.extend([az, bz, None])
+    if edge_x:
+        fig.add_trace(
+            go.Scatter3d(
+                x=edge_x,
+                y=edge_y,
+                z=edge_z,
+                mode="lines",
+                line=dict(color=color, width=4),
+                name=f"{name} edges",
+                hoverinfo="skip",
+                showlegend=False,
+            )
+        )
+    vertices = _complex_vertex_records(obj)
+    labels = [row["label"] for row in vertices if row["label"] in coords]
+    if labels:
+        xs, ys, zs = zip(*(coords[label] for label in labels))
+        hover = [
+            f"<b>{hover_prefix}</b><br>vertex={html.escape(label)}<br>type={html.escape(str(_vertex_by_label(obj).get(label, {}).get('type', 'vertex')))}"
+            for label in labels
+        ]
+        fig.add_trace(
+            go.Scatter3d(
+                x=list(xs),
+                y=list(ys),
+                z=list(zs),
+                mode="markers+text",
+                marker=dict(size=7, color=color, line=dict(color="#e8eef8", width=1)),
+                text=[label[:14] for label in labels],
+                textposition="top center",
+                name=name,
+                hovertext=hover,
+                hoverinfo="text",
+                customdata=[panel_idx] * len(labels),
+            )
+        )
+
+
+def _add_simplicial_map_traces(
+    fig: go.Figure,
+    query_layout: dict[str, tuple[float, float, float]],
+    memory_layout: dict[str, tuple[float, float, float]],
+    sim_map: dict[str, object],
+    panel_idx: int,
+    row: dict[str, object],
+    sim: dict[str, float],
+) -> None:
+    map_rows = sim_map.get("vertex_map", []) if isinstance(sim_map.get("vertex_map"), list) else []
+    xs: list[float | None] = []
+    ys: list[float | None] = []
+    zs: list[float | None] = []
+    hover: list[str | None] = []
+    for mapping in map_rows:
+        if not isinstance(mapping, dict):
+            continue
+        q = str(mapping.get("query_vertex", ""))
+        m = str(mapping.get("memory_vertex", ""))
+        if q not in query_layout or m not in memory_layout:
+            continue
+        qx, qy, qz = query_layout[q]
+        mx, my, mz = memory_layout[m]
+        text = (
+            f"<b>simplicial map candidate</b>"
+            f"<br>{html.escape(q)} -> {html.escape(m)}"
+            f"<br>vertex score={float(mapping.get('score', 0.0)):.4f}"
+            f"<br>edge preservation={float(sim_map.get('edge_preservation_rate', 0.0)):.4f}"
+            f"<br>2-simplex preservation={float(sim_map.get('two_simplex_preservation_rate', 0.0)):.4f}"
+            f"<br>PH similarity={sim['persistent_homology_similarity']:.4f}"
+            f"<br>free-resolution similarity={sim['free_resolution_similarity']:.4f}"
+            f"<br>derived similarity={sim['derived_signature_similarity']:.4f}"
+        )
+        xs.extend([qx, mx, None])
+        ys.extend([qy, my, None])
+        zs.extend([qz, mz, None])
+        hover.extend([text, text, None])
+    if xs:
+        fig.add_trace(
+            go.Scatter3d(
+                x=xs,
+                y=ys,
+                z=zs,
+                mode="lines",
+                line=dict(color="rgba(251,191,36,0.56)", width=3),
+                name=f"simplicial map to {row.get('memory_id')}",
+                hovertext=hover,
+                hoverinfo="text",
+                customdata=[panel_idx if value is not None else None for value in xs],
+            )
+        )
+
+
+def _topological_similarity_summary(query_topology: dict[str, object], memory_topology: dict[str, object], row: dict[str, object]) -> dict[str, float]:
+    q_sig = _signature_numeric_vector(query_topology)
+    m_sig = _signature_numeric_vector(memory_topology)
+    q_free = _free_rank_vector(query_topology)
+    m_free = _free_rank_vector(memory_topology)
+    q_ph = _persistence_numeric_vector(query_topology)
+    m_ph = _persistence_numeric_vector(memory_topology)
+    return {
+        "retrieval_score": float(row.get("retrieval_score", 0.0)),
+        "embedding_similarity": float(row.get("embedding_similarity", 0.0)),
+        "signature_similarity": float(row.get("signature_similarity", 0.0)),
+        "derived_signature_similarity": _cosine_similarity(q_sig, m_sig),
+        "free_resolution_similarity": _cosine_similarity(q_free, m_free),
+        "persistent_homology_similarity": _cosine_similarity(q_ph, m_ph),
+    }
+
+
+def _simplicial_map_between_complexes(query_obj: dict[str, object], memory_obj: dict[str, object], max_vertices: int = 54) -> dict[str, object]:
+    query_vertices = _complex_vertex_records(query_obj)[:max_vertices]
+    memory_vertices = _complex_vertex_records(memory_obj)[:max_vertices]
+    if not query_vertices or not memory_vertices:
+        return {"vertex_map": [], "edge_preservation_rate": 0.0, "two_simplex_preservation_rate": 0.0, "is_simplicial_on_displayed_skeleton": False}
+    used: set[str] = set()
+    vertex_map = []
+    for q in query_vertices:
+        scored = sorted(
+            ((_vertex_match_score(q, m), m) for m in memory_vertices),
+            key=lambda item: item[0],
+            reverse=True,
+        )
+        chosen = None
+        for score, candidate in scored:
+            if candidate["label"] not in used:
+                chosen = (score, candidate)
+                break
+        if chosen is None:
+            chosen = scored[0]
+        score, m = chosen
+        used.add(m["label"])
+        vertex_map.append({"query_vertex": q["label"], "memory_vertex": m["label"], "score": float(score)})
+    mapping = {row["query_vertex"]: row["memory_vertex"] for row in vertex_map}
+    memory_edges = {frozenset(pair) for pair in _complex_edge_pairs(memory_obj)}
+    query_edges = _complex_edge_pairs(query_obj)
+    preserved_edges = 0
+    checked_edges = 0
+    for a, b in query_edges:
+        if a not in mapping or b not in mapping:
+            continue
+        checked_edges += 1
+        ma, mb = mapping[a], mapping[b]
+        if ma == mb or frozenset((ma, mb)) in memory_edges:
+            preserved_edges += 1
+    memory_triangles = {frozenset(simplex) for simplex in _complex_simplices(memory_obj, 2)}
+    query_triangles = _complex_simplices(query_obj, 2)
+    preserved_triangles = 0
+    checked_triangles = 0
+    for simplex in query_triangles:
+        if any(v not in mapping for v in simplex):
+            continue
+        checked_triangles += 1
+        mapped = frozenset(mapping[v] for v in simplex)
+        if len(mapped) <= 2 or mapped in memory_triangles:
+            preserved_triangles += 1
+    edge_rate = preserved_edges / checked_edges if checked_edges else 1.0
+    triangle_rate = preserved_triangles / checked_triangles if checked_triangles else 1.0
+    return {
+        "vertex_map": vertex_map,
+        "checked_edges": checked_edges,
+        "preserved_edges": preserved_edges,
+        "edge_preservation_rate": float(edge_rate),
+        "checked_two_simplices": checked_triangles,
+        "preserved_two_simplices": preserved_triangles,
+        "two_simplex_preservation_rate": float(triangle_rate),
+        "is_simplicial_on_displayed_skeleton": bool(edge_rate >= 0.999 and triangle_rate >= 0.999),
+    }
+
+
+def _complex_vertex_records(obj: dict[str, object]) -> list[dict[str, object]]:
+    simplices = obj.get("simplices", []) if isinstance(obj, dict) else []
+    vertices = []
+    for idx, simplex in enumerate(simplices):
+        if not isinstance(simplex, dict) or int(simplex.get("dimension", -1)) != 0:
+            continue
+        label = _simplex_label(simplex, fallback=f"v{idx}")
+        vertices.append(
+            {
+                "label": label,
+                "type": str(simplex.get("type", "vertex")),
+                "text": str(simplex.get("text", "")),
+                "filtration": float(simplex.get("filtration", 0.0) or 0.0),
+            }
+        )
+    return vertices
+
+
+def _vertex_by_label(obj: dict[str, object]) -> dict[str, dict[str, object]]:
+    return {row["label"]: row for row in _complex_vertex_records(obj)}
+
+
+def _complex_edge_pairs(obj: dict[str, object]) -> list[tuple[str, str]]:
+    return [tuple(simplex[:2]) for simplex in _complex_simplices(obj, 1) if len(simplex) >= 2]
+
+
+def _complex_simplices(obj: dict[str, object], dimension: int) -> list[list[str]]:
+    simplices = obj.get("simplices", []) if isinstance(obj, dict) else []
+    out = []
+    for simplex in simplices:
+        if not isinstance(simplex, dict) or int(simplex.get("dimension", -1)) != dimension:
+            continue
+        raw = simplex.get("simplex", [])
+        if isinstance(raw, list):
+            out.append([str(v) for v in raw])
+    return out
+
+
+def _simplex_label(simplex: dict[str, object], fallback: str) -> str:
+    raw = simplex.get("simplex", [])
+    if isinstance(raw, list) and raw:
+        return str(raw[0])
+    return fallback
+
+
+def _vertex_match_score(query: dict[str, object], memory: dict[str, object]) -> float:
+    score = 0.0
+    if query.get("label") == memory.get("label"):
+        score += 4.0
+    if query.get("type") == memory.get("type"):
+        score += 2.0
+    q_text = set(str(query.get("text", "")).lower().split())
+    m_text = set(str(memory.get("text", "")).lower().split())
+    if q_text or m_text:
+        score += len(q_text & m_text) / max(len(q_text | m_text), 1)
+    score += 1.0 / (1.0 + abs(float(query.get("filtration", 0.0)) - float(memory.get("filtration", 0.0))))
+    return score
+
+
+def _signature_numeric_vector(topology: dict[str, object], length: int = 32) -> np.ndarray:
+    sig = topology.get("derived_equivalence_signature", {}) if isinstance(topology, dict) else {}
+    values: list[float] = []
+    values.extend(float(v) for v in sig.get("betti_vector", [])[:4])
+    values.extend(
+        [
+            float(sig.get("persistence_finite_interval_count", 0.0)),
+            float(sig.get("persistence_infinite_interval_count", 0.0)),
+            float(sig.get("persistence_total_finite_length", 0.0)),
+            float(sig.get("multiparameter_grid_points", 0.0)),
+        ]
+    )
+    samples = sig.get("multiparameter_h0_rank_sample", []) if isinstance(sig.get("multiparameter_h0_rank_sample"), list) else []
+    values.extend(float(row.get("h0_rank", 0.0)) for row in samples if isinstance(row, dict))
+    if len(values) < length:
+        values.extend([0.0] * (length - len(values)))
+    return np.asarray(values[:length], dtype=float)
+
+
+def _free_rank_vector(topology: dict[str, object], length: int = 16) -> np.ndarray:
+    values = [0.0] * length
+    for row in _free_resolution_modules(topology):
+        degree = int(row.get("homological_degree", 0))
+        if 0 <= degree < length:
+            values[degree] = float(row.get("rank", row.get("rank_upper_bound", 0.0)))
+    return np.asarray(values, dtype=float)
+
+
+def _persistence_numeric_vector(topology: dict[str, object], length: int = 16) -> np.ndarray:
+    values = [0.0] * length
+    intervals = topology.get("persistence", {}).get("intervals", []) if isinstance(topology.get("persistence"), dict) else []
+    for interval in intervals:
+        if not isinstance(interval, dict):
+            continue
+        dim = int(interval.get("dimension", 0))
+        if 0 <= dim < 4:
+            values[dim] += 1.0
+            death = interval.get("death")
+            if isinstance(death, (int, float)):
+                values[4 + dim] += max(float(death) - float(interval.get("birth", 0.0)), 0.0)
+            elif interval.get("infinite") or death is None:
+                values[8 + dim] += 1.0
+    return np.asarray(values[:length], dtype=float)
+
+
+def _cosine_similarity(a: np.ndarray, b: np.ndarray) -> float:
+    if a.size == 0 or b.size == 0:
+        return 0.0
+    n = min(a.size, b.size)
+    a = a[:n]
+    b = b[:n]
+    denom = float(np.linalg.norm(a) * np.linalg.norm(b))
+    if denom <= 1e-12:
+        return 1.0 if float(np.linalg.norm(a - b)) <= 1e-12 else 0.0
+    return float(np.dot(a, b) / denom)
+
+
+def _memory_color(idx: int) -> str:
+    palette = ["#7aa2ff", "#fbbf24", "#fb7185", "#c084fc", "#34d399", "#f97316"]
+    return palette[idx % len(palette)]
 
 
 def _write_inference_dashboard(paths: dict[str, str], output_dir: Path) -> Path:
