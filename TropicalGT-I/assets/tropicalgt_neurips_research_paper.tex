@@ -1095,6 +1095,45 @@ TropicalGT has clear risks.  First, hard support can be wrong.  A wrong hard sup
 
 The remedy is not to optimize every objective.  The remedy is staged activation, exact audit, matched ablation, and compression-aware deployment.  Tropical structure should stay teacher-side unless it proves utility.
 
+
+\section{TropicalGT-I implementation update: graph-token reasoning agent}
+\label{sec:tropicalgt-i-implementation-update}
+
+The first implementation pass instantiates the research program above as a compact graph-conditioned reasoning model rather than as a full contest submission.  The implementation target is \texttt{TropicalGT-I}: a TokenGT-style graph tokenizer, a byte-level reasoning language model, a tropical ring attention graph encoder, a GFlowNet trajectory auxiliary, a GraphCG latent-direction auxiliary, and Plotly-based trajectory audits.  This section records the precise methodology so that the paper, code, and reproducibility contract remain synchronized.
+
+\subsection{TokenGT-style graph tokenization}
+Each normalized training row is represented as a graph record
+\[
+  r=(\mathrm{id},x_{\mathrm{text}},q,a,s,G),
+\]
+where \(q\) is a question, \(a\) an answer, \(s\) a reasoning trace, and \(G=(V,E)\) a typed directed graph.  If the source row lacks \texttt{graph\_json}, the implementation constructs a conservative graph with a problem node, reasoning-step nodes, an answer node, \texttt{depends\_on} edges, and a final \texttt{supports\_answer} edge.  The TokenGT tokenizer follows Kim et al.\ \cite{kim2022tokengt}: it emits a graph token, one token for each vertex, and one token for each valid edge.  Vertex tokens carry endpoint identifiers \((i,i)\); edge tokens carry \((i,j)\); type identifiers distinguish graph, vertex, and edge tokens.  The deterministic identifier map is a finite orthonormal-style coordinate chart with hashed fallback, which is sufficient for the smoke-scale model and preserves the intended equality/incidence tests.
+
+\subsection{Tropical ring attention and certificates}
+Given graph-token states \(z_1,\ldots,z_N\in\R^d\), the implemented tropical head computes projected queries, keys, and values and scores token compatibility by negative tropical Hilbert spread,
+\[
+  S_{ij}=-d^{-1/2}\left(\max_a(q_{ia}-k_{ja})-\min_a(q_{ia}-k_{ja})\right).
+\]
+The graph context is then a max-plus reduction
+\[
+  c_{ia}=\max_j\{S_{ij}+v_{ja}\},
+\]
+followed by a learned linear output map.  The head returns the active support \(\argmax_j S_{ij}\), the top-two margin, and support entropy.  Blockwise evaluation is exact because the maximum over context shards equals the maximum over their maxima.  These quantities are logged as tropical certificates: support entropy, margin mean/min, graph token count, edge-token count, and wall-hit proxies.
+
+\subsection{Embedding-space Graph-of-Thought GFlowNet training}
+Graph-of-Thought reasoning \cite{besta2024got} is internalized as a stochastic process over pooled graph-token states.  A lightweight policy \(\pi_\theta(a\mid h_t)\) samples a small discrete action vocabulary representing expand, merge, refine, stop, retrieve, verify, compress, and reject moves.  The first implementation uses trajectory balance from the continuous GFlowNet theory of Lahlou et al.\ \cite{lahlou2023continuousgfn},
+\[
+  \mathcal L_{\mathrm{TB}}=\E_\tau\left[\left(\log Z_\theta+\sum_t\log\pi_\theta(a_t\mid h_t)-\log R(\tau)\right)^2\right],
+\]
+with a smoke-stage reward derived from likelihood improvement and tropical-margin stability.  Later runs can replace this proxy with verifier scores, answer exactness, retrieval provenance, and certificate validity without changing the interface.
+
+\subsection{GraphCG latent steering}
+The GraphCG auxiliary follows Liu et al.\ \cite{liu2024graphcg}: learned directions \(d_1,\ldots,d_m\) define steerable latent edits in pooled graph state space.  The implementation uses a same-condition contrastive term over direction-shifted states, plus orthogonality and sparsity penalties.  This regularizer is intentionally light: it should organize the latent chart in which graph-of-thought trajectories move, not dominate the byte/reasoning objective.
+
+\subsection{Training, evaluation, inference, and visualization contract}
+The runnable contract is implemented by five scripts: \texttt{train\_tropicalgt\_i.py}, \texttt{eval\_tropicalgt\_i.py}, \texttt{infer\_tropicalgt\_i.py}, \texttt{validate\_tropicalgt\_i.py}, and \texttt{render\_reasoning\_visualizations.py}.  Training reports language-model NLL, BPB proxy, GFlowNet trajectory-balance loss, GraphCG contrastive and geometry terms, tropical support entropy, tropical margins, graph-token statistics, GPU memory, and step throughput to W\&B when enabled.  The visualization script projects pooled graph reasoning states by PCA and writes two interactive HTML audits: a three-dimensional embedding trajectory and a two-dimensional PCA plane with NLL as the third coordinate.  Hover payloads expose the full filtered graph object summary for each point.
+
+This implementation deliberately omits toric-only mechanisms from the ToricGT paper unless they admit a tropical meaning.  Ported methods are the dataset schema, graph-of-thought trajectory view, GFlowNet branch training, GraphCG steering, W\&B discipline, reproducibility reports, and latent-trajectory visual audits.  Omitted methods include noncommutative toric phase memory, toric ideals, and torus-specific chamber constraints; tropical replacements are active faces, Hilbert margins, max-plus supports, and fan-cell certificates.
+
 \section{Conclusion}
 
 Tropical Attention showed that replacing softmax with max-plus projective attention can restore sharp, scale-invariant, polyhedral reasoning for combinatorial tasks.  TropicalGT extends this insight into a broader reasoning-agent methodology.  It treats tropical heads as auditable dynamic-programming primitives, active supports as finite certificates, margins as stability witnesses, Newton polytopes as decision geometry, graph tokens as equivariant carriers, and bits-per-byte as the deployment arbiter.  The resulting program is both mathematical and pragmatic: prove exact statements for finite structures; train with explicit support, margin, recurrence, and certificate losses; and keep only what improves held-out compression or reasoning quality.
@@ -1777,6 +1816,22 @@ Charles R. Harris et al.
 Fabian Pedregosa et al.
 \newblock Scikit-learn: Machine learning in Python.
 \newblock \emph{Journal of Machine Learning Research}, 12:2825--2830, 2011.
+
+
+\bibitem{besta2024got}
+Maciej Besta, Nils Blach, Ales Kubicek, Robert Gerstenberger, Michal Podstawski, Lukas Gianinazzi, Joanna Gajda, Tomasz Lehmann, Hubert Niewiadomski, Piotr Nyczyk, and Torsten Hoefler.
+\newblock Graph of thoughts: Solving elaborate problems with large language models.
+\newblock In \emph{AAAI}, 2024.
+
+\bibitem{lahlou2023continuousgfn}
+Salem Lahlou, Tristan Deleu, Pablo Lemos, Dinghuai Zhang, Alexandra Volokhova, Alex Hernandez-Garcia, Lena Nehale Ezzine, Yoshua Bengio, and Nikolay Malkin.
+\newblock A theory of continuous generative flow networks.
+\newblock In \emph{International Conference on Machine Learning}, 2023.
+
+\bibitem{liu2024graphcg}
+Shengchao Liu, Chengpeng Wang, Jiarui Lu, Weili Nie, Hanchen Wang, Zhuoxinran Li, Bolei Zhou, and Jian Tang.
+\newblock Unsupervised discovery of steerable factors when graph deep generative models are entangled.
+\newblock \emph{Transactions on Machine Learning Research}, 2024.
 
 \end{thebibliography}
 

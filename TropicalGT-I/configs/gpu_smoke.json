@@ -1,0 +1,20 @@
+{
+  "run_name": "tropicalgt_i_gpu_smoke",
+  "data_root": "TropicalGT-I/data/toricgt/curated_hf_shards",
+  "fixture_size": 8,
+  "train_limit": 12,
+  "val_limit": 6,
+  "seq_len": 128,
+  "batch_size": 2,
+  "max_steps": 4,
+  "lr": 0.0004,
+  "grad_clip": 1.0,
+  "device": "auto",
+  "output_dir": "TropicalGT-I/outputs/gpu_smoke",
+  "checkpoint_dir": "TropicalGT-I/checkpoints",
+  "keys_path": "keys.txt",
+  "viz_limit": 6,
+  "tokengt": {"max_nodes": 48, "max_edges": 96, "node_id_dim": 16, "feature_dim": 48, "graph_token": true},
+  "model": {"dim": 96, "hidden_dim": 96, "graph_feature_dim": 48, "num_actions": 8, "gflownet_weight": 0.02, "graphcg_weight": 0.02},
+  "wandb": {"enabled": true, "mode": "online", "project": "TropicalGT-I"}
+}

@@ -1,0 +1,18 @@
+{
+  "run_name": "tropicalgt_i_cpu_smoke",
+  "data_root": null,
+  "fixture_size": 8,
+  "train_limit": 8,
+  "val_limit": 4,
+  "seq_len": 96,
+  "batch_size": 2,
+  "max_steps": 3,
+  "lr": 0.0005,
+  "grad_clip": 1.0,
+  "device": "cpu",
+  "output_dir": "TropicalGT-I/outputs/smoke",
+  "checkpoint_dir": "TropicalGT-I/checkpoints",
+  "tokengt": {"max_nodes": 32, "max_edges": 64, "node_id_dim": 16, "feature_dim": 48, "graph_token": true},
+  "model": {"dim": 64, "hidden_dim": 64, "graph_feature_dim": 48, "num_actions": 8, "gflownet_weight": 0.02, "graphcg_weight": 0.02},
+  "wandb": {"enabled": false}
+}

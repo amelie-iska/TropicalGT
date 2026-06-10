@@ -1,1 +1,14 @@
-./keys.txt 
+./keys.txt
+keys.txt
+TropicalGT-I/data/
+TropicalGT-I/outputs/
+TropicalGT-I/checkpoints/
+TropicalGT-I/wandb/
+wandb/
+*.pt
+*.pth
+*.ckpt
+__pycache__/
+.pytest_cache/
+*.egg-info/
+external/
