@@ -196,6 +196,15 @@ def _multiparameter_free_resolution_proxy(multiparameter: dict[str, Any]) -> dic
         for key, value in multiparameter.get("boundary_monomials", {}).items()
         if isinstance(value, list)
     }
+    return {
+        "ring": multiparameter.get("coefficient_ring"),
+        "free_chain_modules": [
+            {"homological_degree": degree, "rank": count}
+            for degree, count in sorted(by_degree.items())
+        ],
+        "monomial_labeled_boundary_entry_counts": boundary_counts,
+        "interpretation": "A multigraded free chain complex over the multiparameter polynomial ring; minimal free resolutions of homology modules require a CAS/backend.",
+    }
 
 
 def _axis_values(enriched: list[dict[str, Any]], index: int, max_grid: int) -> tuple[int, ...]:
@@ -240,15 +249,6 @@ def _multipers_backend_status() -> dict[str, Any]:
             "error": f"{type(exc).__name__}: {exc}",
             "recommendation": "Install multipers to add module approximation/signed-measure backends for high-scale multiparameter graph descriptors.",
         }
-    return {
-        "ring": multiparameter.get("coefficient_ring"),
-        "free_chain_modules": [
-            {"homological_degree": degree, "rank": count}
-            for degree, count in sorted(by_degree.items())
-        ],
-        "monomial_labeled_boundary_entry_counts": boundary_counts,
-        "interpretation": "A multigraded free chain complex over the multiparameter polynomial ring; minimal free resolutions of homology modules require a CAS/backend.",
-    }
 
 
 def _multigraded_boundary_monomials(enriched: list[dict[str, Any]]) -> dict[str, list[dict[str, Any]]]:
@@ -486,6 +486,10 @@ def _persistent_homology_report(simplices: list[dict[str, Any]], ph_backend: str
     backend = (ph_backend or "auto").lower()
     if backend == "none":
         return {"backend": "none", "intervals": [], "available": False}
+    if backend == "ripser":
+        return _ripser_persistent_homology_report(simplices)
+    if backend not in {"auto", "gudhi"}:
+        return {"backend": backend, "available": False, "error": f"Unsupported persistent homology backend: {backend}", "intervals": []}
     try:
         import gudhi  # type: ignore
 
@@ -510,6 +514,46 @@ def _persistent_homology_report(simplices: list[dict[str, Any]], ph_backend: str
         return {"backend": "gudhi", "available": True, "intervals": intervals}
     except Exception as exc:
         return {"backend": "gudhi", "available": False, "error": f"{type(exc).__name__}: {exc}", "intervals": []}
+
+
+def _ripser_persistent_homology_report(simplices: list[dict[str, Any]]) -> dict[str, Any]:
+    try:
+        from ripser import ripser  # type: ignore
+    except Exception as exc:
+        return {"backend": "ripser", "available": False, "error": f"{type(exc).__name__}: {exc}", "intervals": []}
+    vertices = sorted({v for row in simplices for v in row["simplex"]})
+    if not vertices:
+        return {"backend": "ripser", "available": True, "intervals": []}
+    index = {label: idx for idx, label in enumerate(vertices)}
+    finite_filtrations = [float(row.get("filtration", 0.0)) for row in simplices if not isinf(float(row.get("filtration", 0.0)))]
+    far = (max(finite_filtrations) if finite_filtrations else 1.0) + 1.0
+    distance = np.full((len(vertices), len(vertices)), far, dtype=float)
+    np.fill_diagonal(distance, 0.0)
+    for row in simplices:
+        simplex = list(row.get("simplex", []))
+        if len(simplex) == 2:
+            i, j = index[simplex[0]], index[simplex[1]]
+            value = max(float(row.get("filtration", 0.0)), 0.0)
+            distance[i, j] = min(distance[i, j], value)
+            distance[j, i] = min(distance[j, i], value)
+    maxdim = min(2, max((int(row.get("dimension", 0)) for row in simplices), default=0))
+    try:
+        raw = ripser(distance, distance_matrix=True, maxdim=maxdim)
+    except Exception as exc:
+        return {"backend": "ripser", "available": False, "error": f"{type(exc).__name__}: {exc}", "intervals": []}
+    intervals = []
+    for dim, diagram in enumerate(raw.get("dgms", [])):
+        for birth, death in np.asarray(diagram):
+            infinite = bool(isinf(float(death)))
+            intervals.append(
+                {
+                    "dimension": int(dim),
+                    "birth": float(birth),
+                    "death": None if infinite else float(death),
+                    "infinite": infinite,
+                }
+            )
+    return {"backend": "ripser", "available": True, "intervals": intervals}
 
 
 def _graph_metrics(filtered_object: dict[str, Any]) -> dict[str, Any]:

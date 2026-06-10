@@ -28,6 +28,8 @@ Run `scripts/analyze_bpb_ablations.py` on one or more `train_report.json` files 
 
 From the repository root, use the `tokengt` environment with `PYTHONPATH=TropicalGT-I/src` for training, evaluation, validation, inference, and visualization scripts. The top-level README contains the full command inventory for CPU smoke tests, GPU smoke runs, data-backed training, checkpoint resume, and readiness audits.
 
+The readiness audit should be treated as the pre-training acceptance check for this phase: it gates checkpoint reload, data-backed TokenGT conversion, sequential text graphification, finite eval, `bpb`, `graph_bpb`, topology-audit execution, ablation-tool availability, and generated visualization artifacts before a longer run is considered ready.
+
 Full inference audits can optionally emit graph-of-thought PCA trajectories, tropical support heatmaps, persistence barcodes, multiparameter algebra JSON, GraphCG direction plots, and analogical memory retrieval artifacts:
 
 ```bash

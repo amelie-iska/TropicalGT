@@ -13,7 +13,7 @@ from tropicalgt.diagnostics import gflownet_diagnostics, graphcg_diagnostics, re
 from tropicalgt.memory import AnalogicalMemoryBank, memory_records_from_scaling_report, query_signature_from_report
 from tropicalgt.metrics import batch_bpb_metrics
 from tropicalgt.run import load_config, load_checkpoint, collate_records
-from tropicalgt.records import GraphRecord, conservative_graph
+from tropicalgt.records import GraphRecord
 from tropicalgt.scaling import run_inference_scaling
 from tropicalgt.tokenizer import TokenGTTokenizer
 from tropicalgt.visualization import write_inference_audit_artifacts
@@ -46,7 +46,6 @@ def main() -> None:
             "record_id": "inference",
             "text": args.prompt,
             "question": args.prompt,
-            "graph_json": conservative_graph(question=args.prompt, text=args.prompt),
         }
     )
     tok = TokenGTTokenizer(**cfg.get("tokengt", {}))

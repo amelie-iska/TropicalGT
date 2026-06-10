@@ -184,7 +184,17 @@ class FixtureGraphDataset(Dataset):
         self.records = []
         for i in range(size):
             graph = {"nodes": [{"id": "p", "type": "problem", "text": f"add {i} and {i+1}"}, {"id": "s", "type": "reasoning_step", "text": f"{i}+{i+1}={2*i+1}"}, {"id": "a", "type": "answer", "text": str(2*i+1)}], "edges": [{"source": "p", "target": "s", "type": "depends_on"}, {"source": "s", "target": "a", "type": "supports_answer"}]}
-            self.records.append(GraphRecord(f"fixture-{i}", f"Question: add {i} and {i+1}\nAnswer: {2*i+1}", answer=str(2*i+1), graph_json=graph))
+            self.records.append(
+                GraphRecord.from_mapping(
+                    {
+                        "record_id": f"fixture-{i}",
+                        "question": f"add {i} and {i+1}",
+                        "answer": str(2 * i + 1),
+                        "text": f"Question: add {i} and {i+1}\nAnswer: {2 * i + 1}",
+                        "graph_json": graph,
+                    }
+                )
+            )
 
     def __len__(self) -> int:
         return len(self.records)

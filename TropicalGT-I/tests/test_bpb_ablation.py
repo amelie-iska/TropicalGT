@@ -35,13 +35,15 @@ def _write_report(path: Path, offset: float = 0.0) -> Path:
 def test_bpb_ablation_report_ranks_correlated_metrics(tmp_path: Path):
     first = _write_report(tmp_path / "baseline_train_report.json", offset=0.0)
     second = _write_report(tmp_path / "variant_train_report.json", offset=-0.3)
-    report = build_bpb_ablation_report([first, second], top_k=8)
+    third = _write_report(tmp_path / "third_train_report.json", offset=0.4)
+    report = build_bpb_ablation_report([first, second, third], top_k=20)
     assert report["baseline"].endswith("baseline_train_report.json")
-    assert len(report["runs"]) == 2
+    assert len(report["runs"]) == 3
     assert report["deltas_vs_baseline"][1]["deltas"]["delta_bpb"] < 0
     ranked = {(row["target"], row["metric"]): row for row in report["aggregate_metric_rankings"]}
     assert ("bpb", "margin_mean") in ranked
     assert ranked[("bpb", "margin_mean")]["mean_spearman"] < 0
+    assert any(row["target"] == "eval_bpb" and row.get("scope") == "final" for row in report["history_correlations"])
 
 
 def test_bpb_ablation_artifacts_write_json_markdown_and_html(tmp_path: Path):

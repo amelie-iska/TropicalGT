@@ -353,7 +353,19 @@ def _wandb_html_items(paths: dict[str, str]) -> list[tuple[str, str]]:
     return sorted(paths.items(), key=lambda item: (order.get(item[0], len(order)), item[0]))
 
 
-def evaluate_model(model: TropicalGTModel, dataset, tokenizer: TokenGTTokenizer, seq_len: int, batch_size: int, device: torch.device, details_limit: int = 0, graph_bpb_side_weight: float = 1.0) -> dict[str, Any]:
+def evaluate_model(
+    model: TropicalGTModel,
+    dataset,
+    tokenizer: TokenGTTokenizer,
+    seq_len: int,
+    batch_size: int,
+    device: torch.device,
+    details_limit: int = 0,
+    graph_bpb_side_weight: float = 1.0,
+    audit_level: str = "none",
+    ph_backend: str = "auto",
+    audit_max_simplices: int = 1024,
+) -> dict[str, Any]:
     loader = DataLoader(dataset, batch_size=batch_size, shuffle=False, collate_fn=lambda r: collate_records(r, seq_len, tokenizer))
     total_loss = 0.0; total_tokens = 0; batches = 0
     details: list[dict[str, Any]] = []
@@ -388,6 +400,9 @@ def evaluate_model(model: TropicalGTModel, dataset, tokenizer: TokenGTTokenizer,
                         target_ids=y.detach().cpu(),
                         max_records=needed,
                         max_trace_tokens=16,
+                        audit_level=audit_level,
+                        ph_backend=ph_backend,
+                        audit_max_simplices=audit_max_simplices,
                     )
                 )
     nll = total_loss / max(total_tokens, 1)

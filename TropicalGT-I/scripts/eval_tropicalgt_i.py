@@ -18,6 +18,9 @@ def main() -> None:
     parser.add_argument("--checkpoint", required=True)
     parser.add_argument("--split", default="validation")
     parser.add_argument("--details-limit", type=int, default=4)
+    parser.add_argument("--audit-level", choices=["none", "basic", "topology", "algebra", "full"], default="")
+    parser.add_argument("--audit-ph-backend", choices=["auto", "gudhi", "ripser", "none"], default="")
+    parser.add_argument("--audit-max-simplices", type=int, default=0)
     args = parser.parse_args()
     cfg = load_config(args.config)
     device = torch.device("cuda" if torch.cuda.is_available() and cfg.get("device", "auto") != "cpu" else "cpu")
@@ -41,6 +44,9 @@ def main() -> None:
         device,
         details_limit=args.details_limit,
         graph_bpb_side_weight=float(cfg.get("graph_bpb_side_weight", 1.0)),
+        audit_level=args.audit_level or str(cfg.get("audit_level", "none")),
+        ph_backend=args.audit_ph_backend or str(cfg.get("ph_backend", "auto")),
+        audit_max_simplices=int(args.audit_max_simplices or cfg.get("audit_max_simplices", 1024)),
     )
     out = Path(cfg.get("output_dir", "TropicalGT-I/outputs/smoke")) / f"eval_{args.split}.json"
     out.parent.mkdir(parents=True, exist_ok=True)

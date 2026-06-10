@@ -1,7 +1,44 @@
 import json
+import math
 from pathlib import Path
 
+import torch
+
+from tropicalgt.data import encode_bytes
+from tropicalgt.metrics import aggregate_bpb_metrics, batch_bpb_metrics, explicit_graph_json_bytes, graph_token_structural_bytes
+from tropicalgt.records import GraphRecord
 from tropicalgt.run import train
+from tropicalgt.tokenizer import TokenGTTokenizer
+
+
+def test_bpb_and_graph_bpb_formulas_are_exact():
+    record = GraphRecord.from_mapping(
+        {
+            "record_id": "formula",
+            "text": "abc",
+            "question": "abc",
+            "graph_json": {"nodes": [{"id": "n", "type": "problem", "text": "abc"}], "edges": []},
+        }
+    )
+    tok = TokenGTTokenizer(feature_dim=48)
+    graph_batch = tok.batch_encode([record])
+    _, y = encode_bytes(record.text, seq_len=8)
+    nll = torch.tensor(2.0)
+    metrics = batch_bpb_metrics(nll, y.unsqueeze(0), graph_batch, [record], graph_side_weight=0.5)
+    target_bytes = int(y.ne(0).sum().item())
+    nll_bits = 2.0 * target_bytes / math.log(2.0)
+    graph_bytes = graph_token_structural_bytes(graph_batch)
+    explicit_bytes = explicit_graph_json_bytes(record)
+    assert metrics["bpb"] == nll_bits / target_bytes
+    assert metrics["graph_bpb"] == (nll_bits + 4.0 * explicit_bytes) / (target_bytes + graph_bytes)
+    aggregate = aggregate_bpb_metrics(nll_bits, target_bytes, graph_bytes, explicit_bytes, graph_side_weight=0.5)
+    assert aggregate["graph_sideinfo_bpb"] == metrics["graph_sideinfo_bpb"]
+
+
+def test_derived_fallback_graph_is_not_charged_as_side_information():
+    record = GraphRecord.from_mapping({"record_id": "derived", "text": "abc", "question": "abc"})
+    assert record.metadata["graph_json_fallback"] is True
+    assert explicit_graph_json_bytes(record) == 0
 
 
 def test_training_history_contains_certificate_and_throughput_metrics(tmp_path: Path):

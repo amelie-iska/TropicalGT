@@ -123,6 +123,7 @@ def write_reasoning_visualizations(
                 "hover": hover,
                 "points": points,
                 "filtered_simplicial_objects": filtered_objects,
+                **({"topological_algebra_diagnostics": diagnostics} if diagnostics else {}),
             },
             indent=2,
         ),

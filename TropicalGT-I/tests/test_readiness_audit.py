@@ -14,6 +14,7 @@ def test_readiness_audit_fixture_without_checkpoint(tmp_path):
   "val_limit": 4,
   "batch_size": 2,
   "seq_len": 32,
+  "seed": 1729,
   "device": "cpu",
   "output_dir": "%s",
   "model": {"dim": 32, "hidden_dim": 32, "graph_feature_dim": 48},

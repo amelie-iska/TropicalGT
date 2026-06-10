@@ -18,8 +18,19 @@ def test_topological_algebra_report_has_multiparameter_data():
     assert report["multiparameter_persistence"]["num_parameters"] == 3
     assert report["multiparameter_persistence"]["fiber_rank_profile"]
     assert "commutative_algebra" in report
+    proxy = report["commutative_algebra"]["multiparameter_free_resolution_proxy"]
+    assert proxy["ring"] == "F2[x_filtration,x_dimension,x_position]"
+    assert proxy["free_chain_modules"]
     summary = summarize_algebra_reports([report])
     assert summary["algebra_reports"] == 1.0
+
+
+def test_ripser_backend_is_selected_when_requested():
+    record = FixtureGraphDataset(1)[0]
+    filtered = build_filtered_simplicial_object(record)
+    report = compute_topological_algebra_report(filtered, audit_level="topology", ph_backend="ripser", max_simplices=128)
+    assert report["persistence"]["backend"] == "ripser"
+    assert "available" in report["persistence"]
 
 
 def test_reasoning_trajectory_complex_grows_by_level():

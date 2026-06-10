@@ -44,6 +44,7 @@ def build_bpb_ablation_report(
     correlations = []
     for bundle in bundles:
         correlations.extend(_history_correlations(bundle, target_names))
+    correlations.extend(_final_metric_correlations(bundles, target_names))
     aggregate = _aggregate_correlations(correlations, top_k=top_k)
     deltas = [_delta_row(baseline_bundle, bundle, target_names) for bundle in bundles]
     return {
@@ -57,7 +58,7 @@ def build_bpb_ablation_report(
         "interpretation": {
             "primary_metric": "bpb",
             "graph_primary_metric": "graph_bpb",
-            "warning": "Correlations are screening signals only. Promote a component only after matched-seed ablations improve held-out bpb or graph_bpb.",
+            "warning": "Per-step correlations use train history; eval targets are screened across matched final reports when at least three runs are available. Promote a component only after matched-seed ablations improve held-out bpb or graph_bpb.",
         },
     }
 
@@ -137,9 +138,43 @@ def _history_correlations(bundle: ReportBundle, targets: tuple[str, ...]) -> lis
                 {
                     "run": bundle.name,
                     "path": str(bundle.path),
+                    "scope": "history",
                     "target": target,
                     "metric": metric,
                     "n": int(len(values)),
+                    "pearson": pearson,
+                    "spearman": spearman,
+                    "direction": "helps_when_lower" if pearson > 0 else "helps_when_higher",
+                }
+            )
+    return sorted(out, key=lambda row: abs(row.get("spearman", 0.0)), reverse=True)
+
+
+def _final_metric_correlations(bundles: list[ReportBundle], targets: tuple[str, ...]) -> list[dict[str, Any]]:
+    if len(bundles) < 3:
+        return []
+    rows = [_flatten_report_metrics(bundle.report) for bundle in bundles]
+    numeric = _numeric_columns(rows)
+    out = []
+    for target in targets:
+        if target not in numeric:
+            continue
+        target_values = numeric[target]
+        for metric, values in numeric.items():
+            if metric == target:
+                continue
+            pearson = _pearson(values, target_values)
+            spearman = _spearman(values, target_values)
+            if not math.isfinite(pearson) and not math.isfinite(spearman):
+                continue
+            out.append(
+                {
+                    "run": "matched_final_reports",
+                    "path": "",
+                    "scope": "final",
+                    "target": target,
+                    "metric": metric,
+                    "n": int(np.isfinite(values).sum()),
                     "pearson": pearson,
                     "spearman": spearman,
                     "direction": "helps_when_lower" if pearson > 0 else "helps_when_higher",
