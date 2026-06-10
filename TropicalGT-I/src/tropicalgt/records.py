@@ -24,10 +24,13 @@ class GraphRecord:
         answer = _string(row.get("answer"))
         reasoning = _string(row.get("reasoning") or row.get("solution"))
         text = _string(row.get("text")) or _join_nonempty([question, reasoning, answer])
+        metadata = row.get("metadata") if isinstance(row.get("metadata"), dict) else {}
         graph_obj = _parse_graph(row.get("graph_json"))
         if graph_obj is None:
             graph_obj = conservative_graph(question=question, reasoning=reasoning, answer=answer, text=text)
-        metadata = row.get("metadata") if isinstance(row.get("metadata"), dict) else {}
+            metadata["graph_json_fallback"] = True
+        else:
+            metadata["graph_json_fallback"] = False
         if "dataset" in row:
             metadata["dataset"] = _string(row.get("dataset"))
         return cls(rid, text, question, answer, reasoning, metadata, graph_obj)
