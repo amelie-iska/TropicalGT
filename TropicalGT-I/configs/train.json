@@ -1,5 +1,6 @@
 {
   "run_name": "tropicalgt_i_train",
+  "seed": 1729,
   "data_root": "TropicalGT-I/data/toricgt/curated_hf_shards",
   "require_data": true,
   "cache_shards": 4,

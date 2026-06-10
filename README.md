@@ -212,6 +212,21 @@ TropicalGT-I/outputs/gpu_smoke/train_report.json \
 
 For multiple matched runs, pass every `train_report.json` and set `--baseline` to the baseline report. The tool writes JSON, Markdown, and Plotly HTML rankings for correlations against `bpb`, `graph_bpb`, `eval_bpb`, and `eval_graph_bpb`. Treat the output as a screen for the next ablation, not as causal evidence; promote an auxiliary only when the matched run improves held-out `bpb` or `graph_bpb`.
 
+To generate a matched ablation grid and optionally train the variants in sequence:
+
+```bash
+PYTHONPATH=TropicalGT-I/src \
+/home/iska/miniconda3/envs/tokengt/bin/python \
+TropicalGT-I/scripts/run_bpb_ablation_grid.py \
+--config TropicalGT-I/configs/gpu_smoke.json \
+--output-dir TropicalGT-I/outputs/gpu_smoke/bpb_ablation_grid \
+--variants baseline,no_graphcg,no_gflownet,no_certificate,no_tropical_regularizers,no_auxiliary \
+--max-steps 4 \
+--run
+```
+
+By default the grid runner disables W&B media/network logging for the variants and keeps a shared seed across all runs. Add `--wandb` only when online logging for every ablation variant is desired. Add `--fixture --device cpu` for a quick local sanity check that writes configs and reports without touching the moved parquet dataset.
+
 Before a long run, write a single readiness proof bundle that checks the environment, packages, data manifest, sample TokenGT conversion, paper artifacts, checkpoint reload, finite eval, bounded inference scaling, and visualization generation:
 
 ```bash

@@ -17,7 +17,7 @@ The main optimization metric remains byte-level BPB for the OpenAI Parameter-Gol
 
 All tropical margins, GraphCG factors, GFlowNet rewards, persistence summaries, and analogical memory metrics should be ablated by whether they improve held-out `bpb` and `graph_bpb`.
 
-Run `scripts/analyze_bpb_ablations.py` on one or more `train_report.json` files to generate JSON/Markdown/HTML screens ranking which logged metrics correlate with `bpb`, `graph_bpb`, `eval_bpb`, and `eval_graph_bpb`. Use those rankings to choose matched ablations; do not treat correlations as causal wins.
+Run `scripts/analyze_bpb_ablations.py` on one or more `train_report.json` files to generate JSON/Markdown/HTML screens ranking which logged metrics correlate with `bpb`, `graph_bpb`, `eval_bpb`, and `eval_graph_bpb`. Use those rankings to choose matched ablations; do not treat correlations as causal wins. Run `scripts/run_bpb_ablation_grid.py` to generate same-seed variants such as `no_graphcg`, `no_gflownet`, `no_certificate`, `no_tropical_regularizers`, and `no_auxiliary`, optionally train them in sequence, and immediately analyze their BPB deltas.
 
 ## Papers and Assets
 

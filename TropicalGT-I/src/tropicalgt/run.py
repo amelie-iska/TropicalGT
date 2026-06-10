@@ -3,10 +3,12 @@ from __future__ import annotations
 import json
 import math
 import os
+import random
 import time
 from pathlib import Path
 from typing import Any
 
+import numpy as np
 import torch
 from torch.utils.data import DataLoader
 from tqdm.auto import tqdm
@@ -64,6 +66,8 @@ def build_model(cfg: dict[str, Any]) -> TropicalGTModel:
 
 def train(config_path: str | Path, resume_from: str | Path | None = None, max_steps_override: int | None = None) -> dict[str, Any]:
     cfg = load_config(config_path)
+    seed = int(cfg.get("seed", 1729))
+    _set_seed(seed)
     if resume_from is None:
         resume_from = cfg.get("resume_from")
     root = cfg.get("data_root")
@@ -304,6 +308,7 @@ def train(config_path: str | Path, resume_from: str | Path | None = None, max_st
         "dataset_manifest": parquet_manifest(root, ("train", "validation"), include_shards=False) if root else {},
         "sampler": sampler_report,
         "device": str(device),
+        "seed": seed,
     }
     if memory_bank is not None:
         report["analogical_memory"] = {
@@ -456,3 +461,11 @@ def _restore_rng_state(obj: dict[str, Any]) -> None:
         normalized = [state.detach().cpu().to(torch.uint8) for state in cuda_states if isinstance(state, torch.Tensor)]
         if normalized:
             torch.cuda.set_rng_state_all(normalized)
+
+
+def _set_seed(seed: int) -> None:
+    random.seed(seed)
+    np.random.seed(seed % (2**32 - 1))
+    torch.manual_seed(seed)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(seed)
