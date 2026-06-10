@@ -89,6 +89,8 @@ ToricGT began with graph-token reasoning, tropical ring attention, noncommutativ
 
 The NeurIPS 2025 Tropical Attention paper supplies the catalyst.  Its central claim is that softmax attention is geometrically misaligned with combinatorial algorithms: softmax produces smooth mixtures, while dynamic programs often require decisive max/min selections over polyhedral value functions.  Tropical Attention addresses this by moving attention into tropical projective space, scoring query-key agreement by a tropical Hilbert metric, aggregating by max-plus matrix-vector products, and returning the result to Euclidean coordinates for ordinary transformer processing \cite{hashemi2025tropical}.  The authors prove that multi-head Tropical Attention can approximate tropical circuits and simulate max-plus dynamic programs; the official OpenReview record lists it as a NeurIPS 2025 poster and states that MHTA stacks approximate tropical circuits and realize tropical transitive closure with polynomial resource bounds \cite{hashemi2025openreview}.  The public code repository exposes a standalone \texttt{TropicalAttention.py} kernel, experimental scripts, and eleven combinatorial task generators \cite{hashemi2025code}.
 
+TropicalGT also builds on the tropical expressivity program of Su and Liu, where zero-temperature self-attention is analyzed as a tropical rational map whose query-space cells are power diagrams and whose multi-head complexity is governed by Minkowski sums of Newton polytopes \cite{su2026expressivity}.  The TokenGT expressivity extension sharpens this picture for graph data: graph tokenization changes the effective token count, makes vertex-edge incidence directly visible to attention, supports graph-to-graph universality on bounded domains, and clarifies the Boolean-circuit and toric-boundary edge cases \cite{schreiber2026tokengtexpressivity}.  TropicalGT-I turns those expressivity claims into a training and audit contract: the code logs supports, margins, structural certificates, GFlowNet paths, GraphCG directions, and filtered simplicial objects rather than treating the tropical skeleton as an invisible proof device.
+
 TropicalGT asks the next question: what happens if tropical attention is not a local replacement for softmax, but the organizing principle for an auditable reasoning-agent stack?  The answer is a model class with five layers:
 \begin{enumerate}
 \item \textbf{Tropical kernels.}  Selected attention heads operate over max-plus or min-plus semirings, exposing active supports, top-two margins, and polyhedral cells.
@@ -1587,6 +1589,16 @@ Baran Hashemi et al.
 Baran Hashemi, Kurt Pasque, Chris Teska, and Ruriko Yoshida.
 \newblock Tropical Attention: Neural Algorithmic Reasoning for Combinatorial Algorithms.
 \newblock NeurIPS 2025 presentation slides, 2025.
+
+\bibitem{su2026expressivity}
+Ye Su and Yong Liu.
+\newblock Expressivity of transformers: A tropical geometry perspective.
+\newblock \emph{arXiv:2604.14727}, 2026.
+
+\bibitem{schreiber2026tokengtexpressivity}
+Amelie Schreiber.
+\newblock Expressivity of tokenized graph transformers in terms of tropical geometry, Boolean circuits, and toric fans.
+\newblock Local manuscript, 2026.
 
 \bibitem{maclagan2015}
 Diane Maclagan and Bernd Sturmfels.

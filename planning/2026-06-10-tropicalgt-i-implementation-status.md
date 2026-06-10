@@ -16,6 +16,7 @@
 - Iteration 7 adds richer train-time instrumentation: a finite TokenGT skeleton certificate loss/agreement metric, node/edge/margin-threshold wall-hit tropical support diagnostics, graph-json fallback rate, examples/sec, tokens/sec, and expanded metric visualization/W&B traces.
 - Certificate agreement is currently structural unless teacher tropical supports or external verifier labels are supplied, and the wall-hit statistic is a margin-threshold proxy rather than an exact normal-fan wall distance.
 - Iteration 8 adds a reproducible readiness audit CLI that writes JSON/Markdown gates for environment packages, CUDA policy, data manifests, sample TokenGT conversion, paper artifacts, checkpoint reload, finite eval, bounded inference scaling, and optional visualization generation before long training launches.
+- Iteration 9 deepens the literature audit and source crosswalk: each required reference now has page/source metadata, mathematical takeaways, ported TropicalGT-I components, intentionally omitted toric/non-v1 components, and paper-update requirements.  The paper now explicitly cites the Su-Liu tropical expressivity paper and the local TokenGT expressivity extension as the lineage for the graph-token tropical expressivity claims.
 
 ## Verification evidence
 - Unit tests: `/home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests -q` -> `6 passed`.
@@ -66,6 +67,9 @@
 - Iteration 8 unit tests: `/home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests -q` -> `22 passed`.
 - Iteration 8 readiness audit: `audit_tropicalgt_i_readiness.py --config TropicalGT-I/configs/gpu_smoke.json --checkpoint TropicalGT-I/checkpoints/tropicalgt_i_gpu_smoke.pt --split validation --sample-limit 16 --details-limit 2 --scale-depth 1 --scale-width 2 --scale-branch-factor 2 --require-cuda --render-visualizations --output TropicalGT-I/outputs/gpu_smoke/readiness_audit.json` -> status `ready`, `17` gates passed, failed gates `none`, fallback rate `0.0`, checkpoint step `2`, eval NLL `5.510255873203278`, BPB proxy `7.949618822299653`, `3` inference-scaling candidates, best path `['refine']`, and refreshed PCA/filtered-object visualization artifacts.
 - Paper compiled locally from the iteration 8 TeX source to `46` pages and was copied back to `TropicalGT-I/assets/tropicalgt_neurips_research_paper.pdf`.
+- Iteration 9 reference review used `pdfinfo`/`pdftotext` on all required local PDFs plus direct TeX inspection of `references/toricgt_paper_pg_softmoe_final.tex`; the expanded synthesis is tracked in `planning/2026-06-10-tropicalgt-i-reference-synthesis.md`.
+- Iteration 9 unit tests: `/home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests -q` -> `22 passed`.
+- Paper compiled locally from the iteration 9 TeX source to `46` pages and was copied back to `TropicalGT-I/assets/tropicalgt_neurips_research_paper.pdf`.
 
 ## Remaining research risks
 - The model is a first functional iteration, not a competitive Parameter-Golf artifact.
