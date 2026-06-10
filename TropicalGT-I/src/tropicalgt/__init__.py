@@ -1,6 +1,7 @@
 """TropicalGT-I: graph-token tropical reasoning components."""
 from .records import GraphRecord, GraphTokenBatch
 from .tokenizer import TokenGTTokenizer
+from .ablation import build_bpb_ablation_report, write_bpb_ablation_artifacts
 from .attention import TropicalRingAttention, tropical_support_entropy
 from .losses import GFlowNetPolicy, GraphCGLoss
 from .model import TropicalGTConfig, TropicalGTModel
@@ -15,6 +16,8 @@ __all__ = [
     "GraphRecord",
     "GraphTokenBatch",
     "TokenGTTokenizer",
+    "build_bpb_ablation_report",
+    "write_bpb_ablation_artifacts",
     "TropicalRingAttention",
     "tropical_support_entropy",
     "GFlowNetPolicy",

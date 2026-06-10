@@ -32,7 +32,16 @@ def main() -> None:
         cache_shards=int(cfg.get("cache_shards", 2)),
     )
     tok = TokenGTTokenizer(**cfg.get("tokengt", {}))
-    report = evaluate_model(model, ds, tok, int(cfg.get("seq_len", 128)), int(cfg.get("batch_size", 2)), device, details_limit=args.details_limit)
+    report = evaluate_model(
+        model,
+        ds,
+        tok,
+        int(cfg.get("seq_len", 128)),
+        int(cfg.get("batch_size", 2)),
+        device,
+        details_limit=args.details_limit,
+        graph_bpb_side_weight=float(cfg.get("graph_bpb_side_weight", 1.0)),
+    )
     out = Path(cfg.get("output_dir", "TropicalGT-I/outputs/smoke")) / f"eval_{args.split}.json"
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(json.dumps(report, indent=2), encoding="utf-8")

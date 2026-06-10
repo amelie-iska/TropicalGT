@@ -198,6 +198,20 @@ TropicalGT-I/scripts/infer_tropicalgt_i.py \
 
 This writes a graph-of-thought PCA trajectory whose nodes are reasoning candidates and whose edges are parent-child expansions. Hover payloads summarize the filtered simplicial complex attached to that reasoning step, while the JSON payload stores the full complex, multiparameter persistence report, commutative-algebra proxies, derived-equivalence signature, GraphCG direction diagnostics, and analogical memory retrieval details.
 
+## BPB ablation analysis
+
+Use the ablation analyzer after smoke runs or matched-seed experiment ladders to screen which auxiliary metrics correlate with the primary compression targets:
+
+```bash
+PYTHONPATH=TropicalGT-I/src \
+/home/iska/miniconda3/envs/tokengt/bin/python \
+TropicalGT-I/scripts/analyze_bpb_ablations.py \
+TropicalGT-I/outputs/gpu_smoke/train_report.json \
+--output-dir TropicalGT-I/outputs/gpu_smoke/bpb_ablation
+```
+
+For multiple matched runs, pass every `train_report.json` and set `--baseline` to the baseline report. The tool writes JSON, Markdown, and Plotly HTML rankings for correlations against `bpb`, `graph_bpb`, `eval_bpb`, and `eval_graph_bpb`. Treat the output as a screen for the next ablation, not as causal evidence; promote an auxiliary only when the matched run improves held-out `bpb` or `graph_bpb`.
+
 Before a long run, write a single readiness proof bundle that checks the environment, packages, data manifest, sample TokenGT conversion, paper artifacts, checkpoint reload, finite eval, bounded inference scaling, and visualization generation:
 
 ```bash
