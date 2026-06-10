@@ -27,6 +27,11 @@ class TropicalGTConfig:
     certificate_weight: float = 0.001
     wall_margin_threshold: float = 1.0e-3
     memory_dim: int = 32
+    graph_tropical_block_size: int = 32
+    use_sequence_tropical: bool = True
+    sequence_tropical_weight: float = 0.125
+    sequence_tropical_max_tokens: int = 32
+    sequence_tropical_block_size: int = 16
 
 
 class TropicalGTModel(nn.Module):
@@ -48,11 +53,30 @@ class TropicalGTModel(nn.Module):
         g = self.graph_proj(graph_batch.token_features)
         type_ids = graph_batch.token_type_ids.clamp_min(0).clamp_max(3)
         g = g + self.graph_type_emb(type_ids)
-        trop = self.tropical(g, graph_batch.attention_mask)
+        if self.config.graph_tropical_block_size > 0 and g.shape[1] > self.config.graph_tropical_block_size:
+            trop = self.tropical.blockwise(g, graph_batch.attention_mask, block_size=self.config.graph_tropical_block_size)
+        else:
+            trop = self.tropical(g, graph_batch.attention_mask)
         masked = trop.context * graph_batch.attention_mask[..., None]
         denom = graph_batch.attention_mask.sum(dim=1).clamp_min(1).to(masked.dtype)[:, None]
         graph_state = masked.sum(dim=1) / denom
         x = self.byte_emb(input_ids) + graph_state[:, None, :]
+        sequence_tropical_metrics: dict[str, Tensor] = {}
+        if self.config.use_sequence_tropical and input_ids.shape[1] > 1:
+            seq_mask = input_ids.ne(0)
+            pooled_x, pooled_mask, stride = _pool_sequence_tokens(x, seq_mask, self.config.sequence_tropical_max_tokens)
+            seq_trop = self.tropical.blockwise(pooled_x, pooled_mask, block_size=self.config.sequence_tropical_block_size)
+            expanded_context = _expand_sequence_context(seq_trop.context, input_ids.shape[1], stride)
+            x = x + float(self.config.sequence_tropical_weight) * expanded_context
+            valid_seq_margin = seq_trop.margin.masked_select(pooled_mask)
+            sequence_tropical_metrics = {
+                "sequence_tropical_tokens_mean": pooled_mask.float().sum(dim=1).mean().detach(),
+                "sequence_tropical_stride": torch.tensor(float(stride), device=input_ids.device),
+                "sequence_tropical_margin_mean": _safe_mean(valid_seq_margin).detach(),
+                "sequence_tropical_margin_min": _safe_min(valid_seq_margin).detach(),
+                "sequence_tropical_support_entropy": tropical_support_entropy(seq_trop.support, pooled_mask).detach(),
+                "sequence_tropical_weight": torch.tensor(float(self.config.sequence_tropical_weight), device=input_ids.device),
+            }
         h, _ = self.gru(x)
         logits = self.out(h)
         valid_margin = trop.margin.masked_select(graph_batch.attention_mask)
@@ -82,6 +106,7 @@ class TropicalGTModel(nn.Module):
             "wall_margin_threshold": torch.tensor(self.config.wall_margin_threshold, device=input_ids.device),
             "support_boundary_hit_rate": boundary_hit_rate.detach(),
             "analogical_memory_query_norm": self.memory(graph_state).detach().norm(dim=-1).mean(),
+            **sequence_tropical_metrics,
             **certificate_metrics,
         }
         loss = None
@@ -207,6 +232,29 @@ def tropical_support_unique_fraction(support: Tensor, mask: Tensor) -> Tensor:
     if not fractions:
         return support.sum() * 0.0
     return torch.tensor(fractions, dtype=torch.float32, device=support.device).mean()
+
+
+def _pool_sequence_tokens(x: Tensor, mask: Tensor, max_tokens: int) -> tuple[Tensor, Tensor, int]:
+    max_tokens = max(int(max_tokens), 1)
+    batch, seq_len, dim = x.shape
+    stride = max(1, (seq_len + max_tokens - 1) // max_tokens)
+    chunks = (seq_len + stride - 1) // stride
+    pad = chunks * stride - seq_len
+    if pad:
+        x = F.pad(x, (0, 0, 0, pad))
+        mask = F.pad(mask, (0, pad), value=False)
+    x_chunks = x.reshape(batch, chunks, stride, dim)
+    mask_chunks = mask.reshape(batch, chunks, stride)
+    denom = mask_chunks.float().sum(dim=2).clamp_min(1.0)
+    pooled = (x_chunks * mask_chunks[..., None]).sum(dim=2) / denom[..., None]
+    pooled_mask = mask_chunks.any(dim=2)
+    return pooled, pooled_mask, stride
+
+
+def _expand_sequence_context(context: Tensor, seq_len: int, stride: int) -> Tensor:
+    batch, chunks, dim = context.shape
+    expanded = context[:, :, None, :].expand(batch, chunks, stride, dim).reshape(batch, chunks * stride, dim)
+    return expanded[:, :seq_len, :]
 
 
 def _rate(mask: Tensor, denom_mask: Tensor) -> Tensor:

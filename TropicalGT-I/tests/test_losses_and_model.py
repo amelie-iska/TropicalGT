@@ -84,6 +84,9 @@ def test_model_forward_fixture():
         "graphcg_direction_effective_rank",
         "graphcg_direction_numerical_rank",
         "graphcg_direction_singular_min",
+        "sequence_tropical_tokens_mean",
+        "sequence_tropical_margin_mean",
+        "sequence_tropical_support_entropy",
     ]:
         assert key in out
         assert torch.isfinite(out[key])

@@ -4,6 +4,7 @@
   "data_root": "TropicalGT-I/data/toricgt/curated_hf_shards",
   "require_data": true,
   "cache_shards": 4,
+  "graph_autoregressive_decoding": true,
   "shuffle": false,
   "chunk_shuffle": true,
   "chunk_shuffle_seed": 1729,
@@ -12,16 +13,16 @@
   "fixture_size": 8,
   "train_limit": null,
   "val_limit": 512,
-  "seq_len": 256,
-  "batch_size": 4,
-  "max_steps": 2000,
+  "seq_len": 1024,
+  "batch_size": 80,
+  "max_steps": 20000,
   "lr": 0.0003,
   "weight_decay": 0.01,
   "grad_clip": 1.0,
   "device": "auto",
   "output_dir": "TropicalGT-I/outputs/train",
   "checkpoint_dir": "TropicalGT-I/checkpoints",
-  "checkpoint_every": 250,
+  "checkpoint_every": 5000,
   "keys_path": "keys.txt",
   "graph_bpb_side_weight": 1.0,
   "wandb_html_max_bytes": 5000000,
@@ -41,7 +42,44 @@
   "viz_scale_width": 3,
   "viz_scale_branch_factor": 2,
   "tokengt": {"max_nodes": 64, "max_edges": 128, "node_id_dim": 16, "feature_dim": 48, "graph_token": true},
-  "model": {"dim": 128, "hidden_dim": 128, "graph_feature_dim": 48, "num_actions": 8, "gflownet_weight": 0.02, "graphcg_weight": 0.02, "certificate_weight": 0.001, "wall_margin_threshold": 0.001, "memory_dim": 32},
+  "hybrid_data": {
+    "enabled": true,
+    "seed": 1729,
+    "sources": [
+      {"kind": "parquet", "name": "tropicalgt_hf_reasoning", "root": "TropicalGT-I/data/toricgt/curated_hf_shards", "weight": 0.7, "required": true},
+      {
+        "kind": "parameter_golf_bin",
+        "name": "openai_parameter_golf",
+        "root": "external/parameter-golf/data/datasets/fineweb10B_sp1024",
+        "tokenizer_path": "external/parameter-golf/data/tokenizers/fineweb_1024_bpe.model",
+        "weight": 0.3,
+        "required": false,
+        "window_tokens": 1025,
+        "max_graph_chunks": 64
+      }
+    ]
+  },
+  "model": {
+    "dim": 1760,
+    "hidden_dim": 1760,
+    "graph_feature_dim": 48,
+    "num_actions": 8,
+    "gflownet_weight": 0.02,
+    "graphcg_weight": 0.02,
+    "certificate_weight": 0.001,
+    "wall_margin_threshold": 0.001,
+    "memory_dim": 220,
+    "graph_tropical_block_size": 32,
+    "use_sequence_tropical": true,
+    "sequence_tropical_weight": 0.125,
+    "sequence_tropical_max_tokens": 32,
+    "sequence_tropical_block_size": 16
+  },
+  "parameter_golf_export": {
+    "cap_bytes": 16000000,
+    "target_utilization": "approximately 97 percent after int8+zlib export plus stripped code bytes",
+    "size_checked_with": "TropicalGT-I/scripts/estimate_parameter_golf_export_size.py"
+  },
   "inference_scaling": {"depth": 2, "width": 4, "branch_factor": 2},
   "wandb": {"enabled": true, "mode": "online", "project": "TropicalGT-I"}
 }

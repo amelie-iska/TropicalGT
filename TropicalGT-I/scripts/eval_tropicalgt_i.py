@@ -9,7 +9,7 @@ sys.path.insert(0, str(ROOT / "src"))
 
 import torch
 from tropicalgt.run import load_config, load_checkpoint, evaluate_model
-from tropicalgt.data import make_dataset
+from tropicalgt.data import make_dataset_from_config
 from tropicalgt.tokenizer import TokenGTTokenizer
 
 def main() -> None:
@@ -25,15 +25,7 @@ def main() -> None:
     cfg = load_config(args.config)
     device = torch.device("cuda" if torch.cuda.is_available() and cfg.get("device", "auto") != "cpu" else "cpu")
     model, obj = load_checkpoint(args.checkpoint, device)
-    root = cfg.get("data_root")
-    ds = make_dataset(
-        root,
-        args.split,
-        limit=cfg.get("val_limit", cfg.get("train_limit", 4)),
-        fixture_size=cfg.get("fixture_size", 8),
-        require_data=bool(cfg.get("require_data", bool(root))),
-        cache_shards=int(cfg.get("cache_shards", 2)),
-    )
+    ds = make_dataset_from_config(cfg, args.split)
     tok = TokenGTTokenizer(**cfg.get("tokengt", {}))
     report = evaluate_model(
         model,
@@ -47,6 +39,8 @@ def main() -> None:
         audit_level=args.audit_level or str(cfg.get("audit_level", "none")),
         ph_backend=args.audit_ph_backend or str(cfg.get("ph_backend", "auto")),
         audit_max_simplices=int(args.audit_max_simplices or cfg.get("audit_max_simplices", 1024)),
+        graph_autoregressive=bool(cfg.get("graph_autoregressive_decoding", True)),
+        ar_seed=int(cfg.get("seed", 1729)),
     )
     out = Path(cfg.get("output_dir", "TropicalGT-I/outputs/smoke")) / f"eval_{args.split}.json"
     out.parent.mkdir(parents=True, exist_ok=True)

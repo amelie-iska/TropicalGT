@@ -16,7 +16,7 @@ sys.path.insert(0, str(ROOT / "src"))
 
 import torch
 
-from tropicalgt.data import make_dataset, parquet_manifest
+from tropicalgt.data import dataset_manifest, make_dataset_from_config
 from tropicalgt.diagnostics import gflownet_diagnostics, graphcg_diagnostics, record_diagnostics
 from tropicalgt.metrics import batch_bpb_metrics
 from tropicalgt.records import GraphRecord
@@ -139,26 +139,27 @@ def build_readiness_report(
 
     root = cfg.get("data_root")
     require_data = bool(cfg.get("require_data", bool(root)))
-    manifest = parquet_manifest(root) if root else {}
+    cfg_sample = dict(cfg)
+    if split == "train":
+        cfg_sample["train_limit"] = sample_count = max(1, int(sample_limit))
+    else:
+        cfg_sample["val_limit"] = sample_count = max(1, int(sample_limit))
+    ds = make_dataset_from_config(cfg_sample, split)
+    manifest = dataset_manifest(ds, root)
     report["data"] = {"root": root or "", "require_data": require_data, "manifest": manifest}
     add_gate(gates, "data_root_present", bool(root) or not require_data, root or "fixture mode")
     if root:
-        add_gate(gates, "data_splits_present", all(split_name in manifest.get("splits", {}) for split_name in ("train", "validation")), "train and validation split manifests")
-
-    sample_count = max(1, int(sample_limit))
-    ds = make_dataset(
-        root,
-        split,
-        limit=sample_count,
-        fixture_size=max(sample_count, int(cfg.get("fixture_size", 8))),
-        require_data=require_data,
-        cache_shards=int(cfg.get("cache_shards", 2)),
-    )
+        add_gate(gates, "data_splits_present", bool(manifest), "dataset manifest resolved")
     records = [ds[i] for i in range(len(ds))]
     tokenizer = TokenGTTokenizer(**cfg.get("tokengt", {}))
     graph_batch = tokenizer.batch_encode(records[: max(1, min(len(records), int(cfg.get("batch_size", 2))))])
     fallback_count = sum(1 for record in records if (record.metadata or {}).get("graph_json_fallback", False))
     sequentialized_count = sum(1 for record in records if (record.metadata or {}).get("graph_json_sequentialized", False))
+    causal_dag_count = sum(1 for record in records if (record.metadata or {}).get("decoding_order_kind") == "causal_dag")
+    random_ar_count = sum(1 for record in records if (record.metadata or {}).get("decoding_order_kind") == "random_autoregressive")
+    parameter_golf_count = sum(
+        1 for record in records if (record.metadata or {}).get("source") == "parameter_golf_bin" or (record.metadata or {}).get("hybrid_source") == "openai_parameter_golf"
+    )
     sequence_node_count = sum(
         1
         for record in records
@@ -173,6 +174,12 @@ def build_readiness_report(
             "graph_json_fallback_rate": fallback_count / max(len(records), 1),
             "graph_json_sequentialized_records": sequentialized_count,
             "graph_json_sequentialized_rate": sequentialized_count / max(len(records), 1),
+            "causal_dag_ar_records": causal_dag_count,
+            "causal_dag_ar_rate": causal_dag_count / max(len(records), 1),
+            "random_graph_ar_records": random_ar_count,
+            "random_graph_ar_rate": random_ar_count / max(len(records), 1),
+            "parameter_golf_source_records": parameter_golf_count,
+            "parameter_golf_source_rate": parameter_golf_count / max(len(records), 1),
             "sequence_graph_nodes": sequence_node_count,
             "batch_graph_tokens": graph_batch.graph_token_counts.tolist(),
             "batch_node_tokens": graph_batch.node_counts.tolist(),
@@ -252,7 +259,13 @@ def add_train_dry_run_section(
             weight_decay=float(cfg.get("weight_decay", 0.01)),
         )
         batch_size = max(1, min(int(cfg.get("batch_size", 2)), len(records)))
-        x, y, graph_batch, batch_records = collate_records(records[:batch_size], int(cfg.get("seq_len", 128)), tokenizer)
+        x, y, graph_batch, batch_records = collate_records(
+            records[:batch_size],
+            int(cfg.get("seq_len", 128)),
+            tokenizer,
+            graph_autoregressive=bool(cfg.get("graph_autoregressive_decoding", True)),
+            ar_seed=int(cfg.get("seed", 1729)),
+        )
         x = x.to(device)
         y = y.to(device)
         opt.zero_grad(set_to_none=True)
@@ -346,6 +359,8 @@ def add_checkpoint_sections(
         device,
         details_limit=details_limit,
         graph_bpb_side_weight=float(cfg.get("graph_bpb_side_weight", 1.0)),
+        graph_autoregressive=bool(cfg.get("graph_autoregressive_decoding", True)),
+        ar_seed=int(cfg.get("seed", 1729)),
     )
     report["eval"] = eval_report
     add_gate(gates, "eval_finite_nll", _finite_number(eval_report.get("nll")), f"NLL {eval_report.get('nll')}")
@@ -361,7 +376,13 @@ def add_checkpoint_sections(
             "question": prompt,
         }
     )
-    x, y, graph_batch, _ = collate_records([rec], int(cfg.get("seq_len", 128)), tokenizer)
+    x, y, graph_batch, _ = collate_records(
+        [rec],
+        int(cfg.get("seq_len", 128)),
+        tokenizer,
+        graph_autoregressive=bool(cfg.get("graph_autoregressive_decoding", True)),
+        ar_seed=int(cfg.get("seed", 1729)),
+    )
     with torch.no_grad():
         out = model(x.to(device), graph_batch, y.to(device))
     out_cpu = {k: v.detach().cpu() if torch.is_tensor(v) else v for k, v in out.items()}

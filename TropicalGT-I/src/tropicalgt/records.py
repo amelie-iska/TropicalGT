@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import hashlib
 import json
+import random
 from typing import Any, Iterable
 
 import torch
@@ -33,6 +35,7 @@ class GraphRecord:
             metadata["graph_json_fallback"] = False
         graph_obj, sequence_added = attach_sequential_text_graph(graph_obj, text=text, question=question, answer=answer)
         metadata["graph_json_sequentialized"] = sequence_added
+        metadata.update(graph_decoding_order(graph_obj, seed=0, record_id=rid))
         if "dataset" in row:
             metadata["dataset"] = _string(row.get("dataset"))
         return cls(rid, text, question, answer, reasoning, metadata, graph_obj)
@@ -47,6 +50,29 @@ class GraphRecord:
             f"<br><b>answer</b>: {_clip(self.answer, 240)}"
             f"<br><b>graph</b>: {_clip(json.dumps(graph, ensure_ascii=False), 900)}"
         )
+
+    def autoregressive_text(self, seed: int = 0, max_node_chars: int = 4096) -> str:
+        """Flatten node payloads in the graph-aware autoregressive order."""
+
+        graph = self.graph_json or {}
+        nodes = list(graph.get("nodes", []))
+        if not nodes:
+            return self.text
+        node_by_id = {str(node.get("id", idx)): node for idx, node in enumerate(nodes)}
+        metadata = self.metadata if isinstance(self.metadata, dict) else {}
+        order = metadata.get("decoding_node_order")
+        if not isinstance(order, list):
+            order = graph_decoding_order(graph, seed=seed, record_id=self.record_id)["decoding_node_order"]
+        parts: list[str] = []
+        for node_id in order:
+            node = node_by_id.get(str(node_id))
+            if not node:
+                continue
+            text = _string(node.get("text") or node.get("label") or node.get("value")).strip()
+            if text:
+                kind = _string(node.get("type") or "node").strip()
+                parts.append(f"[{kind}] {text[:max_node_chars]}")
+        return "\n".join(parts) if parts else self.text
 
 
 @dataclass
@@ -130,6 +156,54 @@ def attach_sequential_text_graph(
     return {**graph_obj, "nodes": nodes, "edges": edges}, True
 
 
+def graph_decoding_order(graph: dict[str, Any], seed: int = 0, record_id: str = "") -> dict[str, Any]:
+    """Select causal-DAG or random-order autoregressive decoding semantics."""
+
+    nodes = list(graph.get("nodes", [])) if isinstance(graph, dict) else []
+    edges = list(graph.get("edges", [])) if isinstance(graph, dict) else []
+    node_ids = [str(node.get("id", idx)) for idx, node in enumerate(nodes)]
+    node_set = set(node_ids)
+    if not node_ids:
+        return {
+            "decoding_order_kind": "empty_graph",
+            "decoding_is_dag": True,
+            "decoding_node_order": [],
+            "decoding_random_seed": int(seed),
+        }
+
+    causal_edges: list[tuple[str, str]] = []
+    has_noncausal_edge = False
+    for edge in edges:
+        src = str(edge.get("source", edge.get("src", "")))
+        dst = str(edge.get("target", edge.get("dst", "")))
+        if src not in node_set or dst not in node_set:
+            continue
+        if _edge_is_noncausal(edge):
+            has_noncausal_edge = True
+            continue
+        causal_edges.append((src, dst))
+
+    if causal_edges and not has_noncausal_edge:
+        order, is_dag = _topological_order(node_ids, causal_edges)
+        if is_dag:
+            return {
+                "decoding_order_kind": "causal_dag",
+                "decoding_is_dag": True,
+                "decoding_node_order": order,
+                "decoding_random_seed": int(seed),
+            }
+
+    order = list(node_ids)
+    rng = random.Random(_stable_seed(seed, record_id, node_ids, edges))
+    rng.shuffle(order)
+    return {
+        "decoding_order_kind": "random_autoregressive",
+        "decoding_is_dag": False,
+        "decoding_node_order": order,
+        "decoding_random_seed": int(seed),
+    }
+
+
 def _parse_graph(value: Any) -> dict[str, Any] | None:
     if isinstance(value, dict):
         return value
@@ -140,6 +214,52 @@ def _parse_graph(value: Any) -> dict[str, Any] | None:
         except Exception:
             return None
     return None
+
+
+def _edge_is_noncausal(edge: dict[str, Any]) -> bool:
+    if edge.get("directed") is False or edge.get("causal") is False:
+        return True
+    kind = _string(edge.get("type") or edge.get("relation") or "").lower()
+    return kind in {
+        "undirected",
+        "noncausal",
+        "cooccurs",
+        "co_occurs",
+        "similar",
+        "related",
+        "adjacent",
+        "sibling",
+        "contrastive_pair",
+    }
+
+
+def _topological_order(node_ids: list[str], edges: list[tuple[str, str]]) -> tuple[list[str], bool]:
+    adjacency = {node_id: [] for node_id in node_ids}
+    indegree = {node_id: 0 for node_id in node_ids}
+    for src, dst in edges:
+        adjacency[src].append(dst)
+        indegree[dst] += 1
+    ready = [node_id for node_id in node_ids if indegree[node_id] == 0]
+    order: list[str] = []
+    while ready:
+        node_id = ready.pop(0)
+        order.append(node_id)
+        for dst in adjacency[node_id]:
+            indegree[dst] -= 1
+            if indegree[dst] == 0:
+                ready.append(dst)
+    return order, len(order) == len(node_ids)
+
+
+def _stable_seed(seed: int, record_id: str, node_ids: list[str], edges: list[dict[str, Any]]) -> int:
+    payload = json.dumps(
+        {"seed": int(seed), "record_id": record_id, "nodes": node_ids, "edges": edges},
+        sort_keys=True,
+        ensure_ascii=False,
+        default=str,
+    )
+    digest = hashlib.blake2b(payload.encode("utf-8", "ignore"), digest_size=8).digest()
+    return int.from_bytes(digest, "little")
 
 
 def _text_chunks(text: str, chunk_chars: int, max_chunks: int) -> list[str]:

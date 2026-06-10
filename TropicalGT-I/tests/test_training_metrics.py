@@ -7,7 +7,7 @@ import torch
 from tropicalgt.data import encode_bytes
 from tropicalgt.metrics import aggregate_bpb_metrics, batch_bpb_metrics, explicit_graph_json_bytes, graph_token_structural_bytes
 from tropicalgt.records import GraphRecord
-from tropicalgt.run import train
+from tropicalgt.run import organize_wandb_metrics, train
 from tropicalgt.tokenizer import TokenGTTokenizer
 
 
@@ -91,8 +91,35 @@ def test_training_history_contains_certificate_and_throughput_metrics(tmp_path: 
         "graph_token_structural_bytes",
         "explicit_graph_json_bytes",
         "analogical_memory_query_norm",
+        "causal_dag_ar_rate",
+        "random_graph_ar_rate",
+        "graph_autoregressive_decoding_enabled",
+        "sequence_tropical_tokens_mean",
+        "sequence_tropical_margin_mean",
     ]:
         assert key in row
         assert row[key] == row[key]
     assert report["eval"]["bpb"] == report["eval"]["bpb_proxy"]
     assert report["eval"]["graph_bpb"] == report["eval"]["graph_bpb"]
+
+
+def test_wandb_metrics_are_namespaced_by_priority():
+    payload = organize_wandb_metrics(
+        {
+            "step": 5,
+            "eval_bpb": 1.25,
+            "bpb": 1.3,
+            "loss": 2.0,
+            "gflownet_tb": 0.1,
+            "graphcg_full_rank": 1.0,
+            "sequence_tropical_margin_mean": 0.4,
+            "causal_dag_ar_rate": 0.75,
+            "gpu_mem_mb": 21484.0,
+        }
+    )
+    assert list(payload)[:4] == ["step", "00_primary/eval_bpb", "00_primary/bpb", "00_primary/loss"]
+    assert payload["01_losses/gflownet_tb"] == 0.1
+    assert payload["03_tropical/sequence_tropical_margin_mean"] == 0.4
+    assert payload["05_graphcg/graphcg_full_rank"] == 1.0
+    assert payload["06_graph_data/causal_dag_ar_rate"] == 0.75
+    assert payload["00_primary/gpu_mem_mb"] == 21484.0

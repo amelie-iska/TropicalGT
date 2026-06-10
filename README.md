@@ -57,7 +57,17 @@ TropicalGT-I/data/toricgt/curated_hf_shards
 
 Data is gitignored. Do not commit datasets, checkpoints, W&B runs, or `keys.txt`.
 
-Data-backed configs set `require_data: true`, so missing or unreadable parquet shards fail loudly instead of silently training on fixture examples. The parquet loader builds a row-group metadata index over train/validation/test shards and reads records through a bounded row-group cache controlled by `cache_shards`; it does not concatenate the full moved dataset into memory. The full `train.json` config enables `chunk_shuffle`, which randomizes parquet row-group order while preserving row-group-local reads. Use `shuffle_rows_within_chunk` for small smoke/debug runs, but avoid PyTorch `shuffle: true` on full parquet unless deliberate random-access cache pressure is acceptable.
+The full `TropicalGT-I/configs/train.json` path is hybrid by default. It mixes the moved TropicalGT reasoning shards with OpenAI Parameter-Golf FineWeb windows that are decoded as text and then represented as TokenGT-style sequential DAG records. A minimal SP1024 Parameter-Golf cache can be populated with:
+
+```bash
+cd external/parameter-golf
+/home/iska/miniconda3/envs/tokengt/bin/python data/cached_challenge_fineweb.py --variant sp1024 --train-shards 1
+cd ../..
+```
+
+This creates `external/parameter-golf/data/datasets/fineweb10B_sp1024` and `external/parameter-golf/data/tokenizers/fineweb_1024_bpe.model`. Those data files are gitignored. Every OAI sample is graph structured before batching: each token window becomes a causal DAG of sequence chunks, while non-causal/cyclic graphs elsewhere use deterministic random autoregressive node order.
+
+Data-backed configs set `require_data: true`, so missing or unreadable required parquet shards fail loudly instead of silently training on fixture examples. Optional hybrid OAI shards are reported when absent. The parquet loader builds a row-group metadata index over train/validation/test shards and reads records through a bounded row-group cache controlled by `cache_shards`; it does not concatenate the full moved dataset into memory. The full `train.json` config enables `chunk_shuffle`, which randomizes parquet row-group order while preserving row-group-local reads when the dataset is parquet-only; the hybrid sampler uses deterministic weighted indexed sampling over already graph-structured sources.
 
 Generate a shard manifest and tokenization preflight report before a long run:
 
@@ -112,6 +122,28 @@ TropicalGT-I/scripts/train_tropicalgt_i.py \
 
 The script reads the W&B API key from `keys.txt` when W&B is enabled. It logs NLL, exact text BPB, graph-BPB, graph side-information BPB, optimistic graph-conditioned BPB, GFlowNet trajectory-balance loss, GraphCG losses, full-rank singular-spectrum diagnostics, direction geometry, finite graph-certificate loss/agreement, tropical support entropy, tropical margins, margin-threshold wall-hit rate, graph token counts, graph structural byte counts, explicit graph JSON byte counts, graph JSON fallback/sequentialization rates, algebraic persistence summaries, analogical-memory query norms, examples/sec, tokens/sec, GPU memory, and generated HTML artifacts.
 
+W&B scalar metrics are organized by prefixed priority groups rather than logged as one flat pile:
+
+- `00_primary`: eval/train BPB, graph-BPB, loss, NLL, GPU memory.
+- `01_losses`: total loss, NLL, weighted/unweighted auxiliary losses and regularizer ratio.
+- `02_bpb`: text BPB, graph-BPB, side-information BPB, byte counts, graph structural bytes.
+- `03_tropical`: graph/sequence tropical supports, margins, wall hits, certificates.
+- `04_gflownet`: trajectory-balance, reward, diversity, and flow diagnostics.
+- `05_graphcg`: GraphCG loss, full-rank barrier, singular values, effective/numerical rank.
+- `06_graph_data`: graph-token counts, node/edge ratios, causal/random graph AR rates, OAI source rate.
+- `07_algebra_topology`: persistence, Betti, free-resolution, derived-signature summaries.
+- `08_memory`: analogical memory query and bank metrics.
+- `09_system`: VRAM, step time, examples/sec, tokens/sec.
+- `10_optimization`: learning rate, gradient norm, sampler settings.
+
+Local W&B run directories are disposable and should be cleaned after smoke iterations:
+
+```bash
+rm -rf wandb
+```
+
+The online `amelie-iska-math/TropicalGT-I` project was cleaned to keep only the latest useful smoke run, `pzpw99m7`; future long runs should use distinctive names or tags so review-worthy runs are not mixed with throwaway smoke jobs.
+
 The primary Parameter-Golf-style metric is text BPB:
 
 ```text
@@ -143,15 +175,26 @@ PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python Tropic
 
 ## Data-backed training launch
 
+The current full training config is sized for the OpenAI Parameter-Golf 16MB artifact cap while using the RTX 4090. Its core settings are:
+
+- model width/hidden size `1760`, memory width `220`, about `38.6M` parameters before int8+zlib export.
+- estimated stripped competition export `15,633,708` bytes, leaving about `366,292` bytes under the `16,000,000` byte cap.
+- `seq_len: 1024`, `batch_size: 80`, `checkpoint_every: 5000`, `max_steps: 20000`.
+- exact blockwise tropical ring attention over graph tokens with `graph_tropical_block_size: 32`.
+- pooled long-context sequence tropical ring attention with `sequence_tropical_max_tokens: 32`, `sequence_tropical_block_size: 16`, and residual weight `0.125`.
+- graph-aware autoregressive decoding: causal topological order for DAGs, deterministic random order for non-causal/cyclic graphs.
+- hybrid data weights `0.7` TropicalGT reasoning shards and `0.3` OpenAI Parameter-Golf SP1024 windows when the local OAI cache is present.
+
 Before launching the first full run, execute a CUDA dry-run readiness audit against `train.json`. This does not write a training checkpoint; it samples moved parquet data, builds the configured model, runs one optimizer step, checks the W&B key can be found, and gates finite train loss/BPB/graph-BPB:
 
 ```bash
+PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True \
 PYTHONPATH=TropicalGT-I/src \
 /home/iska/miniconda3/envs/tokengt/bin/python \
 TropicalGT-I/scripts/audit_tropicalgt_i_readiness.py \
 --config TropicalGT-I/configs/train.json \
 --split train \
---sample-limit 8 \
+--sample-limit 80 \
 --details-limit 0 \
 --trace-limit 8 \
 --scale-depth 0 \
@@ -165,9 +208,12 @@ TropicalGT-I/scripts/audit_tropicalgt_i_readiness.py \
 --output TropicalGT-I/outputs/train/readiness_train_dry_run.json
 ```
 
+The latest hybrid cap-sized dry run used `21,484 MB` CUDA allocation, mixed in Parameter-Golf graph records at about `31%` of the sampled batch, and passed all readiness gates.
+
 After the dry-run preflight report is clean, launch the first full TropicalGT-I run with:
 
 ```bash
+PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True \
 PYTHONPATH=TropicalGT-I/src \
 /home/iska/miniconda3/envs/tokengt/bin/python \
 TropicalGT-I/scripts/train_tropicalgt_i.py \
@@ -185,6 +231,22 @@ TropicalGT-I/scripts/train_tropicalgt_i.py \
 ```
 
 The training report includes a parquet manifest for the train and validation splits in addition to losses, graph-token counts, certificate metrics, throughput metrics, W&B metadata, visualization paths, and checkpoint paths.
+
+For the 5K Parameter-Golf review cadence, run the single-agent Codex review loop:
+
+```bash
+PYTHONPATH=TropicalGT-I/src \
+/home/iska/miniconda3/envs/tokengt/bin/python \
+TropicalGT-I/scripts/parameter_golf_codex_review_loop.py \
+--config TropicalGT-I/configs/train.json \
+--python /home/iska/miniconda3/envs/tokengt/bin/python \
+--review-every-steps 5000 \
+--target-bpb 1.18 \
+--max-total-steps 20000 \
+--restart-policy beginning
+```
+
+At every 5K boundary it writes a Codex prompt plus `active_training_contract_step_*.json/.md` containing active hyperparameters, losses, objective weights, BPB/graph-BPB metrics, tropical metrics, GFlowNet metrics, GraphCG full-rank metrics, algebra/topology metrics, memory metrics, data-source rates, throughput, VRAM, and visualization paths. If `eval.bpb` is missing or above `1.18`, the boundary is marked for review and restart according to the chosen policy.
 
 ## Eval, inference, validation, visualization
 

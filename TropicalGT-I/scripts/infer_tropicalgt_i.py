@@ -53,7 +53,13 @@ def main() -> None:
     scale_depth = int(scaling_cfg.get("depth", 0) if args.scale_depth is None else args.scale_depth)
     scale_width = int(scaling_cfg.get("width", 3) if args.scale_width is None else args.scale_width)
     scale_branch_factor = int(scaling_cfg.get("branch_factor", 2) if args.scale_branch_factor is None else args.scale_branch_factor)
-    x, y, gb, _ = collate_records([rec], int(cfg.get("seq_len", 128)), tok)
+    x, y, gb, _ = collate_records(
+        [rec],
+        int(cfg.get("seq_len", 128)),
+        tok,
+        graph_autoregressive=bool(cfg.get("graph_autoregressive_decoding", True)),
+        ar_seed=int(cfg.get("seed", 1729)),
+    )
     with torch.no_grad():
         out = model(x.to(device), gb, y.to(device))
         pred = out["logits"].argmax(dim=-1)[0].detach().cpu().tolist()

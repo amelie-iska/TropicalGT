@@ -14,7 +14,7 @@ from torch.utils.data import DataLoader
 from tqdm.auto import tqdm
 
 from .algebra import compute_topological_algebra_report, summarize_algebra_reports
-from .data import ChunkShuffleSampler, ParquetGraphDataset, encode_bytes, make_dataset, parquet_manifest
+from .data import ChunkShuffleSampler, ParquetGraphDataset, dataset_manifest, encode_record_bytes, make_dataset_from_config
 from .diagnostics import record_diagnostics
 from .memory import AnalogicalMemoryBank, memory_records_from_scaling_report
 from .metrics import aggregate_bpb_metrics, batch_bpb_metrics, explicit_graph_json_bytes, graph_token_structural_bytes
@@ -23,6 +23,177 @@ from .scaling import run_inference_scaling
 from .simplicial import build_filtered_simplicial_object
 from .tokenizer import TokenGTTokenizer
 from .visualization import write_graphcg_training_visualizations, write_inference_audit_artifacts, write_metric_visualizations, write_reasoning_visualizations
+
+
+WANDB_PRIORITY_GROUPS: tuple[tuple[str, tuple[str, ...]], ...] = (
+    (
+        "00_primary",
+        (
+            "eval_bpb",
+            "bpb",
+            "eval_graph_bpb",
+            "graph_bpb",
+            "loss",
+            "nll",
+            "gpu_mem_mb",
+        ),
+    ),
+    (
+        "01_losses",
+        (
+            "loss",
+            "nll",
+            "loss_regularizer_total",
+            "loss_regularizer_ratio",
+            "gflownet_tb",
+            "graphcg_loss",
+            "certificate_loss",
+            "tropical_margin_loss",
+            "tropical_entropy_loss",
+            "loss_gflownet_weighted",
+            "loss_graphcg_weighted",
+            "loss_margin_weighted",
+            "loss_entropy_weighted",
+            "loss_certificate_weighted",
+        ),
+    ),
+    (
+        "02_bpb",
+        (
+            "bpb",
+            "text_bpb",
+            "graph_bpb",
+            "graph_sideinfo_bpb",
+            "graph_conditioned_bpb_no_side_cost",
+            "eval_bpb",
+            "eval_text_bpb",
+            "eval_graph_bpb",
+            "eval_graph_sideinfo_bpb",
+            "eval_graph_conditioned_bpb_no_side_cost",
+            "target_bytes",
+            "nll_bits",
+            "graph_token_structural_bytes",
+            "explicit_graph_json_bytes",
+        ),
+    ),
+    (
+        "03_tropical",
+        (
+            "support_entropy",
+            "support_soft_entropy",
+            "support_unique_frac",
+            "self_support_rate",
+            "invalid_support_rate",
+            "margin_mean",
+            "margin_min",
+            "margin_p05",
+            "positive_margin_rate",
+            "wall_hit_rate",
+            "support_boundary_hit_rate",
+            "sequence_tropical_tokens_mean",
+            "sequence_tropical_stride",
+            "sequence_tropical_margin_mean",
+            "sequence_tropical_margin_min",
+            "sequence_tropical_support_entropy",
+            "sequence_tropical_weight",
+            "certificate_agreement",
+            "certificate_coverage",
+            "certificate_edge_agreement",
+            "certificate_node_agreement",
+        ),
+    ),
+    (
+        "04_gflownet",
+        (
+            "gflownet_tb",
+            "gflownet_tb_residual_abs_mean",
+            "gflownet_log_z",
+            "gflownet_reward_mean",
+            "gflownet_reward_std",
+            "gflownet_terminal_diversity",
+        ),
+    ),
+    (
+        "05_graphcg",
+        (
+            "graphcg_loss",
+            "graphcg_full_rank",
+            "graphcg_full_rank_penalty",
+            "graphcg_effective_rank",
+            "graphcg_numerical_rank",
+            "graphcg_rank_target",
+            "graphcg_min_singular_value",
+            "graphcg_max_singular_value",
+            "graphcg_direction_effective_rank",
+            "graphcg_direction_numerical_rank",
+            "graphcg_direction_singular_min",
+            "graphcg_direction_singular_max",
+            "graphcg_direction_svd_condition_proxy",
+        ),
+    ),
+    (
+        "06_graph_data",
+        (
+            "graph_tokens_mean",
+            "node_tokens_mean",
+            "edge_tokens_mean",
+            "node_edge_ratio",
+            "graph_token_node_edge_ratio",
+            "graph_json_fallback_rate",
+            "graph_json_sequentialized_rate",
+            "causal_dag_ar_rate",
+            "random_graph_ar_rate",
+            "parameter_golf_source_rate",
+            "tokens_seen",
+            "tokens_seen_total",
+            "graph_tokens_seen",
+            "graph_tokens_seen_total",
+            "examples_seen",
+        ),
+    ),
+    (
+        "07_algebra_topology",
+        (
+            "algebra_audit_records",
+            "algebra_betti0_mean",
+            "algebra_betti1_mean",
+            "algebra_euler_mean",
+            "persistence_points_mean",
+            "multipersistence_grid_points_mean",
+            "free_resolution_terms_mean",
+            "derived_signature_dim_mean",
+        ),
+    ),
+    (
+        "08_memory",
+        (
+            "analogical_memory_query_norm",
+            "analogical_memory_records_added",
+            "analogical_memory_bank_size",
+        ),
+    ),
+    (
+        "09_system",
+        (
+            "gpu_mem_mb",
+            "step_time_s",
+            "examples_per_sec",
+            "tokens_per_sec",
+            "graph_tokens_per_sec",
+            "batch_size",
+        ),
+    ),
+    (
+        "10_optimization",
+        (
+            "optimizer_lr",
+            "grad_norm",
+            "chunk_shuffle_enabled",
+            "sampler_chunks",
+            "shuffle_rows_within_chunk",
+        ),
+    ),
+)
 
 
 def load_config(path: str | Path) -> dict[str, Any]:
@@ -69,11 +240,54 @@ def setup_wandb(cfg: dict[str, Any], run_name: str):
     if wandb_cfg.get("mode"):
         os.environ["WANDB_MODE"] = wandb_cfg["mode"]
     import wandb
-    return wandb.init(project=wandb_cfg.get("project", "TropicalGT-I"), entity=wandb_cfg.get("entity"), name=run_name, config=cfg)
+    run = wandb.init(project=wandb_cfg.get("project", "TropicalGT-I"), entity=wandb_cfg.get("entity"), name=run_name, config=cfg)
+    configure_wandb_metrics(run)
+    return run
 
 
-def collate_records(records, seq_len: int, tokenizer: TokenGTTokenizer):
-    xs, ys = zip(*(encode_bytes(r.text, seq_len) for r in records))
+def configure_wandb_metrics(run: Any) -> None:
+    """Register prioritized metric namespaces for the W&B UI."""
+
+    try:
+        run.define_metric("step")
+        for group, _keys in WANDB_PRIORITY_GROUPS:
+            run.define_metric(f"{group}/*", step_metric="step")
+        for metric in (
+            "00_primary/eval_bpb",
+            "00_primary/bpb",
+            "00_primary/eval_graph_bpb",
+            "00_primary/graph_bpb",
+            "00_primary/loss",
+            "00_primary/nll",
+            "01_losses/loss_regularizer_total",
+            "09_system/gpu_mem_mb",
+        ):
+            run.define_metric(metric, step_metric="step")
+    except Exception:
+        pass
+
+
+def organize_wandb_metrics(metrics: dict[str, Any]) -> dict[str, Any]:
+    """Return ordered, namespaced W&B metrics while preserving scalar values."""
+
+    payload: dict[str, Any] = {}
+    if "step" in metrics:
+        payload["step"] = metrics["step"]
+    used: set[str] = set()
+    for group, keys in WANDB_PRIORITY_GROUPS:
+        for key in keys:
+            if key in metrics and _wandb_scalar(metrics[key]):
+                payload[f"{group}/{key}"] = metrics[key]
+                used.add(key)
+    for key, value in metrics.items():
+        if key in used or key == "step" or not _wandb_scalar(value):
+            continue
+        payload[f"{_wandb_fallback_group(key)}/{key}"] = value
+    return payload
+
+
+def collate_records(records, seq_len: int, tokenizer: TokenGTTokenizer, graph_autoregressive: bool = False, ar_seed: int = 0):
+    xs, ys = zip(*(encode_record_bytes(r, seq_len, graph_autoregressive=graph_autoregressive, seed=ar_seed) for r in records))
     return torch.stack(xs), torch.stack(ys), tokenizer.batch_encode(records), list(records)
 
 
@@ -88,24 +302,8 @@ def train(config_path: str | Path, resume_from: str | Path | None = None, max_st
     if resume_from is None:
         resume_from = cfg.get("resume_from")
     root = cfg.get("data_root")
-    require_data = bool(cfg.get("require_data", bool(root)))
-    cache_shards = int(cfg.get("cache_shards", 2))
-    train_ds = make_dataset(
-        root,
-        "train",
-        limit=cfg.get("train_limit"),
-        fixture_size=cfg.get("fixture_size", 8),
-        require_data=require_data,
-        cache_shards=cache_shards,
-    )
-    val_ds = make_dataset(
-        root,
-        "validation",
-        limit=cfg.get("val_limit", cfg.get("train_limit", 4)),
-        fixture_size=cfg.get("fixture_size", 8),
-        require_data=require_data,
-        cache_shards=cache_shards,
-    )
+    train_ds = make_dataset_from_config(cfg, "train")
+    val_ds = make_dataset_from_config(cfg, "validation")
     tokenizer = TokenGTTokenizer(**cfg.get("tokengt", {}))
     seq_len = int(cfg.get("seq_len", 128))
     batch_size = int(cfg.get("batch_size", 2))
@@ -145,7 +343,13 @@ def train(config_path: str | Path, resume_from: str | Path | None = None, max_st
         shuffle=loader_shuffle if sampler is None else False,
         sampler=sampler,
         num_workers=int(cfg.get("num_workers", 0)),
-        collate_fn=lambda r: collate_records(r, seq_len, tokenizer),
+        collate_fn=lambda r: collate_records(
+            r,
+            seq_len,
+            tokenizer,
+            graph_autoregressive=bool(cfg.get("graph_autoregressive_decoding", True)),
+            ar_seed=seed + step,
+        ),
     )
     max_steps = int(max_steps_override if max_steps_override is not None else cfg.get("max_steps", 5))
     metrics_last: dict[str, float] = {}
@@ -229,6 +433,16 @@ def train(config_path: str | Path, resume_from: str | Path | None = None, max_st
             metrics_last["graph_json_sequentialized_rate"] = sum(
                 1 for record in _records if (record.metadata or {}).get("graph_json_sequentialized", False)
             ) / max(example_count, 1)
+            metrics_last["causal_dag_ar_rate"] = sum(
+                1 for record in _records if (record.metadata or {}).get("decoding_order_kind") == "causal_dag"
+            ) / max(example_count, 1)
+            metrics_last["random_graph_ar_rate"] = sum(
+                1 for record in _records if (record.metadata or {}).get("decoding_order_kind") == "random_autoregressive"
+            ) / max(example_count, 1)
+            metrics_last["parameter_golf_source_rate"] = sum(
+                1 for record in _records if (record.metadata or {}).get("source") == "parameter_golf_bin" or (record.metadata or {}).get("hybrid_source") == "openai_parameter_golf"
+            ) / max(example_count, 1)
+            metrics_last["graph_autoregressive_decoding_enabled"] = 1.0 if cfg.get("graph_autoregressive_decoding", True) else 0.0
             metrics_last["graph_token_node_edge_ratio"] = (
                 float(graph_batch.node_counts.float().sum() / graph_batch.edge_counts.float().sum().clamp_min(1.0))
             )
@@ -247,7 +461,7 @@ def train(config_path: str | Path, resume_from: str | Path | None = None, max_st
                 metrics_last["gpu_mem_mb"] = torch.cuda.max_memory_allocated() / 1e6
             history.append(dict(metrics_last))
             if wb:
-                wb.log(metrics_last, step=step)
+                wb.log(organize_wandb_metrics(metrics_last), step=step)
             pbar.set_postfix({"loss": f"{metrics_last['loss']:.3f}", "nll": f"{metrics_last.get('nll', 0):.3f}"})
             pbar.update(1)
             if checkpoint_every > 0 and step % checkpoint_every == 0:
@@ -258,8 +472,20 @@ def train(config_path: str | Path, resume_from: str | Path | None = None, max_st
     pbar.close()
     ckpt_path = ckpt_dir / f"{run_name}.pt"
     _save_training_checkpoint(ckpt_path, model, opt, cfg, metrics_last, history, step, run_name)
-    eval_report = evaluate_model(model, val_ds, tokenizer, seq_len, batch_size, device, graph_bpb_side_weight=graph_bpb_side_weight)
+    eval_report = evaluate_model(
+        model,
+        val_ds,
+        tokenizer,
+        seq_len,
+        batch_size,
+        device,
+        graph_bpb_side_weight=graph_bpb_side_weight,
+        graph_autoregressive=bool(cfg.get("graph_autoregressive_decoding", True)),
+        ar_seed=seed,
+    )
     metrics_last.update({f"eval_{k}": v for k, v in eval_report.items() if isinstance(v, (int, float))})
+    if wb:
+        wb.log(organize_wandb_metrics(metrics_last), step=step)
     vis_paths = write_reasoning_visualizations(
         model,
         val_ds,
@@ -322,7 +548,10 @@ def train(config_path: str | Path, resume_from: str | Path | None = None, max_st
         "history": history,
         "eval": eval_report,
         "visualizations": vis_paths,
-        "dataset_manifest": parquet_manifest(root, ("train", "validation"), include_shards=False) if root else {},
+        "dataset_manifest": {
+            "train": dataset_manifest(train_ds, root, ("train", "validation")),
+            "validation": dataset_manifest(val_ds, root, ("train", "validation")),
+        },
         "sampler": sampler_report,
         "device": str(device),
         "seed": seed,
@@ -370,6 +599,36 @@ def _wandb_html_items(paths: dict[str, str]) -> list[tuple[str, str]]:
     return sorted(paths.items(), key=lambda item: (order.get(item[0], len(order)), item[0]))
 
 
+def _wandb_scalar(value: Any) -> bool:
+    return isinstance(value, (int, float, bool)) and not isinstance(value, bool) or isinstance(value, bool)
+
+
+def _wandb_fallback_group(key: str) -> str:
+    if key.startswith("eval_"):
+        return "00_primary" if key in {"eval_bpb", "eval_graph_bpb", "eval_nll", "eval_ppl"} else "02_bpb"
+    if key.startswith(("loss_",)) or key in {"loss", "nll", "ppl"}:
+        return "01_losses"
+    if key.startswith(("graph_bpb", "text_bpb", "bpb", "graph_sideinfo", "graph_conditioned", "explicit_graph", "target_bytes", "nll_bits")):
+        return "02_bpb"
+    if key.startswith(("support_", "margin_", "wall_", "certificate_", "sequence_tropical_", "tropical_", "positive_margin", "self_support", "invalid_support")):
+        return "03_tropical"
+    if key.startswith("gflownet_"):
+        return "04_gflownet"
+    if key.startswith("graphcg_"):
+        return "05_graphcg"
+    if key.startswith(("graph_", "node_", "edge_", "causal_", "random_graph_", "parameter_golf_", "tokens_seen", "examples_seen")):
+        return "06_graph_data"
+    if key.startswith(("algebra_", "homology_", "persistence_", "multipersistence_", "free_resolution_", "derived_", "betti_", "syzygy_")):
+        return "07_algebra_topology"
+    if key.startswith("analogical_memory_"):
+        return "08_memory"
+    if key.startswith(("gpu_", "step_time", "examples_per_sec", "tokens_per_sec", "batch_size")):
+        return "09_system"
+    if key.startswith(("optimizer_", "grad_", "chunk_shuffle", "sampler_", "shuffle_")):
+        return "10_optimization"
+    return "99_other"
+
+
 def evaluate_model(
     model: TropicalGTModel,
     dataset,
@@ -382,8 +641,15 @@ def evaluate_model(
     audit_level: str = "none",
     ph_backend: str = "auto",
     audit_max_simplices: int = 1024,
+    graph_autoregressive: bool = False,
+    ar_seed: int = 0,
 ) -> dict[str, Any]:
-    loader = DataLoader(dataset, batch_size=batch_size, shuffle=False, collate_fn=lambda r: collate_records(r, seq_len, tokenizer))
+    loader = DataLoader(
+        dataset,
+        batch_size=batch_size,
+        shuffle=False,
+        collate_fn=lambda r: collate_records(r, seq_len, tokenizer, graph_autoregressive=graph_autoregressive, ar_seed=ar_seed),
+    )
     total_loss = 0.0; total_tokens = 0; batches = 0
     details: list[dict[str, Any]] = []
     graph_token_total = 0
@@ -392,6 +658,9 @@ def evaluate_model(
     node_token_total = 0
     edge_token_total = 0
     fallback_total = 0
+    causal_dag_total = 0
+    random_graph_total = 0
+    parameter_golf_total = 0
     model.eval()
     with torch.no_grad():
         for x, y, graph_batch, records in loader:
@@ -406,6 +675,11 @@ def evaluate_model(
             node_token_total += int(graph_batch.node_counts.sum().item())
             edge_token_total += int(graph_batch.edge_counts.sum().item())
             fallback_total += sum(1 for record in records if (record.metadata or {}).get("graph_json_fallback", False))
+            causal_dag_total += sum(1 for record in records if (record.metadata or {}).get("decoding_order_kind") == "causal_dag")
+            random_graph_total += sum(1 for record in records if (record.metadata or {}).get("decoding_order_kind") == "random_autoregressive")
+            parameter_golf_total += sum(
+                1 for record in records if (record.metadata or {}).get("source") == "parameter_golf_bin" or (record.metadata or {}).get("hybrid_source") == "openai_parameter_golf"
+            )
             if details_limit > 0 and len(details) < details_limit:
                 needed = details_limit - len(details)
                 details.extend(
@@ -441,6 +715,10 @@ def evaluate_model(
         "edge_tokens": edge_token_total,
         "graph_json_fallback_records": fallback_total,
         "invalid_graph_rate": fallback_total / max(len(dataset), 1),
+        "causal_dag_ar_rate": causal_dag_total / max(len(dataset), 1),
+        "random_graph_ar_rate": random_graph_total / max(len(dataset), 1),
+        "parameter_golf_source_rate": parameter_golf_total / max(len(dataset), 1),
+        "graph_autoregressive_decoding_enabled": 1.0 if graph_autoregressive else 0.0,
         **bpb,
     }
     if details:

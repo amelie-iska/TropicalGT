@@ -17,6 +17,23 @@ The main optimization metric remains byte-level BPB for the OpenAI Parameter-Gol
 
 The graph structural byte budget is derived from the actual TokenGT graph tuple: masks determine live graph tokens, node counts determine endpoint-id width, and edge endpoint ids are charged when supplied.
 
+All training records are graph structured. The moved TropicalGT reasoning shards carry graph JSON and also receive deterministic sequential text path graphs. The OpenAI Parameter-Golf FineWeb stream is loaded from `external/parameter-golf/data/datasets/fineweb10B_sp1024` and decoded with `external/parameter-golf/data/tokenizers/fineweb_1024_bpe.model`; every sampled token window becomes a causal sequential DAG before TokenGT tokenization. Graphs with causal DAG structure are decoded autoregressively in topological order. Cyclic or explicitly non-causal graphs use deterministic seeded random autoregressive order.
+
+The current full `configs/train.json` model is cap-sized for Parameter Golf: width/hidden size `1760`, memory width `220`, about `38.6M` raw parameters, and an estimated stripped int8+zlib competition export of `15,633,708` bytes. The CUDA training shape is `seq_len: 1024`, `batch_size: 80`, and `checkpoint_every: 5000`; the latest hybrid readiness dry run allocated `21,484 MB` on the RTX 4090 and passed all gates. Tropical ring attention is used in two places without duplicating parameters: exact blockwise graph-token attention (`graph_tropical_block_size: 32`) and pooled long-context sequence attention (`sequence_tropical_max_tokens: 32`, `sequence_tropical_block_size: 16`, residual weight `0.125`).
+
+W&B metrics are logged in priority-ordered namespaces so the dashboard opens around the important quantities first:
+
+- `00_primary`: BPB, graph-BPB, loss, NLL, VRAM.
+- `01_losses`: objective decomposition and weighted regularizers.
+- `02_bpb`: byte, graph, and side-information accounting.
+- `03_tropical`: support, margin, wall, sequence-ring, and certificate metrics.
+- `04_gflownet`: trajectory-balance and reward diagnostics.
+- `05_graphcg`: full-rank GraphCG diagnostics and direction spectra.
+- `06_graph_data`: graph-token counts, causal/random graph AR rates, and OAI source rate.
+- `07_algebra_topology`, `08_memory`, `09_system`, and `10_optimization`: topology/algebra, analogical memory, throughput/VRAM, and optimizer/sampler metrics.
+
+The online project has been cleaned so only the latest useful smoke run remains (`pzpw99m7`). Local `wandb/` directories are disposable smoke artifacts and can be removed after syncing useful runs.
+
 All tropical margins, GraphCG factors, GFlowNet rewards, persistence summaries, and analogical memory metrics should be ablated by whether they improve held-out `bpb` and `graph_bpb`. GraphCG training now includes an explicit full-rank singular-value barrier and logs effective rank, numerical rank, singular min/max, and condition proxies so latent steering directions cannot collapse unnoticed.
 
 Run `scripts/analyze_bpb_ablations.py` on one or more `train_report.json` files to generate JSON/Markdown/HTML screens ranking which logged metrics correlate with `bpb`, `graph_bpb`, `eval_bpb`, and `eval_graph_bpb`. The report also emits best-by-target summaries with the lowest run, baseline delta, runner-up, and runner-up margin for each BPB target. Use those rankings to choose matched ablations; do not treat correlations as causal wins. Run `scripts/run_bpb_ablation_grid.py` to generate same-seed variants such as `no_graphcg`, `no_gflownet`, `no_certificate`, `no_tropical_regularizers`, and `no_auxiliary`, optionally train them in sequence, and immediately analyze their BPB deltas.
@@ -35,6 +52,22 @@ From the repository root, use the `tokengt` environment with `PYTHONPATH=Tropica
 The readiness audit should be treated as the pre-training acceptance check for this phase: it gates checkpoint reload, data-backed TokenGT conversion, sequential text graphification, finite eval, `bpb`, `graph_bpb`, topology-audit execution, ablation-tool availability, and generated visualization artifacts before a longer run is considered ready.
 
 For the full `configs/train.json` path, run the readiness audit with `--train-dry-run --require-cuda --check-wandb-key` before launching the long job. That dry run samples the moved parquet train split, builds the configured model, performs one optimizer step on CUDA, and gates finite train loss, BPB, graph-BPB, and gradient norm.
+
+For 5K-step BPB review, run:
+
+```bash
+PYTHONPATH=TropicalGT-I/src \
+/home/iska/miniconda3/envs/tokengt/bin/python \
+TropicalGT-I/scripts/parameter_golf_codex_review_loop.py \
+--config TropicalGT-I/configs/train.json \
+--python /home/iska/miniconda3/envs/tokengt/bin/python \
+--review-every-steps 5000 \
+--target-bpb 1.18 \
+--max-total-steps 20000 \
+--restart-policy beginning
+```
+
+Each boundary writes `active_training_contract_step_*.json/.md` with the active metrics, hyperparameters, losses, objectives, regularizers, dataset rates, VRAM/throughput, and restart decision. If `eval.bpb` is absent or above `1.18`, the generated Codex prompt requests a single-agent review of metrics, losses, hyperparameters, BPB behavior, and restart strategy.
 
 Full inference audits can optionally emit graph-of-thought PCA trajectories, tropical support heatmaps, persistence barcodes, multiparameter algebra JSON, GraphCG direction plots, and analogical memory retrieval artifacts. The trajectory HTML is dark-mode; hovering over a reasoning node renders the node's filtered simplicial object as an SVG in a cursor-following hover card and in the persistent side panel, and the 3D NLL view includes a smoothed NLL heatmapped surface under the reasoning graph:
 

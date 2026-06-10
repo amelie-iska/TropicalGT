@@ -9,7 +9,7 @@ sys.path.insert(0, str(ROOT / "src"))
 
 import torch
 from tropicalgt.run import load_config, load_checkpoint
-from tropicalgt.data import make_dataset
+from tropicalgt.data import make_dataset_from_config
 from tropicalgt.tokenizer import TokenGTTokenizer
 from tropicalgt.visualization import write_reasoning_visualizations
 
@@ -27,15 +27,7 @@ def main() -> None:
     cfg = load_config(args.config)
     device = torch.device("cuda" if torch.cuda.is_available() and cfg.get("device", "auto") != "cpu" else "cpu")
     model, _ = load_checkpoint(args.checkpoint, device)
-    root = cfg.get("data_root")
-    ds = make_dataset(
-        root,
-        args.split,
-        limit=cfg.get("val_limit", 8),
-        fixture_size=cfg.get("fixture_size", 8),
-        require_data=bool(cfg.get("require_data", bool(root))),
-        cache_shards=int(cfg.get("cache_shards", 2)),
-    )
+    ds = make_dataset_from_config(cfg, args.split)
     tok = TokenGTTokenizer(**cfg.get("tokengt", {}))
     paths = write_reasoning_visualizations(
         model,
