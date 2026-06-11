@@ -420,7 +420,9 @@ def write_got_trajectory_visualization(scaling_report: dict[str, object], output
                 "record_id": ids[idx],
                 "parent": candidates[idx].get("parent"),
                 "path": candidates[idx].get("path", []),
+                "embedding": candidates[idx].get("embedding"),
                 "pca": {"pc1": float(pca[idx, 0]), "pc2": float(pca[idx, 1]), "pc3": float(pca[idx, 2])},
+                "embedding_pca": {"pc1": float(pca[idx, 0]), "pc2": float(pca[idx, 1]), "pc3": float(pca[idx, 2])},
                 "plot": {"x": float(pca[idx, 0]), "y": float(pca[idx, 1]), "z_nll": float(nll_values[idx])},
                 "score": scores[idx],
                 "nll": float(nll_values[idx]),
@@ -594,11 +596,10 @@ def _write_got_embedding_map(
 
 
 def _write_full_trajectory_complex_map(scaling_report: dict[str, object], output_dir: Path) -> dict[str, str]:
+    candidates = [row for row in scaling_report.get("candidates", []) if isinstance(row, dict)]
     obj = scaling_report.get("trajectory_filtered_simplicial_object")
-    if not isinstance(obj, dict):
-        candidates = [row for row in scaling_report.get("candidates", []) if isinstance(row, dict)]
-        if candidates:
-            obj = build_reasoning_trajectory_complex(candidates)
+    if candidates and (not isinstance(obj, dict) or not _complex_has_model_io(obj)):
+        obj = build_reasoning_trajectory_complex(candidates)
     if not isinstance(obj, dict):
         return {}
     path = output_dir / "got_full_trajectory_complex.html"
@@ -607,6 +608,15 @@ def _write_full_trajectory_complex_map(scaling_report: dict[str, object], output
     _write_complex_slider_map(path, obj, title=title, subtitle="Full trajectory complex; slider filters simplices by scalar radius/filtration.")
     payload_path.write_text(json.dumps({"filtered_simplicial_object": obj}, indent=2), encoding="utf-8")
     return {"got_full_trajectory_complex": str(path), "got_full_trajectory_complex_payload": str(payload_path)}
+
+
+def _complex_has_model_io(obj: dict[str, object]) -> bool:
+    for simplex in obj.get("simplices", []) if isinstance(obj, dict) else []:
+        if not isinstance(simplex, dict) or int(simplex.get("dimension", -1)) != 0:
+            continue
+        if simplex.get("input_text") or simplex.get("decoded_argmax") or simplex.get("target_text"):
+            return True
+    return False
 
 
 def _write_reasoning_step_complex_maps(candidates: list[dict[str, object]], output_dir: Path) -> dict[str, str]:
@@ -768,12 +778,33 @@ def _complex_slider_traces(obj: dict[str, object], coords3: dict[str, tuple[floa
     vertex_z = [coords3[label][2] for label in labels if label in coords3]
     vertex_labels = [label for label in labels if label in coords3]
     vertex_by_label = {str((row.get("simplex") or [""])[0]): row for row in vertices}
-    vertex_hover = [
-        f"<b>{html.escape(label)}</b><br>type={html.escape(str(vertex_by_label.get(label, {}).get('type', 'vertex')))}"
-        f"<br>filtration={float(vertex_by_label.get(label, {}).get('filtration', 0.0) or 0.0):.4f}"
-        f"<br>{_html_clip(vertex_by_label.get(label, {}).get('text', ''), 600)}"
-        for label in vertex_labels
-    ]
+    vertex_hover = []
+    for label in vertex_labels:
+        vertex_row = vertex_by_label.get(label, {})
+        bits = [
+            f"<b>{html.escape(label)}</b>",
+            f"type={html.escape(str(vertex_row.get('type', 'vertex')))}",
+            f"filtration={float(vertex_row.get('filtration', 0.0) or 0.0):.4f}",
+        ]
+        if vertex_row.get("level") is not None:
+            bits.append(f"trajectory level={int(vertex_row.get('level', 0) or 0)}")
+        if vertex_row.get("nll") is not None:
+            bits.append(f"NLL={float(vertex_row.get('nll', 0.0) or 0.0):.4f}")
+        if vertex_row.get("score") is not None:
+            bits.append(f"score={float(vertex_row.get('score', 0.0) or 0.0):.4f}")
+        if vertex_row.get("path"):
+            bits.append(f"GoT path={html.escape(_json_clip(vertex_row.get('path'), 160))}")
+        if vertex_row.get("input_text"):
+            bits.append(f"<b>model input</b>: {_html_clip(vertex_row.get('input_text'), 900)}")
+        if vertex_row.get("target_text"):
+            bits.append(f"<b>target</b>: {_html_clip(vertex_row.get('target_text'), 500)}")
+        if vertex_row.get("decoded_argmax"):
+            bits.append(f"<b>model output</b>: {_html_clip(vertex_row.get('decoded_argmax'), 900)}")
+        if vertex_row.get("graph_json_summary"):
+            bits.append(f"<b>graph summary</b>: {html.escape(_json_clip(vertex_row.get('graph_json_summary'), 360))}")
+        if vertex_row.get("text"):
+            bits.append(_html_clip(vertex_row.get('text', ''), 600))
+        vertex_hover.append("<br>".join(bits))
     traces: list[go.Scatter3d | go.Mesh3d] = [
         go.Scatter3d(
             x=edge_x,
@@ -1080,27 +1111,100 @@ def write_tropical_support_heatmap(result: dict[str, object], output_dir: str | 
         _write_dark_empty(path, "No graph-token trace available.")
         return {"tropical_support_heatmap": str(path)}
     n = len(tokens)
-    z = np.zeros((n, n), dtype=float)
-    labels = []
+    support_indices = []
+    for token in tokens:
+        active = int(token.get("active_support_index", -1))
+        if 0 <= active < n and active not in support_indices:
+            support_indices.append(active)
+    support_indices = sorted(support_indices, key=lambda idx: (-sum(1 for token in tokens if int(token.get("active_support_index", -1)) == idx), idx))
+    if not support_indices:
+        support_indices = [0]
+    z = np.zeros((n, len(support_indices)), dtype=float)
+    hover_grid: list[list[str]] = []
+    query_labels = []
     for row_idx, token in enumerate(tokens):
         active = int(token.get("active_support_index", -1))
-        margin = float(token.get("margin", 0.0))
-        if 0 <= active < n:
-            z[row_idx, active] = margin if margin != 0.0 else 1.0
-        labels.append(f"{row_idx}:{token.get('kind','?')}:{token.get('label','')}")
-    fig = go.Figure(
-        data=go.Heatmap(
-            z=z,
-            x=labels,
-            y=labels,
-            colorscale="Viridis",
-            colorbar=dict(title="margin on active support"),
-            hovertemplate="query=%{y}<br>active=%{x}<br>value=%{z}<extra></extra>",
-        )
+        margin = float(token.get("margin", 0.0) or 0.0)
+        query_labels.append(_support_token_label(row_idx, token))
+        hover_row = []
+        for col_idx, support_idx in enumerate(support_indices):
+            support = tokens[support_idx] if 0 <= support_idx < n else {}
+            if active == support_idx:
+                z[row_idx, col_idx] = margin if margin != 0.0 else 1.0
+            hover_row.append(
+                f"query={html.escape(_support_token_label(row_idx, token, long=True))}<br>"
+                f"active support={html.escape(_support_token_label(support_idx, support, long=True))}<br>"
+                f"value={z[row_idx, col_idx]:.4f}<br>"
+                f"query text={_html_clip(token.get('text', ''), 360)}<br>"
+                f"support text={_html_clip(support.get('text', ''), 360)}"
+            )
+        hover_grid.append(hover_row)
+    support_labels = [_support_token_label(idx, tokens[idx]) for idx in support_indices]
+    counts = np.asarray([sum(1 for token in tokens if int(token.get("active_support_index", -1)) == idx) for idx in support_indices], dtype=float)
+    mean_margins = []
+    for idx in support_indices:
+        vals = [float(token.get("margin", 0.0) or 0.0) for token in tokens if int(token.get("active_support_index", -1)) == idx]
+        mean_margins.append(float(np.mean(vals)) if vals else 0.0)
+    collapse_rate = float(counts.max() / max(float(n), 1.0)) if counts.size else 0.0
+    fig = make_subplots(
+        rows=1,
+        cols=2,
+        specs=[[{"type": "heatmap"}, {"type": "bar"}]],
+        column_widths=[0.68, 0.32],
+        horizontal_spacing=0.08,
+        subplot_titles=("Observed active-support margins", "Support frequency and mean margin"),
     )
-    fig.update_layout(template="plotly_dark", title="Tropical active-support heatmap", xaxis_title="active support token", yaxis_title="query token")
+    fig.add_trace(
+        go.Heatmap(
+            z=z,
+            x=support_labels,
+            y=query_labels,
+            colorscale="Viridis",
+            colorbar=dict(title="margin", x=0.64),
+            customdata=hover_grid,
+            hovertemplate="%{customdata}<extra></extra>",
+        ),
+        row=1,
+        col=1,
+    )
+    fig.add_trace(
+        go.Bar(
+            x=support_labels,
+            y=counts.tolist(),
+            marker=dict(color=mean_margins, colorscale="Turbo", line=dict(color="#e8eef8", width=0.8)),
+            text=[f"n={int(c)}<br>m={m:.3f}" for c, m in zip(counts.tolist(), mean_margins)],
+            textposition="outside",
+            hovertext=[f"support={html.escape(label)}<br>count={int(c)}<br>mean margin={m:.4f}" for label, c, m in zip(support_labels, counts.tolist(), mean_margins)],
+            hoverinfo="text",
+            name="support frequency",
+        ),
+        row=1,
+        col=2,
+    )
+    fig.update_layout(
+        template="plotly_dark",
+        title=(
+            "Tropical active-support audit: observed supports only "
+            f"<br><sup>unique supports={len(support_indices)}/{n}, top-support collapse rate={collapse_rate:.3f}; raw token trace preserved in hover</sup>"
+        ),
+    )
+    fig.update_xaxes(title_text="active support token", tickangle=55, row=1, col=1)
+    fig.update_yaxes(title_text="query token", row=1, col=1)
+    fig.update_xaxes(title_text="support token", tickangle=55, row=1, col=2)
+    fig.update_yaxes(title_text="query count", row=1, col=2)
     _write_plotly_dark_html(path, fig, "Tropical active-support heatmap")
     return {"tropical_support_heatmap": str(path)}
+
+
+def _support_token_label(index: int, token: dict[str, object], long: bool = False) -> str:
+    kind = str(token.get("kind", "?"))
+    node_type = str(token.get("node_type", token.get("active_support_kind", "")) or "")
+    label = str(token.get("label", token.get("active_support_label", "")) or "")
+    base = f"{index}:{kind}:{node_type or label}"
+    if long:
+        node_id = token.get("node_id")
+        return base + (f":{node_id}" if node_id is not None else "")
+    return base if len(base) <= 28 else base[:25] + "..."
 
 
 def write_persistence_visualizations(
@@ -1624,7 +1728,6 @@ def _analogical_pair_figure(
     query_complex: dict[str, object],
     query_topology: dict[str, object],
 ) -> tuple[go.Figure, list[dict[str, object]], dict[str, object]]:
-    fig = go.Figure()
     panel_items: list[dict[str, object]] = []
     query_layout = _complex_3d_layout(query_complex, slab=0.0)
     query_hover = (
@@ -1634,23 +1737,28 @@ def _analogical_pair_figure(
         f"<br>{_free_resolution_line(query_topology)}"
     )
     panel_items.extend(_simplicial_panel_items([query_complex], [query_hover]))
-    _add_complex_3d_traces(
-        fig,
-        query_complex,
-        query_layout,
-        panel_idx=0,
-        name="domain: query filtered complex",
-        color="#55d6be",
-        hover_prefix="query domain",
-    )
     panel_idx = 1
     slab = 2.4
-    mem_complex = row.get("filtered_simplicial_object", {}) if isinstance(row.get("filtered_simplicial_object"), dict) else {}
+    mem_complex = (
+        row.get("trajectory_filtered_simplicial_object")
+        if isinstance(row.get("trajectory_filtered_simplicial_object"), dict)
+        else row.get("filtered_simplicial_object", {})
+    )
+    mem_complex = mem_complex if isinstance(mem_complex, dict) else {}
     mem_topology = row.get("topological_algebra", {}) if isinstance(row.get("topological_algebra"), dict) else {}
     mem_layout = _complex_3d_layout(mem_complex, slab=slab)
     sim = _topological_similarity_summary(query_topology, mem_topology, row)
     sim_map = _simplicial_map_between_complexes(query_complex, mem_complex)
-    map_report = {"memory_id": row.get("memory_id"), "record_id": row.get("record_id"), "rank": idx + 1, **sim, **sim_map}
+    map_report = {
+        "memory_id": row.get("memory_id"),
+        "record_id": row.get("record_id"),
+        "rank": idx + 1,
+        "domain_complex_summary": query_complex.get("summary", {}) if isinstance(query_complex, dict) else {},
+        "codomain_complex_summary": mem_complex.get("summary", {}) if isinstance(mem_complex, dict) else {},
+        "codomain_complex_source": "trajectory_filtered_simplicial_object" if isinstance(row.get("trajectory_filtered_simplicial_object"), dict) else "filtered_simplicial_object",
+        **sim,
+        **sim_map,
+    }
     panel_hover = (
         f"<b>codomain memory {idx + 1}</b>: {html.escape(str(row.get('memory_id', idx)))}"
         f"<br>retrieval={float(row.get('retrieval_score', 0.0)):.4f}"
@@ -1663,21 +1771,114 @@ def _analogical_pair_figure(
         f"<br>{_free_resolution_line(mem_topology)}"
     )
     panel_items.extend(_simplicial_panel_items([mem_complex], [panel_hover]))
-    _add_complex_3d_traces(
-        fig,
-        mem_complex,
-        mem_layout,
-        panel_idx=panel_idx,
-        name=f"codomain: memory {idx + 1} filtered complex",
-        color=_memory_color(idx),
-        hover_prefix=f"memory {idx + 1} codomain",
+
+    thresholds = _combined_display_thresholds(query_complex, mem_complex)
+    initial = thresholds[-1] if thresholds else 1.0
+    data = _analogical_pair_traces(query_complex, query_layout, mem_complex, mem_layout, sim_map, row, sim, idx, panel_idx, initial)
+    fig = go.Figure(data=data)
+    frames = []
+    for threshold in thresholds:
+        frames.append(
+            go.Frame(
+                name=f"{threshold:.6f}",
+                data=_analogical_pair_traces(query_complex, query_layout, mem_complex, mem_layout, sim_map, row, sim, idx, panel_idx, threshold),
+                traces=list(range(len(data))),
+            )
+        )
+    fig.frames = frames
+    if frames:
+        steps = [
+            {
+                "args": [[frame.name], {"frame": {"duration": 0, "redraw": True}, "mode": "immediate", "transition": {"duration": 0}}],
+                "label": f"{float(frame.name):.3f}",
+                "method": "animate",
+            }
+            for frame in frames
+        ]
+        fig.update_layout(
+            sliders=[
+                {
+                    "active": len(steps) - 1,
+                    "currentvalue": {"prefix": "domain/codomain filtration <= ", "font": {"color": "#dbeafe"}},
+                    "pad": {"t": 42},
+                    "steps": steps,
+                }
+            ],
+            updatemenus=[
+                {
+                    "type": "buttons",
+                    "showactive": False,
+                    "x": 0.02,
+                    "y": 0,
+                    "xanchor": "left",
+                    "yanchor": "top",
+                    "buttons": [
+                        {
+                            "label": "play filtration",
+                            "method": "animate",
+                            "args": [None, {"frame": {"duration": 240, "redraw": True}, "fromcurrent": True, "transition": {"duration": 0}}],
+                        }
+                    ],
+                }
+            ],
+        )
+    fig.update_layout(
+        template="plotly_dark",
+        title=(
+            f"Analogical reasoning memory retrieval as simplicial maps: rank {idx + 1} "
+            "trajectory-complex map from query domain to retrieved codomain"
+            "<br><sup>coordinates use embedding-derived PCoA/MDS when simplex vertices carry graph_state embeddings; slider filters both complexes and map edges</sup>"
+        ),
+        scene=dict(
+            xaxis=dict(title="domain / codomain embedding slabs", range=[-0.78, slab + 0.78]),
+            yaxis=dict(title="PCoA/MDS-2", range=[-1.25, 1.25]),
+            zaxis=dict(title="PCoA/MDS-3", range=[-1.25, 1.25]),
+            camera=dict(eye=dict(x=1.45, y=1.25, z=0.85), center=dict(x=0.02, y=0.0, z=0.0)),
+        ),
+        legend=dict(itemsizing="constant"),
     )
-    _add_simplicial_map_traces(fig, query_layout, mem_layout, sim_map, panel_idx, row, sim)
+    return fig, panel_items, map_report
+
+
+def _combined_display_thresholds(a: dict[str, object], b: dict[str, object]) -> list[float]:
+    values = sorted(set(_display_thresholds(a, max_steps=24) + _display_thresholds(b, max_steps=24)))
+    if not values:
+        return [1.0]
+    if len(values) <= 36:
+        return values
+    keep = np.linspace(0, len(values) - 1, 36, dtype=int)
+    return [values[int(idx)] for idx in keep]
+
+
+def _analogical_pair_traces(
+    query_complex: dict[str, object],
+    query_layout: dict[str, tuple[float, float, float]],
+    mem_complex: dict[str, object],
+    mem_layout: dict[str, tuple[float, float, float]],
+    sim_map: dict[str, object],
+    row: dict[str, object],
+    sim: dict[str, float],
+    idx: int,
+    panel_idx: int,
+    threshold: float,
+) -> list[go.Scatter3d | go.Mesh3d]:
+    traces: list[go.Scatter3d | go.Mesh3d] = []
+    traces.extend(_complex_filtered_plotly_traces(query_complex, query_layout, 0, "domain: query trajectory complex", "#55d6be", "query domain", threshold))
+    traces.extend(_complex_filtered_plotly_traces(mem_complex, mem_layout, panel_idx, f"codomain: memory {idx + 1} trajectory complex", _memory_color(idx), f"memory {idx + 1} codomain", threshold))
+    traces.append(_simplicial_map_trace(query_complex, mem_complex, query_layout, mem_layout, sim_map, panel_idx, row, sim, threshold))
     marker = dict(size=11, color=_memory_color(idx), showscale=False, line=dict(width=1.2, color="#e8eef8"))
-    fig.add_trace(
+    panel_hover = (
+        f"<b>rank {idx + 1} retrieved memory</b>"
+        f"<br>memory_id={html.escape(str(row.get('memory_id', idx)))}"
+        f"<br>retrieval={float(row.get('retrieval_score', 0.0)):.4f}"
+        f"<br>PH similarity={sim['persistent_homology_similarity']:.4f}"
+        f"<br>free-resolution similarity={sim['free_resolution_similarity']:.4f}"
+        f"<br>derived similarity={sim['derived_signature_similarity']:.4f}"
+    )
+    traces.append(
         go.Scatter3d(
-            x=[slab * 0.5],
-            y=[-1.22],
+            x=[1.2],
+            y=[-1.16],
             z=[1.05],
             mode="markers+text",
             marker=marker,
@@ -1689,18 +1890,189 @@ def _analogical_pair_figure(
             name=f"rank {idx + 1} invariants",
         )
     )
-    fig.update_layout(
-        template="plotly_dark",
-        title=f"Analogical reasoning memory retrieval as simplicial maps: rank {idx + 1} binary map from query domain to retrieved codomain",
-        scene=dict(
-            xaxis=dict(title="domain / codomain", range=[-0.25, slab + 0.35]),
-            yaxis=dict(title="filtered-complex layout x", range=[-1.45, 1.45]),
-            zaxis=dict(title="filtered-complex layout y", range=[-1.25, 1.25]),
-            camera=dict(eye=dict(x=1.45, y=1.25, z=0.85), center=dict(x=0.02, y=0.0, z=0.0)),
+    return traces
+
+
+def _complex_filtered_plotly_traces(
+    obj: dict[str, object],
+    coords: dict[str, tuple[float, float, float]],
+    panel_idx: int,
+    name: str,
+    color: str,
+    hover_prefix: str,
+    threshold: float,
+) -> list[go.Scatter3d | go.Mesh3d]:
+    vertex_rows = [row for row in _complex_vertex_records(obj) if float(row.get("filtration", 0.0) or 0.0) <= threshold + 1e-12]
+    visible = {str(row["label"]) for row in vertex_rows if str(row["label"]) in coords}
+    edge_x: list[float | None] = []
+    edge_y: list[float | None] = []
+    edge_z: list[float | None] = []
+    edge_hover: list[str | None] = []
+    for simplex in obj.get("simplices", []) if isinstance(obj, dict) else []:
+        if not isinstance(simplex, dict) or int(simplex.get("dimension", -1)) != 1:
+            continue
+        if float(simplex.get("filtration", 0.0) or 0.0) > threshold + 1e-12:
+            continue
+        raw = [str(v) for v in (simplex.get("simplex", []) or [])[:2]]
+        if len(raw) < 2 or raw[0] not in visible or raw[1] not in visible:
+            continue
+        ax, ay, az = coords[raw[0]]
+        bx, by, bz = coords[raw[1]]
+        hover = f"<b>{html.escape(hover_prefix)} 1-simplex</b><br>{html.escape(raw[0])} -> {html.escape(raw[1])}<br>filtration={float(simplex.get('filtration', 0.0) or 0.0):.4f}<br>type={html.escape(str(simplex.get('type', 'edge')))}"
+        edge_x.extend([ax, bx, None])
+        edge_y.extend([ay, by, None])
+        edge_z.extend([az, bz, None])
+        edge_hover.extend([hover, hover, None])
+    labels = [str(row["label"]) for row in vertex_rows if str(row["label"]) in coords]
+    xs = [coords[label][0] for label in labels]
+    ys = [coords[label][1] for label in labels]
+    zs = [coords[label][2] for label in labels]
+    vertex_by_label = {str(row["label"]): row for row in vertex_rows}
+    vertex_hover = [_complex_vertex_hover(label, vertex_by_label.get(label, {}), hover_prefix) for label in labels]
+    mesh_x: list[float] = []
+    mesh_y: list[float] = []
+    mesh_z: list[float] = []
+    tri_i: list[int] = []
+    tri_j: list[int] = []
+    tri_k: list[int] = []
+    mesh_index: dict[str, int] = {}
+    for simplex in obj.get("simplices", []) if isinstance(obj, dict) else []:
+        if not isinstance(simplex, dict) or int(simplex.get("dimension", -1)) != 2:
+            continue
+        if float(simplex.get("filtration", 0.0) or 0.0) > threshold + 1e-12:
+            continue
+        raw = [str(v) for v in (simplex.get("simplex", []) or [])[:3]]
+        if len(raw) < 3 or any(label not in visible or label not in coords for label in raw):
+            continue
+        inds = []
+        for label in raw:
+            if label not in mesh_index:
+                mesh_index[label] = len(mesh_x)
+                x, y, z = coords[label]
+                mesh_x.append(x); mesh_y.append(y); mesh_z.append(z)
+            inds.append(mesh_index[label])
+        tri_i.append(inds[0]); tri_j.append(inds[1]); tri_k.append(inds[2])
+    return [
+        go.Mesh3d(
+            x=mesh_x,
+            y=mesh_y,
+            z=mesh_z,
+            i=tri_i,
+            j=tri_j,
+            k=tri_k,
+            color=color,
+            opacity=0.18,
+            hoverinfo="skip",
+            showscale=False,
+            name=f"{name} 2-simplices",
         ),
-        legend=dict(itemsizing="constant"),
+        go.Scatter3d(
+            x=edge_x,
+            y=edge_y,
+            z=edge_z,
+            mode="lines",
+            line=dict(color=color, width=4),
+            name=f"{name} 1-simplices",
+            hovertext=edge_hover,
+            hoverinfo="text",
+            showlegend=False,
+        ),
+        go.Scatter3d(
+            x=xs,
+            y=ys,
+            z=zs,
+            mode="markers+text",
+            marker=dict(size=7, color=color, line=dict(color="#e8eef8", width=1)),
+            text=[label[:14] for label in labels],
+            textposition="top center",
+            name=name,
+            hovertext=vertex_hover,
+            hoverinfo="text",
+            customdata=[panel_idx] * len(labels),
+        ),
+    ]
+
+
+def _complex_vertex_hover(label: str, vertex_row: dict[str, object], prefix: str) -> str:
+    bits = [
+        f"<b>{html.escape(prefix)}</b>",
+        f"vertex={html.escape(label)}",
+        f"type={html.escape(str(vertex_row.get('type', 'vertex')))}",
+        f"filtration={float(vertex_row.get('filtration', 0.0) or 0.0):.4f}",
+    ]
+    if vertex_row.get("level") is not None:
+        bits.append(f"trajectory level={int(vertex_row.get('level', 0) or 0)}")
+    if vertex_row.get("nll") is not None:
+        bits.append(f"NLL={float(vertex_row.get('nll', 0.0) or 0.0):.4f}")
+    if vertex_row.get("score") is not None:
+        bits.append(f"score={float(vertex_row.get('score', 0.0) or 0.0):.4f}")
+    if vertex_row.get("path"):
+        bits.append(f"GoT path={html.escape(_json_clip(vertex_row.get('path'), 160))}")
+    if vertex_row.get("input_text"):
+        bits.append(f"<b>model input</b>: {_html_clip(vertex_row.get('input_text'), 700)}")
+    if vertex_row.get("decoded_argmax"):
+        bits.append(f"<b>model output</b>: {_html_clip(vertex_row.get('decoded_argmax'), 700)}")
+    if vertex_row.get("text"):
+        bits.append(_html_clip(vertex_row.get("text", ""), 400))
+    return "<br>".join(bits)
+
+
+def _simplicial_map_trace(
+    query_obj: dict[str, object],
+    memory_obj: dict[str, object],
+    query_layout: dict[str, tuple[float, float, float]],
+    memory_layout: dict[str, tuple[float, float, float]],
+    sim_map: dict[str, object],
+    panel_idx: int,
+    row: dict[str, object],
+    sim: dict[str, float],
+    threshold: float,
+) -> go.Scatter3d:
+    q_vertex = _vertex_by_label(query_obj)
+    m_vertex = _vertex_by_label(memory_obj)
+    map_rows = sim_map.get("vertex_map", []) if isinstance(sim_map.get("vertex_map"), list) else []
+    xs: list[float | None] = []
+    ys: list[float | None] = []
+    zs: list[float | None] = []
+    hover: list[str | None] = []
+    for mapping in map_rows:
+        if not isinstance(mapping, dict):
+            continue
+        q = str(mapping.get("query_vertex", ""))
+        m = str(mapping.get("memory_vertex", ""))
+        if q not in query_layout or m not in memory_layout:
+            continue
+        q_filtration = float(q_vertex.get(q, {}).get("filtration", 0.0) or 0.0)
+        m_filtration = float(m_vertex.get(m, {}).get("filtration", 0.0) or 0.0)
+        if max(q_filtration, m_filtration) > threshold + 1e-12:
+            continue
+        qx, qy, qz = query_layout[q]
+        mx, my, mz = memory_layout[m]
+        text = (
+            f"<b>simplicial map candidate</b>"
+            f"<br>{html.escape(q)} -> {html.escape(m)}"
+            f"<br>vertex score={float(mapping.get('score', 0.0)):.4f}"
+            f"<br>edge preservation={float(sim_map.get('edge_preservation_rate', 0.0)):.4f}"
+            f"<br>2-simplex preservation={float(sim_map.get('two_simplex_preservation_rate', 0.0)):.4f}"
+            f"<br>PH similarity={sim['persistent_homology_similarity']:.4f}"
+            f"<br>free-resolution similarity={sim['free_resolution_similarity']:.4f}"
+            f"<br>derived similarity={sim['derived_signature_similarity']:.4f}"
+        )
+        xs.extend([qx, mx, None])
+        ys.extend([qy, my, None])
+        zs.extend([qz, mz, None])
+        hover.extend([text, text, None])
+    return go.Scatter3d(
+        x=xs,
+        y=ys,
+        z=zs,
+        mode="lines",
+        line=dict(color="rgba(251,191,36,0.58)", width=3),
+        name=f"simplicial map to {row.get('memory_id')}",
+        hovertext=hover,
+        hoverinfo="text",
+        customdata=[panel_idx if value is not None else None for value in xs],
     )
-    return fig, panel_items, map_report
 
 
 def _write_analogical_topk_index(path: Path, pair_pages: list[dict[str, object]], map_reports: list[dict[str, object]]) -> None:
@@ -1776,6 +2148,11 @@ def _enrich_memory_row(row: dict[str, object], bank_records: dict[str, dict[str,
     memory_id = str(row.get("memory_id", ""))
     bank_row = bank_records.get(memory_id, {})
     enriched = {**bank_row, **row}
+    metadata = enriched.get("metadata") if isinstance(enriched.get("metadata"), dict) else {}
+    trajectory_complex = metadata.get("trajectory_filtered_simplicial_object") if isinstance(metadata, dict) else None
+    if isinstance(trajectory_complex, dict):
+        enriched["trajectory_filtered_simplicial_object"] = trajectory_complex
+        enriched.setdefault("trajectory_summary", trajectory_complex.get("summary", {}))
     if not isinstance(enriched.get("filtered_simplicial_object"), dict) and isinstance(bank_row.get("filtered_simplicial_object"), dict):
         enriched["filtered_simplicial_object"] = bank_row["filtered_simplicial_object"]
     if not isinstance(enriched.get("topological_algebra"), dict) and isinstance(bank_row.get("topological_algebra"), dict):
@@ -1785,19 +2162,20 @@ def _enrich_memory_row(row: dict[str, object], bank_records: dict[str, dict[str,
     return enriched
 
 
-def _complex_3d_layout(obj: dict[str, object], slab: float, max_vertices: int = 54) -> dict[str, tuple[float, float, float]]:
+def _complex_3d_layout(obj: dict[str, object], slab: float, max_vertices: int = 75) -> dict[str, tuple[float, float, float]]:
     vertices = _complex_vertex_records(obj)[:max_vertices]
     labels = [row["label"] for row in vertices]
+    label_set = set(labels)
     edges = [
-        {"simplex": list(pair)}
+        {"simplex": list(pair), "filtration": _edge_filtration(obj, pair)}
         for pair in _complex_edge_pairs(obj)
-        if pair[0] in set(labels) and pair[1] in set(labels)
+        if pair[0] in label_set and pair[1] in label_set
     ]
-    coords2d, _ = _simplicial_layout(labels, edges, width=360, height=260)
+    coords3_unit, _projected, _kind = _simplicial_pca3_radius_layout(labels, vertices, edges, width=520, height=420)
     coords: dict[str, tuple[float, float, float]] = {}
     for label in labels:
-        x2, y2 = coords2d.get(label, (180.0, 130.0))
-        coords[label] = (slab, (x2 - 180.0) / 150.0, (130.0 - y2) / 110.0)
+        x, y, z = coords3_unit.get(label, (0.5, 0.5, 0.5))
+        coords[label] = (slab + (x - 0.5) * 0.82, (y - 0.5) * 2.1, (z - 0.5) * 2.1)
     return coords
 
 
@@ -2002,6 +2380,15 @@ def _complex_vertex_records(obj: dict[str, object]) -> list[dict[str, object]]:
                 "type": str(simplex.get("type", "vertex")),
                 "text": str(simplex.get("text", "")),
                 "filtration": float(simplex.get("filtration", 0.0) or 0.0),
+                "embedding": simplex.get("embedding", []),
+                "score": simplex.get("score"),
+                "nll": simplex.get("nll"),
+                "level": simplex.get("level"),
+                "path": simplex.get("path", []),
+                "input_text": simplex.get("input_text", ""),
+                "target_text": simplex.get("target_text", ""),
+                "decoded_argmax": simplex.get("decoded_argmax", ""),
+                "graph_json_summary": simplex.get("graph_json_summary", {}),
             }
         )
     return vertices
@@ -2009,6 +2396,18 @@ def _complex_vertex_records(obj: dict[str, object]) -> list[dict[str, object]]:
 
 def _vertex_by_label(obj: dict[str, object]) -> dict[str, dict[str, object]]:
     return {row["label"]: row for row in _complex_vertex_records(obj)}
+
+
+def _edge_filtration(obj: dict[str, object], pair: tuple[str, str]) -> float:
+    a, b = pair
+    for simplex in obj.get("simplices", []) if isinstance(obj, dict) else []:
+        if not isinstance(simplex, dict) or int(simplex.get("dimension", -1)) != 1:
+            continue
+        raw_value = simplex.get("simplex", [])
+        raw = [str(v) for v in raw_value[:2]] if isinstance(raw_value, list) else []
+        if len(raw) >= 2 and raw[0] == a and raw[1] == b:
+            return float(simplex.get("filtration", 0.0) or 0.0)
+    return 1.0
 
 
 def _complex_edge_pairs(obj: dict[str, object]) -> list[tuple[str, str]]:
@@ -2036,15 +2435,27 @@ def _simplex_label(simplex: dict[str, object], fallback: str) -> str:
 
 def _vertex_match_score(query: dict[str, object], memory: dict[str, object]) -> float:
     score = 0.0
+    q_vec = _coerce_vertex_vector(query, max_dims=256)
+    m_vec = _coerce_vertex_vector(memory, max_dims=256)
+    if q_vec and m_vec:
+        n = min(len(q_vec), len(m_vec))
+        q_arr = np.asarray(q_vec[:n], dtype=float)
+        m_arr = np.asarray(m_vec[:n], dtype=float)
+        denom = float(np.linalg.norm(q_arr) * np.linalg.norm(m_arr))
+        if denom > 1e-12:
+            score += 6.0 * float(np.dot(q_arr, m_arr) / denom)
+        score += 2.0 / (1.0 + float(np.linalg.norm(q_arr - m_arr)))
     if query.get("label") == memory.get("label"):
-        score += 4.0
+        score += 1.0
     if query.get("type") == memory.get("type"):
-        score += 2.0
+        score += 1.5
     q_text = set(str(query.get("text", "")).lower().split())
     m_text = set(str(memory.get("text", "")).lower().split())
     if q_text or m_text:
         score += len(q_text & m_text) / max(len(q_text | m_text), 1)
     score += 1.0 / (1.0 + abs(float(query.get("filtration", 0.0)) - float(memory.get("filtration", 0.0))))
+    if query.get("level") is not None and memory.get("level") is not None:
+        score += 1.0 / (1.0 + abs(float(query.get("level", 0.0) or 0.0) - float(memory.get("level", 0.0) or 0.0)))
     return score
 
 

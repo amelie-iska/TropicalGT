@@ -117,6 +117,10 @@ def build_reasoning_trajectory_complex(candidates: list[dict[str, Any]], up_to_l
                 "nll": nll,
                 "path": row.get("path", []),
                 "embedding": row.get("embedding", []),
+                "input_text": row.get("input_text", ""),
+                "target_text": row.get("target_text", ""),
+                "decoded_argmax": row.get("decoded_argmax", ""),
+                "graph_json_summary": row.get("graph_json_summary", {}),
                 "weight": round(1.0 / (1.0 + max(nll, 0.0)), 6),
             }
         )

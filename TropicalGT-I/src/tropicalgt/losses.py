@@ -93,6 +93,11 @@ class GraphCGLoss(nn.Module):
                 "graphcg_orthogonality": zero,
                 "graphcg_sparsity": zero,
                 "graphcg_full_rank": zero,
+                "graphcg_active_full_rank": zero,
+                "graphcg_raw_full_rank": zero,
+                "graphcg_active_rank_fraction": zero,
+                "graphcg_raw_active_rank_fraction": zero,
+                "graphcg_active_full_rank_penalty": zero,
                 "graphcg_direction_effective_rank": zero,
                 "graphcg_effective_rank": zero,
                 "graphcg_direction_numerical_rank": zero,
@@ -149,6 +154,11 @@ class GraphCGLoss(nn.Module):
         raw_effective_rank = torch.exp(-(raw_spectral_probs * raw_spectral_probs.log()).sum())
         numerical_rank = active_singular_values.gt(self.full_rank_margin).float().sum()
         raw_numerical_rank = raw_active_singular_values.gt(self.full_rank_margin).float().sum()
+        rank_target_tensor = torch.tensor(float(active_rank_target), device=z.device)
+        active_full_rank = numerical_rank.ge(rank_target_tensor).to(z.dtype)
+        raw_active_full_rank = raw_numerical_rank.ge(rank_target_tensor).to(z.dtype)
+        active_rank_fraction = numerical_rank / rank_target_tensor.clamp_min(1.0)
+        raw_active_rank_fraction = raw_numerical_rank / rank_target_tensor.clamp_min(1.0)
         condition_proxy = active_singular_values.max() / active_singular_values.abs().clamp_min(1e-8).min()
         eigvals = torch.linalg.eigvalsh((gram + gram.t()) * 0.5).real
         loss = contrastive + 0.05 * orth + 0.05 * raw_full_rank + 0.001 * sparse
@@ -156,7 +166,12 @@ class GraphCGLoss(nn.Module):
             "graphcg_contrastive": contrastive.detach(),
             "graphcg_orthogonality": orth.detach(),
             "graphcg_sparsity": sparse.detach(),
-            "graphcg_full_rank": full_rank.detach(),
+            "graphcg_full_rank": active_full_rank.detach(),
+            "graphcg_active_full_rank": active_full_rank.detach(),
+            "graphcg_raw_full_rank": raw_active_full_rank.detach(),
+            "graphcg_active_rank_fraction": active_rank_fraction.detach(),
+            "graphcg_raw_active_rank_fraction": raw_active_rank_fraction.detach(),
+            "graphcg_active_full_rank_penalty": full_rank.detach(),
             "graphcg_full_rank_penalty": raw_full_rank.detach(),
             "graphcg_raw_full_rank_penalty": raw_full_rank.detach(),
             "graphcg_direction_rank_target": torch.tensor(float(rank_target), device=z.device),

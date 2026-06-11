@@ -118,6 +118,11 @@ WANDB_PRIORITY_GROUPS: tuple[tuple[str, tuple[str, ...]], ...] = (
         (
             "graphcg_loss",
             "graphcg_full_rank",
+            "graphcg_active_full_rank",
+            "graphcg_raw_full_rank",
+            "graphcg_active_rank_fraction",
+            "graphcg_raw_active_rank_fraction",
+            "graphcg_active_full_rank_penalty",
             "graphcg_full_rank_penalty",
             "graphcg_raw_full_rank_penalty",
             "graphcg_full_rank_possible",
