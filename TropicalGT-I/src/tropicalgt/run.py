@@ -561,19 +561,27 @@ def train(config_path: str | Path, resume_from: str | Path | None = None, max_st
     vis_paths.update(write_metric_visualizations(history, out_dir))
     vis_paths.update(write_graphcg_training_visualizations(model, out_dir))
     if bool(cfg.get("viz_got_scaling", False)) and len(val_ds) > 0:
+        audit_seed_record = _select_got_audit_records(
+            val_ds,
+            count=1,
+            pool=int(cfg.get("viz_got_record_pool", cfg.get("viz_limit", 8)) or 1),
+            seed=seed + step,
+        )[0][1]
         scaling = run_inference_scaling(
             model,
-            val_ds[0],
+            audit_seed_record,
             tokenizer,
             seq_len,
             device,
-            depth=int(cfg.get("viz_scale_depth", 1)),
-            width=int(cfg.get("viz_scale_width", 3)),
-            branch_factor=int(cfg.get("viz_scale_branch_factor", 2)),
+            depth=int(cfg.get("viz_scale_depth", 3)),
+            width=int(cfg.get("viz_scale_width", 4)),
+            branch_factor=int(cfg.get("viz_scale_branch_factor", 3)),
             trace_limit=int(cfg.get("viz_trace_limit", 24)),
             audit_level=audit_level,
             ph_backend=ph_backend,
             audit_max_simplices=audit_max_simplices,
+            allow_stop=bool(cfg.get("viz_scale_allow_stop", False)),
+            diverse_actions=bool(cfg.get("viz_scale_diverse_actions", True)),
         )
         if memory_bank is not None:
             records = memory_records_from_scaling_report(
@@ -698,56 +706,69 @@ def _run_periodic_validation_round(
         vis_paths.update({f"metrics_{key}": value for key, value in write_metric_visualizations(history, step_dir / "metrics").items()})
         vis_paths.update({f"graphcg_{key}": value for key, value in write_graphcg_training_visualizations(model, step_dir / "graphcg").items()})
         if bool(cfg.get("periodic_viz_got_scaling", cfg.get("viz_got_scaling", False))) and len(val_ds) > 0:
-            scaling = run_inference_scaling(
-                model,
-                val_ds[0],
-                tokenizer,
-                seq_len,
-                device,
-                depth=int(cfg.get("periodic_viz_scale_depth", cfg.get("viz_scale_depth", 1))),
-                width=int(cfg.get("periodic_viz_scale_width", cfg.get("viz_scale_width", 3))),
-                branch_factor=int(cfg.get("periodic_viz_scale_branch_factor", cfg.get("viz_scale_branch_factor", 2))),
-                trace_limit=int(cfg.get("viz_trace_limit", 24)),
-                audit_level=audit_level,
-                ph_backend=ph_backend,
-                audit_max_simplices=audit_max_simplices,
+            audit_records = _select_got_audit_records(
+                val_ds,
+                count=int(cfg.get("periodic_viz_got_examples", 3)),
+                pool=int(cfg.get("periodic_viz_got_record_pool", cfg.get("periodic_viz_limit", 16)) or 1),
+                seed=seed + step,
             )
-            audit_result: dict[str, Any] = {
-                "inference_scaling": scaling,
-                "topological_algebra": scaling.get("best", {}).get("topological_algebra"),
-            }
-            if memory_bank is not None:
-                records = memory_records_from_scaling_report(
-                    scaling,
-                    source=f"periodic:{run_name}:step{step}",
-                    min_score=cfg.get("memory_min_score"),
-                    max_records=int(cfg.get("memory_records_per_audit", 8)),
+            for example_idx, (record_idx, audit_record) in enumerate(audit_records):
+                scaling = run_inference_scaling(
+                    model,
+                    audit_record,
+                    tokenizer,
+                    seq_len,
+                    device,
+                    depth=int(cfg.get("periodic_viz_scale_depth", cfg.get("viz_scale_depth", 3))),
+                    width=int(cfg.get("periodic_viz_scale_width", cfg.get("viz_scale_width", 4))),
+                    branch_factor=int(cfg.get("periodic_viz_scale_branch_factor", cfg.get("viz_scale_branch_factor", 3))),
+                    trace_limit=int(cfg.get("viz_trace_limit", 24)),
+                    audit_level=audit_level,
+                    ph_backend=ph_backend,
+                    audit_max_simplices=audit_max_simplices,
+                    allow_stop=bool(cfg.get("periodic_viz_scale_allow_stop", cfg.get("viz_scale_allow_stop", False))),
+                    diverse_actions=bool(cfg.get("periodic_viz_scale_diverse_actions", cfg.get("viz_scale_diverse_actions", True))),
                 )
-                memory_bank.extend(records)
-                memory_bank.save()
-                memory_added_this_round = len(records)
-                query_embedding, query_signature = query_signature_from_report(audit_result)
-                audit_result["analogical_memory_retrieval"] = {
-                    "bank_path": str(memory_bank.path),
-                    "bank_size": len(memory_bank.records),
-                    "records_added": memory_added_this_round,
-                    "top_k": int(cfg.get("periodic_memory_retrieve_top_k", 5)),
-                    "retrieved": memory_bank.retrieve(
-                        query_embedding,
-                        query_signature,
-                        top_k=int(cfg.get("periodic_memory_retrieve_top_k", 5)),
-                    ),
+                audit_result: dict[str, Any] = {
+                    "inference_scaling": scaling,
+                    "topological_algebra": scaling.get("best", {}).get("topological_algebra"),
+                    "audit_seed_record_index": record_idx,
+                    "audit_seed_record_id": audit_record.record_id,
                 }
-            vis_paths.update(
-                {
-                    f"got_audit_{key}": value
-                    for key, value in write_inference_audit_artifacts(
-                        audit_result,
-                        step_dir / "got_audit",
-                        render_html=True,
-                    ).items()
-                }
-            )
+                if memory_bank is not None:
+                    records = memory_records_from_scaling_report(
+                        scaling,
+                        source=f"periodic:{run_name}:step{step}:record{record_idx}",
+                        min_score=cfg.get("memory_min_score"),
+                        max_records=int(cfg.get("memory_records_per_audit", 8)),
+                    )
+                    memory_bank.extend(records)
+                    memory_bank.save()
+                    memory_added_this_round += len(records)
+                    query_embedding, query_signature = query_signature_from_report(audit_result)
+                    audit_result["analogical_memory_retrieval"] = {
+                        "bank_path": str(memory_bank.path),
+                        "bank_size": len(memory_bank.records),
+                        "records_added": len(records),
+                        "top_k": int(cfg.get("periodic_memory_retrieve_top_k", 5)),
+                        "retrieved": memory_bank.retrieve(
+                            query_embedding,
+                            query_signature,
+                            top_k=int(cfg.get("periodic_memory_retrieve_top_k", 5)),
+                        ),
+                    }
+                example_dir = step_dir / "got_audit" if example_idx == 0 else step_dir / "got_audit" / f"example_{example_idx:02d}"
+                prefix = "got_audit" if example_idx == 0 else f"got_audit_example_{example_idx:02d}"
+                vis_paths.update(
+                    {
+                        f"{prefix}_{key}": value
+                        for key, value in write_inference_audit_artifacts(
+                            audit_result,
+                            example_dir,
+                            render_html=True,
+                        ).items()
+                    }
+                )
             if memory_bank is not None:
                 memory_records_added += memory_added_this_round
                 metrics["analogical_memory_records_added"] = float(memory_records_added)
@@ -769,6 +790,55 @@ def _run_periodic_validation_round(
     with manifest_path.open("a", encoding="utf-8") as fh:
         fh.write(json.dumps({"step": step, "report": str(report_path), "visualization_count": len(vis_paths)}) + "\n")
     return report
+
+
+def _select_got_audit_records(dataset: Any, count: int, pool: int, seed: int) -> list[tuple[int, Any]]:
+    try:
+        n = len(dataset)
+    except Exception:
+        n = 0
+    if n <= 0:
+        return []
+    count = max(int(count), 1)
+    pool = max(int(pool), count)
+    pool = min(pool, n)
+    offset = int(seed) % n
+    indices = [int((offset + idx) % n) for idx in range(pool)]
+    scored: list[tuple[float, int, Any]] = []
+    for idx in indices:
+        try:
+            record = dataset[idx]
+        except Exception:
+            continue
+        scored.append((_got_audit_record_score(record), idx, record))
+    if not scored:
+        record = dataset[0]
+        return [(0, record)]
+    scored.sort(key=lambda item: (item[0], -item[1]), reverse=True)
+    selected = scored[:count]
+    selected.sort(key=lambda item: item[1])
+    return [(idx, record) for _, idx, record in selected]
+
+
+def _got_audit_record_score(record: Any) -> float:
+    graph = getattr(record, "graph_json", None)
+    graph = graph if isinstance(graph, dict) else {}
+    nodes = graph.get("nodes", []) if isinstance(graph.get("nodes", []), list) else []
+    edges = graph.get("edges", []) if isinstance(graph.get("edges", []), list) else []
+    node_types = {str(node.get("type", "")) for node in nodes if isinstance(node, dict)}
+    edge_types = {str(edge.get("type", "")) for edge in edges if isinstance(edge, dict)}
+    text = str(getattr(record, "text", "") or "")
+    reasoning = str(getattr(record, "reasoning", "") or "")
+    answer = str(getattr(record, "answer", "") or "")
+    return (
+        4.0 * min(len(nodes), 96)
+        + 3.0 * min(len(edges), 160)
+        + 9.0 * len(node_types)
+        + 4.0 * len(edge_types)
+        + min(len(text), 4096) / 64.0
+        + min(len(reasoning), 4096) / 40.0
+        + min(len(answer), 1024) / 48.0
+    )
 
 
 def _log_wandb_html_artifacts(

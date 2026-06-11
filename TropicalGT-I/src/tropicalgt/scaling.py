@@ -103,6 +103,8 @@ def run_inference_scaling(
     audit_level: str = "none",
     ph_backend: str = "auto",
     audit_max_simplices: int = 1024,
+    allow_stop: bool = False,
+    diverse_actions: bool = True,
 ) -> dict[str, Any]:
     depth = max(int(depth), 0)
     width = max(int(width), 1)
@@ -140,7 +142,13 @@ def run_inference_scaling(
         next_frontier = []
         for rank, row in enumerate(scored):
             probs = row["gflownet_action_probs"]
-            actions = sorted(probs, key=lambda item: item["probability"], reverse=True)[:branch_factor]
+            actions = _select_branch_actions(
+                probs,
+                branch_factor=branch_factor,
+                allow_stop=allow_stop,
+                diverse_actions=diverse_actions,
+                path=row.get("path", []),
+            )
             for branch_rank, action_row in enumerate(actions):
                 child = apply_reasoning_action(row["record"], action_row["action"], rank=branch_rank)
                 next_frontier.append(
@@ -187,6 +195,8 @@ def run_inference_scaling(
         "depth": depth,
         "width": width,
         "branch_factor": branch_factor,
+        "allow_stop": bool(allow_stop),
+        "diverse_actions": bool(diverse_actions),
         "evaluated_candidates": len(evaluated),
         "levels": levels,
         "best": _public_candidate(best),
@@ -322,6 +332,49 @@ def _action_probs(row: torch.Tensor) -> list[dict[str, Any]]:
         }
         for idx, value in sorted(enumerate(row.tolist()), key=lambda item: item[1], reverse=True)
     ]
+
+
+def _select_branch_actions(
+    action_probs: list[dict[str, Any]],
+    branch_factor: int,
+    allow_stop: bool = False,
+    diverse_actions: bool = True,
+    path: list[str] | None = None,
+) -> list[dict[str, Any]]:
+    branch_factor = max(int(branch_factor), 1)
+    path_counts = {action: list(path or []).count(action) for action in ACTION_NAMES}
+    candidates = []
+    for row in action_probs:
+        action = str(row.get("action", ""))
+        if action == "stop" and not allow_stop:
+            continue
+        prob = float(row.get("probability", 0.0))
+        repeat_penalty = 0.035 * float(path_counts.get(action, 0))
+        candidates.append({**row, "audit_selection_score": prob - repeat_penalty})
+    if not candidates:
+        fallback = next((row for row in action_probs if str(row.get("action", "")) != "stop"), None)
+        return [fallback or {"action": "expand", "probability": 1.0, "audit_selection_score": 1.0}]
+    ranked = sorted(candidates, key=lambda item: float(item.get("audit_selection_score", 0.0)), reverse=True)
+    if not diverse_actions:
+        return ranked[:branch_factor]
+    selected: list[dict[str, Any]] = []
+    seen: set[str] = set()
+
+    def add_action(action_name: str) -> None:
+        if len(selected) >= branch_factor or action_name in seen:
+            return
+        match = next((row for row in ranked if str(row.get("action", "")) == action_name), None)
+        if match is not None:
+            selected.append(match)
+            seen.add(action_name)
+
+    if ranked:
+        add_action(str(ranked[0].get("action", "")))
+    for action_name in ("expand", "verify", "retrieve", "refine", "merge", "compress", "reject"):
+        add_action(action_name)
+    for row in ranked:
+        add_action(str(row.get("action", "")))
+    return selected[:branch_factor] or ranked[:branch_factor]
 
 
 def _graphcg_projection(model, graph_state: torch.Tensor, top_k: int = 4) -> list[dict[str, Any]]:

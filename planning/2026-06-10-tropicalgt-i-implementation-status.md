@@ -164,3 +164,12 @@
 - Changed GraphCG steering to use an effective QR full-rank basis for projections, diagnostics, and visualizations while retaining raw-direction rank-collapse penalties.
 - Split each non-stop GFlowNet reasoning action into explicit graph micro-steps, so future inference states grow parse/check/rewrite/proposal-style filtered simplicial objects instead of a single coarse node.
 - Verification: `conda run -n tokengt python -m pytest TropicalGT-I/tests -q` passed with 52 tests.
+
+## Step-0 Restart Preparation
+
+- Diagnosed the trivial-looking step-250 GoT audit as a generation-depth problem: periodic validation was configured with `periodic_viz_scale_depth=1`, so the saved audit could only show a root plus one candidate frontier regardless of the renderer.
+- Updated inference-scaling expansion to default to non-stop, diverse reasoning actions for audit generation, preventing early `stop` or repeated top actions from collapsing the visualized tree.
+- Updated periodic validation to select graph/text-rich validation records rather than always using `val_ds[0]`, and to emit multiple GoT audit examples per validation round.  The first example remains at `periodic/step_XXXXXXXX/got_audit/`; additional examples are written below `got_audit/example_01`, `got_audit/example_02`, and so on.
+- Updated `TropicalGT-I/configs/train.json` so the fresh run uses depth `3`, width `4`, branch factor `3`, three audit examples, a larger candidate-record pool, clean analogical-memory state, and no stop action in audit expansion by default.
+- Archived stale pre-restart train outputs and analogical memory under `TropicalGT-I/outputs/train/restart_archive_20260611_020950` so new step-250 artifacts are unambiguous.
+- Verification before restart: `conda run -n tokengt python -m pytest TropicalGT-I/tests/test_scaling.py TropicalGT-I/tests/test_simplicial_visualization.py -q` passed with 11 tests; `conda run -n tokengt python -m pytest TropicalGT-I/tests -q` passed with 54 tests.

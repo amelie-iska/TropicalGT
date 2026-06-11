@@ -5,6 +5,7 @@ import torch
 
 from tropicalgt.data import FixtureGraphDataset
 from tropicalgt.model import TropicalGTConfig, TropicalGTModel
+from tropicalgt.scaling import apply_reasoning_action
 from tropicalgt.simplicial import build_filtered_simplicial_object
 from tropicalgt.tokenizer import TokenGTTokenizer
 from tropicalgt.visualization import (
@@ -81,12 +82,18 @@ def test_visualization_payload_contains_topology_when_audited(tmp_path: Path):
 def test_got_trajectory_visualization_renders_simplicial_panel_and_nll_surface(tmp_path: Path):
     record = FixtureGraphDataset(1)[0]
     obj = build_filtered_simplicial_object(record)
+    child_record = apply_reasoning_action(record, "verify", rank=0)
+    sibling_record = apply_reasoning_action(record, "expand", rank=1)
+    leaf_record = apply_reasoning_action(child_record, "refine", rank=0)
+    child_obj = build_filtered_simplicial_object(child_record)
+    sibling_obj = build_filtered_simplicial_object(sibling_record)
+    leaf_obj = build_filtered_simplicial_object(leaf_record)
     scaling = {
         "candidates": [
-            {"record_id": "root", "embedding": [0.0, 0.0, 0.0], "score": 0.1, "nll": 2.0, "level": 0, "path": [], "filtered_simplicial_object": obj},
-            {"record_id": "child", "parent": "root", "embedding": [1.0, 0.3, 0.2], "score": 0.5, "nll": 1.3, "level": 1, "path": ["verify"], "input_text": "input", "decoded_argmax": "output", "filtered_simplicial_object": obj},
-            {"record_id": "sibling", "parent": "root", "embedding": [0.8, -0.3, 0.1], "score": 0.4, "nll": 1.5, "level": 1, "path": ["expand"], "filtered_simplicial_object": obj},
-            {"record_id": "leaf", "parent": "child", "embedding": [1.4, 0.7, 0.4], "score": 0.7, "nll": 0.9, "level": 2, "path": ["verify", "refine"], "filtered_simplicial_object": obj},
+            {"record_id": record.record_id, "embedding": [0.0, 0.0, 0.0], "score": 0.1, "nll": 2.0, "level": 0, "path": [], "filtered_simplicial_object": obj},
+            {"record_id": child_record.record_id, "parent": record.record_id, "embedding": [1.0, 0.3, 0.2], "score": 0.5, "nll": 1.3, "level": 1, "path": ["verify"], "input_text": "input", "decoded_argmax": "output", "filtered_simplicial_object": child_obj},
+            {"record_id": sibling_record.record_id, "parent": record.record_id, "embedding": [0.8, -0.3, 0.1], "score": 0.4, "nll": 1.5, "level": 1, "path": ["expand"], "filtered_simplicial_object": sibling_obj},
+            {"record_id": leaf_record.record_id, "parent": child_record.record_id, "embedding": [1.4, 0.7, 0.4], "score": 0.7, "nll": 0.9, "level": 2, "path": ["verify", "refine"], "filtered_simplicial_object": leaf_obj},
         ]
     }
     paths = write_got_trajectory_visualization(scaling, tmp_path)
@@ -104,7 +111,10 @@ def test_got_trajectory_visualization_renders_simplicial_panel_and_nll_surface(t
     assert payload["nll_surface"]["surface_kind"] in {"smooth_exact_rbf_surface", "sparse_exact_triangular_nll_mesh", "exact_delaunay_nll_mesh"}
     assert payload["nll_surface"]["max_point_residual"] < 1e-5
     assert len(payload["edges"]) == 3
-    assert sum(1 for edge in payload["edges"] if edge["source"] == "root") == 2
+    assert sum(1 for edge in payload["edges"] if edge["source"] == record.record_id) == 2
+    assert payload["microstep_nodes"]
+    assert any(row["type"] == "verification_check" for row in payload["microstep_nodes"])
+    assert "reasoning microstep" in html
     assert payload["nodes"][1]["input_text"] == "input"
     assert payload["nodes"][1]["decoded_argmax"] == "output"
     assert payload["nodes"][1]["level"] == 1
@@ -173,6 +183,17 @@ def test_analogical_memory_visualization_renders_simplicial_maps(tmp_path: Path)
                 "filtered_simplicial_object": obj,
                 "topological_algebra": topo,
                 "derived_signature": topo["derived_equivalence_signature"],
+            },
+            {
+                "memory_id": "mem1",
+                "record_id": "rec1",
+                "retrieval_score": 0.7,
+                "embedding_similarity": 0.6,
+                "signature_similarity": 0.5,
+                "quality_score": 0.4,
+                "filtered_simplicial_object": obj,
+                "topological_algebra": topo,
+                "derived_signature": topo["derived_equivalence_signature"],
             }
         ],
     }
@@ -190,6 +211,16 @@ def test_analogical_memory_visualization_renders_simplicial_maps(tmp_path: Path)
     assert "simplicial-object-panel" in html
     assert '<input id="filtration-slider"' in html
     assert '<div class="filtration-controls"' in html
+    assert "memory 2" not in html
+    assert "analogical_memory_topk_index_html" in paths
+    assert "analogical_memory_map_02_html" in paths
+    index_html = Path(paths["analogical_memory_topk_index_html"]).read_text(encoding="utf-8")
+    rank2_html = Path(paths["analogical_memory_map_02_html"]).read_text(encoding="utf-8")
+    assert "top-k retrieval as separate filtered simplicial maps" in index_html
+    assert "rank 2" in rank2_html
+    assert '<input id="filtration-slider"' in rank2_html
+    assert len(maps["maps"]) == 2
+    assert maps["maps"][1]["pair_page"].endswith("analogical_memory_map_02.html")
     assert maps["maps"][0]["edge_preservation_rate"] >= 0.0
     assert maps["maps"][0]["derived_signature_similarity"] >= 0.0
 

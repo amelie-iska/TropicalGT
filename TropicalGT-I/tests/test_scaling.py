@@ -2,7 +2,7 @@ import torch
 
 from tropicalgt.data import FixtureGraphDataset
 from tropicalgt.model import TropicalGTConfig, TropicalGTModel
-from tropicalgt.scaling import apply_reasoning_action, run_inference_scaling
+from tropicalgt.scaling import _select_branch_actions, apply_reasoning_action, run_inference_scaling
 from tropicalgt.tokenizer import TokenGTTokenizer
 
 
@@ -39,3 +39,38 @@ def test_inference_scaling_returns_best_candidate():
     assert "best" in report
     assert "filtered_simplicial_object" in report["best"]
     assert "gflownet_action_probs" in report["best"]
+
+
+def test_inference_scaling_uses_deeper_non_stop_audit_branches():
+    record = FixtureGraphDataset(1)[0]
+    tok = TokenGTTokenizer(feature_dim=48)
+    model = TropicalGTModel(TropicalGTConfig(dim=32, hidden_dim=32, graph_feature_dim=48))
+    report = run_inference_scaling(
+        model,
+        record,
+        tok,
+        seq_len=32,
+        device=torch.device("cpu"),
+        depth=2,
+        width=3,
+        branch_factor=3,
+        trace_limit=4,
+        allow_stop=False,
+        diverse_actions=True,
+    )
+    assert report["depth"] == 2
+    assert report["evaluated_candidates"] > 3
+    assert any(len(row.get("path", [])) >= 2 for row in report["candidates"])
+    assert all("stop" not in row.get("path", []) for row in report["candidates"])
+
+
+def test_select_branch_actions_filters_stop_and_preserves_diversity():
+    probs = [
+        {"action": "stop", "probability": 0.9},
+        {"action": "merge", "probability": 0.8},
+        {"action": "expand", "probability": 0.7},
+        {"action": "verify", "probability": 0.6},
+    ]
+    selected = _select_branch_actions(probs, branch_factor=3, allow_stop=False, diverse_actions=True)
+    actions = [row["action"] for row in selected]
+    assert actions == ["merge", "expand", "verify"]
