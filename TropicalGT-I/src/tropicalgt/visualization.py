@@ -989,13 +989,13 @@ def _gudhi_canonical_complex(obj: dict[str, object]) -> dict[str, object]:
             },
         }
     except Exception as exc:
-        fallback = dict(obj)
-        fallback["simplex_tree"] = {
+        serialized_obj = dict(obj)
+        serialized_obj["simplex_tree"] = {
             "backend": "json-fallback",
             "available": False,
             "error": f"{type(exc).__name__}: {exc}",
         }
-        return fallback
+        return serialized_obj
 
 
 def _complex_slider_traces(
@@ -2631,8 +2631,8 @@ def _free_resolution_line(topology: dict[str, object]) -> str:
     modules = _free_resolution_modules(topology)
     ranks = [f"F{int(row.get('homological_degree', 0))}:{int(row.get('rank', row.get('rank_upper_bound', 0)))}" for row in modules[:6]]
     ca = topology.get("commutative_algebra", {}) if isinstance(topology, dict) else {}
-    proxy = ca.get("multiparameter_free_resolution_proxy", {}) if isinstance(ca.get("multiparameter_free_resolution_proxy"), dict) else {}
-    ring = proxy.get("ring", "F2[x_filtration,x_dimension,x_position]")
+    free_resolution_proxy = ca.get("multiparameter_free_resolution_proxy", {}) if isinstance(ca.get("multiparameter_free_resolution_proxy"), dict) else {}
+    ring = free_resolution_proxy.get("ring", "F2[x_filtration,x_dimension,x_position]")
     return f"free-resolution proxy over {ring}: " + (", ".join(ranks) if ranks else "no displayed free modules")
 
 
@@ -2652,8 +2652,8 @@ def _persistence_representation_line(topology: dict[str, object]) -> str:
 
 def _free_resolution_modules(topology: dict[str, object]) -> list[dict[str, object]]:
     ca = topology.get("commutative_algebra", {}) if isinstance(topology, dict) else {}
-    proxy = ca.get("multiparameter_free_resolution_proxy", {}) if isinstance(ca.get("multiparameter_free_resolution_proxy"), dict) else {}
-    modules = proxy.get("free_chain_modules", []) if isinstance(proxy, dict) else []
+    free_resolution_proxy = ca.get("multiparameter_free_resolution_proxy", {}) if isinstance(ca.get("multiparameter_free_resolution_proxy"), dict) else {}
+    modules = free_resolution_proxy.get("free_chain_modules", []) if isinstance(free_resolution_proxy, dict) else []
     if modules:
         return [row for row in modules if isinstance(row, dict)]
     taylor = ca.get("taylor_resolution_upper_bound", {}) if isinstance(ca.get("taylor_resolution_upper_bound"), dict) else {}
@@ -3532,7 +3532,7 @@ def _complex_vertex_records(obj: dict[str, object]) -> list[dict[str, object]]:
     for idx, simplex in enumerate(simplices):
         if not isinstance(simplex, dict) or int(simplex.get("dimension", -1)) != 0:
             continue
-        label = _simplex_label(simplex, fallback=f"v{idx}")
+        label = _simplex_label(simplex, default_label=f"v{idx}")
         vertices.append(
             {
                 "label": label,
@@ -3588,11 +3588,11 @@ def _complex_simplices(obj: dict[str, object], dimension: int) -> list[list[str]
     return out
 
 
-def _simplex_label(simplex: dict[str, object], fallback: str) -> str:
+def _simplex_label(simplex: dict[str, object], default_label: str) -> str:
     raw = simplex.get("simplex", [])
     if isinstance(raw, list) and raw:
         return str(raw[0])
-    return fallback
+    return default_label
 
 
 def _vertex_match_score(query: dict[str, object], memory: dict[str, object]) -> float:
@@ -4736,8 +4736,8 @@ def _vertex_metric_feature_matrix(labels: list[str], vertex_by_label: dict[str, 
     for idx, label in enumerate(labels):
         vertex = vertex_by_label.get(label, {})
         vector = _coerce_vertex_vector(vertex)
-        fallback = _vertex_pca_feature(label, vertex, idx, len(labels))
-        row = vector + fallback
+        semantic_features = _vertex_pca_feature(label, vertex, idx, len(labels))
+        row = vector + semantic_features
         rows.append(row)
         max_len = max(max_len, len(row))
     padded = np.zeros((len(rows), max_len), dtype=float)

@@ -34,7 +34,7 @@ def main() -> None:
     records = all_records[: min(len(all_records), int(cfg.get("batch_size", 2)))]
     tok = TokenGTTokenizer(**cfg.get("tokengt", {}))
     batch = tok.batch_encode(records)
-    fallback_count = sum(1 for record in all_records if (record.metadata or {}).get("graph_json_fallback", False))
+    graph_json_fallback_count = sum(1 for record in all_records if (record.metadata or {}).get("graph_json_fallback", False))
     causal_dag_count = sum(1 for record in all_records if (record.metadata or {}).get("decoding_order_kind") == "causal_dag")
     random_ar_count = sum(1 for record in all_records if (record.metadata or {}).get("decoding_order_kind") == "random_autoregressive")
     parameter_golf_count = sum(
@@ -59,8 +59,8 @@ def main() -> None:
         "split": args.split,
         "dataset_required": require_data,
         "manifest": dataset_manifest(ds, root),
-        "graph_json_fallback_records": fallback_count,
-        "invalid_graph_rate": fallback_count / max(len(ds), 1),
+        "graph_json_fallback_records": graph_json_fallback_count,
+        "invalid_graph_rate": graph_json_fallback_count / max(len(ds), 1),
         "causal_dag_ar_records": causal_dag_count,
         "causal_dag_ar_rate": causal_dag_count / max(len(ds), 1),
         "random_graph_ar_records": random_ar_count,

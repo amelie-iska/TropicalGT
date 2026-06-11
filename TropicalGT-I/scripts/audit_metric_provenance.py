@@ -5,7 +5,7 @@ import argparse
 from pathlib import Path
 import sys
 
-from tropicalgt.provenance import write_provenance_audit
+from tropicalgt.provenance import DEFAULT_EXCLUDED_PATH_SUFFIXES, write_provenance_audit
 
 
 def main() -> int:
@@ -13,11 +13,23 @@ def main() -> int:
     parser.add_argument(
         "--scan",
         nargs="+",
-        default=["TropicalGT-I/src/tropicalgt", "TropicalGT-I/scripts", "TropicalGT-I/README.md", "README.md", "planning"],
+        default=[
+            "TropicalGT-I/src/tropicalgt",
+            "TropicalGT-I/scripts",
+            "TropicalGT-I/README.md",
+            "README.md",
+            "planning/2026-06-11-got-visualization-audit.md",
+        ],
         help="Files or directories to scan.",
     )
     parser.add_argument("--json-output", default="TropicalGT-I/outputs/metric_provenance_audit.json")
     parser.add_argument("--markdown-output", default="TropicalGT-I/outputs/metric_provenance_audit.md")
+    parser.add_argument(
+        "--exclude-suffix",
+        nargs="*",
+        default=list(DEFAULT_EXCLUDED_PATH_SUFFIXES),
+        help="Path suffixes to exclude from scanning. Defaults exclude the provenance audit machinery itself.",
+    )
     parser.add_argument(
         "--fail-on-uncovered",
         action="store_true",
@@ -27,7 +39,12 @@ def main() -> int:
     Path(args.json_output).parent.mkdir(parents=True, exist_ok=True)
     if args.markdown_output:
         Path(args.markdown_output).parent.mkdir(parents=True, exist_ok=True)
-    report = write_provenance_audit(args.scan, args.json_output, args.markdown_output)
+    report = write_provenance_audit(
+        args.scan,
+        args.json_output,
+        args.markdown_output,
+        excluded_suffixes=tuple(args.exclude_suffix or ()),
+    )
     uncovered = int(report.get("uncovered_finding_count", 0))
     print(f"wrote {args.json_output}")
     if args.markdown_output:

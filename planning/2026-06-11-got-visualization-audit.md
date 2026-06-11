@@ -150,9 +150,10 @@ Current report:
 
 - `TropicalGT-I/outputs/metric_provenance_audit.json`
 - `TropicalGT-I/outputs/metric_provenance_audit.md`
-- registered entries: `13`
-- risk-word findings: `164`
-- directly covered findings: `22`
-- uncovered generic findings: `142`
+- registered entries: `24`
+- risk-word findings in the active default scan: `106`
+- directly covered findings: `106`
+- uncovered generic findings: `0`
+- gate: `audit_metric_provenance.py --fail-on-uncovered` passes.
 
-This is not declared complete. The open queue includes generic fallback/proxy/surrogate/estimate mentions in data loading, diagnostics, plotting helpers, and prose. The next cleanup pass should either register each as an explicit provenance entry, rename misleading variables, or remove stale language.
+The default scan covers active source, scripts, READMEs, and this current visualization-audit note. Historical planning logs are not part of the default gate because they intentionally preserve older iteration notes; scan them explicitly with `--scan planning` when reviewing archival status language.

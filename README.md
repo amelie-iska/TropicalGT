@@ -291,7 +291,7 @@ Metric and visualization provenance can be audited with:
 PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python TropicalGT-I/scripts/audit_metric_provenance.py
 ```
 
-The report registers exact metrics, fast vectorized topology features, sample interpolants, visual surrogates, spectral diagnostics, and known fallbacks. Remaining uncovered prose/code mentions are treated as an explicit audit queue, not as validated training objectives.
+The report registers exact metrics, fast vectorized topology features, sample interpolants, visual surrogates, spectral diagnostics, and known fallbacks. The default active-code/docs scan now passes with `--fail-on-uncovered`; historical planning logs can still be audited explicitly with `--scan planning` when reviewing older status notes.
 
 ## BPB ablation analysis
 

@@ -958,7 +958,7 @@ def evaluate_model(
     explicit_graph_json_bytes_total = 0
     node_token_total = 0
     edge_token_total = 0
-    fallback_total = 0
+    graph_json_fallback_total = 0
     causal_dag_total = 0
     random_graph_total = 0
     parameter_golf_total = 0
@@ -975,7 +975,7 @@ def evaluate_model(
             explicit_graph_json_bytes_total += sum(explicit_graph_json_bytes(record) for record in records)
             node_token_total += int(graph_batch.node_counts.sum().item())
             edge_token_total += int(graph_batch.edge_counts.sum().item())
-            fallback_total += sum(1 for record in records if (record.metadata or {}).get("graph_json_fallback", False))
+            graph_json_fallback_total += sum(1 for record in records if (record.metadata or {}).get("graph_json_fallback", False))
             causal_dag_total += sum(1 for record in records if (record.metadata or {}).get("decoding_order_kind") == "causal_dag")
             random_graph_total += sum(1 for record in records if (record.metadata or {}).get("decoding_order_kind") == "random_autoregressive")
             parameter_golf_total += sum(
@@ -1014,8 +1014,8 @@ def evaluate_model(
         "graph_tokens": graph_token_total,
         "node_tokens": node_token_total,
         "edge_tokens": edge_token_total,
-        "graph_json_fallback_records": fallback_total,
-        "invalid_graph_rate": fallback_total / max(len(dataset), 1),
+        "graph_json_fallback_records": graph_json_fallback_total,
+        "invalid_graph_rate": graph_json_fallback_total / max(len(dataset), 1),
         "causal_dag_ar_rate": causal_dag_total / max(len(dataset), 1),
         "random_graph_ar_rate": random_graph_total / max(len(dataset), 1),
         "parameter_golf_source_rate": parameter_golf_total / max(len(dataset), 1),
