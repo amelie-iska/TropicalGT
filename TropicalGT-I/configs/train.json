@@ -14,7 +14,7 @@
   "train_limit": null,
   "val_limit": 512,
   "seq_len": 1024,
-  "batch_size": 80,
+  "batch_size": 68,
   "max_steps": 20000,
   "lr": 0.0003,
   "weight_decay": 0.01,
