@@ -24,6 +24,7 @@ REQUIRED_HTML = {
     "trajectory_barcode": ("trajectory_persistence/persistence_barcode.html", ("Trajectory", "barcode")),
     "trajectory_betti": ("trajectory_persistence/persistence_module_betti.html", ("Trajectory", "Betti", "2D matrix", "decorative 3D")),
     "trajectory_representations": ("trajectory_persistence/persistence_representations.html", ("Trajectory", "GUDHI persistence vectorization", "Fast train", "eval features")),
+    "trajectory_landscapes": ("trajectory_persistence/persistence_landscapes.html", ("Trajectory", "Actual GUDHI persistence landscape functions", "lambda_1(t)", "not norm-only summaries")),
 }
 
 REQUIRED_JSON = {

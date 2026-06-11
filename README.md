@@ -283,7 +283,15 @@ TropicalGT-I/scripts/infer_tropicalgt_i.py \
 --output TropicalGT-I/outputs/gpu_smoke/inference_full_audit.json
 ```
 
-This writes a dark-mode graph-of-thought PCA trajectory whose nodes are reasoning candidates and whose edges are parent-child expansions. Hovering over a node renders the filtered simplicial complex attached to that reasoning step directly in a cursor-following hover card and in the side panel. The 3D trajectory includes both a smooth projected NLL/fitness landscape over actual model `graph_state` PCA coordinates and an exact anchor mesh through sampled reasoning states, with residual/provenance metadata in JSON. The persistence bundle includes barcodes, Betti/free-resolution growth, and `persistence_representations.html`, which uses GUDHI vector methods for landscapes, Betti curves, persistence images, silhouettes, persistence lengths, entropy, and topological vectors. The JSON payload stores the full complex, multiparameter persistence report, vectorized persistence summaries, commutative-algebra proxies, derived-equivalence signature, GraphCG direction diagnostics, NLL-surface metadata, NLL-progress diagnostics, and analogical memory retrieval details.
+This writes a dark-mode graph-of-thought PCA trajectory whose nodes are reasoning candidates and whose edges are parent-child expansions. Hovering over a node renders the filtered simplicial complex attached to that reasoning step directly in a cursor-following hover card and in the side panel. The 3D trajectory includes three labeled NLL layers: a smooth projected NLL/fitness landscape over actual model `graph_state` PCA coordinates plus rendered microstep anchors, a local sample-supported interpolating NLL sheet that passes through those anchors, and an exact anchor mesh through sampled reasoning states, with residual/provenance metadata in JSON. The persistence bundle includes barcodes, Betti/free-resolution growth, `persistence_representations.html` for GUDHI vector summaries, and `persistence_landscapes.html` for the actual GUDHI landscape functions `lambda_k(t)` by trajectory-growth level. The JSON payload stores the full complex, multiparameter persistence report, vectorized persistence summaries, commutative-algebra proxies, derived-equivalence signature, GraphCG direction diagnostics, NLL-surface metadata, NLL-progress diagnostics, and analogical memory retrieval details.
+
+Metric and visualization provenance can be audited with:
+
+```bash
+PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python TropicalGT-I/scripts/audit_metric_provenance.py
+```
+
+The report registers exact metrics, fast vectorized topology features, sample interpolants, visual surrogates, spectral diagnostics, and known fallbacks. Remaining uncovered prose/code mentions are treated as an explicit audit queue, not as validated training objectives.
 
 ## BPB ablation analysis
 

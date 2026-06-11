@@ -148,6 +148,10 @@ def test_got_trajectory_visualization_renders_simplicial_panel_and_nll_surface(t
     assert payload["nll_surface"]["surface_kind"] in {"sample_supported_local_idw_surface", "sparse_exact_triangular_nll_mesh", "exact_delaunay_nll_mesh"}
     assert payload["nll_surface"]["z_axis"] == "projected_nll_fitness_energy"
     assert payload["nll_surface"]["surrogate_landscape_layer"]["surface_kind"] == "smooth_projected_nll_fitness_landscape"
+    assert payload["nll_surface"]["surrogate_landscape_layer"]["point_count"] >= len(scaling["candidates"])
+    assert payload["nll_surface"]["local_interpolating_sheet"]["surface_kind"] == "local_interpolating_nll_sheet"
+    assert payload["nll_surface"]["local_interpolating_sheet"]["point_count"] >= len(scaling["candidates"])
+    assert payload["nll_surface"]["smooth_landscape_microstep_anchor_count"] > 0
     assert payload["nll_surface"]["max_point_residual"] < 1e-5
     assert payload["nll_progress"]["edge_count"] == 3
     assert payload["nll_progress"]["improving_edge_fraction"] > 0.0
@@ -201,8 +205,13 @@ def test_simplicial_svg_wraps_long_topological_paths():
 def test_trajectory_persistence_uses_growth_and_free_resolution(tmp_path: Path):
     record = FixtureGraphDataset(1)[0]
     obj = build_filtered_simplicial_object(record)
-    topo0 = _toy_topology(intervals=[])
-    topo1 = _toy_topology(intervals=[{"dimension": 0, "birth": 0.0, "death": None, "infinite": True}])
+    topo0 = _toy_topology(intervals=[{"dimension": 0, "birth": 0.0, "death": 0.45, "infinite": False}])
+    topo1 = _toy_topology(
+        intervals=[
+            {"dimension": 0, "birth": 0.0, "death": 0.45, "infinite": False},
+            {"dimension": 1, "birth": 0.2, "death": 0.82, "infinite": False},
+        ]
+    )
     paths = write_persistence_visualizations(
         topo1,
         tmp_path,
@@ -215,6 +224,7 @@ def test_trajectory_persistence_uses_growth_and_free_resolution(tmp_path: Path):
     barcode_html = Path(paths["persistence_barcode"]).read_text(encoding="utf-8")
     module_html = Path(paths["persistence_module_betti"]).read_text(encoding="utf-8")
     reps_html = Path(paths["persistence_representations"]).read_text(encoding="utf-8")
+    landscapes_html = Path(paths["persistence_landscapes"]).read_text(encoding="utf-8")
     assert "persistent homology growth barcode" in barcode_html
     assert "trajectory growth level" in barcode_html
     assert "multiparameter persistence and free-resolution growth" in module_html
@@ -223,6 +233,9 @@ def test_trajectory_persistence_uses_growth_and_free_resolution(tmp_path: Path):
     assert "GUDHI persistence vectorization growth" in reps_html
     assert "Fast train" in reps_html
     assert "eval features" in reps_html
+    assert "Actual GUDHI persistence landscape functions" in landscapes_html
+    assert "lambda_1(t)" in landscapes_html
+    assert "not norm-only summaries" in landscapes_html
     assert '<input id="filtration-slider"' not in barcode_html
     assert '<div class="filtration-controls"' not in barcode_html
     assert '<input id="filtration-slider"' not in module_html

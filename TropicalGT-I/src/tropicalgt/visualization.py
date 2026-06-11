@@ -333,6 +333,17 @@ def write_got_trajectory_visualization(scaling_report: dict[str, object], output
     microsteps_by_candidate: dict[int, list[dict[str, object]]] = {}
     for entry in microstep_entries:
         microsteps_by_candidate.setdefault(int(entry["candidate_index"]), []).append(entry)
+    microstep_x = np.asarray([float(entry["x"]) for entry in microstep_entries], dtype=float)
+    microstep_y = np.asarray([float(entry["y"]) for entry in microstep_entries], dtype=float)
+    microstep_z = np.asarray([float(entry["z"]) for entry in microstep_entries], dtype=float)
+    if microstep_z.size and np.isfinite(nll_plot_scale) and abs(nll_plot_scale) > 1e-12:
+        microstep_nll = nll_center + (microstep_z / nll_plot_scale)
+    else:
+        microstep_nll = np.asarray([], dtype=float)
+    landscape_x = np.concatenate([pca[:, 0], microstep_x]) if microstep_x.size else pca[:, 0]
+    landscape_y = np.concatenate([pca[:, 1], microstep_y]) if microstep_y.size else pca[:, 1]
+    landscape_z = np.concatenate([nll_plot_z, microstep_z]) if microstep_z.size else nll_plot_z
+    landscape_nll = np.concatenate([nll_values, microstep_nll]) if microstep_nll.size else nll_values
     fig = go.Figure()
     nll_surface, nll_surface_meta = _nll_triangulated_surface_trace(
         pca[:, 0],
@@ -348,21 +359,58 @@ def write_got_trajectory_visualization(scaling_report: dict[str, object], output
             "z_axis_scale": nll_plot_scale,
             "z_axis_label": f"centered NLL x {nll_plot_scale:g} plus local support energy",
             "raw_nll_range": float(np.nanmax(nll_values) - np.nanmin(nll_values)) if nll_values.size else 0.0,
+            "exact_anchor_scope": "sampled model GoT states only",
+            "smooth_landscape_anchor_scope": "sampled model GoT states plus rendered reasoning microstep vertices",
+            "smooth_landscape_model_state_anchor_count": int(len(candidates)),
+            "smooth_landscape_microstep_anchor_count": int(microstep_z.size),
         }
     )
     landscape_trace, landscape_meta = _nll_surrogate_landscape_trace(
-        pca[:, 0],
-        pca[:, 1],
-        nll_plot_z,
-        nll_values,
+        landscape_x,
+        landscape_y,
+        landscape_z,
+        landscape_nll,
         name="Smooth projected NLL/fitness landscape",
+    )
+    local_sheet_trace, local_sheet_meta = _nll_local_interpolating_sheet_trace(
+        landscape_x,
+        landscape_y,
+        landscape_z,
+        landscape_nll,
+        name="Local interpolating NLL sheet",
     )
     if landscape_trace is not None:
         fig.add_trace(landscape_trace)
         nll_surface_meta["surrogate_landscape_layer"] = landscape_meta
+    if local_sheet_trace is not None:
+        fig.add_trace(local_sheet_trace)
+        nll_surface_meta["local_interpolating_sheet"] = local_sheet_meta
     if nll_surface is not None:
         fig.add_trace(nll_surface)
     fig.add_trace(_nll_anchor_trace(pca[:, 0], pca[:, 1], nll_plot_z, nll_values, name="NLL surface anchors"))
+    if microstep_z.size:
+        fig.add_trace(
+            go.Scatter3d(
+                x=microstep_x,
+                y=microstep_y,
+                z=microstep_z,
+                mode="markers",
+                marker=dict(
+                    size=4,
+                    color=microstep_nll if microstep_nll.size else microstep_z,
+                    colorscale="Tealgrn",
+                    showscale=False,
+                    symbol="square",
+                    line=dict(width=1.4, color="#f8fafc"),
+                ),
+                hovertext=[
+                    str(entry["hover"]) + "<br><b>NLL surface role</b>: interpolated microstep anchor"
+                    for entry in microstep_entries
+                ],
+                hoverinfo="text",
+                name="microstep NLL anchors",
+            )
+        )
     for idx, row in enumerate(candidates):
         parent = row.get("parent")
         if isinstance(parent, str) and parent in id_to_idx:
@@ -1559,14 +1607,17 @@ def write_persistence_visualizations(
     barcode = output_dir / "persistence_barcode.html"
     module_path = output_dir / "persistence_module_betti.html"
     representations_path = output_dir / "persistence_representations.html"
+    landscapes_path = output_dir / "persistence_landscapes.html"
     if growth:
         _write_growth_persistence_barcode(barcode, topology, growth, title_prefix=title_prefix)
         _write_growth_persistence_module(module_path, topology, growth, title_prefix=title_prefix)
         _write_growth_persistence_representations(representations_path, topology, growth, title_prefix=title_prefix)
+        _write_growth_persistence_landscapes(landscapes_path, topology, growth, title_prefix=title_prefix)
         return {
             "persistence_barcode": str(barcode),
             "persistence_module_betti": str(module_path),
             "persistence_representations": str(representations_path),
+            "persistence_landscapes": str(landscapes_path),
         }
 
     intervals = topology.get("persistence", {}).get("intervals", []) if isinstance(topology.get("persistence"), dict) else []
@@ -2181,6 +2232,136 @@ def _write_growth_persistence_representations(path: Path, topology: dict[str, ob
         path,
         fig,
         f"{title_prefix}GUDHI persistence vectorization growth",
+        _simplicial_panel_items(panel_objects, panel_hover),
+    )
+
+
+def _write_growth_persistence_landscapes(path: Path, topology: dict[str, object], growth: list[object], title_prefix: str = "") -> None:
+    rows = _trajectory_growth_rows(topology, growth)
+    fig = make_subplots(
+        rows=1,
+        cols=2,
+        specs=[[{"type": "scene"}, {"type": "heatmap"}]],
+        subplot_titles=(
+            "Actual Landscape lambda_k(t) curves by growth level",
+            "First available lambda_1(t) image by growth level",
+        ),
+        horizontal_spacing=0.08,
+    )
+    panel_objects: list[dict[str, object]] = []
+    panel_hover: list[str] = []
+    palette = {
+        0: ["#55d6be", "#2dd4bf", "#0ea5e9", "#38bdf8"],
+        1: ["#7aa2ff", "#a78bfa", "#c084fc", "#818cf8"],
+        2: ["#fbbf24", "#f59e0b", "#fb7185", "#f97316"],
+    }
+    heatmap_rows: list[list[float]] = []
+    heatmap_y: list[str] = []
+    heatmap_x: list[float] = []
+    heatmap_dim: int | None = None
+    trace_count = 0
+    for row_idx, row in enumerate(rows):
+        level = int(row.get("level", row_idx))
+        topo = row.get("topological_algebra", {}) if isinstance(row.get("topological_algebra"), dict) else {}
+        topo = _topology_with_persistence_representations(topo)
+        obj = row.get("filtered_simplicial_object", {}) if isinstance(row.get("filtered_simplicial_object"), dict) else {}
+        reps = topo.get("persistence_representations", {}) if isinstance(topo.get("persistence_representations"), dict) else {}
+        methods = reps.get("methods", {}) if isinstance(reps.get("methods"), dict) else {}
+        panel_objects.append(obj)
+        panel_hover.append(_topology_growth_hover(level, obj, topo) + f"<br>{_persistence_representation_line(topo)}")
+        for dim_key, method in sorted(methods.items(), key=lambda item: int(item[0]) if str(item[0]).isdigit() else 99):
+            if not isinstance(method, dict) or not method.get("available"):
+                continue
+            dim = int(dim_key)
+            landscape = method.get("landscape", {}) if isinstance(method.get("landscape"), dict) else {}
+            grid = _as_float_list(landscape.get("grid", []))
+            values = landscape.get("values", [])
+            if not grid or not isinstance(values, list):
+                continue
+            if values and heatmap_dim is None:
+                heatmap_dim = dim
+                heatmap_x = grid
+            if values and dim == heatmap_dim:
+                lambda1 = _as_float_list(values[0])
+                if len(lambda1) == len(heatmap_x):
+                    heatmap_rows.append(lambda1)
+                    heatmap_y.append(f"L{level} H{dim}")
+            colors = palette.get(dim, ["#e2e8f0", "#94a3b8", "#64748b", "#cbd5e1"])
+            for layer_idx, layer in enumerate(values[:4]):
+                ys = _as_float_list(layer)
+                if len(ys) != len(grid):
+                    continue
+                y_level = [level + 0.075 * layer_idx + 0.025 * dim for _ in grid]
+                color = colors[layer_idx % len(colors)]
+                fig.add_trace(
+                    go.Scatter3d(
+                        x=grid,
+                        y=y_level,
+                        z=ys,
+                        mode="lines",
+                        line=dict(width=max(2.2, 5.0 - 0.65 * layer_idx), color=color),
+                        name=f"L{level} H{dim} lambda_{layer_idx + 1}",
+                        hovertemplate=(
+                            f"growth level={level}<br>"
+                            f"H{dim} actual landscape lambda_{layer_idx + 1}(t)<br>"
+                            "filtration t=%{x:.4g}<br>"
+                            "landscape value=%{z:.5g}<extra></extra>"
+                        ),
+                        showlegend=trace_count < 14,
+                    ),
+                    row=1,
+                    col=1,
+                )
+                trace_count += 1
+    if heatmap_rows:
+        fig.add_trace(
+            go.Heatmap(
+                z=heatmap_rows,
+                x=heatmap_x,
+                y=heatmap_y,
+                colorscale=[
+                    [0.0, "#08111f"],
+                    [0.25, "#0e7490"],
+                    [0.55, "#22d3ee"],
+                    [0.78, "#bef264"],
+                    [1.0, "#facc15"],
+                ],
+                colorbar=dict(title=f"H{heatmap_dim if heatmap_dim is not None else '?'} lambda_1(t)", x=1.0),
+                hovertemplate="level/dim=%{y}<br>filtration t=%{x:.4g}<br>lambda_1(t)=%{z:.5g}<extra></extra>",
+                name="lambda_1 heatmap",
+            ),
+            row=1,
+            col=2,
+        )
+    if trace_count == 0:
+        fig.add_annotation(
+            text="No finite persistence intervals were available for actual Landscape curves.",
+            xref="paper",
+            yref="paper",
+            x=0.5,
+            y=0.5,
+            showarrow=False,
+        )
+    fig.update_layout(
+        template="plotly_dark",
+        title=(
+            f"{title_prefix}Actual GUDHI persistence landscape functions"
+            "<br><sup>These are lambda_k(t) curves from GUDHI Landscape vectors, not norm-only summaries. "
+            "Use the vectorized curves for fast retrieval/reward diagnostics and the hover panel for the corresponding complex.</sup>"
+        ),
+        scene=dict(
+            xaxis_title="filtration t",
+            yaxis_title="trajectory growth level",
+            zaxis_title="actual landscape value",
+            aspectmode="cube",
+            camera=dict(eye=dict(x=1.55, y=-1.75, z=1.18)),
+        ),
+        legend=dict(orientation="h", y=-0.18),
+    )
+    _write_plotly_dark_html(
+        path,
+        fig,
+        f"{title_prefix}Actual GUDHI persistence landscape functions",
         _simplicial_panel_items(panel_objects, panel_hover),
     )
 
@@ -5037,6 +5218,91 @@ def _nll_triangulated_surface_trace(
     return trace, meta
 
 
+def _nll_local_interpolating_sheet_trace(
+    x_values: np.ndarray,
+    y_values: np.ndarray,
+    z_values: np.ndarray,
+    nll_values: np.ndarray,
+    name: str,
+) -> tuple[go.BaseTraceType | None, dict[str, object]]:
+    x = np.asarray(x_values, dtype=float).reshape(-1)
+    y = np.asarray(y_values, dtype=float).reshape(-1)
+    z = np.asarray(z_values, dtype=float).reshape(-1)
+    nll = np.asarray(nll_values, dtype=float).reshape(-1)
+    finite = np.isfinite(x) & np.isfinite(y) & np.isfinite(z) & np.isfinite(nll)
+    x = x[finite]
+    y = y[finite]
+    z = z[finite]
+    nll = nll[finite]
+    if x.size < 3 or _xy_rank(x, y) < 2:
+        return None, {"available": False, "reason": "insufficient non-collinear NLL anchors for local interpolating sheet"}
+    source_count = int(x.size)
+    x, y, z, nll, duplicate_meta = _collapse_duplicate_xy_for_surface(x, y, z, nll)
+    if x.size < 3 or _xy_rank(x, y) < 2:
+        return None, {"available": False, "reason": "duplicate collapse left insufficient local-sheet anchors"}
+    grid_x, grid_y, z_grid, nll_grid, residual, support_meta = _supported_local_idw_grid(
+        x,
+        y,
+        z,
+        nll,
+        grid_size=88,
+    )
+    finite_z = z_grid[np.isfinite(z_grid)]
+    if finite_z.size == 0:
+        return None, {"available": False, "reason": "local interpolating support grid is empty"}
+    trace = go.Surface(
+        x=grid_x,
+        y=grid_y,
+        z=z_grid,
+        surfacecolor=nll_grid,
+        colorscale=[
+            [0.0, "#0f172a"],
+            [0.18, "#1d4ed8"],
+            [0.42, "#06b6d4"],
+            [0.68, "#bef264"],
+            [1.0, "#f97316"],
+        ],
+        opacity=0.58,
+        showscale=False,
+        name=name,
+        hovertemplate=(
+            "local interpolating NLL sheet<br>"
+            "PC1=%{x:.3f}<br>"
+            "PC2=%{y:.3f}<br>"
+            "centered scaled NLL=%{z:.4f}<br>"
+            "local raw NLL=%{surfacecolor:.6f}<br>"
+            "visible support is restricted to neighborhoods of observed states and microsteps<extra></extra>"
+        ),
+        contours=dict(z=dict(show=True, color="rgba(219,234,254,0.22)", width=1)),
+        lighting=dict(ambient=0.80, diffuse=0.32, specular=0.08, roughness=0.88),
+        showlegend=True,
+    )
+    meta = {
+        "available": True,
+        "surface_kind": "local_interpolating_nll_sheet",
+        "source_point_count_before_duplicate_collapse": source_count,
+        "point_count": source_count,
+        "unique_xy_point_count": int(x.size),
+        "duplicate_xy_points_removed": int(max(source_count - x.size, 0)),
+        "max_point_residual": float(residual),
+        "touches_points": bool(float(residual) <= 1e-8),
+        "interpolation": "Sample-supported inverse-distance interpolation through observed GoT state anchors and rendered microstep anchors.",
+        "support_policy": support_meta.get("support_policy", "union of local sample neighborhoods"),
+        "support_radius": float(support_meta.get("support_radius", 0.0)),
+        "masked_fraction": float(support_meta.get("masked_fraction", 0.0)),
+        "provenance": "computed from sampled model GoT state NLL anchors plus deterministic rendered microstep NLL anchors; it is not a dense model forward pass over latent space",
+    }
+    meta.update(
+        {
+            "duplicate_xy_group_count": int(duplicate_meta.get("duplicate_xy_group_count", 0)),
+            "max_duplicate_xy_multiplicity": int(duplicate_meta.get("max_duplicate_xy_multiplicity", 1)),
+            "max_duplicate_xy_centered_z_spread": float(duplicate_meta.get("max_duplicate_xy_centered_z_spread", 0.0)),
+            "max_duplicate_xy_raw_nll_spread": float(duplicate_meta.get("max_duplicate_xy_raw_nll_spread", 0.0)),
+        }
+    )
+    return trace, meta
+
+
 def _nll_surrogate_landscape_trace(
     x_values: np.ndarray,
     y_values: np.ndarray,
@@ -5125,6 +5391,7 @@ def _nll_surrogate_landscape_trace(
         "available": True,
         "surface_kind": "smooth_projected_nll_fitness_landscape",
         "source_point_count_before_duplicate_collapse": source_count,
+        "point_count": source_count,
         "unique_xy_point_count": int(x.size),
         "duplicate_xy_points_removed": int(max(source_count - x.size, 0)),
         "touches_points": True,

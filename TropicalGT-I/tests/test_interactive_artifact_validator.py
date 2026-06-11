@@ -173,6 +173,7 @@ def _row(root: Path, name: str) -> Path:
         "trajectory_persistence/persistence_barcode.html": _html("Trajectory persistence barcode"),
         "trajectory_persistence/persistence_module_betti.html": _html("Trajectory persistence Betti", "Plotly.newPlot 2D matrix decorative 3D"),
         "trajectory_persistence/persistence_representations.html": _html("Trajectory GUDHI persistence vectorization", "Plotly.newPlot Fast train/eval features"),
+        "trajectory_persistence/persistence_landscapes.html": _html("Trajectory Actual GUDHI persistence landscape functions", "Plotly.newPlot lambda_1(t) not norm-only summaries"),
     }
     for rel, content in html_files.items():
         _write(row / rel, content)

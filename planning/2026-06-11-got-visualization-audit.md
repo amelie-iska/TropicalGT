@@ -117,3 +117,42 @@ Immediate modeling recommendation:
 - Remote audit root: `TropicalGT-I/outputs/train/periodic/step_00000250/got_audit`
 - Local screenshots: `/Users/amelieschreiber/Documents/LaTeX-projects/TropicalGT-audit-screenshots/step_00000250`
 - Latest checkpoint: `TropicalGT-I/checkpoints/tropicalgt_i_train.latest.pt`
+
+## 2026-06-11 Iteration: Actual Landscapes And Local NLL Sheet
+
+Implemented after the follow-up critique that actual landscapes were missing and the NLL energy surface appeared not to contain all trajectory vertices.
+
+- The 3D GoT NLL page now has three distinct layers:
+  - `Smooth projected NLL/fitness landscape`: a broad visual energy/fitness surrogate over sampled model states plus rendered reasoning microsteps.
+  - `Local interpolating NLL sheet`: a sample-supported inverse-distance interpolant through model-state anchors and rendered microstep anchors. Metadata records `max_point_residual`, duplicate-coordinate collapse diagnostics, support radius, and masked fraction.
+  - `Exact GoT NLL anchor mesh`: exact mesh through sampled model GoT states only.
+- The key distinction is now explicit: the exact mesh is scoped to sampled model states, while the local sheet and broad landscape also include rendered microstep vertices so those vertices are not visually floating outside the NLL field.
+- Added `trajectory_persistence/persistence_landscapes.html`, a dark-mode page plotting actual GUDHI `Landscape` functions `lambda_k(t)` by trajectory-growth level, not only L2 norms.
+- The landscape heatmap now uses the first finite homology dimension available in the audit instead of assuming finite H0 intervals. On the refreshed step-250 audit this selects H1, which is why the heatmap labels show `H1`.
+- Refreshed all three step-250 audit rows from their saved `inference_audit.json` payloads.
+- Validator result:
+  - `TropicalGT-I/outputs/train/periodic/step_00000250/interactive_audit_validation_landscapes.md`
+  - status: `PASS`
+  - rows checked: `3`
+  - main row: `75` candidates, `74` edges, depth `8`, PCA distance correlation `0.989791`, NLL residual `0.0`.
+- Local mirror:
+  - `/Users/amelieschreiber/Documents/LaTeX-projects/TropicalGT-audit-browser/step_00000250/got_audit/got_trajectory_pca_3d.html`
+  - `/Users/amelieschreiber/Documents/LaTeX-projects/TropicalGT-audit-browser/step_00000250/got_audit/trajectory_persistence/persistence_landscapes.html`
+- Fresh screenshots:
+  - `/Users/amelieschreiber/Documents/LaTeX-projects/TropicalGT-audit-browser/step_00000250/screenshots_landscape_pass_v2/nll_landscape_local_sheet.png`
+  - `/Users/amelieschreiber/Documents/LaTeX-projects/TropicalGT-audit-browser/step_00000250/screenshots_landscape_pass_v2/actual_persistence_landscapes.png`
+
+## Provenance Audit Status
+
+Added `TropicalGT-I/src/tropicalgt/provenance.py` and `TropicalGT-I/scripts/audit_metric_provenance.py`.
+
+Current report:
+
+- `TropicalGT-I/outputs/metric_provenance_audit.json`
+- `TropicalGT-I/outputs/metric_provenance_audit.md`
+- registered entries: `13`
+- risk-word findings: `164`
+- directly covered findings: `22`
+- uncovered generic findings: `142`
+
+This is not declared complete. The open queue includes generic fallback/proxy/surrogate/estimate mentions in data loading, diagnostics, plotting helpers, and prose. The next cleanup pass should either register each as an explicit provenance entry, rename misleading variables, or remove stale language.
