@@ -123,8 +123,8 @@ def test_got_trajectory_visualization_renders_simplicial_panel_and_nll_surface(t
         "candidates": [
             {"record_id": record.record_id, "embedding": [0.0, 0.0, 0.0], "score": 0.1, "nll": 2.0, "level": 0, "path": [], "filtered_simplicial_object": obj},
             {"record_id": child_record.record_id, "parent": record.record_id, "embedding": [1.0, 0.3, 0.2], "score": 0.5, "nll": 1.3, "level": 1, "path": ["verify"], "input_text": "input", "decoded_argmax": "output", "filtered_simplicial_object": child_obj},
-            {"record_id": sibling_record.record_id, "parent": record.record_id, "embedding": [0.8, -0.3, 0.1], "score": 0.4, "nll": 1.5, "level": 1, "path": ["expand"], "filtered_simplicial_object": sibling_obj},
-            {"record_id": leaf_record.record_id, "parent": child_record.record_id, "embedding": [1.4, 0.7, 0.4], "score": 0.7, "nll": 0.9, "level": 2, "path": ["verify", "refine"], "filtered_simplicial_object": leaf_obj},
+            {"record_id": sibling_record.record_id, "parent": record.record_id, "embedding": [0.2, 1.1, -0.4], "score": 0.4, "nll": 1.5, "level": 1, "path": ["expand"], "filtered_simplicial_object": sibling_obj},
+            {"record_id": leaf_record.record_id, "parent": child_record.record_id, "embedding": [1.4, -0.8, 0.9], "score": 0.7, "nll": 0.9, "level": 2, "path": ["verify", "refine"], "filtered_simplicial_object": leaf_obj},
         ]
     }
     paths = write_got_trajectory_visualization(scaling, tmp_path)
@@ -139,12 +139,18 @@ def test_got_trajectory_visualization_renders_simplicial_panel_and_nll_surface(t
     assert 'aria-label="hovered filtered simplicial object"' in html
     assert "<svg" in html
     assert "filtration-layer" in html
-    assert "Sample-supported local centered NLL surface" in html
+    assert "Smooth projected NLL" in html
+    assert "fitness landscape" in html
+    assert "Exact GoT NLL anchor mesh" in html
     assert "NLL surface anchors" in html
     assert payload["nll_surface"]["available"] is True
     assert payload["nll_surface"]["touches_points"] is True
     assert payload["nll_surface"]["surface_kind"] in {"sample_supported_local_idw_surface", "sparse_exact_triangular_nll_mesh", "exact_delaunay_nll_mesh"}
+    assert payload["nll_surface"]["z_axis"] == "projected_nll_fitness_energy"
+    assert payload["nll_surface"]["surrogate_landscape_layer"]["surface_kind"] == "smooth_projected_nll_fitness_landscape"
     assert payload["nll_surface"]["max_point_residual"] < 1e-5
+    assert payload["nll_progress"]["edge_count"] == 3
+    assert payload["nll_progress"]["improving_edge_fraction"] > 0.0
     assert len(payload["edges"]) == 3
     assert sum(1 for edge in payload["edges"] if edge["source"] == record.record_id) == 2
     assert payload["microstep_nodes"]
@@ -208,11 +214,15 @@ def test_trajectory_persistence_uses_growth_and_free_resolution(tmp_path: Path):
     )
     barcode_html = Path(paths["persistence_barcode"]).read_text(encoding="utf-8")
     module_html = Path(paths["persistence_module_betti"]).read_text(encoding="utf-8")
+    reps_html = Path(paths["persistence_representations"]).read_text(encoding="utf-8")
     assert "persistent homology growth barcode" in barcode_html
     assert "trajectory growth level" in barcode_html
     assert "multiparameter persistence and free-resolution growth" in module_html
     assert "free-resolution proxy" in module_html
     assert "simplicial-object-panel" in module_html
+    assert "GUDHI persistence vectorization growth" in reps_html
+    assert "Fast train" in reps_html
+    assert "eval features" in reps_html
     assert '<input id="filtration-slider"' not in barcode_html
     assert '<div class="filtration-controls"' not in barcode_html
     assert '<input id="filtration-slider"' not in module_html

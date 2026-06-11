@@ -4,6 +4,7 @@ from collections import Counter, defaultdict
 from itertools import combinations, product
 from math import comb, isinf
 from typing import Any, Iterable
+import warnings
 
 import numpy as np
 
@@ -45,6 +46,7 @@ def compute_topological_algebra_report(
     )
     graph_metrics = _graph_metrics(filtered_object)
     persistence = _persistent_homology_report(closed["simplices"], ph_backend)
+    persistence_representations = _persistence_representations_report(persistence)
 
     report: dict[str, Any] = {
         "enabled": True,
@@ -59,6 +61,7 @@ def compute_topological_algebra_report(
             "euler_characteristic": _euler_characteristic(by_dim),
         },
         "persistence": persistence,
+        "persistence_representations": persistence_representations,
         "persistence_module": persistence_module,
         "multiparameter_persistence": multiparameter,
         "graph_metrics": graph_metrics,
@@ -103,6 +106,21 @@ def summarize_algebra_reports(reports: list[dict[str, Any]], prefix: str = "alge
     out[f"{prefix}euler_mean"] = float(np.mean([report["chain_complex"]["euler_characteristic"] for report in enabled]))
     out[f"{prefix}persistence_intervals_mean"] = float(np.mean([len(report.get("persistence", {}).get("intervals", [])) for report in enabled]))
     out[f"{prefix}filtration_thresholds_mean"] = float(np.mean([len(report.get("persistence_module", {}).get("thresholds", [])) for report in enabled]))
+    landscape_norms = [
+        float(report.get("persistence_representations", {}).get("summary", {}).get("landscape_l2_norm", 0.0))
+        for report in enabled
+    ]
+    out[f"{prefix}persistence_landscape_l2_mean"] = float(np.mean(landscape_norms)) if landscape_norms else 0.0
+    entropy_vals = [
+        float(report.get("persistence_representations", {}).get("summary", {}).get("entropy_scalar_sum", 0.0))
+        for report in enabled
+    ]
+    out[f"{prefix}persistence_entropy_sum_mean"] = float(np.mean(entropy_vals)) if entropy_vals else 0.0
+    topvec_norms = [
+        float(report.get("persistence_representations", {}).get("summary", {}).get("topological_vector_l2_norm", 0.0))
+        for report in enabled
+    ]
+    out[f"{prefix}topological_vector_l2_mean"] = float(np.mean(topvec_norms)) if topvec_norms else 0.0
     out[f"{prefix}multiparameter_grid_points_mean"] = float(
         np.mean([len(report.get("multiparameter_persistence", {}).get("fiber_rank_profile", [])) for report in enabled])
     )
@@ -117,6 +135,33 @@ def summarize_algebra_reports(reports: list[dict[str, Any]], prefix: str = "alge
     ]
     out[f"{prefix}hochster_nonzero_mean"] = float(np.mean(hochster_counts)) if hochster_counts else 0.0
     return out
+
+
+def compute_persistence_representations_from_intervals(
+    intervals: list[dict[str, Any]],
+    *,
+    max_dimension: int = 2,
+    landscape_layers: int = 4,
+    resolution: int = 96,
+    image_resolution: int = 24,
+    topological_vector_threshold: int = 24,
+) -> dict[str, Any]:
+    """Vectorize persistence intervals with GUDHI representation methods.
+
+    This is the fast train/eval/inference path for topology features.  It
+    accepts the interval JSON emitted by the persistence backends and returns
+    cached NumPy/scikit-learn representation vectors suitable for metrics,
+    memory retrieval, W&B logging, and optional visualization.
+    """
+
+    return _persistence_representations_report(
+        {"backend": "intervals", "available": True, "intervals": intervals},
+        max_dimension=max_dimension,
+        landscape_layers=landscape_layers,
+        resolution=resolution,
+        image_resolution=image_resolution,
+        topological_vector_threshold=topological_vector_threshold,
+    )
 
 
 def _multiparameter_module_report(
@@ -554,6 +599,247 @@ def _ripser_persistent_homology_report(simplices: list[dict[str, Any]]) -> dict[
                 }
             )
     return {"backend": "ripser", "available": True, "intervals": intervals}
+
+
+def _persistence_representations_report(
+    persistence: dict[str, Any],
+    *,
+    max_dimension: int = 2,
+    landscape_layers: int = 4,
+    resolution: int = 96,
+    image_resolution: int = 24,
+    topological_vector_threshold: int = 24,
+) -> dict[str, Any]:
+    intervals = persistence.get("intervals", []) if isinstance(persistence, dict) else []
+    diagrams = _finite_diagrams_by_dimension(intervals, max_dimension=max_dimension)
+    finite_count = int(sum(diagram.shape[0] for diagram in diagrams.values()))
+    if finite_count == 0:
+        return {
+            "available": False,
+            "backend": "gudhi.representations",
+            "reason": "no finite persistence intervals",
+            "decision_policy": _persistence_vectorization_decision_policy(),
+            "diagrams_by_dimension": {str(dim): [] for dim in range(max_dimension + 1)},
+        }
+    try:
+        from gudhi.representations import (  # type: ignore
+            BettiCurve,
+            Entropy,
+            Landscape,
+            PersistenceImage,
+            PersistenceLengths,
+            Silhouette,
+            TopologicalVector,
+        )
+    except Exception as exc:
+        return {
+            "available": False,
+            "backend": "gudhi.representations",
+            "error": f"{type(exc).__name__}: {exc}",
+            "decision_policy": _persistence_vectorization_decision_policy(),
+            "diagrams_by_dimension": {str(dim): _diagram_to_rows(diagrams.get(dim, np.zeros((0, 2)))) for dim in range(max_dimension + 1)},
+        }
+
+    method_reports: dict[str, Any] = {}
+    summary: dict[str, float] = {}
+    for dim in range(max_dimension + 1):
+        diagram = diagrams.get(dim, np.zeros((0, 2), dtype=float))
+        if diagram.size == 0:
+            method_reports[str(dim)] = {"available": False, "reason": "no finite intervals in dimension"}
+            continue
+        try:
+            landscape = Landscape(num_landscapes=landscape_layers, resolution=resolution, keep_endpoints=True)
+            landscape_vec = np.asarray(landscape.fit_transform([diagram])[0], dtype=float)
+            landscape_grid = np.asarray(getattr(landscape, "grid_", np.linspace(float(np.min(diagram[:, 0])), float(np.max(diagram[:, 1])), resolution)), dtype=float)
+            betti_curve = BettiCurve(resolution=resolution, keep_endpoints=True)
+            betti_vec = np.asarray(betti_curve.fit_transform([diagram])[0], dtype=float)
+            betti_grid = np.asarray(getattr(betti_curve, "grid_", landscape_grid), dtype=float)
+            silhouette = Silhouette(resolution=resolution, keep_endpoints=True)
+            silhouette_vec = np.asarray(silhouette.fit_transform([diagram])[0], dtype=float)
+            silhouette_grid = np.asarray(getattr(silhouette, "grid_", landscape_grid), dtype=float)
+            with warnings.catch_warnings():
+                warnings.filterwarnings("ignore", message="invalid value encountered in divide", category=RuntimeWarning)
+                entropy_scalar = np.asarray(Entropy(mode="scalar").fit_transform([diagram])[0], dtype=float)
+                entropy_vector = np.asarray(Entropy(mode="vector", resolution=resolution, keep_endpoints=True).fit_transform([diagram])[0], dtype=float)
+            lengths_vec = np.asarray(PersistenceLengths(num_lengths=topological_vector_threshold).fit_transform([diagram])[0], dtype=float)
+            topological_vec = np.asarray(TopologicalVector(threshold=topological_vector_threshold).fit_transform([diagram])[0], dtype=float)
+            image = PersistenceImage(
+                bandwidth=max(_diagram_scale(diagram) / 18.0, 1e-3),
+                resolution=[image_resolution, image_resolution],
+            )
+            image_vec = np.asarray(image.fit_transform([diagram])[0], dtype=float)
+            image_grid = image_vec.reshape(image_resolution, image_resolution)
+        except Exception as exc:
+            method_reports[str(dim)] = {
+                "available": False,
+                "error": f"{type(exc).__name__}: {exc}",
+                "finite_interval_count": int(diagram.shape[0]),
+            }
+            continue
+        landscape_vec = np.nan_to_num(landscape_vec, nan=0.0, posinf=0.0, neginf=0.0)
+        betti_vec = np.nan_to_num(betti_vec, nan=0.0, posinf=0.0, neginf=0.0)
+        silhouette_vec = np.nan_to_num(silhouette_vec, nan=0.0, posinf=0.0, neginf=0.0)
+        entropy_scalar = np.nan_to_num(entropy_scalar, nan=0.0, posinf=0.0, neginf=0.0)
+        entropy_vector = np.nan_to_num(entropy_vector, nan=0.0, posinf=0.0, neginf=0.0)
+        lengths_vec = np.nan_to_num(lengths_vec, nan=0.0, posinf=0.0, neginf=0.0)
+        topological_vec = np.nan_to_num(topological_vec, nan=0.0, posinf=0.0, neginf=0.0)
+        image_vec = np.nan_to_num(image_vec, nan=0.0, posinf=0.0, neginf=0.0)
+        image_grid = np.nan_to_num(image_grid, nan=0.0, posinf=0.0, neginf=0.0)
+        method_reports[str(dim)] = {
+            "available": True,
+            "finite_interval_count": int(diagram.shape[0]),
+            "diagram": _diagram_to_rows(diagram),
+            "landscape": {
+                "num_landscapes": landscape_layers,
+                "resolution": resolution,
+                "grid": _round_list(landscape_grid),
+                "values": _matrix_rows(landscape_vec.reshape(landscape_layers, resolution)),
+                "vector": _round_list(landscape_vec),
+                "l2_norm": float(np.linalg.norm(landscape_vec)),
+                "l1_norm": float(np.linalg.norm(landscape_vec, ord=1)),
+            },
+            "betti_curve": {
+                "resolution": resolution,
+                "grid": _round_list(betti_grid),
+                "values": _round_list(betti_vec),
+                "area": float(np.trapezoid(betti_vec, betti_grid)) if len(betti_grid) == len(betti_vec) else float(np.sum(betti_vec)),
+            },
+            "silhouette": {
+                "resolution": resolution,
+                "grid": _round_list(silhouette_grid),
+                "values": _round_list(silhouette_vec),
+                "l2_norm": float(np.linalg.norm(silhouette_vec)),
+            },
+            "entropy": {
+                "scalar": _round_list(entropy_scalar),
+                "vector": _round_list(entropy_vector),
+                "vector_l2_norm": float(np.linalg.norm(entropy_vector)),
+            },
+            "persistence_lengths": {
+                "threshold": topological_vector_threshold,
+                "values": _round_list(lengths_vec),
+                "sum": float(np.sum(lengths_vec)),
+                "max": float(np.max(lengths_vec)) if lengths_vec.size else 0.0,
+            },
+            "topological_vector": {
+                "threshold": topological_vector_threshold,
+                "values": _round_list(topological_vec),
+                "l2_norm": float(np.linalg.norm(topological_vec)),
+            },
+            "persistence_image": {
+                "resolution": [image_resolution, image_resolution],
+                "values": _matrix_rows(image_grid),
+                "l2_norm": float(np.linalg.norm(image_vec)),
+                "mass": float(np.sum(image_vec)),
+            },
+        }
+        summary[f"dim{dim}_landscape_l2_norm"] = float(np.linalg.norm(landscape_vec))
+        summary[f"dim{dim}_betti_area"] = method_reports[str(dim)]["betti_curve"]["area"]
+        summary[f"dim{dim}_entropy_scalar_sum"] = float(np.sum(entropy_scalar))
+        summary[f"dim{dim}_persistence_length_sum"] = float(np.sum(lengths_vec))
+        summary[f"dim{dim}_topological_vector_l2_norm"] = float(np.linalg.norm(topological_vec))
+        summary[f"dim{dim}_persistence_image_mass"] = float(np.sum(image_vec))
+    summary["landscape_l2_norm"] = float(
+        sum(float(row.get("landscape", {}).get("l2_norm", 0.0)) for row in method_reports.values() if isinstance(row, dict))
+    )
+    summary["entropy_scalar_sum"] = float(
+        sum(float(np.sum(row.get("entropy", {}).get("scalar", [0.0]))) for row in method_reports.values() if isinstance(row, dict) and row.get("available"))
+    )
+    summary["topological_vector_l2_norm"] = float(
+        sum(float(row.get("topological_vector", {}).get("l2_norm", 0.0)) for row in method_reports.values() if isinstance(row, dict))
+    )
+    return {
+        "available": any(isinstance(row, dict) and row.get("available") for row in method_reports.values()),
+        "backend": "gudhi.representations",
+        "finite_interval_count": finite_count,
+        "max_dimension": max_dimension,
+        "decision_policy": _persistence_vectorization_decision_policy(),
+        "diagrams_by_dimension": {str(dim): _diagram_to_rows(diagrams.get(dim, np.zeros((0, 2)))) for dim in range(max_dimension + 1)},
+        "methods": method_reports,
+        "summary": summary,
+        "train_time_use": {
+            "fast_features": ["landscape.vector", "betti_curve.values", "entropy.scalar", "persistence_lengths.values", "topological_vector.values"],
+            "loss_candidates": [
+                "landscape_l2 or cosine distance to successful memory trajectories",
+                "persistence_length sparsity/stability penalty",
+                "topological_vector contrastive retrieval loss",
+                "Betti-curve drift penalty across invalid reasoning branches",
+            ],
+            "autograd_note": "GUDHI vectorizers are NumPy/scikit-learn transforms in this implementation; use as cached features, rewards, retrieval keys, and diagnostics unless replaced by a torch-native differentiable surrogate.",
+        },
+    }
+
+
+def _persistence_vectorization_decision_policy() -> list[dict[str, str]]:
+    return [
+        {"method": "Landscape", "priority": "primary", "use": "stable vector-space summary for losses, retrieval, averages, and dark-mode curve plots"},
+        {"method": "BettiCurve", "priority": "primary", "use": "interpretable rank trace by filtration; cheap train/eval metric"},
+        {"method": "PersistenceImage", "priority": "auxiliary", "use": "compact heatmap artifact and convolution-friendly topology feature"},
+        {"method": "Silhouette", "priority": "auxiliary", "use": "single weighted landscape summary curve for dashboards"},
+        {"method": "PersistenceLengths", "priority": "fast scalar/vector", "use": "cheap persistence mass, max-length, and regularizer features"},
+        {"method": "TopologicalVector", "priority": "retrieval", "use": "fixed-length memory-retrieval key and contrastive feature"},
+        {"method": "Entropy", "priority": "diagnostic", "use": "topological complexity scalar/vector for W&B and branch pruning"},
+        {"method": "ComplexPolynomial", "priority": "defer", "use": "optional experimental signature; lower interpretability for current GoT audit"},
+    ]
+
+
+def _finite_diagrams_by_dimension(intervals: list[Any], max_dimension: int) -> dict[int, np.ndarray]:
+    grouped: dict[int, list[list[float]]] = {dim: [] for dim in range(max_dimension + 1)}
+    for row in intervals:
+        if not isinstance(row, dict):
+            continue
+        dim = int(row.get("dimension", 0) or 0)
+        if dim < 0 or dim > max_dimension:
+            continue
+        birth = row.get("birth", 0.0)
+        death = row.get("death")
+        if death is None or row.get("infinite"):
+            continue
+        try:
+            b = float(birth)
+            d = float(death)
+        except (TypeError, ValueError):
+            continue
+        if not (np.isfinite(b) and np.isfinite(d)) or d <= b:
+            continue
+        grouped.setdefault(dim, []).append([b, d])
+    return {
+        dim: np.asarray(rows, dtype=float).reshape((-1, 2)) if rows else np.zeros((0, 2), dtype=float)
+        for dim, rows in grouped.items()
+    }
+
+
+def _diagram_to_rows(diagram: np.ndarray) -> list[dict[str, float]]:
+    arr = np.asarray(diagram, dtype=float).reshape((-1, 2)) if np.asarray(diagram).size else np.zeros((0, 2), dtype=float)
+    return [{"birth": float(row[0]), "death": float(row[1]), "persistence": float(row[1] - row[0])} for row in arr]
+
+
+def _diagram_scale(diagram: np.ndarray) -> float:
+    arr = np.asarray(diagram, dtype=float)
+    if arr.size == 0:
+        return 1.0
+    return float(max(np.nanmax(arr[:, 1]) - np.nanmin(arr[:, 0]), np.nanmax(arr[:, 1] - arr[:, 0]), 1e-6))
+
+
+def _round_list(values: np.ndarray | list[float], decimals: int = 6, max_items: int | None = None) -> list[float]:
+    arr = np.asarray(values, dtype=float).reshape(-1)
+    if max_items is not None:
+        arr = arr[:max_items]
+    return [_finite_round(value, decimals) for value in arr]
+
+
+def _matrix_rows(values: np.ndarray, decimals: int = 6) -> list[list[float]]:
+    arr = np.asarray(values, dtype=float)
+    if arr.ndim == 1:
+        arr = arr.reshape(1, -1)
+    return [[_finite_round(value, decimals) for value in row] for row in arr]
+
+
+def _finite_round(value: float, decimals: int = 6) -> float:
+    val = float(value)
+    if not np.isfinite(val):
+        return 0.0
+    return float(round(val, decimals))
 
 
 def _graph_metrics(filtered_object: dict[str, Any]) -> dict[str, Any]:

@@ -23,6 +23,7 @@ REQUIRED_HTML = {
     "analogical_map": ("analogical_memory_map_02.html", ("Analogical", "simplicial", "binary filtered-complex map")),
     "trajectory_barcode": ("trajectory_persistence/persistence_barcode.html", ("Trajectory", "barcode")),
     "trajectory_betti": ("trajectory_persistence/persistence_module_betti.html", ("Trajectory", "Betti", "2D matrix", "decorative 3D")),
+    "trajectory_representations": ("trajectory_persistence/persistence_representations.html", ("Trajectory", "GUDHI persistence vectorization", "Fast train", "eval features")),
 }
 
 REQUIRED_JSON = {
@@ -178,6 +179,7 @@ def validate_row(row_dir: Path, *, min_candidates: int = 8, min_depth: int = 2, 
     _assert(_finite_float(pca_diag.get("n_samples")) == len(nodes), errors, "PCA sample count does not match payload node count")
 
     embedded_nodes = [row for row in embedding_payload.get("nodes", []) if isinstance(row, dict)]
+    embedding_objects = [row for row in embedding_payload.get("filtered_simplicial_objects", []) if isinstance(row, dict)]
     _assert(sum(1 for row in nodes if row.get("embedding") is not None) == len(nodes), errors, "trajectory payload nodes do not all carry raw model embeddings")
     embedding_by_id = {str(row.get("record_id")): row for row in embedded_nodes}
     node_basis = []
@@ -216,7 +218,12 @@ def validate_row(row_dir: Path, *, min_candidates: int = 8, min_depth: int = 2, 
     _assert(surface.get("available") is True, errors, "NLL surface unavailable")
     _assert(surface.get("touches_points") is True, errors, "NLL surface is not point-anchored")
     _assert(_finite_float(surface.get("max_point_residual"), 999.0) <= nll_residual_tol, errors, "NLL surface residual exceeds tolerance")
-    _assert(surface.get("z_axis") == "centered_scaled_nll", errors, "NLL trajectory surface is not rendered with centered scaled-NLL z-axis")
+    z_axis = surface.get("z_axis")
+    _assert(
+        z_axis in {"centered_scaled_nll", "projected_nll_fitness_energy"},
+        errors,
+        "NLL trajectory surface is not rendered with an audited NLL/fitness z-axis",
+    )
     _assert(_finite_float(surface.get("raw_nll_range"), -1.0) >= 0.0, errors, "NLL surface payload is missing raw_nll_range")
     _assert(surface.get("exact_anchor_layer") is True, errors, "NLL surface is missing exact anchor layer metadata")
     surface_kind = surface.get("surface_kind")
@@ -227,13 +234,36 @@ def validate_row(row_dir: Path, *, min_candidates: int = 8, min_depth: int = 2, 
     )
     if surface_kind == "exact_delaunay_nll_mesh":
         footprint = surface.get("support_footprint_layer", {})
-        _assert(isinstance(footprint, dict) and footprint.get("available") is True, errors, "Exact NLL mesh is missing its smoothed support footprint")
-        _assert(
-            footprint.get("surface_kind") == "projected_local_support_footprint",
-            errors,
-            "Exact NLL mesh footprint is not the projected local support layer",
-        )
+        surrogate = surface.get("surrogate_landscape_layer", {})
+        has_footprint = isinstance(footprint, dict) and footprint.get("available") is True
+        has_surrogate = isinstance(surrogate, dict) and surrogate.get("available") is True
+        _assert(has_footprint or has_surrogate, errors, "Exact NLL mesh is missing an audited support/landscape layer")
+        if has_footprint:
+            _assert(
+                footprint.get("surface_kind") == "projected_local_support_footprint",
+                errors,
+                "Exact NLL mesh footprint is not the projected local support layer",
+            )
+        if has_surrogate:
+            _assert(
+                surrogate.get("surface_kind") == "smooth_projected_nll_fitness_landscape",
+                errors,
+                "NLL surrogate layer is not labeled as the smooth projected NLL/fitness landscape",
+            )
+            _assert(surrogate.get("touches_points") is True, errors, "NLL surrogate layer is not point-anchored")
+            _assert(
+                _finite_float(surrogate.get("max_point_residual"), 999.0) <= nll_residual_tol,
+                errors,
+                "NLL surrogate anchor residual exceeds tolerance",
+            )
+            _assert("provenance" in surrogate, errors, "NLL surrogate layer is missing provenance")
     _assert(_finite_float(surface.get("support_radius"), -1.0) > 0.0, errors, "NLL surface payload is missing a positive support_radius")
+
+    nll_progress = payload.get("nll_progress", {})
+    _assert(isinstance(nll_progress, dict), errors, "trajectory payload is missing NLL progress diagnostics")
+    _assert(_finite_float(nll_progress.get("edge_count"), 0.0) > 0, errors, "NLL progress diagnostics have no edges")
+    _assert("improving_edge_fraction" in nll_progress, errors, "NLL progress diagnostics missing improving edge fraction")
+    _assert("by_level" in nll_progress, errors, "NLL progress diagnostics missing level summary")
 
     support_metrics = support_payload.get("metrics", {}) if isinstance(support_payload, dict) else {}
     _assert(support_metrics.get("available") is True, errors, "tropical support payload is unavailable")
@@ -249,6 +279,14 @@ def validate_row(row_dir: Path, *, min_candidates: int = 8, min_depth: int = 2, 
 
     _assert(len(embedded_nodes) == len(nodes), errors, "embedding map payload node count differs from trajectory payload")
     _assert(embedding_payload.get("coordinate_source", "").startswith("PCA of model graph_state embeddings"), errors, "embedding map payload has wrong coordinate source")
+    _assert(len(embedding_objects) == len(embedded_nodes), errors, "embedding map payload does not include one filtered simplicial object per node")
+    _assert(
+        any(isinstance(obj.get("simplices"), list) and obj.get("simplices") for obj in embedding_objects),
+        errors,
+        "embedding map filtered simplicial objects are empty",
+    )
+    embedding_html = _read_text(row_dir / REQUIRED_HTML["embedding_map"][0]) if (row_dir / REQUIRED_HTML["embedding_map"][0]).exists() else ""
+    _assert("simplicial-object-panel" in embedding_html and "hover-simplicial-card" in embedding_html, errors, "embedding map does not expose filtered-complex hover panel")
 
     full_obj = full_complex_payload.get("filtered_simplicial_object", {})
     summary = full_obj.get("summary", {}) if isinstance(full_obj, dict) else {}

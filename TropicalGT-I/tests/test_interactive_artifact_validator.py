@@ -44,7 +44,10 @@ def _row(root: Path, name: str) -> Path:
             "nll": row["nll"],
             "embedding": row["embedding"],
             "embedding_pca": {"pc1": row["embedding"][0], "pc2": row["embedding"][1], "pc3": row["embedding"][2]},
-            "filtered_simplicial_object": {"summary": {"num_vertices": 1, "num_edges": 0, "num_two_simplices": 0}},
+            "filtered_simplicial_object": {
+                "summary": {"num_vertices": 1, "num_edges": 0, "num_two_simplices": 0},
+                "simplices": [{"simplex": [row["record_id"]], "dimension": 0, "filtration": 0.0}],
+            },
         }
         for row in candidates
     ]
@@ -73,10 +76,30 @@ def _row(root: Path, name: str) -> Path:
             "exact_anchor_layer": True,
             "support_radius": 0.5,
         },
+        "nll_progress": {
+            "edge_count": 3,
+            "improving_edge_fraction": 2 / 3,
+            "mean_edge_delta": -0.0666666667,
+            "best_terminal_improvement_from_root": 0.2,
+            "by_level": [
+                {"level": 0, "count": 1, "mean_nll": 1.0},
+                {"level": 1, "count": 2, "mean_nll": 1.0},
+                {"level": 2, "count": 1, "mean_nll": 0.8},
+            ],
+        },
     }
     _write(row / "inference_scaling_tree.json", json.dumps({"stochastic_actions": True, "sampling_temperature": 2.0, "sampling_exploration": 0.4, "candidates": candidates}))
     _write(row / "got_trajectory_payloads.json", json.dumps(payload))
-    _write(row / "got_embedding_map_payloads.json", json.dumps({"coordinate_source": "PCA of model graph_state embeddings; no level/tree layout coordinates are used", "nodes": nodes}))
+    _write(
+        row / "got_embedding_map_payloads.json",
+        json.dumps(
+            {
+                "coordinate_source": "PCA of model graph_state embeddings; no level/tree layout coordinates are used",
+                "nodes": nodes,
+                "filtered_simplicial_objects": [node["filtered_simplicial_object"] for node in nodes],
+            }
+        ),
+    )
     _write(
         row / "got_full_trajectory_complex_payload.json",
         json.dumps(
@@ -136,7 +159,10 @@ def _row(root: Path, name: str) -> Path:
     )
     _write(row / "inference_audit.json", "{}")
     html_files = {
-        "got_embedding_map_3d.html": _html("Graph-of-thought embedding-space trajectory map actual graph_state PCA"),
+        "got_embedding_map_3d.html": _html(
+            "Graph-of-thought embedding-space trajectory map actual graph_state PCA",
+            "Plotly.newPlot simplicial-object-panel hover-simplicial-card",
+        ),
         "got_trajectory_pca_3d.html": _html("Graph-of-thought branching trajectory centered NLL"),
         "got_full_trajectory_complex.html": _html("Full graph-of-thought trajectory filtered simplicial complex", "Plotly.newPlot play filtration Filtration radius model input model output filtration backend="),
         "reasoning_step_complex_maps/index.html": _html("Reasoning step filtered simplicial complex maps", "table"),
@@ -146,6 +172,7 @@ def _row(root: Path, name: str) -> Path:
         "analogical_memory_map_02.html": _html("Analogical simplicial map trajectory-complex map", "Plotly.newPlot slider filters domain and codomain sliders binary filtered-complex map"),
         "trajectory_persistence/persistence_barcode.html": _html("Trajectory persistence barcode"),
         "trajectory_persistence/persistence_module_betti.html": _html("Trajectory persistence Betti", "Plotly.newPlot 2D matrix decorative 3D"),
+        "trajectory_persistence/persistence_representations.html": _html("Trajectory GUDHI persistence vectorization", "Plotly.newPlot Fast train/eval features"),
     }
     for rel, content in html_files.items():
         _write(row / rel, content)

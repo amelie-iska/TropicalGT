@@ -313,6 +313,7 @@ def write_got_trajectory_visualization(scaling_report: dict[str, object], output
     nll_plot_scale = _nll_visual_scale(nll_values)
     nll_plot_z = (nll_values - nll_center) * nll_plot_scale
     hover = [_candidate_hover(row) for row in candidates]
+    nll_progress = _trajectory_nll_progress_diagnostics(candidates, ids, id_to_idx, nll_values, inferred_levels)
     candidate_objects = [
         row.get("filtered_simplicial_object") if isinstance(row.get("filtered_simplicial_object"), dict) else {}
         for row in candidates
@@ -338,35 +339,37 @@ def write_got_trajectory_visualization(scaling_report: dict[str, object], output
         pca[:, 1],
         nll_plot_z,
         nll_values,
-        name="Sample-supported local centered NLL surface with exact GoT anchors",
+        name="Exact GoT NLL anchor mesh",
     )
     nll_surface_meta.update(
         {
-            "z_axis": "centered_scaled_nll",
+            "z_axis": "projected_nll_fitness_energy",
             "z_axis_center_raw_nll": nll_center,
             "z_axis_scale": nll_plot_scale,
-            "z_axis_label": f"centered NLL x {nll_plot_scale:g}",
+            "z_axis_label": f"centered NLL x {nll_plot_scale:g} plus local support energy",
             "raw_nll_range": float(np.nanmax(nll_values) - np.nanmin(nll_values)) if nll_values.size else 0.0,
         }
     )
+    landscape_trace, landscape_meta = _nll_surrogate_landscape_trace(
+        pca[:, 0],
+        pca[:, 1],
+        nll_plot_z,
+        nll_values,
+        name="Smooth projected NLL/fitness landscape",
+    )
+    if landscape_trace is not None:
+        fig.add_trace(landscape_trace)
+        nll_surface_meta["surrogate_landscape_layer"] = landscape_meta
     if nll_surface is not None:
         fig.add_trace(nll_surface)
-        footprint_trace, footprint_meta = _nll_support_footprint_trace(
-            pca[:, 0],
-            pca[:, 1],
-            nll_plot_z,
-            nll_values,
-            name="NLL local-support footprint",
-        )
-        if footprint_trace is not None:
-            fig.add_trace(footprint_trace)
-            nll_surface_meta["support_footprint_layer"] = footprint_meta
     fig.add_trace(_nll_anchor_trace(pca[:, 0], pca[:, 1], nll_plot_z, nll_values, name="NLL surface anchors"))
     for idx, row in enumerate(candidates):
         parent = row.get("parent")
         if isinstance(parent, str) and parent in id_to_idx:
             j = id_to_idx[parent]
             action = _edge_action_label(row)
+            raw_delta = float(nll_values[idx] - nll_values[j])
+            improvement_label = "improved" if raw_delta < 0 else ("flat" if abs(raw_delta) <= 1e-12 else "regressed")
             chain = [
                 {"x": float(pca[j, 0]), "y": float(pca[j, 1]), "z": float(nll_plot_z[j]), "label": str(parent)},
                 *microsteps_by_candidate.get(idx, []),
@@ -380,7 +383,14 @@ def write_got_trajectory_visualization(scaling_report: dict[str, object], output
                     mode="lines",
                     line=dict(color=_action_color(action), width=4),
                     showlegend=False,
-                    hovertext=f"{parent} -> {ids[idx]}<br>action={html.escape(action)}<br>microsteps={len(chain) - 2}",
+                    hovertext=(
+                        f"{parent} -> {ids[idx]}<br>"
+                        f"action={html.escape(action)}<br>"
+                        f"microsteps={len(chain) - 2}<br>"
+                        f"parent raw NLL={float(nll_values[j]):.6f}<br>"
+                        f"child raw NLL={float(nll_values[idx]):.6f}<br>"
+                        f"delta child-parent={raw_delta:+.6g} ({improvement_label})"
+                    ),
                     hoverinfo="text",
                 )
             )
@@ -440,8 +450,9 @@ def write_got_trajectory_visualization(scaling_report: dict[str, object], output
         scene=dict(
             xaxis_title="PC1",
             yaxis_title="PC2",
-            zaxis_title=f"centered NLL x {nll_plot_scale:g}",
+            zaxis_title="projected NLL / fitness energy",
             aspectmode="cube",
+            camera=dict(eye=dict(x=1.52, y=-1.72, z=1.18)),
         ),
     )
     unique_ratio = float(pca_report.get("unique_embedding_ratio_rounded8", 1.0))
@@ -471,7 +482,7 @@ def write_got_trajectory_visualization(scaling_report: dict[str, object], output
             text=(
                 "NLL field diagnostic: raw range="
                 f"{raw_nll_range:.6g}; z-axis shows centered NLL scaled by {nll_plot_scale:.1f}.<br>"
-                "The lifted surface is exact at anchors; the lower translucent sheet is the local support footprint."
+                "The landscape is a smooth embedding surrogate around the trajectory; the anchor mesh remains exact at observed states."
             ),
             x=0,
             y=0.985,
@@ -486,6 +497,26 @@ def write_got_trajectory_visualization(scaling_report: dict[str, object], output
         )
         current_margin = fig.layout.margin.to_plotly_json() if fig.layout.margin else {}
         fig.update_layout(margin=dict(t=max(int(current_margin.get("t", 82)), 138)))
+    fig.add_annotation(
+        text=(
+            "GoT NLL progress: "
+            f"{100.0 * float(nll_progress.get('improving_edge_fraction', 0.0)):.1f}% improving edges; "
+            f"mean edge delta={float(nll_progress.get('mean_edge_delta', 0.0)):+.3g}; "
+            f"best terminal improvement={float(nll_progress.get('best_terminal_improvement_from_root', 0.0)):+.3g}"
+        ),
+        x=1,
+        y=1.035,
+        xref="paper",
+        yref="paper",
+        showarrow=False,
+        align="right",
+        font=dict(size=12, color="#d9f99d"),
+        bgcolor="rgba(15,23,42,0.88)",
+        bordercolor="rgba(132,204,22,0.38)",
+        borderwidth=1,
+    )
+    current_margin = fig.layout.margin.to_plotly_json() if fig.layout.margin else {}
+    fig.update_layout(margin=dict(t=max(int(current_margin.get("t", 82)), 138)))
     panel_items = _simplicial_panel_items(panel_objects, panel_hover)
     _write_plotly_dark_html(path, fig, "Graph-of-thought trajectory PCA in embedding space", panel_items, show_filtration_slider=True)
     payload = {
@@ -540,6 +571,7 @@ def write_got_trajectory_visualization(scaling_report: dict[str, object], output
             for idx in range(len(candidates))
         ],
         "nll_surface": nll_surface_meta,
+        "nll_progress": nll_progress,
     }
     payload_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
     extra_paths = {}
@@ -577,6 +609,11 @@ def _write_got_embedding_map(
     path = output_dir / "got_embedding_map_3d.html"
     payload_path = output_dir / "got_embedding_map_payloads.json"
     pca_multiplicity = _coordinate_multiplicities(pca)
+    candidate_objects = [
+        row.get("filtered_simplicial_object") if isinstance(row.get("filtered_simplicial_object"), dict) else {}
+        for row in candidates
+    ]
+    panel_items = _simplicial_panel_items(candidate_objects, hover)
     fig = go.Figure()
     for idx, row in enumerate(candidates):
         parent = row.get("parent")
@@ -620,7 +657,7 @@ def _write_got_embedding_map(
                 for idx, text in enumerate(hover)
             ],
             hoverinfo="text",
-            customdata=np.arange(len(candidates), dtype=int),
+            customdata=np.arange(len(panel_items), dtype=int),
             name="GoT state: actual graph_state PCA",
         )
     )
@@ -645,7 +682,7 @@ def _write_got_embedding_map(
             )
         ],
     )
-    _write_plotly_dark_html(path, fig, "Graph-of-thought embedding-space trajectory map")
+    _write_plotly_dark_html(path, fig, "Graph-of-thought embedding-space trajectory map", panel_items, show_filtration_slider=True)
     payload = {
         "coordinate_source": "PCA of model graph_state embeddings; no level/tree layout coordinates are used",
         "sampling": {
@@ -667,6 +704,7 @@ def _write_got_embedding_map(
             }
             for idx in range(len(candidates))
         ],
+        "filtered_simplicial_objects": candidate_objects,
         "edges": [
             {"source": row.get("parent"), "target": ids[idx], "action": _edge_action_label(row)}
             for idx, row in enumerate(candidates)
@@ -1520,10 +1558,16 @@ def write_persistence_visualizations(
     output_dir.mkdir(parents=True, exist_ok=True)
     barcode = output_dir / "persistence_barcode.html"
     module_path = output_dir / "persistence_module_betti.html"
+    representations_path = output_dir / "persistence_representations.html"
     if growth:
         _write_growth_persistence_barcode(barcode, topology, growth, title_prefix=title_prefix)
         _write_growth_persistence_module(module_path, topology, growth, title_prefix=title_prefix)
-        return {"persistence_barcode": str(barcode), "persistence_module_betti": str(module_path)}
+        _write_growth_persistence_representations(representations_path, topology, growth, title_prefix=title_prefix)
+        return {
+            "persistence_barcode": str(barcode),
+            "persistence_module_betti": str(module_path),
+            "persistence_representations": str(representations_path),
+        }
 
     intervals = topology.get("persistence", {}).get("intervals", []) if isinstance(topology.get("persistence"), dict) else []
     fig = go.Figure()
@@ -1606,7 +1650,12 @@ def write_persistence_visualizations(
             )
     fig2.update_layout(template="plotly_dark", title="Persistence module Betti rank profile (step functions)", xaxis_title="filtration", yaxis_title="Betti rank")
     _write_plotly_dark_html(module_path, fig2, "Persistence module Betti rank profile")
-    return {"persistence_barcode": str(barcode), "persistence_module_betti": str(module_path)}
+    _write_single_persistence_representations(representations_path, topology, title_prefix=title_prefix)
+    return {
+        "persistence_barcode": str(barcode),
+        "persistence_module_betti": str(module_path),
+        "persistence_representations": str(representations_path),
+    }
 
 
 def _write_growth_persistence_barcode(path: Path, topology: dict[str, object], growth: list[object], title_prefix: str = "") -> None:
@@ -1851,6 +1900,291 @@ def _write_growth_persistence_module(path: Path, topology: dict[str, object], gr
     )
 
 
+def _write_single_persistence_representations(path: Path, topology: dict[str, object], title_prefix: str = "") -> None:
+    topology = _topology_with_persistence_representations(topology)
+    reps = topology.get("persistence_representations", {}) if isinstance(topology.get("persistence_representations"), dict) else {}
+    fig = make_subplots(
+        rows=2,
+        cols=2,
+        specs=[[{"type": "xy"}, {"type": "heatmap"}], [{"type": "xy"}, {"type": "xy"}]],
+        subplot_titles=(
+            "Persistence landscapes and silhouettes",
+            "Persistence image",
+            "Betti curves",
+            "Lengths and topological vectors",
+        ),
+        horizontal_spacing=0.10,
+        vertical_spacing=0.16,
+    )
+    if not reps.get("available"):
+        fig.add_annotation(
+            text=f"No finite persistence-representation vectors available: {html.escape(str(reps.get('reason', reps.get('error', 'unknown'))))}",
+            xref="paper",
+            yref="paper",
+            x=0.5,
+            y=0.5,
+            showarrow=False,
+        )
+    palette = ["#55d6be", "#7aa2ff", "#fbbf24", "#fb7185"]
+    methods = reps.get("methods", {}) if isinstance(reps.get("methods"), dict) else {}
+    image_added = False
+    for dim_key, row in sorted(methods.items(), key=lambda item: int(item[0]) if str(item[0]).isdigit() else 99):
+        if not isinstance(row, dict) or not row.get("available"):
+            continue
+        dim = int(dim_key)
+        color = palette[dim % len(palette)]
+        landscape = row.get("landscape", {}) if isinstance(row.get("landscape"), dict) else {}
+        grid = _as_float_list(landscape.get("grid", []))
+        values = landscape.get("values", [])
+        if grid and isinstance(values, list):
+            for layer_idx, layer in enumerate(values[:4]):
+                ys = _as_float_list(layer)
+                if len(ys) != len(grid):
+                    continue
+                fig.add_trace(
+                    go.Scatter(
+                        x=grid,
+                        y=ys,
+                        mode="lines",
+                        line=dict(width=max(1.2, 3.0 - 0.35 * layer_idx), color=color, dash="solid" if layer_idx == 0 else "dot"),
+                        name=f"H{dim} lambda_{layer_idx + 1}",
+                        hovertemplate=f"H{dim} landscape layer {layer_idx + 1}<br>filtration=%{{x:.4g}}<br>value=%{{y:.4g}}<extra></extra>",
+                    ),
+                    row=1,
+                    col=1,
+                )
+        silhouette = row.get("silhouette", {}) if isinstance(row.get("silhouette"), dict) else {}
+        s_grid = _as_float_list(silhouette.get("grid", []))
+        s_vals = _as_float_list(silhouette.get("values", []))
+        if len(s_grid) == len(s_vals) and s_grid:
+            fig.add_trace(
+                go.Scatter(
+                    x=s_grid,
+                    y=s_vals,
+                    mode="lines",
+                    line=dict(width=2.0, color=color, dash="dash"),
+                    name=f"H{dim} silhouette",
+                    hovertemplate=f"H{dim} silhouette<br>filtration=%{{x:.4g}}<br>value=%{{y:.4g}}<extra></extra>",
+                ),
+                row=1,
+                col=1,
+            )
+        betti = row.get("betti_curve", {}) if isinstance(row.get("betti_curve"), dict) else {}
+        b_grid = _as_float_list(betti.get("grid", []))
+        b_vals = _as_float_list(betti.get("values", []))
+        if len(b_grid) == len(b_vals) and b_grid:
+            fig.add_trace(
+                go.Scatter(
+                    x=b_grid,
+                    y=b_vals,
+                    mode="lines",
+                    line_shape="hv",
+                    line=dict(width=2.5, color=color),
+                    name=f"H{dim} Betti curve",
+                    hovertemplate=f"H{dim} Betti curve<br>filtration=%{{x:.4g}}<br>beta=%{{y:.4g}}<extra></extra>",
+                ),
+                row=2,
+                col=1,
+            )
+        image = row.get("persistence_image", {}) if isinstance(row.get("persistence_image"), dict) else {}
+        if not image_added and isinstance(image.get("values"), list):
+            fig.add_trace(
+                go.Heatmap(
+                    z=image.get("values", []),
+                    colorscale="Turbo",
+                    colorbar=dict(title="image mass", x=1.0),
+                    hovertemplate="persistence image<br>x pixel=%{x}<br>y pixel=%{y}<br>value=%{z:.5g}<extra></extra>",
+                    name=f"H{dim} persistence image",
+                ),
+                row=1,
+                col=2,
+            )
+            image_added = True
+        lengths = _as_float_list(row.get("persistence_lengths", {}).get("values", []) if isinstance(row.get("persistence_lengths"), dict) else [])
+        if lengths:
+            fig.add_trace(
+                go.Bar(
+                    x=[f"H{dim} L{i}" for i in range(len(lengths))],
+                    y=lengths,
+                    marker=dict(color=color),
+                    name=f"H{dim} lengths",
+                    hovertemplate=f"H{dim} persistence length<br>rank=%{{x}}<br>value=%{{y:.4g}}<extra></extra>",
+                ),
+                row=2,
+                col=2,
+            )
+        topvec = _as_float_list(row.get("topological_vector", {}).get("values", []) if isinstance(row.get("topological_vector"), dict) else [])
+        if topvec:
+            fig.add_trace(
+                go.Scatter(
+                    x=list(range(len(topvec))),
+                    y=topvec,
+                    mode="lines+markers",
+                    line=dict(color=color, width=2),
+                    marker=dict(size=4),
+                    name=f"H{dim} topological vector",
+                    hovertemplate=f"H{dim} topological vector<br>index=%{{x}}<br>value=%{{y:.4g}}<extra></extra>",
+                ),
+                row=2,
+                col=2,
+            )
+    summary = reps.get("summary", {}) if isinstance(reps.get("summary"), dict) else {}
+    fig.update_layout(
+        template="plotly_dark",
+        title=(
+            f"{title_prefix}GUDHI persistence vectorizations"
+            "<br><sup>Fast vectorized topology: landscapes/Betti curves/images/silhouettes/lengths/topological vectors. "
+            f"landscape L2={float(summary.get('landscape_l2_norm', 0.0)):.4g}, "
+            f"entropy sum={float(summary.get('entropy_scalar_sum', 0.0)):.4g}</sup>"
+        ),
+        legend=dict(orientation="h", y=-0.18),
+    )
+    fig.update_xaxes(title_text="filtration", row=1, col=1)
+    fig.update_yaxes(title_text="landscape / silhouette", row=1, col=1)
+    fig.update_xaxes(title_text="persistence-image x pixel", row=1, col=2)
+    fig.update_yaxes(title_text="persistence-image y pixel", row=1, col=2)
+    fig.update_xaxes(title_text="filtration", row=2, col=1)
+    fig.update_yaxes(title_text="Betti rank", row=2, col=1)
+    fig.update_xaxes(title_text="vector coordinate", row=2, col=2, tickangle=45)
+    fig.update_yaxes(title_text="feature value", row=2, col=2)
+    _write_plotly_dark_html(path, fig, f"{title_prefix}GUDHI persistence vectorizations")
+
+
+def _write_growth_persistence_representations(path: Path, topology: dict[str, object], growth: list[object], title_prefix: str = "") -> None:
+    rows = _trajectory_growth_rows(topology, growth)
+    fig = make_subplots(
+        rows=2,
+        cols=2,
+        specs=[[{"type": "xy"}, {"type": "heatmap"}], [{"type": "xy"}, {"type": "xy"}]],
+        subplot_titles=(
+            "Landscape norm growth",
+            "Betti curve heatmap by level",
+            "Persistence length mass",
+            "Topological vector norm / entropy",
+        ),
+        horizontal_spacing=0.10,
+        vertical_spacing=0.16,
+    )
+    panel_objects = []
+    panel_hover = []
+    levels: list[int] = []
+    landscape_norms: list[float] = []
+    length_sums: list[float] = []
+    topvec_norms: list[float] = []
+    entropy_sums: list[float] = []
+    betti_rows: list[list[float]] = []
+    betti_labels: list[str] = []
+    for row_idx, row in enumerate(rows):
+        level = int(row.get("level", row_idx))
+        topo = row.get("topological_algebra", {}) if isinstance(row.get("topological_algebra"), dict) else {}
+        obj = row.get("filtered_simplicial_object", {}) if isinstance(row.get("filtered_simplicial_object"), dict) else {}
+        reps = topo.get("persistence_representations", {}) if isinstance(topo.get("persistence_representations"), dict) else {}
+        summary = reps.get("summary", {}) if isinstance(reps.get("summary"), dict) else {}
+        levels.append(level)
+        landscape_norms.append(float(summary.get("landscape_l2_norm", 0.0)))
+        length_sums.append(_representation_summary_sum(reps, "persistence_lengths", "sum"))
+        topvec_norms.append(float(summary.get("topological_vector_l2_norm", 0.0)))
+        entropy_sums.append(float(summary.get("entropy_scalar_sum", 0.0)))
+        betti_vector = _combined_betti_curve_vector(reps)
+        if betti_vector:
+            betti_rows.append(betti_vector)
+            betti_labels.append(f"L{level}")
+        panel_objects.append(obj)
+        panel_hover.append(_topology_growth_hover(level, obj, topo) + f"<br>{_persistence_representation_line(topo)}")
+    if levels:
+        fig.add_trace(
+            go.Scatter(
+                x=levels,
+                y=landscape_norms,
+                mode="lines+markers",
+                line=dict(color="#55d6be", width=3),
+                marker=dict(size=7),
+                name="landscape L2",
+                hovertemplate="level=%{x}<br>landscape L2=%{y:.5g}<extra></extra>",
+            ),
+            row=1,
+            col=1,
+        )
+        fig.add_trace(
+            go.Scatter(
+                x=levels,
+                y=length_sums,
+                mode="lines+markers",
+                line=dict(color="#fbbf24", width=3),
+                marker=dict(size=7),
+                name="persistence length sum",
+                hovertemplate="level=%{x}<br>length sum=%{y:.5g}<extra></extra>",
+            ),
+            row=2,
+            col=1,
+        )
+        fig.add_trace(
+            go.Scatter(
+                x=levels,
+                y=topvec_norms,
+                mode="lines+markers",
+                line=dict(color="#7aa2ff", width=3),
+                marker=dict(size=7),
+                name="topological vector L2",
+                hovertemplate="level=%{x}<br>topological-vector L2=%{y:.5g}<extra></extra>",
+            ),
+            row=2,
+            col=2,
+        )
+        fig.add_trace(
+            go.Scatter(
+                x=levels,
+                y=entropy_sums,
+                mode="lines+markers",
+                line=dict(color="#fb7185", width=2.5, dash="dash"),
+                marker=dict(size=6),
+                name="entropy sum",
+                hovertemplate="level=%{x}<br>entropy sum=%{y:.5g}<extra></extra>",
+            ),
+            row=2,
+            col=2,
+        )
+    if betti_rows:
+        max_len = max(len(row) for row in betti_rows)
+        padded = [row + [0.0] * (max_len - len(row)) for row in betti_rows]
+        fig.add_trace(
+            go.Heatmap(
+                z=padded,
+                y=betti_labels,
+                x=list(range(max_len)),
+                colorscale="Viridis",
+                colorbar=dict(title="beta", x=1.0),
+                hovertemplate="level=%{y}<br>grid index=%{x}<br>Betti value=%{z:.4g}<extra></extra>",
+            ),
+            row=1,
+            col=2,
+        )
+    if not levels:
+        fig.add_annotation(text="No vectorized persistence growth data available.", xref="paper", yref="paper", x=0.5, y=0.5, showarrow=False)
+    fig.update_layout(
+        template="plotly_dark",
+        title=(
+            f"{title_prefix}GUDHI persistence vectorization growth"
+            "<br><sup>Fast train/eval features from persistence diagrams; hover panel shows the corresponding filtered complex.</sup>"
+        ),
+        legend=dict(orientation="h", y=-0.18),
+    )
+    fig.update_xaxes(title_text="trajectory level", row=1, col=1)
+    fig.update_yaxes(title_text="landscape L2", row=1, col=1)
+    fig.update_xaxes(title_text="Betti-curve grid coordinate", row=1, col=2)
+    fig.update_yaxes(title_text="trajectory level", row=1, col=2)
+    fig.update_xaxes(title_text="trajectory level", row=2, col=1)
+    fig.update_yaxes(title_text="length mass", row=2, col=1)
+    fig.update_xaxes(title_text="trajectory level", row=2, col=2)
+    fig.update_yaxes(title_text="feature norm / entropy", row=2, col=2)
+    _write_plotly_dark_html(
+        path,
+        fig,
+        f"{title_prefix}GUDHI persistence vectorization growth",
+        _simplicial_panel_items(panel_objects, panel_hover),
+    )
+
+
 def _prepare_barcode_intervals(intervals: list[object], epsilon: float = 1e-9) -> tuple[list[dict[str, object]], dict[str, object]]:
     raw: list[dict[str, object]] = [row for row in intervals if isinstance(row, dict)]
     finite_deaths = [
@@ -1914,6 +2248,7 @@ def _trajectory_growth_rows(topology: dict[str, object], growth: list[object] | 
         if not isinstance(item, dict):
             continue
         topo = item.get("topological_algebra") if isinstance(item.get("topological_algebra"), dict) else {}
+        topo = _topology_with_persistence_representations(topo)
         obj = item.get("filtered_simplicial_object") if isinstance(item.get("filtered_simplicial_object"), dict) else {}
         intervals, _ = _prepare_barcode_intervals(_intervals_or_synthetic_h0(topo), epsilon=0.0)
         rows.append(
@@ -1926,6 +2261,7 @@ def _trajectory_growth_rows(topology: dict[str, object], growth: list[object] | 
             }
         )
     if not rows and isinstance(topology, dict):
+        topology = _topology_with_persistence_representations(topology)
         intervals, _ = _prepare_barcode_intervals(_intervals_or_synthetic_h0(topology), epsilon=0.0)
         rows.append(
             {
@@ -1937,6 +2273,34 @@ def _trajectory_growth_rows(topology: dict[str, object], growth: list[object] | 
             }
         )
     return rows
+
+
+def _topology_with_persistence_representations(topology: dict[str, object]) -> dict[str, object]:
+    if not isinstance(topology, dict):
+        return {}
+    reps = topology.get("persistence_representations")
+    if isinstance(reps, dict) and (reps.get("available") or "methods" in reps):
+        return topology
+    persistence = topology.get("persistence", {}) if isinstance(topology.get("persistence"), dict) else {}
+    intervals = persistence.get("intervals", []) if isinstance(persistence, dict) else []
+    if not isinstance(intervals, list):
+        return topology
+    try:
+        from .algebra import compute_persistence_representations_from_intervals
+
+        enriched = dict(topology)
+        enriched["persistence_representations"] = compute_persistence_representations_from_intervals(
+            [row for row in intervals if isinstance(row, dict)]
+        )
+        return enriched
+    except Exception as exc:
+        enriched = dict(topology)
+        enriched["persistence_representations"] = {
+            "available": False,
+            "backend": "gudhi.representations",
+            "error": f"{type(exc).__name__}: {exc}",
+        }
+        return enriched
 
 
 def _intervals_or_synthetic_h0(topology: dict[str, object]) -> list[dict[str, object]]:
@@ -1952,6 +2316,47 @@ def _intervals_or_synthetic_h0(topology: dict[str, object]) -> list[dict[str, ob
         return []
     birth = float(first.get("threshold", 0.0) or 0.0)
     return [{"dimension": 0, "birth": birth, "death": None, "infinite": True, "synthetic": "module_beta0"}]
+
+
+def _as_float_list(values: object) -> list[float]:
+    if not isinstance(values, list):
+        return []
+    out: list[float] = []
+    for value in values:
+        try:
+            val = float(value)
+        except (TypeError, ValueError):
+            continue
+        if math.isfinite(val):
+            out.append(val)
+    return out
+
+
+def _representation_summary_sum(reps: dict[str, object], method: str, key: str) -> float:
+    methods = reps.get("methods", {}) if isinstance(reps.get("methods"), dict) else {}
+    total = 0.0
+    for row in methods.values():
+        if not isinstance(row, dict) or not row.get("available"):
+            continue
+        method_report = row.get(method, {})
+        if isinstance(method_report, dict):
+            total += float(method_report.get(key, 0.0) or 0.0)
+    return total
+
+
+def _combined_betti_curve_vector(reps: dict[str, object], max_points_per_dim: int = 64) -> list[float]:
+    methods = reps.get("methods", {}) if isinstance(reps.get("methods"), dict) else {}
+    combined: list[float] = []
+    for _, row in sorted(methods.items(), key=lambda item: int(item[0]) if str(item[0]).isdigit() else 99):
+        if not isinstance(row, dict) or not row.get("available"):
+            continue
+        betti = row.get("betti_curve", {}) if isinstance(row.get("betti_curve"), dict) else {}
+        vals = _as_float_list(betti.get("values", []))
+        if len(vals) > max_points_per_dim:
+            take = np.linspace(0, len(vals) - 1, max_points_per_dim).round().astype(int)
+            vals = [vals[int(idx)] for idx in take]
+        combined.extend(vals)
+    return combined
 
 
 def _topology_growth_hover(level: int, obj: dict[str, object], topology: dict[str, object]) -> str:
@@ -2048,6 +2453,20 @@ def _free_resolution_line(topology: dict[str, object]) -> str:
     proxy = ca.get("multiparameter_free_resolution_proxy", {}) if isinstance(ca.get("multiparameter_free_resolution_proxy"), dict) else {}
     ring = proxy.get("ring", "F2[x_filtration,x_dimension,x_position]")
     return f"free-resolution proxy over {ring}: " + (", ".join(ranks) if ranks else "no displayed free modules")
+
+
+def _persistence_representation_line(topology: dict[str, object]) -> str:
+    reps = topology.get("persistence_representations", {}) if isinstance(topology, dict) and isinstance(topology.get("persistence_representations"), dict) else {}
+    if not reps:
+        return "persistence vectorizations: unavailable"
+    summary = reps.get("summary", {}) if isinstance(reps.get("summary"), dict) else {}
+    return (
+        "persistence vectorizations: "
+        f"available={bool(reps.get('available'))}, "
+        f"finite intervals={int(reps.get('finite_interval_count', 0) or 0)}, "
+        f"landscape L2={float(summary.get('landscape_l2_norm', 0.0) or 0.0):.4g}, "
+        f"topological-vector L2={float(summary.get('topological_vector_l2_norm', 0.0) or 0.0):.4g}"
+    )
 
 
 def _free_resolution_modules(topology: dict[str, object]) -> list[dict[str, object]]:
@@ -3509,6 +3928,78 @@ def _edge_action_label(row: dict[str, object]) -> str:
     return _last_action(row)
 
 
+def _trajectory_nll_progress_diagnostics(
+    candidates: list[dict[str, object]],
+    ids: list[str],
+    id_to_idx: dict[str, int],
+    nll_values: np.ndarray,
+    levels: np.ndarray,
+) -> dict[str, object]:
+    edge_rows: list[dict[str, object]] = []
+    has_child = {str(row.get("parent")) for row in candidates if isinstance(row.get("parent"), str)}
+    for idx, row in enumerate(candidates):
+        parent = row.get("parent")
+        if not isinstance(parent, str) or parent not in id_to_idx:
+            continue
+        parent_idx = id_to_idx[parent]
+        delta = float(nll_values[idx] - nll_values[parent_idx])
+        edge_rows.append(
+            {
+                "source": str(parent),
+                "target": str(ids[idx]),
+                "source_level": int(levels[parent_idx]) if parent_idx < len(levels) else 0,
+                "target_level": int(levels[idx]) if idx < len(levels) else 0,
+                "source_nll": float(nll_values[parent_idx]),
+                "target_nll": float(nll_values[idx]),
+                "delta_child_minus_parent": delta,
+                "improves": bool(delta < 0.0),
+            }
+        )
+    deltas = np.asarray([row["delta_child_minus_parent"] for row in edge_rows], dtype=float)
+    improving = deltas < 0.0 if deltas.size else np.asarray([], dtype=bool)
+    root_indices = [idx for idx, row in enumerate(candidates) if not isinstance(row.get("parent"), str)]
+    root_nll = float(np.nanmean(nll_values[root_indices])) if root_indices else float(nll_values[0])
+    max_level = int(np.nanmax(levels)) if len(levels) else 0
+    terminal_indices = [
+        idx
+        for idx, row in enumerate(candidates)
+        if int(levels[idx]) == max_level or str(ids[idx]) not in has_child
+    ]
+    terminal_nll = np.asarray([float(nll_values[idx]) for idx in terminal_indices], dtype=float)
+    by_level: list[dict[str, float | int]] = []
+    level_values = np.asarray(levels, dtype=int).reshape(-1)
+    for level in sorted({int(v) for v in level_values.tolist()}):
+        mask = np.asarray([int(v) == level for v in levels], dtype=bool)
+        vals = nll_values[mask]
+        if vals.size:
+            by_level.append(
+                {
+                    "level": int(level),
+                    "count": int(vals.size),
+                    "mean_nll": float(np.nanmean(vals)),
+                    "min_nll": float(np.nanmin(vals)),
+                    "max_nll": float(np.nanmax(vals)),
+                    "mean_improvement_from_root": float(root_nll - np.nanmean(vals)),
+                    "best_improvement_from_root": float(root_nll - np.nanmin(vals)),
+                }
+            )
+    return {
+        "edge_count": int(len(edge_rows)),
+        "edge_deltas": edge_rows,
+        "improving_edge_fraction": float(np.mean(improving)) if improving.size else 0.0,
+        "mean_edge_delta": float(np.nanmean(deltas)) if deltas.size else 0.0,
+        "median_edge_delta": float(np.nanmedian(deltas)) if deltas.size else 0.0,
+        "root_mean_nll": root_nll,
+        "terminal_count": int(terminal_nll.size),
+        "terminal_mean_nll": float(np.nanmean(terminal_nll)) if terminal_nll.size else root_nll,
+        "terminal_min_nll": float(np.nanmin(terminal_nll)) if terminal_nll.size else root_nll,
+        "terminal_mean_improvement_from_root": float(root_nll - np.nanmean(terminal_nll)) if terminal_nll.size else 0.0,
+        "best_terminal_improvement_from_root": float(root_nll - np.nanmin(terminal_nll)) if terminal_nll.size else 0.0,
+        "by_level": by_level,
+        "interpretation": "Negative edge deltas and positive terminal improvements indicate reasoning paths moving toward lower NLL; non-monotone paths remain visible as regressions.",
+    }
+
+
 def _action_color(action: str) -> str:
     colors = {
         "expand": "#55d6be",
@@ -4543,6 +5034,116 @@ def _nll_triangulated_surface_trace(
     meta["source_point_count_before_duplicate_collapse"] = source_count
     meta["unique_xy_point_count"] = int(x.size)
     meta["duplicate_xy_points_removed"] = int(max(source_count - x.size, 0))
+    return trace, meta
+
+
+def _nll_surrogate_landscape_trace(
+    x_values: np.ndarray,
+    y_values: np.ndarray,
+    z_values: np.ndarray,
+    nll_values: np.ndarray,
+    name: str,
+) -> tuple[go.BaseTraceType | None, dict[str, object]]:
+    x = np.asarray(x_values, dtype=float).reshape(-1)
+    y = np.asarray(y_values, dtype=float).reshape(-1)
+    z = np.asarray(z_values, dtype=float).reshape(-1)
+    nll = np.asarray(nll_values, dtype=float).reshape(-1)
+    finite = np.isfinite(x) & np.isfinite(y) & np.isfinite(z) & np.isfinite(nll)
+    x = x[finite]
+    y = y[finite]
+    z = z[finite]
+    nll = nll[finite]
+    if x.size < 3 or _xy_rank(x, y) < 2:
+        return None, {"available": False, "reason": "insufficient non-collinear NLL anchors for landscape"}
+    source_count = int(x.size)
+    x, y, z, nll, duplicate_meta = _collapse_duplicate_xy_for_surface(x, y, z, nll)
+    if x.size < 3 or _xy_rank(x, y) < 2:
+        return None, {"available": False, "reason": "duplicate collapse left insufficient landscape anchors"}
+
+    x_span = float(np.ptp(x))
+    y_span = float(np.ptp(y))
+    span = max(x_span, y_span, 1e-9)
+    pad_x = max(x_span * 0.78, span * 0.46, 0.45)
+    pad_y = max(y_span * 0.78, span * 0.46, 0.45)
+    grid_size = 82
+    xi = _axis_with_points(float(x.min() - pad_x), float(x.max() + pad_x), x, grid_size)
+    yi = _axis_with_points(float(y.min() - pad_y), float(y.max() + pad_y), y, grid_size)
+    grid_x, grid_y = np.meshgrid(xi, yi)
+    points = np.column_stack([x, y])
+    grid_points = np.column_stack([grid_x.reshape(-1), grid_y.reshape(-1)])
+    positive = _positive_pairwise_distances(points)
+    if positive.size:
+        sigma = float(max(np.quantile(positive, 0.45), span * 0.14, 1e-6))
+        distance_scale = float(max(np.quantile(positive, 0.72), span * 0.42, 1e-6))
+    else:
+        sigma = float(max(span * 0.25, 1e-6))
+        distance_scale = float(max(span * 0.42, 1e-6))
+    z_idw, min_dist = _local_idw_interpolate(points, z, grid_points, sigma=sigma)
+    nll_idw, _ = _local_idw_interpolate(points, nll, grid_points, sigma=sigma)
+
+    z_range = float(np.nanmax(z) - np.nanmin(z)) if z.size else 0.0
+    barrier_height = float(max(z_range * 0.72, 2.4))
+    local_support_energy = np.clip((min_dist / distance_scale) ** 2, 0.0, 3.5)
+    landscape_flat = z_idw + barrier_height * local_support_energy
+    landscape_z = landscape_flat.reshape(grid_x.shape)
+    nll_grid = nll_idw.reshape(grid_x.shape)
+    distance_grid = min_dist.reshape(grid_x.shape)
+    customdata = np.dstack([nll_grid, distance_grid])
+    z_at_points, _ = _local_idw_interpolate(points, z, points, sigma=sigma)
+    residual = float(np.nanmax(np.abs(z_at_points - z))) if z.size else 0.0
+    trace = go.Surface(
+        x=grid_x,
+        y=grid_y,
+        z=landscape_z,
+        surfacecolor=landscape_z,
+        colorscale=[
+            [0.0, "#0612a8"],
+            [0.22, "#2447d8"],
+            [0.45, "#6578d8"],
+            [0.62, "#a6b4c4"],
+            [0.78, "#d08b52"],
+            [1.0, "#b91c1c"],
+        ],
+        opacity=0.66,
+        showscale=False,
+        name=name,
+        customdata=customdata,
+        hovertemplate=(
+            "smooth projected NLL/fitness landscape<br>"
+            "PC1=%{x:.3f}<br>"
+            "PC2=%{y:.3f}<br>"
+            "energy=%{z:.4f}<br>"
+            "local smoothed raw NLL=%{customdata[0]:.6f}<br>"
+            "distance to nearest GoT state=%{customdata[1]:.4f}<br>"
+            "surrogate term is zero at observed states<extra></extra>"
+        ),
+        contours=dict(z=dict(show=True, color="rgba(224,242,254,0.20)", width=1)),
+        lighting=dict(ambient=0.72, diffuse=0.38, specular=0.10, roughness=0.86),
+        showlegend=True,
+    )
+    meta = {
+        "available": True,
+        "surface_kind": "smooth_projected_nll_fitness_landscape",
+        "source_point_count_before_duplicate_collapse": source_count,
+        "unique_xy_point_count": int(x.size),
+        "duplicate_xy_points_removed": int(max(source_count - x.size, 0)),
+        "touches_points": True,
+        "max_point_residual": residual,
+        "raw_nll_range": float(np.nanmax(nll) - np.nanmin(nll)) if nll.size else 0.0,
+        "grid_shape": [int(grid_x.shape[0]), int(grid_x.shape[1])],
+        "idw_sigma": sigma,
+        "distance_scale": distance_scale,
+        "barrier_height": barrier_height,
+        "surrogate_terms": ["inverse_distance_weighted_centered_scaled_nll", "squared_distance_to_observed_embedding_support"],
+        "support_energy_policy": "adds zero energy at observed PCA states and a smooth embedding-neighborhood penalty away from sampled reasoning states",
+        "provenance": "computed from model graph_state PCA coordinates and sampled raw NLL anchors; not an independently evaluated dense model loss field",
+    }
+    meta.update(
+        {
+            "duplicate_xy_group_count": int(duplicate_meta.get("duplicate_xy_group_count", 0)),
+            "max_duplicate_xy_multiplicity": int(duplicate_meta.get("max_duplicate_xy_multiplicity", 1)),
+        }
+    )
     return trace, meta
 
 

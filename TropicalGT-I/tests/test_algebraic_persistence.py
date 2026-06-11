@@ -17,6 +17,13 @@ def test_topological_algebra_report_has_multiparameter_data():
     assert report["chain_complex"]["field"] == "F2"
     assert report["multiparameter_persistence"]["num_parameters"] == 3
     assert report["multiparameter_persistence"]["fiber_rank_profile"]
+    reps = report["persistence_representations"]
+    assert reps["backend"] == "gudhi.representations"
+    assert "decision_policy" in reps
+    if reps["available"]:
+        assert reps["summary"]["landscape_l2_norm"] >= 0.0
+        assert reps["summary"]["topological_vector_l2_norm"] >= 0.0
+        assert any(row.get("method") == "Landscape" for row in reps["decision_policy"])
     assert "commutative_algebra" in report
     proxy = report["commutative_algebra"]["multiparameter_free_resolution_proxy"]
     assert proxy["ring"] == "F2[x_filtration,x_dimension,x_position]"
