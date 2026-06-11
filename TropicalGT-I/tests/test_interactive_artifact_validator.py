@@ -106,6 +106,34 @@ def _row(root: Path, name: str) -> Path:
         {"codomain_complex_source": "trajectory_filtered_simplicial_object", "edge_preservation_rate": 0.25, "domain_simplex_tree": {"backend": "gudhi.SimplexTree"}, "codomain_simplex_tree": {"backend": "gudhi.SimplexTree"}, "displayed_domain_vertices": 2, "displayed_codomain_vertices": 2},
         {"codomain_complex_source": "trajectory_filtered_simplicial_object", "edge_preservation_rate": 0.5, "domain_simplex_tree": {"backend": "gudhi.SimplexTree"}, "codomain_simplex_tree": {"backend": "gudhi.SimplexTree"}, "displayed_domain_vertices": 2, "displayed_codomain_vertices": 2},
     ]}))
+    _write(
+        row / "tropical_support_payload.json",
+        json.dumps(
+            {
+                "metrics": {
+                    "available": True,
+                    "token_count": 4,
+                    "unique_support_count": 1,
+                    "effective_supports": 1.0,
+                    "support_entropy_bits": 0.0,
+                    "top_support_collapse_rate": 1.0,
+                    "interpretation": "Uniform blocks indicate true active-support collapse or nearly constant margins.",
+                }
+            }
+        ),
+    )
+    _write(
+        row / "graphcg_direction_cosines_payload.json",
+        json.dumps(
+            {
+                "available": True,
+                "matrix_shape": [4, 8],
+                "display_count": 4,
+                "active_rank_nonzero_mean_abs": 8,
+                "interpretation": "Heatmap colors encode absolute cosine activity; signed cosine values are preserved in hover.",
+            }
+        ),
+    )
     _write(row / "inference_audit.json", "{}")
     html_files = {
         "got_embedding_map_3d.html": _html("Graph-of-thought embedding-space trajectory map actual graph_state PCA"),

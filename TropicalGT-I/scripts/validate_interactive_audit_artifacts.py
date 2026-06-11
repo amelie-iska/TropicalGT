@@ -32,6 +32,8 @@ REQUIRED_JSON = {
     "full_complex_payload": "got_full_trajectory_complex_payload.json",
     "step_manifest": "reasoning_step_complex_maps/manifest.json",
     "inference_audit": "inference_audit.json",
+    "tropical_support_payload": "tropical_support_payload.json",
+    "graphcg_payload": "graphcg_direction_cosines_payload.json",
 }
 
 
@@ -148,6 +150,8 @@ def validate_row(row_dir: Path, *, min_candidates: int = 8, min_depth: int = 2, 
     embedding_payload = _read_json(row_dir / REQUIRED_JSON["embedding_payload"]) if (row_dir / REQUIRED_JSON["embedding_payload"]).exists() else {}
     full_complex_payload = _read_json(row_dir / REQUIRED_JSON["full_complex_payload"]) if (row_dir / REQUIRED_JSON["full_complex_payload"]).exists() else {}
     manifest = _read_json(row_dir / REQUIRED_JSON["step_manifest"]) if (row_dir / REQUIRED_JSON["step_manifest"]).exists() else {}
+    support_payload = _read_json(row_dir / REQUIRED_JSON["tropical_support_payload"]) if (row_dir / REQUIRED_JSON["tropical_support_payload"]).exists() else {}
+    graphcg_payload = _read_json(row_dir / REQUIRED_JSON["graphcg_payload"]) if (row_dir / REQUIRED_JSON["graphcg_payload"]).exists() else {}
 
     candidates = [row for row in scaling.get("candidates", []) if isinstance(row, dict)]
     nodes = [row for row in payload.get("nodes", []) if isinstance(row, dict)]
@@ -215,6 +219,18 @@ def validate_row(row_dir: Path, *, min_candidates: int = 8, min_depth: int = 2, 
     _assert(surface.get("exact_anchor_layer") is True, errors, "NLL surface is missing exact anchor layer metadata")
     _assert(surface.get("surface_kind") == "sample_supported_local_idw_surface", errors, "NLL surface is not using sample-supported local interpolation")
     _assert(_finite_float(surface.get("support_radius"), -1.0) > 0.0, errors, "NLL surface payload is missing a positive support_radius")
+
+    support_metrics = support_payload.get("metrics", {}) if isinstance(support_payload, dict) else {}
+    _assert(support_metrics.get("available") is True, errors, "tropical support payload is unavailable")
+    _assert(_finite_float(support_metrics.get("token_count"), 0.0) > 0, errors, "tropical support payload has no tokens")
+    _assert(_finite_float(support_metrics.get("unique_support_count"), 0.0) >= 1, errors, "tropical support payload has no observed supports")
+    _assert("interpretation" in support_metrics, errors, "tropical support payload is missing collapse interpretation")
+
+    _assert(graphcg_payload.get("available") is True, errors, "GraphCG payload is unavailable")
+    matrix_shape = graphcg_payload.get("matrix_shape", [])
+    _assert(isinstance(matrix_shape, list) and len(matrix_shape) == 2 and int(matrix_shape[0]) >= len(candidates), errors, "GraphCG payload has invalid matrix shape")
+    _assert(_finite_float(graphcg_payload.get("active_rank_nonzero_mean_abs"), 0.0) > 0, errors, "GraphCG payload reports no active directions")
+    _assert(graphcg_payload.get("interpretation"), errors, "GraphCG payload is missing heatmap interpretation")
 
     _assert(len(embedded_nodes) == len(nodes), errors, "embedding map payload node count differs from trajectory payload")
     _assert(embedding_payload.get("coordinate_source", "").startswith("PCA of model graph_state embeddings"), errors, "embedding map payload has wrong coordinate source")

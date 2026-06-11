@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections import defaultdict, deque
+from collections import Counter, defaultdict, deque
 from pathlib import Path
 import hashlib
 import html
@@ -1218,6 +1218,7 @@ def write_tropical_support_heatmap(result: dict[str, object], output_dir: str | 
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
     path = output_dir / "tropical_support_heatmap.html"
+    payload_path = output_dir / "tropical_support_payload.json"
     trace = result.get("graph_token_trace", {}) if isinstance(result, dict) else {}
     if (not isinstance(trace, dict) or not trace.get("tokens")) and isinstance(result, dict):
         scaling = result.get("inference_scaling")
@@ -1235,7 +1236,8 @@ def write_tropical_support_heatmap(result: dict[str, object], output_dir: str | 
     tokens = trace.get("tokens", []) if isinstance(trace, dict) else []
     if not tokens:
         _write_dark_empty(path, "No graph-token trace available.")
-        return {"tropical_support_heatmap": str(path)}
+        payload_path.write_text(json.dumps({"tokens": [], "supports": [], "metrics": {"available": False}}, indent=2), encoding="utf-8")
+        return {"tropical_support_heatmap": str(path), "tropical_support_payload": str(payload_path)}
     n = len(tokens)
     support_indices = []
     for token in tokens:
@@ -1275,6 +1277,32 @@ def write_tropical_support_heatmap(result: dict[str, object], output_dir: str | 
     support_probs = counts / max(float(counts.sum()), 1.0)
     support_entropy = float(-np.sum(support_probs * np.log2(np.maximum(support_probs, 1e-12)))) if counts.size else 0.0
     effective_supports = float(2.0 ** support_entropy) if counts.size else 0.0
+    support_metrics = {
+        "available": True,
+        "token_count": int(n),
+        "unique_support_count": int(len(support_indices)),
+        "effective_supports": effective_supports,
+        "support_entropy_bits": support_entropy,
+        "top_support_collapse_rate": collapse_rate,
+        "support_indices": [int(idx) for idx in support_indices],
+        "support_labels": support_labels,
+        "support_counts": [int(c) for c in counts.tolist()],
+        "mean_margins": [float(v) for v in mean_margins],
+        "interpretation": "Uniform blocks indicate true active-support collapse or nearly constant margins, not a heatmap rendering failure.",
+    }
+    payload_path.write_text(
+        json.dumps(
+            {
+                "metrics": support_metrics,
+                "query_labels": query_labels,
+                "support_labels": support_labels,
+                "margin_matrix": z.tolist(),
+                "tokens": tokens,
+            },
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
     fig = make_subplots(
         rows=1,
         cols=2,
@@ -1288,12 +1316,12 @@ def write_tropical_support_heatmap(result: dict[str, object], output_dir: str | 
             z=z,
             x=support_labels,
             y=query_labels,
-            colorscale="Viridis",
+            colorscale="Cividis",
             colorbar=dict(title="margin", x=0.64),
             customdata=hover_grid,
             hovertemplate="%{customdata}<extra></extra>",
-            zmin=float(np.nanmin(z)) if z.size and np.isfinite(z).any() else None,
-            zmax=float(np.nanmax(z)) if z.size and np.isfinite(z).any() else None,
+            zmin=0.0,
+            zmax=max(float(np.nanmax(z)), 1.0) if z.size and np.isfinite(z).any() else 1.0,
         ),
         row=1,
         col=1,
@@ -1321,12 +1349,30 @@ def write_tropical_support_heatmap(result: dict[str, object], output_dir: str | 
             "uniform blocks mean active-support collapse or nearly constant margins</sup>"
         ),
     )
+    if collapse_rate >= 0.95:
+        fig.add_annotation(
+            text=(
+                "active-support collapse: nearly every query token selects the same support<br>"
+                "uniform color is a model-trace diagnostic, not a heatmap rendering failure"
+            ),
+            x=0.02,
+            y=1.11,
+            xref="paper",
+            yref="paper",
+            showarrow=False,
+            align="left",
+            font=dict(size=12, color="#fbbf24"),
+            bgcolor="rgba(15,23,42,0.92)",
+            bordercolor="rgba(251,191,36,0.45)",
+            borderwidth=1,
+        )
+        fig.update_layout(margin=dict(t=138))
     fig.update_xaxes(title_text="active support token", tickangle=55, row=1, col=1)
     fig.update_yaxes(title_text="query token", row=1, col=1)
     fig.update_xaxes(title_text="support token", tickangle=55, row=1, col=2)
     fig.update_yaxes(title_text="query count", row=1, col=2)
     _write_plotly_dark_html(path, fig, "Tropical active-support heatmap")
-    return {"tropical_support_heatmap": str(path)}
+    return {"tropical_support_heatmap": str(path), "tropical_support_payload": str(payload_path)}
 
 
 def _support_token_label(index: int, token: dict[str, object], long: bool = False) -> str:
@@ -1463,14 +1509,18 @@ def _write_growth_persistence_barcode(path: Path, topology: dict[str, object], g
             if isinstance(death, (int, float)) and math.isfinite(float(death)):
                 max_death = max(max_death, float(death))
     y_cursor = 0
-    tick_vals: list[int] = []
+    tick_vals: list[float] = []
     tick_text: list[str] = []
+    line_width = 3 if interval_count > 160 else 5 if interval_count > 80 else 8
+    marker_size = 3 if interval_count > 160 else 4 if interval_count > 80 else 5
     for row_idx, row in enumerate(rows):
         level = int(row["level"])
         obj = row.get("filtered_simplicial_object", {})
         topo = row.get("topological_algebra", {})
         panel_objects.append(obj if isinstance(obj, dict) else {})
         panel_hover.append(_topology_growth_hover(level, obj if isinstance(obj, dict) else {}, topo if isinstance(topo, dict) else {}))
+        level_start = y_cursor
+        level_interval_count = 0
         for interval_idx, interval in enumerate(row["intervals"]):
             dim = int(interval.get("dimension", 0))
             birth = float(interval.get("birth", 0.0))
@@ -1488,16 +1538,15 @@ def _write_growth_persistence_barcode(path: Path, topology: dict[str, object], g
                 f"<br>{_free_resolution_line(topo if isinstance(topo, dict) else {})}"
             )
             y = y_cursor
-            tick_vals.append(y)
-            tick_text.append(f"L{level} H{dim} #{interval_idx}")
             y_cursor += 1
+            level_interval_count += 1
             fig.add_trace(
                 go.Scatter(
                     x=[birth, death],
                     y=[y, y],
                     mode="lines+markers",
-                    line=dict(width=8, color=colors.get(dim, "#cbd5e1")),
-                    marker=dict(size=5, color=colors.get(dim, "#cbd5e1")),
+                    line=dict(width=line_width, color=colors.get(dim, "#cbd5e1")),
+                    marker=dict(size=marker_size, color=colors.get(dim, "#cbd5e1")),
                     name=f"H{dim}",
                     hovertext=[hover, hover],
                     hoverinfo="text",
@@ -1518,19 +1567,29 @@ def _write_growth_persistence_barcode(path: Path, topology: dict[str, object], g
                         showlegend=False,
                     )
                 )
+        if level_interval_count:
+            tick_vals.append(level_start + (level_interval_count - 1) / 2.0)
+            dim_counts = Counter(int(interval.get("dimension", 0)) for interval in row["intervals"])
+            dim_summary = " ".join(f"H{dim}:{count}" for dim, count in sorted(dim_counts.items()))
+            tick_text.append(f"L{level} ({level_interval_count}; {dim_summary})")
+        else:
+            tick_vals.append(float(y_cursor))
+            tick_text.append(f"L{level} (0)")
+            y_cursor += 1
     if not rows:
         fig.add_annotation(text="No trajectory growth topology available.", xref="paper", yref="paper", x=0.5, y=0.5, showarrow=False)
+    backend_summary = ", ".join(f"{key}:{value}" for key, value in sorted(backend_counts.items())) or "none"
     fig.update_layout(
         template="plotly_dark",
         title=(
             f"{title_prefix}persistent homology growth barcode"
-            "<br><sup>standard interval view; "
+            "<br><sup>standard interval view with level-grouped y-axis; "
             f"intervals={interval_count}, synthetic fallback={synthetic_count}; "
-            f"backends={html.escape(_json_clip(dict(backend_counts), 160))}; "
+            f"backends={html.escape(backend_summary)}; "
             "hover shows GUDHI/topology provenance and free-resolution summary</sup>"
         ),
         xaxis_title="filtration birth/death",
-        yaxis=dict(title="interval", tickmode="array", tickvals=tick_vals, ticktext=tick_text, autorange="reversed"),
+        yaxis=dict(title="trajectory level (interval counts by homology dimension)", tickmode="array", tickvals=tick_vals, ticktext=tick_text, autorange="reversed", tickfont=dict(size=10)),
         legend=dict(itemsizing="constant"),
     )
     _write_plotly_dark_html(
@@ -1557,6 +1616,10 @@ def _write_growth_persistence_module(path: Path, topology: dict[str, object], gr
     panel_hover = []
     betti_cells: list[dict[str, object]] = []
     free_cells: list[dict[str, object]] = []
+    betti_tickvals: list[str] = []
+    betti_ticktext: list[str] = []
+    free_tickvals: list[str] = []
+    free_ticktext: list[str] = []
     for row_idx, row in enumerate(rows):
         level = int(row["level"])
         obj = row.get("filtered_simplicial_object", {})
@@ -1603,6 +1666,9 @@ def _write_growth_persistence_module(path: Path, topology: dict[str, object], gr
         dims = sorted({int(cell["dim"]) for cell in betti_cells})
         thresholds = sorted({round(float(cell["threshold"]), 6) for cell in betti_cells})
         x_labels = [f"H{dim}@{threshold:.3g}" for dim in dims for threshold in thresholds]
+        tick_step = max(1, int(math.ceil(len(x_labels) / 18)))
+        betti_tickvals = x_labels[::tick_step]
+        betti_ticktext = x_labels[::tick_step]
         z = np.zeros((len(levels), len(x_labels)), dtype=float)
         hover = [["" for _ in x_labels] for _ in levels]
         index = {(int(cell["level"]), int(cell["dim"]), round(float(cell["threshold"]), 6)): cell for cell in betti_cells}
@@ -1628,6 +1694,9 @@ def _write_growth_persistence_module(path: Path, topology: dict[str, object], gr
     if free_cells:
         x = [f"L{cell['level']} F{cell['degree']}" for cell in free_cells]
         y = [float(cell["rank"]) for cell in free_cells]
+        tick_step = max(1, int(math.ceil(len(x) / 22)))
+        free_tickvals = x[::tick_step]
+        free_ticktext = x[::tick_step]
         fig.add_trace(
             go.Bar(
                 x=x,
@@ -1649,9 +1718,9 @@ def _write_growth_persistence_module(path: Path, topology: dict[str, object], gr
             "<br><sup>2D matrix/bar view replaces decorative 3D spikes; hover opens the corresponding filtered complex panel</sup>"
         ),
     )
-    fig.update_xaxes(title_text="homology dimension / filtration", tickangle=55, row=1, col=1)
+    fig.update_xaxes(title_text="homology dimension / filtration", tickangle=45, tickmode="array", tickvals=betti_tickvals, ticktext=betti_ticktext, row=1, col=1)
     fig.update_yaxes(title_text="trajectory growth level", row=1, col=1)
-    fig.update_xaxes(title_text="level and free module", tickangle=55, row=1, col=2)
+    fig.update_xaxes(title_text="level and free module", tickangle=45, tickmode="array", tickvals=free_tickvals, ticktext=free_ticktext, row=1, col=2)
     fig.update_yaxes(title_text="free rank", row=1, col=2)
     _write_plotly_dark_html(
         path,
@@ -1874,6 +1943,7 @@ def _free_resolution_modules(topology: dict[str, object]) -> list[dict[str, obje
 def write_graphcg_trajectory_visualization(scaling_report: dict[str, object], output_dir: str | Path) -> dict[str, str]:
     output_dir = Path(output_dir)
     path = output_dir / "graphcg_direction_cosines.html"
+    payload_path = output_dir / "graphcg_direction_cosines_payload.json"
     candidates = [row for row in scaling_report.get("candidates", []) if isinstance(row, dict)]
     matrices = []
     labels = []
@@ -1890,24 +1960,50 @@ def write_graphcg_trajectory_visualization(scaling_report: dict[str, object], ou
             )
     if not matrices:
         _write_dark_empty(path, "No GraphCG projection diagnostics available.")
-        return {"graphcg_direction_cosines": str(path)}
+        payload_path.write_text(json.dumps({"available": False, "reason": "No GraphCG projection diagnostics available."}, indent=2), encoding="utf-8")
+        return {"graphcg_direction_cosines": str(path), "graphcg_direction_cosines_payload": str(payload_path)}
     matrix = np.asarray(matrices, dtype=float)
     mean_abs = np.mean(np.abs(matrix), axis=0)
+    signed_mean = np.mean(matrix, axis=0)
     direction_count = int(matrix.shape[1])
     display_count = min(48, direction_count)
     top_idx = np.argsort(mean_abs)[::-1][:display_count]
     top_idx = top_idx[np.argsort(top_idx)]
-    z = matrix[:, top_idx]
+    z_signed = matrix[:, top_idx]
+    z_abs = np.abs(z_signed)
     custom = [
         [
             hover_rows[row_idx]
             + f"<br>direction={int(direction_idx)}"
-            + f"<br>cosine={z[row_idx, col_idx]:.5f}"
+            + f"<br>signed cosine={z_signed[row_idx, col_idx]:.5f}"
+            + f"<br>|cosine|={z_abs[row_idx, col_idx]:.5f}"
             + f"<br>mean |cos| for direction={mean_abs[int(direction_idx)]:.5f}"
+            + f"<br>signed mean for direction={signed_mean[int(direction_idx)]:.5f}"
             for col_idx, direction_idx in enumerate(top_idx)
         ]
-        for row_idx in range(z.shape[0])
+        for row_idx in range(z_abs.shape[0])
     ]
+    active_floor = float(np.quantile(mean_abs, 0.9)) if mean_abs.size else 0.0
+    active_rank = int(np.sum(mean_abs > 1e-8)) if mean_abs.size else 0
+    payload_path.write_text(
+        json.dumps(
+            {
+                "available": True,
+                "matrix_shape": [int(matrix.shape[0]), int(matrix.shape[1])],
+                "display_count": int(display_count),
+                "displayed_direction_indices": [int(idx) for idx in top_idx.tolist()],
+                "active_rank_nonzero_mean_abs": active_rank,
+                "mean_abs_min": float(np.min(mean_abs)) if mean_abs.size else 0.0,
+                "mean_abs_max": float(np.max(mean_abs)) if mean_abs.size else 0.0,
+                "mean_abs_p90": active_floor,
+                "mean_abs": [float(v) for v in mean_abs.tolist()],
+                "signed_mean": [float(v) for v in signed_mean.tolist()],
+                "interpretation": "Heatmap colors encode absolute cosine activity; signed cosine values are preserved in hover and signed_mean.",
+            },
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
     fig = make_subplots(
         rows=1,
         cols=2,
@@ -1918,12 +2014,13 @@ def write_graphcg_trajectory_visualization(scaling_report: dict[str, object], ou
     )
     fig.add_trace(
         go.Heatmap(
-            z=z,
+            z=z_abs,
             y=labels,
             x=[f"d{int(idx)}" for idx in top_idx],
-            colorscale="RdBu",
-            zmid=0,
-            colorbar=dict(title="cosine", x=0.68),
+            colorscale="Magma",
+            zmin=0.0,
+            zmax=max(float(np.nanmax(z_abs)), 1e-9) if z_abs.size else 1.0,
+            showscale=False,
             customdata=custom,
             hovertemplate="%{customdata}<extra></extra>",
         ),
@@ -1949,7 +2046,7 @@ def write_graphcg_trajectory_visualization(scaling_report: dict[str, object], ou
         template="plotly_dark",
         title=(
             "GraphCG full-rank direction audit"
-            f"<br><sup>displaying top {display_count}/{direction_count} directions by mean absolute cosine; full-rank spectrum retained</sup>"
+            f"<br><sup>heatmap encodes |cosine| for top {display_count}/{direction_count} directions; signed cosine is in hover; active nonzero rank={active_rank}</sup>"
         ),
     )
     fig.update_xaxes(title_text="GraphCG direction", tickangle=45, row=1, col=1)
@@ -1957,7 +2054,7 @@ def write_graphcg_trajectory_visualization(scaling_report: dict[str, object], ou
     fig.update_xaxes(title_text="direction rank by activity", row=1, col=2)
     fig.update_yaxes(title_text="mean absolute cosine", row=1, col=2)
     _write_plotly_dark_html(path, fig, "GraphCG direction cosines along GoT candidates")
-    return {"graphcg_direction_cosines": str(path)}
+    return {"graphcg_direction_cosines": str(path), "graphcg_direction_cosines_payload": str(payload_path)}
 
 
 def write_analogical_memory_visualization(
@@ -2240,6 +2337,7 @@ def _complex_filtered_plotly_traces(
     zs = [coords[label][2] for label in labels]
     vertex_by_label = {str(row["label"]): row for row in vertex_rows}
     vertex_hover = [_complex_vertex_hover(label, vertex_by_label.get(label, {}), hover_prefix) for label in labels]
+    label_text = _salient_complex_text_labels(labels, vertex_by_label, max_labels=12)
     mesh_x: list[float] = []
     mesh_y: list[float] = []
     mesh_z: list[float] = []
@@ -2294,7 +2392,7 @@ def _complex_filtered_plotly_traces(
             z=zs,
             mode="markers+text",
             marker=dict(size=7, color=color, line=dict(color="#e8eef8", width=1)),
-            text=[label[:14] for label in labels],
+            text=label_text,
             textposition="top center",
             name=name,
             hovertext=vertex_hover,
@@ -2306,6 +2404,26 @@ def _complex_filtered_plotly_traces(
 
 def _complex_vertex_hover(label: str, vertex_row: dict[str, object], prefix: str) -> str:
     return f"<b>{html.escape(prefix)}</b><br>" + _vertex_readable_summary({**vertex_row, "simplex": [label]}, include_output=True)
+
+
+def _salient_complex_text_labels(labels: list[str], vertex_by_label: dict[str, dict[str, object]], max_labels: int = 12) -> list[str]:
+    if len(labels) <= max_labels:
+        return [_short_label(label, 14) for label in labels]
+    scored: list[tuple[float, int, str]] = []
+    for idx, label in enumerate(labels):
+        row = vertex_by_label.get(label, {})
+        kind = str(row.get("type", "")).lower()
+        filtration = float(row.get("filtration", 0.0) or 0.0)
+        score = filtration
+        if idx == 0 or "root" in kind or "problem" in kind:
+            score += 4.0
+        if any(key in kind for key in ("verification", "retrieved", "merged", "compressed", "rejected")):
+            score += 1.5
+        if "reasoning" in kind:
+            score += 0.75
+        scored.append((score, idx, label))
+    keep = {idx for _, idx, _ in sorted(scored, reverse=True)[:max_labels]}
+    return [_short_label(label, 14) if idx in keep else "" for idx, label in enumerate(labels)]
 
 
 def _simplicial_map_trace(
@@ -2322,6 +2440,14 @@ def _simplicial_map_trace(
     q_vertex = _vertex_by_label(query_obj)
     m_vertex = _vertex_by_label(memory_obj)
     map_rows = sim_map.get("vertex_map", []) if isinstance(sim_map.get("vertex_map"), list) else []
+    raw_map_count = len(map_rows)
+    max_visible_map_edges = 72
+    if len(map_rows) > max_visible_map_edges:
+        map_rows = sorted(
+            [row for row in map_rows if isinstance(row, dict)],
+            key=lambda row: float(row.get("score", 0.0) or 0.0),
+            reverse=True,
+        )[:max_visible_map_edges]
     xs: list[float | None] = []
     ys: list[float | None] = []
     zs: list[float | None] = []
@@ -2347,6 +2473,7 @@ def _simplicial_map_trace(
             f"<br>vertex score={float(mapping.get('score', 0.0)):.4f}"
             f"<br>edge preservation={float(sim_map.get('edge_preservation_rate', 0.0)):.4f}"
             f"<br>2-simplex preservation={float(sim_map.get('two_simplex_preservation_rate', 0.0)):.4f}"
+            f"<br>displayed map edges={len(map_rows)}/{raw_map_count} top-scoring vertex maps"
             f"<br>PH similarity={sim['persistent_homology_similarity']:.4f}"
             f"<br>free-resolution similarity={sim['free_resolution_similarity']:.4f}"
             f"<br>derived similarity={sim['derived_signature_similarity']:.4f}"
@@ -3286,7 +3413,8 @@ def _write_plotly_dark_html(path: Path, fig: go.Figure, title: str, panel_items:
     )
     chart = fig.to_html(full_html=False, include_plotlyjs="cdn", config={"displaylogo": False, "responsive": True})
     items = panel_items or []
-    initial = items[0] if items else {"title": "Filtered simplicial object", "svg": "", "summary": "Hover a reasoning node to render its complex."}
+    initial_index = max(range(len(items)), key=lambda idx: float(items[idx].get("complexity", 0.0))) if items else 0
+    initial = items[initial_index] if items else {"title": "Filtered simplicial object", "svg": "", "summary": "Hover a reasoning node to render its complex."}
     controls_html = (
         """<div class=\"filtration-controls\" id=\"filtration-controls\">
         <label><span>Filtration radius</span><strong id=\"filtration-value\">all</strong></label>
@@ -3447,7 +3575,8 @@ def _write_plotly_dark_html(path: Path, fig: go.Figure, title: str, panel_items:
     const filtrationSlider = document.getElementById("filtration-slider");
     const filtrationValue = document.getElementById("filtration-value");
     const filtrationHint = document.getElementById("filtration-hint");
-    let activePanelIndex = 0;
+    const initialPanelIndex = {int(initial_index)};
+    let activePanelIndex = initialPanelIndex;
     function setPanel(index) {{
       const item = simplicialPanels[index];
       if (!item) return;
@@ -3518,7 +3647,7 @@ def _write_plotly_dark_html(path: Path, fig: go.Figure, title: str, panel_items:
     }}
     const plot = document.querySelector("#chart .plotly-graph-div");
     if (plot && simplicialPanels.length) {{
-      setPanel(0);
+      setPanel(initialPanelIndex);
       plot.on("plotly_hover", (event) => {{
         const point = (event.points || []).find((p) => p.customdata !== undefined && p.customdata !== null);
         if (!point) return;
@@ -3569,6 +3698,11 @@ def _simplicial_panel_items(objects: list[dict[str, object]], hover: list[str]) 
             f"V={summary.get('num_vertices', 0)} | E={summary.get('num_edges', 0)} | "
             f"T={summary.get('num_two_simplices', 0)} | scalar thresholds={summary.get('num_thresholds', len(threshold_values))}"
         )
+        complexity = (
+            float(summary.get("num_vertices", 0) or 0)
+            + 2.0 * float(summary.get("num_edges", 0) or 0)
+            + 3.0 * float(summary.get("num_two_simplices", 0) or 0)
+        )
         summary_html = compact_summary
         if idx < len(hover):
             summary_html += f"<br>{hover[idx]}"
@@ -3578,6 +3712,7 @@ def _simplicial_panel_items(objects: list[dict[str, object]], hover: list[str]) 
                 "summary": summary_html,
                 "compact_summary": compact_summary,
                 "svg": _simplicial_object_svg(obj if isinstance(obj, dict) else {}),
+                "complexity": complexity,
                 "filtration_min": filtration_min,
                 "filtration_max": filtration_max,
                 "multiparameter_hint": (
