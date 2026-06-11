@@ -125,7 +125,7 @@ Implemented after the follow-up critique that actual landscapes were missing and
 - The 3D GoT NLL page now has three distinct layers:
   - `Smooth projected NLL/fitness landscape`: a broad visual energy/fitness surrogate over sampled model states plus rendered reasoning microsteps.
   - `Local interpolating NLL sheet`: a sample-supported inverse-distance interpolant through model-state anchors and rendered microstep anchors. Metadata records `max_point_residual`, duplicate-coordinate collapse diagnostics, support radius, and masked fraction.
-  - `Exact GoT NLL anchor mesh`: exact mesh through sampled model GoT states only.
+  - `Actual sampled GoT NLL landscape (exact mesh)`: exact mesh through sampled model GoT states only.
 - The key distinction is now explicit: the exact mesh is scoped to sampled model states, while the local sheet and broad landscape also include rendered microstep vertices so those vertices are not visually floating outside the NLL field.
 - Added `trajectory_persistence/persistence_landscapes.html`, a dark-mode page plotting actual GUDHI `Landscape` functions `lambda_k(t)` by trajectory-growth level, not only L2 norms.
 - The landscape heatmap now uses the first finite homology dimension available in the audit instead of assuming finite H0 intervals. On the refreshed step-250 audit this selects H1, which is why the heatmap labels show `H1`.
@@ -141,6 +141,38 @@ Implemented after the follow-up critique that actual landscapes were missing and
 - Fresh screenshots:
   - `/Users/amelieschreiber/Documents/LaTeX-projects/TropicalGT-audit-browser/step_00000250/screenshots_landscape_pass_v2/nll_landscape_local_sheet.png`
   - `/Users/amelieschreiber/Documents/LaTeX-projects/TropicalGT-audit-browser/step_00000250/screenshots_landscape_pass_v2/actual_persistence_landscapes.png`
+
+## 2026-06-11 Iteration: Anchored Landscape, GraphCG, And Support Readability
+
+Implemented after the follow-up critique that actual landscapes must be visible and that trajectory vertices appeared outside the NLL surface.
+
+- The smooth projected NLL/fitness grid is now numerically pinned at the nearest grid cell for every sampled GoT state and rendered microstep anchor. The refreshed main payload reports:
+  - exact sampled mesh residual: `0.0`,
+  - smooth-grid anchor residual: `0.0`,
+  - smooth landscape domain covers all trajectory points: `true`,
+  - anchored grid cells: `77`.
+- The exact layer is now labeled `Actual sampled GoT NLL landscape (exact mesh)` and carries `actual_landscape_layer=true`, `actual_landscape_scope`, and provenance metadata. It is intentionally not described as a dense latent-space model evaluation.
+- GraphCG visualization was redesigned from a hard-to-read label wall into:
+  - a top-active-direction heatmap for readability,
+  - a full-rank activity spectrum over all directions,
+  - candidate activity and effective-direction counts,
+  - a signed-bias versus absolute-activity scatter.
+  The main refreshed payload reports matrix shape `[75, 1760]`, full-rank direction count `1760`, and active nonzero rank `1760`.
+- Tropical support visualization now treats the step-250 result as true active-support collapse rather than a rendering artifact. The payload records query-to-support flow edges and a margin summary; the page shows the collapsed support strip, per-token margin profile, margin histogram, and collapse metrics table.
+- Refreshed all three step-250 audit rows again from saved `inference_audit.json`.
+- Stricter validator result:
+  - `TropicalGT-I/outputs/train/periodic/step_00000250/interactive_audit_validation_landscape_graphcg_support.md`
+  - status: `PASS`
+  - rows checked: `3`
+  - main row: `75` candidates, `74` edges, depth `8`, PCA distance correlation `0.989791`, NLL residual `0.0`.
+- Local screenshots:
+  - `/Users/amelieschreiber/Documents/LaTeX-projects/TropicalGT-audit-browser/step_00000250/screenshots_landscape_graphcg_support_pass/nll_actual_smoothed_landscape_webgl.png`
+  - `/Users/amelieschreiber/Documents/LaTeX-projects/TropicalGT-audit-browser/step_00000250/screenshots_landscape_graphcg_support_pass/graphcg_full_rank_audit.png`
+  - `/Users/amelieschreiber/Documents/LaTeX-projects/TropicalGT-audit-browser/step_00000250/screenshots_landscape_graphcg_support_pass/tropical_support_collapse_diagnostic.png`
+
+Remaining limitation:
+
+- The broad NLL/fitness landscape is still a post-hoc projection/interpolation over sampled model states and rendered microsteps. A genuinely dense actual landscape would require a separately defined perturbation family and additional model forward passes at those perturbations. The current renderer does not pretend otherwise.
 
 ## Provenance Audit Status
 

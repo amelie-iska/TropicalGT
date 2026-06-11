@@ -74,6 +74,7 @@ def _row(root: Path, name: str) -> Path:
             "z_axis": "centered_scaled_nll",
             "raw_nll_range": 0.3,
             "exact_anchor_layer": True,
+            "actual_landscape_layer": True,
             "support_radius": 0.5,
         },
         "nll_progress": {
@@ -140,8 +141,13 @@ def _row(root: Path, name: str) -> Path:
                     "effective_supports": 1.0,
                     "support_entropy_bits": 0.0,
                     "top_support_collapse_rate": 1.0,
+                    "margin_summary": {"min": 0.1, "max": 0.4, "mean": 0.25, "std": 0.1, "p05": 0.1, "p50": 0.25, "p95": 0.4},
                     "interpretation": "Uniform blocks indicate true active-support collapse or nearly constant margins.",
-                }
+                },
+                "support_flow_edges": [
+                    {"query_index": idx, "query_label": f"q{idx}", "support_index": 0, "support_label": "q0", "margin": 0.1 * (idx + 1)}
+                    for idx in range(4)
+                ],
             }
         ),
     )
@@ -152,7 +158,10 @@ def _row(root: Path, name: str) -> Path:
                 "available": True,
                 "matrix_shape": [4, 8],
                 "display_count": 4,
+                "full_rank_direction_count": 8,
                 "active_rank_nonzero_mean_abs": 8,
+                "candidate_effective_direction_count": [4.0, 4.0, 4.0, 4.0],
+                "direction_activity_sorted": [0.2 for _ in range(8)],
                 "interpretation": "Heatmap colors encode absolute cosine activity; signed cosine values are preserved in hover.",
             }
         ),

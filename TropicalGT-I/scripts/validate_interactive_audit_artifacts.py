@@ -227,6 +227,7 @@ def validate_row(row_dir: Path, *, min_candidates: int = 8, min_depth: int = 2, 
     )
     _assert(_finite_float(surface.get("raw_nll_range"), -1.0) >= 0.0, errors, "NLL surface payload is missing raw_nll_range")
     _assert(surface.get("exact_anchor_layer") is True, errors, "NLL surface is missing exact anchor layer metadata")
+    _assert(surface.get("actual_landscape_layer") is True, errors, "NLL surface is missing actual sampled landscape metadata")
     surface_kind = surface.get("surface_kind")
     _assert(
         surface_kind in {"sample_supported_local_idw_surface", "exact_delaunay_nll_mesh"},
@@ -257,6 +258,12 @@ def validate_row(row_dir: Path, *, min_candidates: int = 8, min_depth: int = 2, 
                 errors,
                 "NLL surrogate anchor residual exceeds tolerance",
             )
+            _assert(
+                _finite_float(surrogate.get("anchor_grid_exact_residual"), 999.0) <= nll_residual_tol,
+                errors,
+                "NLL surrogate rendered grid is not exactly anchored at observed points",
+            )
+            _assert(surrogate.get("landscape_domain_covers_all_points") is True, errors, "NLL surrogate landscape does not cover all trajectory points")
             _assert("provenance" in surrogate, errors, "NLL surrogate layer is missing provenance")
     _assert(_finite_float(surface.get("support_radius"), -1.0) > 0.0, errors, "NLL surface payload is missing a positive support_radius")
 
@@ -271,11 +278,17 @@ def validate_row(row_dir: Path, *, min_candidates: int = 8, min_depth: int = 2, 
     _assert(_finite_float(support_metrics.get("token_count"), 0.0) > 0, errors, "tropical support payload has no tokens")
     _assert(_finite_float(support_metrics.get("unique_support_count"), 0.0) >= 1, errors, "tropical support payload has no observed supports")
     _assert("interpretation" in support_metrics, errors, "tropical support payload is missing collapse interpretation")
+    _assert(isinstance(support_metrics.get("margin_summary"), dict), errors, "tropical support payload is missing margin summary")
+    flow_edges = support_payload.get("support_flow_edges", []) if isinstance(support_payload, dict) else []
+    _assert(isinstance(flow_edges, list) and len(flow_edges) >= int(_finite_float(support_metrics.get("token_count"), 0.0)), errors, "tropical support payload is missing query-to-support flow edges")
 
     _assert(graphcg_payload.get("available") is True, errors, "GraphCG payload is unavailable")
     matrix_shape = graphcg_payload.get("matrix_shape", [])
     _assert(isinstance(matrix_shape, list) and len(matrix_shape) == 2 and int(matrix_shape[0]) >= len(candidates), errors, "GraphCG payload has invalid matrix shape")
     _assert(_finite_float(graphcg_payload.get("active_rank_nonzero_mean_abs"), 0.0) > 0, errors, "GraphCG payload reports no active directions")
+    _assert(int(_finite_float(graphcg_payload.get("full_rank_direction_count"), 0.0)) == int(matrix_shape[1]), errors, "GraphCG full-rank direction count does not match matrix width")
+    _assert(len(graphcg_payload.get("candidate_effective_direction_count", [])) >= len(candidates), errors, "GraphCG payload is missing candidate effective-direction counts")
+    _assert(len(graphcg_payload.get("direction_activity_sorted", [])) == int(matrix_shape[1]), errors, "GraphCG payload is missing full direction activity spectrum")
     _assert(graphcg_payload.get("interpretation"), errors, "GraphCG payload is missing heatmap interpretation")
 
     _assert(len(embedded_nodes) == len(nodes), errors, "embedding map payload node count differs from trajectory payload")

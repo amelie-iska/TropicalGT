@@ -350,7 +350,7 @@ def write_got_trajectory_visualization(scaling_report: dict[str, object], output
         pca[:, 1],
         nll_plot_z,
         nll_values,
-        name="Exact GoT NLL anchor mesh",
+        name="Actual sampled GoT NLL landscape (exact mesh)",
     )
     nll_surface_meta.update(
         {
@@ -360,6 +360,7 @@ def write_got_trajectory_visualization(scaling_report: dict[str, object], output
             "z_axis_label": f"centered NLL x {nll_plot_scale:g} plus local support energy",
             "raw_nll_range": float(np.nanmax(nll_values) - np.nanmin(nll_values)) if nll_values.size else 0.0,
             "exact_anchor_scope": "sampled model GoT states only",
+            "actual_landscape_scope": "piecewise-linear interpolation through sampled model GoT states with no synthetic z-values",
             "smooth_landscape_anchor_scope": "sampled model GoT states plus rendered reasoning microstep vertices",
             "smooth_landscape_model_state_anchor_count": int(len(candidates)),
             "smooth_landscape_microstep_anchor_count": int(microstep_z.size),
@@ -494,7 +495,7 @@ def write_got_trajectory_visualization(scaling_report: dict[str, object], output
     )
     fig.update_layout(
         template="plotly_dark",
-        title="Graph-of-thought branching trajectory with local NLL landscape",
+        title="Graph-of-thought branching trajectory with actual and smoothed NLL landscapes",
         scene=dict(
             xaxis_title="PC1",
             yaxis_title="PC2",
@@ -530,7 +531,7 @@ def write_got_trajectory_visualization(scaling_report: dict[str, object], output
             text=(
                 "NLL field diagnostic: raw range="
                 f"{raw_nll_range:.6g}; z-axis shows centered NLL scaled by {nll_plot_scale:.1f}.<br>"
-                "The landscape is a smooth embedding surrogate around the trajectory; the anchor mesh remains exact at observed states."
+                "Visible layers: exact sampled NLL landscape through model-evaluated GoT states, plus a smoothed projected surrogate around it."
             ),
             x=0,
             y=0.985,
@@ -1391,6 +1392,32 @@ def write_tropical_support_heatmap(result: dict[str, object], output_dir: str | 
     for idx in support_indices:
         vals = [float(token.get("margin", 0.0) or 0.0) for token in tokens if int(token.get("active_support_index", -1)) == idx]
         mean_margins.append(float(np.mean(vals)) if vals else 0.0)
+    margin_values = np.asarray([float(token.get("margin", 0.0) or 0.0) for token in tokens], dtype=float)
+    finite_margins = margin_values[np.isfinite(margin_values)]
+    margin_summary = {
+        "min": float(np.min(finite_margins)) if finite_margins.size else 0.0,
+        "max": float(np.max(finite_margins)) if finite_margins.size else 0.0,
+        "mean": float(np.mean(finite_margins)) if finite_margins.size else 0.0,
+        "std": float(np.std(finite_margins)) if finite_margins.size else 0.0,
+        "p05": float(np.quantile(finite_margins, 0.05)) if finite_margins.size else 0.0,
+        "p50": float(np.quantile(finite_margins, 0.50)) if finite_margins.size else 0.0,
+        "p95": float(np.quantile(finite_margins, 0.95)) if finite_margins.size else 0.0,
+    }
+    support_flow_edges = []
+    for row_idx, token in enumerate(tokens):
+        active = int(token.get("active_support_index", -1))
+        support = tokens[active] if 0 <= active < n else {}
+        support_flow_edges.append(
+            {
+                "query_index": int(row_idx),
+                "query_label": _support_token_label(row_idx, token),
+                "support_index": int(active),
+                "support_label": _support_token_label(active, support) if 0 <= active < n else "invalid",
+                "margin": float(token.get("margin", 0.0) or 0.0),
+                "query_kind": str(token.get("kind", "?")),
+                "support_kind": str(support.get("kind", "?")) if isinstance(support, dict) else "?",
+            }
+        )
     collapse_rate = float(counts.max() / max(float(n), 1.0)) if counts.size else 0.0
     support_probs = counts / max(float(counts.sum()), 1.0)
     support_entropy = float(-np.sum(support_probs * np.log2(np.maximum(support_probs, 1e-12)))) if counts.size else 0.0
@@ -1406,6 +1433,7 @@ def write_tropical_support_heatmap(result: dict[str, object], output_dir: str | 
         "support_labels": support_labels,
         "support_counts": [int(c) for c in counts.tolist()],
         "mean_margins": [float(v) for v in mean_margins],
+        "margin_summary": margin_summary,
         "interpretation": "Uniform blocks indicate true active-support collapse or nearly constant margins, not a heatmap rendering failure.",
     }
     payload_path.write_text(
@@ -1416,6 +1444,7 @@ def write_tropical_support_heatmap(result: dict[str, object], output_dir: str | 
                 "support_labels": support_labels,
                 "margin_matrix": z.tolist(),
                 "tokens": tokens,
+                "support_flow_edges": support_flow_edges,
             },
             indent=2,
         ),
@@ -1432,15 +1461,24 @@ def write_tropical_support_heatmap(result: dict[str, object], output_dir: str | 
             ("entropy", f"{support_entropy:.3f} bits"),
             ("collapse rate", f"{collapse_rate:.3f}"),
             ("top support", support_labels[0] if support_labels else "n/a"),
-            ("mean margin", f"{float(mean_margins[0]) if mean_margins else 0.0:.4f}"),
+            ("mean margin", f"{margin_summary['mean']:.4f}"),
+            ("margin range", f"{margin_summary['min']:.4f} to {margin_summary['max']:.4f}"),
+            ("margin std", f"{margin_summary['std']:.4f}"),
         ]
         fig = make_subplots(
-            rows=1,
-            cols=3,
-            specs=[[{"type": "heatmap"}, {"type": "scatter"}, {"type": "table"}]],
-            column_widths=[0.42, 0.36, 0.22],
-            horizontal_spacing=0.08,
-            subplot_titles=("Collapsed active support strip", "Margin profile by graph-token order", "Collapse metrics"),
+            rows=2,
+            cols=2,
+            specs=[[{"type": "heatmap"}, {"type": "scatter"}], [{"type": "histogram"}, {"type": "table"}]],
+            column_widths=[0.48, 0.52],
+            row_heights=[0.62, 0.38],
+            horizontal_spacing=0.09,
+            vertical_spacing=0.18,
+            subplot_titles=(
+                "Collapsed active support strip",
+                "Margin profile by graph-token order",
+                "Margin distribution",
+                "Collapse metrics",
+            ),
         )
         fig.add_trace(
             go.Heatmap(
@@ -1482,6 +1520,18 @@ def write_tropical_support_heatmap(result: dict[str, object], output_dir: str | 
             col=2,
         )
         fig.add_trace(
+            go.Histogram(
+                x=margin_profile,
+                nbinsx=min(18, max(5, int(math.sqrt(max(n, 1))) + 2)),
+                marker=dict(color="#38bdf8", line=dict(color="#e0f2fe", width=0.7)),
+                opacity=0.82,
+                hovertemplate="margin bin=%{x}<br>count=%{y}<extra></extra>",
+                name="margin distribution",
+            ),
+            row=2,
+            col=1,
+        )
+        fig.add_trace(
             go.Table(
                 header=dict(values=["metric", "value"], fill_color="#111827", font=dict(color="#e8eef8", size=12), align="left"),
                 cells=dict(
@@ -1492,8 +1542,8 @@ def write_tropical_support_heatmap(result: dict[str, object], output_dir: str | 
                     height=28,
                 ),
             ),
-            row=1,
-            col=3,
+            row=2,
+            col=2,
         )
         fig.update_layout(
             template="plotly_dark",
@@ -1508,6 +1558,8 @@ def write_tropical_support_heatmap(result: dict[str, object], output_dir: str | 
         fig.update_yaxes(title_text="query token", row=1, col=1)
         fig.update_xaxes(title_text="graph-token index", row=1, col=2)
         fig.update_yaxes(title_text="active-support margin", row=1, col=2)
+        fig.update_xaxes(title_text="active-support margin", row=2, col=1)
+        fig.update_yaxes(title_text="token count", row=2, col=1)
         _write_plotly_dark_html(path, fig, "Tropical active-support collapse diagnostic")
         return {"tropical_support_heatmap": str(path), "tropical_support_payload": str(payload_path)}
     fig = make_subplots(
@@ -2668,12 +2720,14 @@ def write_graphcg_trajectory_visualization(scaling_report: dict[str, object], ou
     candidates = [row for row in scaling_report.get("candidates", []) if isinstance(row, dict)]
     matrices = []
     labels = []
+    compact_labels = []
     hover_rows = []
     for idx, row in enumerate(candidates):
         proj = row.get("graphcg_projection")
         if isinstance(proj, dict) and proj.get("all_direction_cosines") is not None:
             matrices.append([float(v) for v in proj["all_direction_cosines"]])
-            labels.append(_candidate_axis_label(row, idx))
+            labels.append(_candidate_axis_label(row, idx, long=True))
+            compact_labels.append(_candidate_axis_label(row, idx))
             hover_rows.append(
                 f"<b>{html.escape(_candidate_axis_label(row, idx, long=True))}</b>"
                 f"<br>level={row.get('level')} path={html.escape(_json_clip(row.get('path', []), 180))}"
@@ -2684,10 +2738,16 @@ def write_graphcg_trajectory_visualization(scaling_report: dict[str, object], ou
         payload_path.write_text(json.dumps({"available": False, "reason": "No GraphCG projection diagnostics available."}, indent=2), encoding="utf-8")
         return {"graphcg_direction_cosines": str(path), "graphcg_direction_cosines_payload": str(payload_path)}
     matrix = np.asarray(matrices, dtype=float)
+    abs_matrix = np.abs(matrix)
     mean_abs = np.mean(np.abs(matrix), axis=0)
     signed_mean = np.mean(matrix, axis=0)
+    candidate_mean_abs = np.mean(abs_matrix, axis=1)
+    candidate_peak_abs = np.max(abs_matrix, axis=1)
+    row_probs = abs_matrix / np.maximum(np.sum(abs_matrix, axis=1, keepdims=True), 1e-12)
+    candidate_entropy = -np.sum(row_probs * np.log2(np.maximum(row_probs, 1e-12)), axis=1)
+    candidate_effective_dirs = np.power(2.0, candidate_entropy)
     direction_count = int(matrix.shape[1])
-    display_count = min(48, direction_count)
+    display_count = min(64, direction_count)
     top_idx = np.argsort(mean_abs)[::-1][:display_count]
     top_idx = top_idx[np.argsort(top_idx)]
     z_signed = matrix[:, top_idx]
@@ -2706,6 +2766,10 @@ def write_graphcg_trajectory_visualization(scaling_report: dict[str, object], ou
     ]
     active_floor = float(np.quantile(mean_abs, 0.9)) if mean_abs.size else 0.0
     active_rank = int(np.sum(mean_abs > 1e-8)) if mean_abs.size else 0
+    candidate_active_counts = np.sum(abs_matrix >= max(active_floor, 1e-12), axis=1)
+    sorted_order = np.argsort(mean_abs)[::-1]
+    sorted_activity = mean_abs[sorted_order]
+    sorted_signed = signed_mean[sorted_order]
     payload_path.write_text(
         json.dumps(
             {
@@ -2713,30 +2777,47 @@ def write_graphcg_trajectory_visualization(scaling_report: dict[str, object], ou
                 "matrix_shape": [int(matrix.shape[0]), int(matrix.shape[1])],
                 "display_count": int(display_count),
                 "displayed_direction_indices": [int(idx) for idx in top_idx.tolist()],
+                "full_rank_direction_count": int(direction_count),
                 "active_rank_nonzero_mean_abs": active_rank,
                 "mean_abs_min": float(np.min(mean_abs)) if mean_abs.size else 0.0,
                 "mean_abs_max": float(np.max(mean_abs)) if mean_abs.size else 0.0,
                 "mean_abs_p90": active_floor,
                 "mean_abs": [float(v) for v in mean_abs.tolist()],
                 "signed_mean": [float(v) for v in signed_mean.tolist()],
-                "interpretation": "Heatmap colors encode absolute cosine activity; signed cosine values are preserved in hover and signed_mean.",
+                "candidate_labels_compact": compact_labels,
+                "candidate_labels": labels,
+                "candidate_activity_mean_abs": [float(v) for v in candidate_mean_abs.tolist()],
+                "candidate_peak_abs": [float(v) for v in candidate_peak_abs.tolist()],
+                "candidate_effective_direction_count": [float(v) for v in candidate_effective_dirs.tolist()],
+                "candidate_active_direction_count": [int(v) for v in candidate_active_counts.tolist()],
+                "direction_activity_sorted": [float(v) for v in sorted_activity.tolist()],
+                "direction_signed_mean_sorted": [float(v) for v in sorted_signed.tolist()],
+                "activity_threshold_p90": active_floor,
+                "interpretation": "GraphCG directions are full-rank: the heatmap shows top activity for readability, while the spectrum and candidate effective-direction counts summarize all directions.",
             },
             indent=2,
         ),
         encoding="utf-8",
     )
     fig = make_subplots(
-        rows=1,
+        rows=2,
         cols=2,
-        specs=[[{"type": "heatmap"}, {"type": "scatter"}]],
-        column_widths=[0.72, 0.28],
-        horizontal_spacing=0.08,
-        subplot_titles=("Top active GraphCG directions across GoT states", "Full-rank direction activity spectrum"),
+        specs=[[{"type": "heatmap"}, {"type": "scatter"}], [{"type": "scatter"}, {"type": "scatter"}]],
+        column_widths=[0.64, 0.36],
+        row_heights=[0.62, 0.38],
+        horizontal_spacing=0.10,
+        vertical_spacing=0.16,
+        subplot_titles=(
+            "Top active directions across GoT states",
+            "Full-rank activity spectrum",
+            "Candidate activity and effective direction count",
+            "Signed bias vs absolute activity",
+        ),
     )
     fig.add_trace(
         go.Heatmap(
             z=z_abs,
-            y=labels,
+            y=compact_labels,
             x=[f"d{int(idx)}" for idx in top_idx],
             colorscale="Magma",
             zmin=0.0,
@@ -2748,7 +2829,6 @@ def write_graphcg_trajectory_visualization(scaling_report: dict[str, object], ou
         row=1,
         col=1,
     )
-    sorted_activity = np.sort(mean_abs)[::-1]
     fig.add_trace(
         go.Scatter(
             x=np.arange(direction_count),
@@ -2763,23 +2843,74 @@ def write_graphcg_trajectory_visualization(scaling_report: dict[str, object], ou
         row=1,
         col=2,
     )
+    fig.add_trace(
+        go.Scatter(
+            x=list(range(len(compact_labels))),
+            y=candidate_mean_abs,
+            mode="lines+markers",
+            marker=dict(
+                size=np.clip(4.0 + 8.0 * candidate_peak_abs / max(float(np.max(candidate_peak_abs)), 1e-12), 4.0, 12.0),
+                color=candidate_effective_dirs,
+                colorscale="Turbo",
+                colorbar=dict(title="effective dirs", x=0.60, y=0.20, len=0.35),
+                line=dict(color="#e8eef8", width=0.8),
+            ),
+            line=dict(color="#5eead4", width=2),
+            customdata=[
+                hover_rows[i]
+                + f"<br>mean |cos|={candidate_mean_abs[i]:.5f}"
+                + f"<br>peak |cos|={candidate_peak_abs[i]:.5f}"
+                + f"<br>effective directions={candidate_effective_dirs[i]:.1f}/{direction_count}"
+                + f"<br>directions above p90 activity threshold={int(candidate_active_counts[i])}"
+                for i in range(len(compact_labels))
+            ],
+            hovertemplate="%{customdata}<extra></extra>",
+            name="candidate activity",
+        ),
+        row=2,
+        col=1,
+    )
+    fig.add_trace(
+        go.Scatter(
+            x=mean_abs,
+            y=signed_mean,
+            mode="markers",
+            marker=dict(
+                size=5,
+                color=np.arange(direction_count),
+                colorscale="Viridis",
+                showscale=False,
+                opacity=0.72,
+                line=dict(color="rgba(226,232,240,0.35)", width=0.4),
+            ),
+            customdata=np.arange(direction_count),
+            hovertemplate="direction=%{customdata}<br>mean |cos|=%{x:.5f}<br>signed mean=%{y:.5f}<extra></extra>",
+            name="direction signed bias",
+        ),
+        row=2,
+        col=2,
+    )
     fig.update_layout(
         template="plotly_dark",
         title=(
             "GraphCG full-rank direction audit"
-            f"<br><sup>heatmap encodes |cosine| for top {display_count}/{direction_count} directions; signed cosine is in hover; active nonzero rank={active_rank}</sup>"
+            f"<br><sup>top heatmap shows {display_count}/{direction_count} directions for readability; spectrum/effective counts audit all directions; active nonzero rank={active_rank}</sup>"
         ),
-        margin=dict(t=112, l=92, r=44, b=92),
+        margin=dict(t=122, l=92, r=48, b=90),
     )
     x_labels = [f"d{int(idx)}" for idx in top_idx]
     x_step = max(1, int(math.ceil(len(x_labels) / 12)))
     x_tickvals = [label for pos, label in enumerate(x_labels) if pos % x_step == 0 or pos == len(x_labels) - 1]
     y_step = max(1, int(math.ceil(len(labels) / 24)))
-    y_tickvals = [label for pos, label in enumerate(labels) if pos % y_step == 0 or pos == len(labels) - 1]
+    y_tickvals = [label for pos, label in enumerate(compact_labels) if pos % y_step == 0 or pos == len(compact_labels) - 1]
     fig.update_xaxes(title_text="GraphCG direction", tickangle=0, tickmode="array", tickvals=x_tickvals, ticktext=x_tickvals, row=1, col=1)
     fig.update_yaxes(title_text="GoT state", tickmode="array", tickvals=y_tickvals, ticktext=y_tickvals, row=1, col=1)
     fig.update_xaxes(title_text="direction rank by activity", row=1, col=2)
     fig.update_yaxes(title_text="mean absolute cosine", row=1, col=2)
+    fig.update_xaxes(title_text="GoT candidate index", row=2, col=1)
+    fig.update_yaxes(title_text="candidate mean |cos|", row=2, col=1)
+    fig.update_xaxes(title_text="direction mean |cos|", row=2, col=2)
+    fig.update_yaxes(title_text="direction signed mean", row=2, col=2)
     _write_plotly_dark_html(path, fig, "GraphCG direction cosines along GoT candidates")
     return {"graphcg_direction_cosines": str(path), "graphcg_direction_cosines_payload": str(payload_path)}
 
@@ -5354,6 +5485,17 @@ def _nll_surrogate_landscape_trace(
     landscape_z = landscape_flat.reshape(grid_x.shape)
     nll_grid = nll_idw.reshape(grid_x.shape)
     distance_grid = min_dist.reshape(grid_x.shape)
+    anchor_grid_meta = _force_landscape_grid_to_anchor_values(
+        grid_x,
+        grid_y,
+        landscape_z,
+        nll_grid,
+        distance_grid,
+        x,
+        y,
+        z,
+        nll,
+    )
     customdata = np.dstack([nll_grid, distance_grid])
     z_at_points, _ = _local_idw_interpolate(points, z, points, sigma=sigma)
     residual = float(np.nanmax(np.abs(z_at_points - z))) if z.size else 0.0
@@ -5396,6 +5538,10 @@ def _nll_surrogate_landscape_trace(
         "duplicate_xy_points_removed": int(max(source_count - x.size, 0)),
         "touches_points": True,
         "max_point_residual": residual,
+        "anchor_grid_exact_residual": float(anchor_grid_meta.get("anchor_grid_exact_residual", 0.0)),
+        "anchor_grid_forced": True,
+        "landscape_domain_covers_all_points": bool(anchor_grid_meta.get("landscape_domain_covers_all_points", False)),
+        "anchor_grid_cell_count": int(anchor_grid_meta.get("anchor_grid_cell_count", 0)),
         "raw_nll_range": float(np.nanmax(nll) - np.nanmin(nll)) if nll.size else 0.0,
         "grid_shape": [int(grid_x.shape[0]), int(grid_x.shape[1])],
         "idw_sigma": sigma,
@@ -5412,6 +5558,49 @@ def _nll_surrogate_landscape_trace(
         }
     )
     return trace, meta
+
+
+def _force_landscape_grid_to_anchor_values(
+    grid_x: np.ndarray,
+    grid_y: np.ndarray,
+    z_grid: np.ndarray,
+    nll_grid: np.ndarray,
+    distance_grid: np.ndarray,
+    x: np.ndarray,
+    y: np.ndarray,
+    z: np.ndarray,
+    nll: np.ndarray,
+) -> dict[str, object]:
+    """Pin nearest grid cells to measured anchor values for honest rendering."""
+    if grid_x.size == 0 or grid_y.size == 0 or x.size == 0:
+        return {
+            "anchor_grid_exact_residual": 0.0,
+            "landscape_domain_covers_all_points": False,
+            "anchor_grid_cell_count": 0,
+        }
+    xi = np.asarray(grid_x[0, :], dtype=float)
+    yi = np.asarray(grid_y[:, 0], dtype=float)
+    cells: set[tuple[int, int]] = set()
+    residuals: list[float] = []
+    for px, py, pz, pnll in zip(x, y, z, nll):
+        col = int(np.argmin(np.abs(xi - float(px))))
+        row = int(np.argmin(np.abs(yi - float(py))))
+        z_grid[row, col] = float(pz)
+        nll_grid[row, col] = float(pnll)
+        distance_grid[row, col] = 0.0
+        cells.add((row, col))
+        residuals.append(abs(float(z_grid[row, col]) - float(pz)))
+    return {
+        "anchor_grid_exact_residual": float(max(residuals) if residuals else 0.0),
+        "landscape_domain_covers_all_points": bool(
+            float(np.nanmin(x)) >= float(np.nanmin(xi))
+            and float(np.nanmax(x)) <= float(np.nanmax(xi))
+            and float(np.nanmin(y)) >= float(np.nanmin(yi))
+            and float(np.nanmax(y)) <= float(np.nanmax(yi))
+        ),
+        "anchor_grid_cell_count": int(len(cells)),
+        "anchor_grid_policy": "nearest grid cells are overwritten with measured GoT-state and microstep NLL anchors before rendering",
+    }
 
 
 def _nll_support_footprint_trace(
@@ -5646,16 +5835,16 @@ def _smooth_anchored_surface(
         z=z,
         intensity=nll,
         colorscale="Plasma",
-        opacity=0.28,
+        opacity=0.52,
         showscale=False,
         name=name,
         hovertemplate=(
-            "exact NLL anchor mesh<br>"
+            "actual sampled NLL landscape<br>"
             "PC1=%{x:.3f}<br>"
             "PC2=%{y:.3f}<br>"
             "centered scaled NLL=%{z:.4f}<br>"
             "raw NLL=%{intensity:.6f}<br>"
-            "triangles interpolate only between observed PCA states<extra></extra>"
+            "piecewise-linear triangles use only observed model-evaluated GoT states<extra></extra>"
         ),
         flatshading=True,
         lighting=dict(ambient=0.82, diffuse=0.26, specular=0.05, roughness=0.92),
@@ -5665,7 +5854,9 @@ def _smooth_anchored_surface(
         "available": True,
         "mode": mode,
         "surface_kind": "exact_delaunay_nll_mesh",
-        "interpolation": "Exact piecewise-linear triangulation through observed PCA states; the separate support footprint carries the smoothed local IDW neighborhood field",
+        "actual_landscape_layer": True,
+        "interpolation": "Exact piecewise-linear triangulation through observed PCA states; no synthetic anchor values are introduced in this layer",
+        "provenance": "computed only from sampled model GoT state embeddings and their measured raw NLL values",
         "point_count": int(x.size),
         "hull_masked_fraction": float(support_meta.get("masked_fraction", 0.0)),
         "support_radius": float(support_meta.get("support_radius", 0.0)),

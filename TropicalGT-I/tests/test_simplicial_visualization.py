@@ -141,10 +141,11 @@ def test_got_trajectory_visualization_renders_simplicial_panel_and_nll_surface(t
     assert "filtration-layer" in html
     assert "Smooth projected NLL" in html
     assert "fitness landscape" in html
-    assert "Exact GoT NLL anchor mesh" in html
+    assert "Actual sampled GoT NLL landscape" in html
     assert "NLL surface anchors" in html
     assert payload["nll_surface"]["available"] is True
     assert payload["nll_surface"]["touches_points"] is True
+    assert payload["nll_surface"]["actual_landscape_layer"] is True
     assert payload["nll_surface"]["surface_kind"] in {"sample_supported_local_idw_surface", "sparse_exact_triangular_nll_mesh", "exact_delaunay_nll_mesh"}
     assert payload["nll_surface"]["z_axis"] == "projected_nll_fitness_energy"
     assert payload["nll_surface"]["surrogate_landscape_layer"]["surface_kind"] == "smooth_projected_nll_fitness_landscape"
