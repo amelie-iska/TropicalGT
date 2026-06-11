@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections import defaultdict, deque
 from pathlib import Path
+import hashlib
 import html
 import json
 import math
@@ -1854,20 +1855,27 @@ def write_graphcg_training_visualizations(model, output_dir: str | Path) -> dict
     if directions.size == 0:
         return {}
     raw_directions = model.graphcg.directions.detach().cpu().float().numpy()
+    max_plot = min(int(getattr(model.graphcg, "viz_max_directions", 256)), directions.shape[0])
+    sample_idx = np.linspace(0, directions.shape[0] - 1, max_plot, dtype=int) if directions.shape[0] > max_plot else np.arange(directions.shape[0])
+    plot_directions = directions[sample_idx]
+    plot_raw_directions = raw_directions[sample_idx]
     norms = np.linalg.norm(raw_directions, axis=1, keepdims=True)
-    normalized = directions / np.maximum(np.linalg.norm(directions, axis=1, keepdims=True), 1e-8)
+    plot_norms = np.linalg.norm(plot_raw_directions, axis=1, keepdims=True)
+    normalized = plot_directions / np.maximum(np.linalg.norm(plot_directions, axis=1, keepdims=True), 1e-8)
     gram = normalized @ normalized.T
     singular_values = np.linalg.svd(normalized, compute_uv=False)
     rank_margin = float(getattr(model.graphcg, "full_rank_margin", 0.05))
     numerical_rank = int(np.sum(singular_values > rank_margin))
     rank_target = min(normalized.shape)
+    full_count = int(directions.shape[0])
+    sample_note = f"sampled {len(sample_idx)} of {full_count} embedding-space directions"
 
     gram_path = output_dir / "graphcg_direction_gram.html"
     fig = go.Figure(
         data=go.Heatmap(
             z=gram,
-            x=[f"dir_{idx}" for idx in range(gram.shape[0])],
-            y=[f"dir_{idx}" for idx in range(gram.shape[0])],
+            x=[f"dir_{int(idx)}" for idx in sample_idx],
+            y=[f"dir_{int(idx)}" for idx in sample_idx],
             colorscale="RdBu",
             zmid=0,
             colorbar=dict(title="cosine"),
@@ -1875,33 +1883,40 @@ def write_graphcg_training_visualizations(model, output_dir: str | Path) -> dict
     )
     fig.update_layout(
         template="plotly_dark",
-        title=f"GraphCG effective full-rank direction Gram matrix (rank {numerical_rank}/{rank_target})",
+        title=f"GraphCG direction Gram matrix ({sample_note}; sample rank {numerical_rank}/{rank_target})",
     )
-    _write_plotly_dark_html(gram_path, fig, f"GraphCG effective full-rank direction Gram matrix (rank {numerical_rank}/{rank_target})")
+    _write_plotly_dark_html(gram_path, fig, f"GraphCG direction Gram matrix ({sample_note}; sample rank {numerical_rank}/{rank_target})")
 
     pca_path = output_dir / "graphcg_direction_pca.html"
-    pca = _pca3(directions)
+    pca = _pca3(plot_directions)
     fig2 = go.Figure()
-    for idx, point in enumerate(pca):
-        fig2.add_trace(
-            go.Scatter3d(
-                x=[0, point[0]],
-                y=[0, point[1]],
-                z=[0, point[2]],
-                mode="lines+markers",
-                line=dict(width=5),
-                marker=dict(size=[2, 7]),
-                name=f"dir_{idx}",
-                hovertext=f"direction {idx}<br>norm={float(norms[idx,0]):.4f}",
-                hoverinfo="text",
-            )
+    fig2.add_trace(
+        go.Scatter3d(
+            x=pca[:, 0],
+            y=pca[:, 1],
+            z=pca[:, 2],
+            mode="markers",
+            marker=dict(
+                size=4,
+                color=sample_idx,
+                colorscale="Viridis",
+                colorbar=dict(title="direction"),
+                line=dict(width=0.5, color="#e8eef8"),
+            ),
+            name="sampled GraphCG directions",
+            hovertext=[
+                f"direction {int(direction_idx)}<br>norm={float(norm):.4f}<br>{sample_note}"
+                for direction_idx, norm in zip(sample_idx, plot_norms[:, 0])
+            ],
+            hoverinfo="text",
         )
+    )
     fig2.update_layout(
         template="plotly_dark",
-        title="GraphCG effective steering directions in PCA",
+        title=f"GraphCG embedding-space steering directions in PCA ({sample_note})",
         scene=dict(xaxis_title="PC1", yaxis_title="PC2", zaxis_title="PC3"),
     )
-    _write_plotly_dark_html(pca_path, fig2, "GraphCG effective steering directions in PCA")
+    _write_plotly_dark_html(pca_path, fig2, f"GraphCG embedding-space steering directions in PCA ({sample_note})")
 
     sv_path = output_dir / "graphcg_direction_singular_values.html"
     fig3 = go.Figure(
@@ -1915,11 +1930,11 @@ def write_graphcg_training_visualizations(model, output_dir: str | Path) -> dict
     fig3.add_hline(y=rank_margin, line_dash="dash", line_color="#f97316", annotation_text="full-rank margin")
     fig3.update_layout(
         template="plotly_dark",
-        title="GraphCG full-rank singular spectrum",
+        title=f"GraphCG sampled singular spectrum ({sample_note})",
         xaxis_title="singular direction",
         yaxis_title="singular value",
     )
-    _write_plotly_dark_html(sv_path, fig3, "GraphCG full-rank singular spectrum")
+    _write_plotly_dark_html(sv_path, fig3, f"GraphCG sampled singular spectrum ({sample_note})")
     return {
         "graphcg_direction_gram": str(gram_path),
         "graphcg_direction_pca": str(pca_path),
@@ -2319,13 +2334,16 @@ def _simplicial_object_svg(obj: dict[str, object], width: int = 380, height: int
     visible = set(visible_labels)
     summary = obj.get("summary", {}) if isinstance(obj, dict) else {}
     thresholds = obj.get("thresholds", []) if isinstance(obj, dict) else []
-    coords, layout_kind = _simplicial_layout(visible_labels, edges, width=width, height=height)
+    coords3, projected, layout_kind = _simplicial_pca3_radius_layout(visible_labels, vertices, edges, width=width, height=height)
 
     def point(label: str) -> tuple[float, float] | None:
-        return coords.get(str(label))
+        return projected.get(str(label))
+
+    def depth(label: str) -> float:
+        return float(coords3.get(str(label), (0.0, 0.0, 0.0))[2])
 
     parts = [
-        f"<svg viewBox='0 0 {width} {height}' role='img' aria-label='rendered filtered simplicial object'>",
+        f"<svg class='pca-radius-filtered-complex' viewBox='0 0 {width} {height}' role='img' aria-label='3D PCA radius filtered simplicial object'>",
         "<rect width='100%' height='100%' rx='12' fill='#070a12'/>",
         "<defs>"
         "<filter id='glow'><feGaussianBlur stdDeviation='2.5' result='b'/><feMerge><feMergeNode in='b'/><feMergeNode in='SourceGraphic'/></feMerge></filter>"
@@ -2341,10 +2359,11 @@ def _simplicial_object_svg(obj: dict[str, object], width: int = 380, height: int
         if len(pts) == 3 and all(p is not None for p in pts):
             poly = " ".join(f"{p[0]:.1f},{p[1]:.1f}" for p in pts if p is not None)
             filt = float(tri.get("filtration", 0.0) or 0.0)
+            avg_z = float(np.mean([depth(v) for v in simplex]))
             parts.append(
-                f"<polygon class='two-simplex' data-filtration='{filt:.8f}' points='{poly}' "
+                f"<polygon class='two-simplex pca-radius-face' data-filtration='{filt:.8f}' data-pca-z='{avg_z:.6f}' points='{poly}' "
                 f"fill='rgba(94,234,212,0.16)' stroke='rgba(94,234,212,0.46)' stroke-width='1.2'>"
-                f"<title>2-simplex filtration={filt:.3f}</title></polygon>"
+                f"<title>3D PCA face filtration={filt:.3f} mean_z={avg_z:.3f}</title></polygon>"
             )
     for edge in edges[:160]:
         simplex = edge.get("simplex", [])
@@ -2358,29 +2377,33 @@ def _simplicial_object_svg(obj: dict[str, object], width: int = 380, height: int
         filt = float(edge.get("filtration", 0.0) or 0.0)
         color = _filtration_color(filt)
         edge_type = html.escape(str(edge.get("type", "edge"))[:30])
+        avg_z = 0.5 * (depth(simplex[0]) + depth(simplex[1]))
+        stroke_width = 1.5 + 1.6 * max(0.0, min(1.0, avg_z))
         parts.append(
-            f"<line class='one-simplex' data-filtration='{filt:.8f}' x1='{a[0]:.1f}' y1='{a[1]:.1f}' x2='{b[0]:.1f}' y2='{b[1]:.1f}' "
-            f"stroke='{color}' stroke-width='2.2' stroke-opacity='0.82'><title>{edge_type} filtration={filt:.3f}</title></line>"
+            f"<line class='one-simplex pca-radius-edge' data-filtration='{filt:.8f}' data-pca-z='{avg_z:.6f}' x1='{a[0]:.1f}' y1='{a[1]:.1f}' x2='{b[0]:.1f}' y2='{b[1]:.1f}' "
+            f"stroke='{color}' stroke-width='{stroke_width:.2f}' stroke-opacity='0.82'><title>{edge_type} radius filtration={filt:.3f} mean_z={avg_z:.3f}</title></line>"
         )
     vertex_by_label = {str((s.get("simplex") or [""])[0]): s for s in vertices}
     radius = 7.2 if len(visible_labels) <= 32 else 5.2
     font_size = 8 if len(visible_labels) <= 32 else 6
     for idx, label in enumerate(visible_labels):
-        x, y = coords[label]
+        x, y = projected.get(label, (width / 2.0, height / 2.0))
         filt = 0.0
         vertex = vertex_by_label.get(label, {})
         if vertex:
             filt = float(vertex.get("filtration", 0.0) or 0.0)
         color = _filtration_color(filt)
+        z = depth(label)
+        r = radius * (0.72 + 0.56 * max(0.0, min(1.0, z)))
         safe = html.escape(label[:18])
         vertex_type = html.escape(str(vertex.get("type", "vertex"))[:30]) if vertex else "vertex"
         parts.append(
-            f"<circle class='zero-simplex' data-filtration='{filt:.8f}' cx='{x:.1f}' cy='{y:.1f}' r='{radius:.1f}' fill='{color}' stroke='#e8eef8' "
-            f"stroke-width='1.2' filter='url(#glow)'><title>{vertex_type} filtration={filt:.3f}</title></circle>"
+            f"<circle class='zero-simplex pca-radius-node' data-filtration='{filt:.8f}' data-pca-z='{z:.6f}' cx='{x:.1f}' cy='{y:.1f}' r='{r:.1f}' fill='{color}' stroke='#e8eef8' "
+            f"stroke-width='1.2' filter='url(#glow)'><title>{vertex_type} radius filtration={filt:.3f} PCA=({coords3.get(label, (0.0, 0.0, 0.0))[0]:.3f},{coords3.get(label, (0.0, 0.0, 0.0))[1]:.3f},{z:.3f})</title></circle>"
         )
         if len(visible_labels) <= 48:
             parts.append(f"<text x='{x:.1f}' y='{y + 18:.1f}' text-anchor='middle' fill='#dbe7f4' font-size='{font_size}'>{safe}</text>")
-    parts.append("<text x='16' y='24' fill='#dbeafe' font-size='11' font-weight='650'>filtered simplicial complex</text>")
+    parts.append("<text x='16' y='24' fill='#dbeafe' font-size='11' font-weight='650'>3D PCA radius-filtered simplicial complex</text>")
     parts.append(
         f"<text x='16' y='40' fill='#9fb3c8' font-size='9'>"
         f"dim0={summary.get('num_vertices', len(vertices))} dim1={summary.get('num_edges', len(edges))} dim2={summary.get('num_two_simplices', len(triangles))}</text>"
@@ -2396,6 +2419,235 @@ def _simplicial_object_svg(obj: dict[str, object], width: int = 380, height: int
     parts.append(f"<text x='14' y='{height - 10}' fill='#7dd3fc' font-size='9'>thresholds: {html.escape(_json_clip(thresholds[:8], 116))}</text>")
     parts.append("</svg>")
     return "".join(parts)
+
+
+def _simplicial_pca3_radius_layout(
+    labels: list[str],
+    vertices: list[dict[str, object]],
+    edges: list[dict[str, object]],
+    width: int,
+    height: int,
+) -> tuple[dict[str, tuple[float, float, float]], dict[str, tuple[float, float]], str]:
+    if not labels:
+        return {}, {}, "empty_3d_pca"
+    vertex_by_label = {str((row.get("simplex") or [""])[0]): row for row in vertices if isinstance(row, dict)}
+    features = _vertex_metric_feature_matrix(labels, vertex_by_label)
+    if features.shape[0] == 1:
+        coords = np.asarray([[0.5, 0.5, 0.5]], dtype=float)
+        stats = {"stress": 0.0, "corr": 1.0, "energy3": 1.0}
+    else:
+        target_distances = _target_simplicial_distance_matrix(labels, features, edges)
+        coords, stats = _classical_mds3(target_distances)
+        if coords.shape != (features.shape[0], 3) or not np.isfinite(coords).all() or float(np.abs(coords).sum()) <= 1e-12:
+            coords = np.asarray(
+                [
+                    [math.cos(2 * math.pi * idx / len(labels)), math.sin(2 * math.pi * idx / len(labels)), idx / max(len(labels) - 1, 1)]
+                    for idx in range(len(labels))
+                ],
+                dtype=float,
+            )
+            stats = {"stress": 1.0, "corr": 0.0, "energy3": 0.0}
+    mins = coords.min(axis=0, keepdims=True)
+    spans = np.maximum(coords.max(axis=0, keepdims=True) - mins, 1e-8)
+    unit = (coords - mins) / spans
+    coords3 = {label: (float(unit[idx, 0]), float(unit[idx, 1]), float(unit[idx, 2])) for idx, label in enumerate(labels)}
+    edge_pairs = _edge_pairs_for_labels(edges, set(labels))
+    if edge_pairs:
+        mean_radius = float(
+            np.mean(
+                [
+                    np.linalg.norm(np.asarray(coords3[a], dtype=float) - np.asarray(coords3[b], dtype=float))
+                    for a, b in edge_pairs
+                    if a in coords3 and b in coords3
+                ]
+            )
+        )
+    else:
+        mean_radius = 0.0
+    projected: dict[str, tuple[float, float]] = {}
+    for label, (x, y, z) in coords3.items():
+        sx = 32.0 + x * (width - 104.0) + (z - 0.5) * 52.0
+        sy = 52.0 + (1.0 - y) * (height - 108.0) - (z - 0.5) * 44.0
+        projected[label] = (float(max(18.0, min(width - 18.0, sx))), float(max(28.0, min(height - 42.0, sy))))
+    return (
+        coords3,
+        projected,
+        "3d_pca_radius_projection "
+        "method=classical_mds_pcoa "
+        f"stress={float(stats.get('stress', 0.0)):.3f} "
+        f"corr={float(stats.get('corr', 0.0)):.3f} "
+        f"energy3={float(stats.get('energy3', 0.0)):.3f} "
+        f"mean_radius={mean_radius:.3f}",
+    )
+
+
+def _vertex_metric_feature_matrix(labels: list[str], vertex_by_label: dict[str, dict[str, object]]) -> np.ndarray:
+    rows: list[list[float]] = []
+    max_len = 0
+    for idx, label in enumerate(labels):
+        vertex = vertex_by_label.get(label, {})
+        vector = _coerce_vertex_vector(vertex)
+        fallback = _vertex_pca_feature(label, vertex, idx, len(labels))
+        row = vector + fallback
+        rows.append(row)
+        max_len = max(max_len, len(row))
+    padded = np.zeros((len(rows), max_len), dtype=float)
+    for idx, row in enumerate(rows):
+        if row:
+            padded[idx, : len(row)] = np.asarray(row, dtype=float)
+    means = np.nanmean(padded, axis=0, keepdims=True)
+    padded = np.where(np.isfinite(padded), padded, means)
+    scale = np.nanstd(padded, axis=0, keepdims=True)
+    scale = np.where(scale > 1e-8, scale, 1.0)
+    return (padded - means) / scale
+
+
+def _coerce_vertex_vector(vertex: dict[str, object], max_dims: int = 128) -> list[float]:
+    if not isinstance(vertex, dict):
+        return []
+    for key in ("embedding", "embedding_vector", "vector", "features", "feature", "coords", "coordinates", "pca"):
+        value = vertex.get(key)
+        if value is None:
+            continue
+        arr = np.asarray(value, dtype=float).reshape(-1)
+        arr = arr[np.isfinite(arr)]
+        if arr.size:
+            return [float(x) for x in arr[:max_dims]]
+    return []
+
+
+def _target_simplicial_distance_matrix(labels: list[str], features: np.ndarray, edges: list[dict[str, object]]) -> np.ndarray:
+    n = len(labels)
+    base = _pairwise_euclidean(features)
+    if n <= 1:
+        return np.zeros((n, n), dtype=float)
+    label_to_idx = {label: idx for idx, label in enumerate(labels)}
+    graph = np.full((n, n), np.inf, dtype=float)
+    np.fill_diagonal(graph, 0.0)
+    has_metric_edges = False
+    base_nonzero = base[base > 1e-8]
+    default_edge_length = float(np.median(base_nonzero)) if base_nonzero.size else 1.0
+    for edge in edges:
+        simplex = edge.get("simplex", []) if isinstance(edge, dict) else []
+        if len(simplex) < 2:
+            continue
+        a = label_to_idx.get(str(simplex[0]))
+        b = label_to_idx.get(str(simplex[1]))
+        if a is None or b is None or a == b:
+            continue
+        metric = _edge_metric_distance(edge, default_edge_length)
+        graph[a, b] = min(graph[a, b], metric)
+        graph[b, a] = min(graph[b, a], metric)
+        has_metric_edges = True
+    if not has_metric_edges:
+        return base
+    for k in range(n):
+        graph = np.minimum(graph, graph[:, [k]] + graph[[k], :])
+    finite = np.isfinite(graph)
+    offdiag = ~np.eye(n, dtype=bool)
+    finite_offdiag = finite & offdiag
+    if not finite_offdiag.any():
+        return base
+    graph_nonzero = graph[finite_offdiag & (graph > 1e-8)]
+    base_matching = base[finite_offdiag & (base > 1e-8)]
+    if graph_nonzero.size and base_matching.size:
+        graph = graph * (float(np.median(base_matching)) / max(float(np.median(graph_nonzero)), 1e-8))
+    target = base.copy()
+    target[finite_offdiag] = graph[finite_offdiag]
+    target = 0.5 * (target + target.T)
+    np.fill_diagonal(target, 0.0)
+    return np.maximum(target, 0.0)
+
+
+def _edge_metric_distance(edge: dict[str, object], default_edge_length: float) -> float:
+    for key in ("distance", "metric_distance", "radius", "edge_length", "filtration"):
+        value = edge.get(key) if isinstance(edge, dict) else None
+        try:
+            metric = float(value)
+        except (TypeError, ValueError):
+            continue
+        if math.isfinite(metric) and metric > 1e-8:
+            return metric
+    return max(default_edge_length, 1e-6)
+
+
+def _pairwise_euclidean(values: np.ndarray) -> np.ndarray:
+    if values.size == 0:
+        return np.zeros((0, 0), dtype=float)
+    diffs = values[:, None, :] - values[None, :, :]
+    dist = np.sqrt(np.maximum(np.sum(diffs * diffs, axis=-1), 0.0))
+    dist = 0.5 * (dist + dist.T)
+    np.fill_diagonal(dist, 0.0)
+    return dist
+
+
+def _classical_mds3(distances: np.ndarray) -> tuple[np.ndarray, dict[str, float]]:
+    distances = np.asarray(distances, dtype=float)
+    n = distances.shape[0]
+    if n == 0:
+        return np.zeros((0, 3), dtype=float), {"stress": 0.0, "corr": 1.0, "energy3": 1.0}
+    distances = np.where(np.isfinite(distances), distances, 0.0)
+    distances = np.maximum(0.0, 0.5 * (distances + distances.T))
+    np.fill_diagonal(distances, 0.0)
+    if n == 1:
+        return np.zeros((1, 3), dtype=float), {"stress": 0.0, "corr": 1.0, "energy3": 1.0}
+    j = np.eye(n) - np.ones((n, n), dtype=float) / n
+    gram = -0.5 * j @ (distances * distances) @ j
+    vals, vecs = np.linalg.eigh(0.5 * (gram + gram.T))
+    order = np.argsort(vals)[::-1]
+    vals = vals[order]
+    vecs = vecs[:, order]
+    positive = np.maximum(vals[:3], 0.0)
+    coords = vecs[:, :3] * np.sqrt(positive.reshape(1, -1))
+    if coords.shape[1] < 3:
+        coords = np.pad(coords, ((0, 0), (0, 3 - coords.shape[1])))
+    embedded = _pairwise_euclidean(coords)
+    mask = np.triu(np.ones_like(distances, dtype=bool), k=1)
+    target = distances[mask]
+    realized = embedded[mask]
+    denom = float(np.dot(realized, realized))
+    scale = float(np.dot(target, realized) / denom) if denom > 1e-12 else 1.0
+    coords = coords * scale
+    embedded = embedded * scale
+    realized = embedded[mask]
+    target_norm = max(float(np.dot(target, target)), 1e-12)
+    stress = math.sqrt(float(np.dot(target - realized, target - realized)) / target_norm)
+    if target.size >= 2 and float(np.std(target)) > 1e-12 and float(np.std(realized)) > 1e-12:
+        corr = float(np.corrcoef(target, realized)[0, 1])
+    else:
+        corr = 1.0 if stress < 1e-8 else 0.0
+    positive_vals = vals[vals > 1e-10]
+    energy3 = float(np.sum(np.maximum(vals[:3], 0.0)) / max(float(np.sum(positive_vals)), 1e-12)) if positive_vals.size else 1.0
+    return coords[:, :3], {"stress": stress, "corr": corr, "energy3": energy3}
+
+
+def _vertex_pca_feature(label: str, vertex: dict[str, object], idx: int, total: int) -> list[float]:
+    text = str(vertex.get("text", "")) if isinstance(vertex, dict) else ""
+    kind = str(vertex.get("type", "vertex")) if isinstance(vertex, dict) else "vertex"
+    filt = float(vertex.get("filtration", 0.0) or 0.0) if isinstance(vertex, dict) else 0.0
+    weight = float(vertex.get("weight", 1.0) or 1.0) if isinstance(vertex, dict) else 1.0
+    digest = hashlib.sha1(f"{label}|{kind}|{text[:256]}".encode("utf-8", "ignore")).digest()
+    hashed = [int(byte) / 255.0 for byte in digest[:6]]
+    return [
+        filt,
+        math.log1p(abs(weight)),
+        len(text) / 512.0,
+        idx / max(total - 1, 1),
+        math.sin(idx + 1.0),
+        math.cos(idx + 1.0),
+        *hashed,
+    ]
+
+
+def _edge_pairs_for_labels(edges: list[dict[str, object]], labels: set[str]) -> list[tuple[str, str]]:
+    pairs = []
+    for edge in edges:
+        simplex = edge.get("simplex", []) if isinstance(edge, dict) else []
+        if len(simplex) >= 2:
+            a, b = str(simplex[0]), str(simplex[1])
+            if a in labels and b in labels and a != b:
+                pairs.append((a, b))
+    return pairs
 
 
 def _simplicial_layout(

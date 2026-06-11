@@ -57,3 +57,10 @@ def test_analogical_memory_bank_roundtrip_and_retrieval(tmp_path):
     retrieved = loaded.retrieve(query_embedding, query_signature, top_k=2)
     assert retrieved
     assert "filtered_summary" in retrieved[0]
+    trajectory_summary = report["trajectory_filtered_simplicial_object"]["summary"]
+    candidate_summaries = {row["record_id"]: row["filtered_simplicial_object"]["summary"] for row in report["candidates"]}
+    stored_summaries = [record.filtered_simplicial_object["summary"] for record in records]
+    assert all(record.filtered_simplicial_object["summary"] == candidate_summaries[record.record_id] for record in records)
+    assert any(summary != trajectory_summary for summary in stored_summaries)
+    assert "record_family" in retrieved[0]
+    assert "base_retrieval_score" in retrieved[0]

@@ -42,8 +42,16 @@ class GFlowNetPolicy(nn.Module):
 
 
 class GraphCGLoss(nn.Module):
-    def __init__(self, dim: int, num_directions: int = 8, full_rank_margin: float = 0.05) -> None:
+    def __init__(
+        self,
+        dim: int,
+        num_directions: int | None = None,
+        full_rank_margin: float = 0.05,
+        active_directions: int | None = None,
+        exact_rank_max_directions: int = 512,
+    ) -> None:
         super().__init__()
+        num_directions = dim if num_directions is None else int(num_directions)
         directions = torch.empty(num_directions, dim)
         if num_directions > 0 and dim > 0:
             nn.init.orthogonal_(directions)
@@ -51,6 +59,8 @@ class GraphCGLoss(nn.Module):
             directions.zero_()
         self.directions = nn.Parameter(directions)
         self.full_rank_margin = full_rank_margin
+        self.active_directions = int(active_directions or min(num_directions, 64))
+        self.exact_rank_max_directions = int(exact_rank_max_directions)
 
     def effective_directions(self, detach: bool = False) -> Tensor:
         """Return the full-rank steering basis used by GraphCG projections.
@@ -67,7 +77,7 @@ class GraphCGLoss(nn.Module):
         raw = self.directions.detach() if detach else self.directions
         if raw.numel() == 0:
             return raw
-        if raw.shape[0] <= raw.shape[1]:
+        if raw.shape[0] <= raw.shape[1] and raw.shape[0] <= self.exact_rank_max_directions:
             q, _ = torch.linalg.qr(raw.transpose(0, 1), mode="reduced")
             dirs = q.transpose(0, 1)
             signs = torch.sign((dirs * raw).sum(dim=-1, keepdim=True))
@@ -94,6 +104,10 @@ class GraphCGLoss(nn.Module):
                 "graphcg_full_rank_penalty": zero,
                 "graphcg_raw_full_rank_penalty": zero,
                 "graphcg_rank_target": zero,
+                "graphcg_num_directions": zero,
+                "graphcg_embedding_dim": zero,
+                "graphcg_active_directions": zero,
+                "graphcg_active_rank_target": zero,
                 "graphcg_raw_effective_rank": zero,
                 "graphcg_raw_numerical_rank": zero,
                 "graphcg_full_rank_possible": zero,
@@ -103,24 +117,28 @@ class GraphCGLoss(nn.Module):
             }
         raw_dirs = F.normalize(self.directions, dim=-1)
         dirs = self.effective_directions()
+        active_idx = self._active_indices(z.device)
+        active_raw_dirs = raw_dirs.index_select(0, active_idx)
+        active_dirs = dirs.index_select(0, active_idx)
         z_norm = F.normalize(z, dim=-1)
-        shifted = F.normalize(z_norm[:, None, :] + 0.1 * dirs[None, :, :], dim=-1)
-        sim = torch.einsum("brd,crd->bc", shifted, shifted) / dirs.shape[0]
+        shifted = F.normalize(z_norm[:, None, :] + 0.1 * active_dirs[None, :, :], dim=-1)
+        sim = torch.einsum("brd,crd->bc", shifted, shifted) / active_dirs.shape[0]
         labels = torch.arange(z.shape[0], device=z.device)
         contrastive = F.cross_entropy(sim, labels)
-        gram = dirs @ dirs.t()
+        gram = active_dirs @ active_dirs.t()
         eye = torch.eye(gram.shape[0], device=z.device)
         orth = ((gram - eye) ** 2).mean()
         sparse = self.directions.abs().mean()
         offdiag = gram - eye
         norms = self.directions.norm(dim=-1)
-        centered = dirs - dirs.mean(dim=0, keepdim=True)
-        covariance = centered @ centered.t() / max(dirs.shape[-1] - 1, 1)
-        singular_values = torch.linalg.svdvals(dirs)
-        raw_singular_values = torch.linalg.svdvals(raw_dirs)
+        centered = active_dirs - active_dirs.mean(dim=0, keepdim=True)
+        covariance = centered @ centered.t() / max(active_dirs.shape[-1] - 1, 1)
+        singular_values = torch.linalg.svdvals(active_dirs)
+        raw_singular_values = torch.linalg.svdvals(active_raw_dirs)
         rank_target = min(dirs.shape[0], dirs.shape[1])
-        active_singular_values = singular_values[:rank_target]
-        raw_active_singular_values = raw_singular_values[:rank_target]
+        active_rank_target = min(active_dirs.shape[0], active_dirs.shape[1])
+        active_singular_values = singular_values[:active_rank_target]
+        raw_active_singular_values = raw_singular_values[:active_rank_target]
         raw_full_rank = F.relu(self.full_rank_margin - raw_active_singular_values).pow(2).mean()
         full_rank = F.relu(self.full_rank_margin - active_singular_values).pow(2).mean()
         spectral_mass = active_singular_values.clamp_min(1e-8)
@@ -143,6 +161,10 @@ class GraphCGLoss(nn.Module):
             "graphcg_raw_full_rank_penalty": raw_full_rank.detach(),
             "graphcg_direction_rank_target": torch.tensor(float(rank_target), device=z.device),
             "graphcg_rank_target": torch.tensor(float(rank_target), device=z.device),
+            "graphcg_num_directions": torch.tensor(float(dirs.shape[0]), device=z.device),
+            "graphcg_embedding_dim": torch.tensor(float(dirs.shape[1]), device=z.device),
+            "graphcg_active_directions": torch.tensor(float(active_dirs.shape[0]), device=z.device),
+            "graphcg_active_rank_target": torch.tensor(float(active_rank_target), device=z.device),
             "graphcg_direction_effective_rank": effective_rank.detach(),
             "graphcg_effective_rank": effective_rank.detach(),
             "graphcg_direction_numerical_rank": numerical_rank.detach(),
@@ -167,3 +189,11 @@ class GraphCGLoss(nn.Module):
             "graphcg_direction_gram_condition_proxy": (eigvals.detach().max() / eigvals.detach().abs().clamp_min(1e-8).min()),
             "graphcg_direction_svd_condition_proxy": condition_proxy.detach(),
         }
+
+    def _active_indices(self, device: torch.device) -> Tensor:
+        num_directions = self.directions.shape[0]
+        active = max(1, min(int(self.active_directions), num_directions))
+        if active >= num_directions:
+            return torch.arange(num_directions, device=device)
+        stride = max(num_directions // active, 1)
+        return (torch.arange(active, device=device) * stride).remainder(num_directions)

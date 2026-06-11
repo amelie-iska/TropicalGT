@@ -91,6 +91,7 @@ class AnalogicalMemoryBank:
         embedding_weight: float = 0.55,
         signature_weight: float = 0.35,
         score_weight: float = 0.10,
+        diversity_weight: float = 0.18,
     ) -> list[dict[str, Any]]:
         if not self.records:
             return []
@@ -102,11 +103,16 @@ class AnalogicalMemoryBank:
             sig_sim = _cosine(query_signature, _normalize(np.asarray(record.signature_vector, dtype=float)))
             quality = float(record.score) - 0.05 * float(record.nll)
             retrieval_score = embedding_weight * emb_sim + signature_weight * sig_sim + score_weight * quality
+            family = _record_family(record.record_id)
+            signature_hash = _signature_hash(record.signature_vector)
             rows.append(
                 {
                     "memory_id": record.memory_id,
                     "record_id": record.record_id,
+                    "record_family": family,
+                    "signature_hash": signature_hash,
                     "retrieval_score": float(retrieval_score),
+                    "base_retrieval_score": float(retrieval_score),
                     "embedding_similarity": float(emb_sim),
                     "signature_similarity": float(sig_sim),
                     "quality_score": quality,
@@ -123,7 +129,7 @@ class AnalogicalMemoryBank:
                     "metadata": record.metadata,
                 }
             )
-        return sorted(rows, key=lambda row: row["retrieval_score"], reverse=True)[:top_k]
+        return _diverse_top_k(rows, top_k=max(int(top_k), 0), diversity_weight=float(diversity_weight))
 
 
 def memory_records_from_scaling_report(
@@ -155,6 +161,7 @@ def memory_records_from_scaling_report(
         if min_score is not None and score < min_score:
             continue
         topology = row.get("topological_algebra") or trajectory_algebra or {}
+        row_complex = row.get("filtered_simplicial_object", {})
         embedding = [float(v) for v in row.get("embedding", [])]
         signature = signature_vector(topology)
         memory_id = _memory_id(row.get("record_id", ""), embedding, signature)
@@ -169,14 +176,16 @@ def memory_records_from_scaling_report(
                 trajectory_embeddings=trajectory_embeddings,
                 trajectory_edges=trajectory_edges,
                 trajectory_paths=trajectory_paths,
-                filtered_simplicial_object=trajectory_complex or row.get("filtered_simplicial_object", {}),
-                topological_algebra=trajectory_algebra or topology,
-                derived_signature=(trajectory_algebra or topology).get("derived_equivalence_signature", {}),
+                filtered_simplicial_object=row_complex or trajectory_complex,
+                topological_algebra=topology or trajectory_algebra,
+                derived_signature=(topology or trajectory_algebra).get("derived_equivalence_signature", {}),
                 metadata={
                     "source": source,
                     "level": row.get("level"),
                     "path": row.get("path", []),
                     "graphcg_projection": row.get("graphcg_projection"),
+                    "trajectory_filtered_simplicial_object": trajectory_complex,
+                    "trajectory_summary": trajectory_complex.get("summary", {}) if isinstance(trajectory_complex, dict) else {},
                 },
             )
         )
@@ -225,6 +234,49 @@ def _memory_id(record_id: object, embedding: list[float], signature: list[float]
     h.update(np.asarray(embedding[:16], dtype=np.float32).tobytes())
     h.update(np.asarray(signature[:16], dtype=np.float32).tobytes())
     return h.hexdigest()[:20]
+
+
+def _diverse_top_k(rows: list[dict[str, Any]], top_k: int, diversity_weight: float) -> list[dict[str, Any]]:
+    if top_k <= 0:
+        return []
+    ranked = sorted(rows, key=lambda row: float(row.get("retrieval_score", 0.0)), reverse=True)
+    selected: list[dict[str, Any]] = []
+    selected_families: set[str] = set()
+    selected_signatures: set[str] = set()
+    remaining = ranked
+    while remaining and len(selected) < top_k:
+        best_idx = 0
+        best_score = float("-inf")
+        for idx, row in enumerate(remaining):
+            penalty = 0.0
+            if row.get("record_family") in selected_families:
+                penalty += diversity_weight
+            if row.get("signature_hash") in selected_signatures:
+                penalty += diversity_weight * 0.5
+            adjusted = float(row.get("base_retrieval_score", row.get("retrieval_score", 0.0))) - penalty
+            if adjusted > best_score:
+                best_idx = idx
+                best_score = adjusted
+        row = dict(remaining.pop(best_idx))
+        row["retrieval_score"] = float(best_score)
+        row["diversity_adjusted"] = True
+        row["diversity_penalty_applied"] = float(row.get("base_retrieval_score", 0.0)) - float(best_score)
+        selected.append(row)
+        selected_families.add(str(row.get("record_family", "")))
+        selected_signatures.add(str(row.get("signature_hash", "")))
+    return selected
+
+
+def _record_family(record_id: object) -> str:
+    value = str(record_id or "")
+    if "|" in value:
+        return value.split("|", 1)[0]
+    return value
+
+
+def _signature_hash(signature: list[float]) -> str:
+    rounded = [round(float(v), 4) for v in signature[:16]]
+    return hashlib.sha1(json.dumps(rounded, sort_keys=True).encode("utf-8")).hexdigest()[:12]
 
 
 def _normalize(values: np.ndarray) -> np.ndarray:

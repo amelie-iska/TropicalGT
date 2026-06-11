@@ -20,6 +20,8 @@ class TropicalGTConfig:
     dim: int = 128
     hidden_dim: int = 128
     num_actions: int = 8
+    graphcg_num_directions: int | None = None
+    graphcg_active_directions: int = 64
     gflownet_weight: float = 0.02
     graphcg_weight: float = 0.02
     margin_weight: float = 0.002
@@ -45,7 +47,12 @@ class TropicalGTModel(nn.Module):
         self.gru = nn.GRU(config.dim, config.hidden_dim, batch_first=True)
         self.out = nn.Linear(config.hidden_dim, config.vocab_size)
         self.gfn = GFlowNetPolicy(config.dim, config.num_actions)
-        self.graphcg = GraphCGLoss(config.dim, config.num_actions)
+        graphcg_num_directions = config.graphcg_num_directions or config.dim
+        self.graphcg = GraphCGLoss(
+            config.dim,
+            num_directions=graphcg_num_directions,
+            active_directions=config.graphcg_active_directions,
+        )
         self.memory = AnalogicalMemoryHead(config.dim, config.memory_dim)
 
     def forward(self, input_ids: Tensor, graph_batch: GraphTokenBatch, target_ids: Tensor | None = None) -> dict[str, Tensor]:

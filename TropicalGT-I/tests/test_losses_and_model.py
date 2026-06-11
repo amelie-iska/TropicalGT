@@ -71,6 +71,7 @@ def test_model_forward_fixture():
     model = TropicalGTModel(TropicalGTConfig(dim=32, hidden_dim=32, graph_feature_dim=48))
     out = model(torch.stack(xs), gb, torch.stack(ys))
     assert out["logits"].shape[:2] == (2, 32)
+    assert model.graphcg.directions.shape == (32, 32)
     assert torch.isfinite(out["loss"])
     for key in [
         "certificate_loss",
@@ -91,12 +92,31 @@ def test_model_forward_fixture():
         "graphcg_direction_effective_rank",
         "graphcg_direction_numerical_rank",
         "graphcg_direction_singular_min",
+        "graphcg_num_directions",
+        "graphcg_embedding_dim",
+        "graphcg_active_directions",
         "sequence_tropical_tokens_mean",
         "sequence_tropical_margin_mean",
         "sequence_tropical_support_entropy",
     ]:
         assert key in out
         assert torch.isfinite(out[key])
+    assert out["graphcg_num_directions"].item() == 32.0
+    assert out["graphcg_embedding_dim"].item() == 32.0
+
+
+def test_model_allows_explicit_full_embedding_graphcg_bank():
+    model = TropicalGTModel(
+        TropicalGTConfig(
+            dim=24,
+            hidden_dim=24,
+            graph_feature_dim=48,
+            graphcg_num_directions=24,
+            graphcg_active_directions=6,
+        )
+    )
+    assert model.graphcg.directions.shape == (24, 24)
+    assert model.graphcg.active_directions == 6
 
 
 def test_tropical_certificate_targets_allow_edge_endpoints():

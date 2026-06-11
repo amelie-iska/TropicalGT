@@ -54,6 +54,10 @@ def test_visualization_payload_contains_filtered_objects(tmp_path: Path):
     assert "plotly_hover" in html
     assert "renderHoverCard" in html
     assert "<svg" in html
+    assert "pca-radius-filtered-complex" in html
+    assert "3D PCA radius-filtered simplicial complex" in html
+    assert "pca-radius-node" in html
+    assert "data-pca-z" in html
     assert "zero-simplex" in html
     assert "filtration-layer" in html
     assert "Interpolating NLL surface" in html
@@ -77,6 +81,33 @@ def test_visualization_payload_contains_topology_when_audited(tmp_path: Path):
     payload = json.loads(Path(paths["payloads"]).read_text(encoding="utf-8"))
     assert "topological_algebra_diagnostics" in payload
     assert payload["topological_algebra_diagnostics"][0]["topological_algebra"]["multiparameter_persistence"]["num_parameters"] == 3
+
+
+def test_simplicial_object_svg_uses_3d_pca_radius_filtration():
+    obj = {
+        "summary": {"num_vertices": 4, "num_edges": 4, "num_two_simplices": 1},
+        "thresholds": [0.0, 0.2, 0.4],
+        "simplices": [
+            {"simplex": ["a"], "dimension": 0, "filtration": 0.0, "type": "reasoning-step", "text": "alpha"},
+            {"simplex": ["b"], "dimension": 0, "filtration": 0.1, "type": "reasoning-step", "text": "beta"},
+            {"simplex": ["c"], "dimension": 0, "filtration": 0.2, "type": "reasoning-step", "text": "gamma"},
+            {"simplex": ["d"], "dimension": 0, "filtration": 0.3, "type": "reasoning-step", "text": "delta"},
+            {"simplex": ["a", "b"], "dimension": 1, "filtration": 0.15, "type": "radius-edge"},
+            {"simplex": ["b", "c"], "dimension": 1, "filtration": 0.25, "type": "radius-edge"},
+            {"simplex": ["c", "d"], "dimension": 1, "filtration": 0.35, "type": "radius-edge"},
+            {"simplex": ["a", "c"], "dimension": 1, "filtration": 0.4, "type": "radius-edge"},
+            {"simplex": ["a", "b", "c"], "dimension": 2, "filtration": 0.45, "type": "radius-face"},
+        ],
+    }
+    html = _simplicial_object_svg(obj)
+    assert "pca-radius-filtered-complex" in html
+    assert "3D PCA radius-filtered simplicial complex" in html
+    assert html.count("pca-radius-node") == 4
+    assert html.count("pca-radius-edge") == 4
+    assert html.count("pca-radius-face") == 1
+    assert "data-pca-z" in html
+    assert "PCA=(" in html
+    assert "radius filtration" in html
 
 
 def test_got_trajectory_visualization_renders_simplicial_panel_and_nll_surface(tmp_path: Path):
@@ -134,7 +165,11 @@ def test_simplicial_svg_wraps_long_topological_paths():
             "thresholds": [idx / 10 for idx in range(11)],
         }
     )
-    assert "layout=wrapped_topological_path" in svg
+    assert "layout=3d_pca_radius_projection" in svg
+    assert "method=classical_mds_pcoa" in svg
+    assert "stress=" in svg
+    assert "pca-radius-filtered-complex" in svg
+    assert "data-pca-z" in svg
     assert svg.count("zero-simplex") == 50
     assert svg.count("one-simplex") == 49
 
