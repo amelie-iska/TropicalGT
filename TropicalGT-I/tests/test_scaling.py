@@ -10,8 +10,11 @@ def test_apply_reasoning_action_extends_graph():
     record = FixtureGraphDataset(1)[0]
     expanded = apply_reasoning_action(record, "verify", rank=0)
     assert expanded.record_id.endswith("|verify0")
-    assert len(expanded.graph_json["nodes"]) == len(record.graph_json["nodes"]) + 1
-    assert len(expanded.graph_json["edges"]) == len(record.graph_json["edges"]) + 1
+    assert len(expanded.graph_json["nodes"]) == len(record.graph_json["nodes"]) + 4
+    assert len(expanded.graph_json["edges"]) >= len(record.graph_json["edges"]) + 5
+    assert expanded.metadata["reasoning_microstep_count"] == 3
+    assert "[got:verify:1]" in expanded.text
+    assert any(node.get("type") == "verification_check" for node in expanded.graph_json["nodes"])
     stopped = apply_reasoning_action(record, "stop", rank=1)
     assert len(stopped.graph_json["nodes"]) == len(record.graph_json["nodes"])
 

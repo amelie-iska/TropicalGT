@@ -163,8 +163,9 @@ def gflownet_diagnostics(model, graph_state: torch.Tensor, top_k: int = 3) -> di
 
 
 def graphcg_diagnostics(model, graph_state: torch.Tensor, top_k: int = 3) -> dict[str, Any]:
-    dirs = model.graphcg.directions.detach()
-    norms = dirs.norm(dim=-1).cpu()
+    raw_dirs = model.graphcg.directions.detach()
+    dirs = model.graphcg.effective_directions(detach=True) if hasattr(model.graphcg, "effective_directions") else raw_dirs
+    norms = raw_dirs.norm(dim=-1).cpu()
     dirs_norm = F.normalize(dirs, dim=-1)
     state_norm = F.normalize(graph_state.detach(), dim=-1)
     scores = (state_norm @ dirs_norm.t()).cpu()
@@ -183,6 +184,7 @@ def graphcg_diagnostics(model, graph_state: torch.Tensor, top_k: int = 3) -> dic
         top.append([{"direction": int(idx), "cosine": float(value)} for value, idx in zip(values, indices)])
     return {
         "direction_norms": [float(v) for v in norms.tolist()],
+        "basis": "effective_full_rank_qr" if hasattr(model.graphcg, "effective_directions") else "raw_normalized",
         "mean_abs_offdiag_cosine": float(offdiag.abs().mean()),
         "full_rank_margin": rank_margin,
         "rank_target": int(rank_target),

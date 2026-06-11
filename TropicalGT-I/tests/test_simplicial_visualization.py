@@ -97,10 +97,11 @@ def test_got_trajectory_visualization_renders_simplicial_panel_and_nll_surface(t
     assert 'aria-label="hovered filtered simplicial object"' in html
     assert "<svg" in html
     assert "filtration-layer" in html
-    assert "Interpolating trajectory NLL surface" in html
+    assert "Exact triangulated trajectory NLL surface" in html
+    assert "NLL surface anchors" in html
     assert payload["nll_surface"]["available"] is True
     assert payload["nll_surface"]["touches_points"] is True
-    assert payload["nll_surface"]["surface_kind"] in {"smooth_exact_rbf_surface", "sparse_exact_triangular_nll_mesh"}
+    assert payload["nll_surface"]["surface_kind"] in {"smooth_exact_rbf_surface", "sparse_exact_triangular_nll_mesh", "exact_delaunay_nll_mesh"}
     assert payload["nll_surface"]["max_point_residual"] < 1e-5
     assert len(payload["edges"]) == 3
     assert sum(1 for edge in payload["edges"] if edge["source"] == "root") == 2
@@ -149,6 +150,10 @@ def test_trajectory_persistence_uses_growth_and_free_resolution(tmp_path: Path):
     assert "multiparameter persistence and free-resolution growth" in module_html
     assert "free-resolution proxy" in module_html
     assert "simplicial-object-panel" in module_html
+    assert '<input id="filtration-slider"' not in barcode_html
+    assert '<div class="filtration-controls"' not in barcode_html
+    assert '<input id="filtration-slider"' not in module_html
+    assert '<div class="filtration-controls"' not in module_html
 
 
 def test_analogical_memory_visualization_renders_simplicial_maps(tmp_path: Path):
@@ -183,6 +188,8 @@ def test_analogical_memory_visualization_renders_simplicial_maps(tmp_path: Path)
     assert "persistent homology similarity" in html
     assert "free-resolution similarity" in html
     assert "simplicial-object-panel" in html
+    assert '<input id="filtration-slider"' not in html
+    assert '<div class="filtration-controls"' not in html
     assert maps["maps"][0]["edge_preservation_rate"] >= 0.0
     assert maps["maps"][0]["derived_signature_similarity"] >= 0.0
 

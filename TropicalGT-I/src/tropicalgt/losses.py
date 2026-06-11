@@ -44,8 +44,36 @@ class GFlowNetPolicy(nn.Module):
 class GraphCGLoss(nn.Module):
     def __init__(self, dim: int, num_directions: int = 8, full_rank_margin: float = 0.05) -> None:
         super().__init__()
-        self.directions = nn.Parameter(torch.randn(num_directions, dim) * 0.02)
+        directions = torch.empty(num_directions, dim)
+        if num_directions > 0 and dim > 0:
+            nn.init.orthogonal_(directions)
+        else:
+            directions.zero_()
+        self.directions = nn.Parameter(directions)
         self.full_rank_margin = full_rank_margin
+
+    def effective_directions(self, detach: bool = False) -> Tensor:
+        """Return the full-rank steering basis used by GraphCG projections.
+
+        When the requested number of directions is at most the ambient embedding
+        dimension, the effective basis is an orthonormal Stiefel projection of
+        the learnable directions. The raw directions still receive a rank-collapse
+        penalty, but downstream steering cannot silently become rank-deficient.
+        If more directions than dimensions are requested, full row rank is
+        impossible; in that edge case we return normalized directions and report
+        the attainable rank target separately.
+        """
+
+        raw = self.directions.detach() if detach else self.directions
+        if raw.numel() == 0:
+            return raw
+        if raw.shape[0] <= raw.shape[1]:
+            q, _ = torch.linalg.qr(raw.transpose(0, 1), mode="reduced")
+            dirs = q.transpose(0, 1)
+            signs = torch.sign((dirs * raw).sum(dim=-1, keepdim=True))
+            signs = torch.where(signs == 0, torch.ones_like(signs), signs)
+            return dirs * signs
+        return F.normalize(raw, dim=-1)
 
     def forward(self, z: Tensor) -> tuple[Tensor, dict[str, Tensor]]:
         if z.shape[0] < 2:
@@ -64,10 +92,17 @@ class GraphCGLoss(nn.Module):
                 "graphcg_direction_singular_max": zero,
                 "graphcg_max_singular_value": zero,
                 "graphcg_full_rank_penalty": zero,
+                "graphcg_raw_full_rank_penalty": zero,
                 "graphcg_rank_target": zero,
+                "graphcg_raw_effective_rank": zero,
+                "graphcg_raw_numerical_rank": zero,
+                "graphcg_full_rank_possible": zero,
+                "graphcg_raw_singular_min": zero,
+                "graphcg_raw_singular_max": zero,
                 "graphcg_singular_value_floor": zero,
             }
-        dirs = F.normalize(self.directions, dim=-1)
+        raw_dirs = F.normalize(self.directions, dim=-1)
+        dirs = self.effective_directions()
         z_norm = F.normalize(z, dim=-1)
         shifted = F.normalize(z_norm[:, None, :] + 0.1 * dirs[None, :, :], dim=-1)
         sim = torch.einsum("brd,crd->bc", shifted, shifted) / dirs.shape[0]
@@ -82,32 +117,45 @@ class GraphCGLoss(nn.Module):
         centered = dirs - dirs.mean(dim=0, keepdim=True)
         covariance = centered @ centered.t() / max(dirs.shape[-1] - 1, 1)
         singular_values = torch.linalg.svdvals(dirs)
+        raw_singular_values = torch.linalg.svdvals(raw_dirs)
         rank_target = min(dirs.shape[0], dirs.shape[1])
         active_singular_values = singular_values[:rank_target]
+        raw_active_singular_values = raw_singular_values[:rank_target]
+        raw_full_rank = F.relu(self.full_rank_margin - raw_active_singular_values).pow(2).mean()
         full_rank = F.relu(self.full_rank_margin - active_singular_values).pow(2).mean()
         spectral_mass = active_singular_values.clamp_min(1e-8)
         spectral_probs = spectral_mass / spectral_mass.sum().clamp_min(1e-8)
         effective_rank = torch.exp(-(spectral_probs * spectral_probs.log()).sum())
+        raw_spectral_mass = raw_active_singular_values.clamp_min(1e-8)
+        raw_spectral_probs = raw_spectral_mass / raw_spectral_mass.sum().clamp_min(1e-8)
+        raw_effective_rank = torch.exp(-(raw_spectral_probs * raw_spectral_probs.log()).sum())
         numerical_rank = active_singular_values.gt(self.full_rank_margin).float().sum()
+        raw_numerical_rank = raw_active_singular_values.gt(self.full_rank_margin).float().sum()
         condition_proxy = active_singular_values.max() / active_singular_values.abs().clamp_min(1e-8).min()
         eigvals = torch.linalg.eigvalsh((gram + gram.t()) * 0.5).real
-        loss = contrastive + 0.05 * orth + 0.05 * full_rank + 0.001 * sparse
+        loss = contrastive + 0.05 * orth + 0.05 * raw_full_rank + 0.001 * sparse
         return loss, {
             "graphcg_contrastive": contrastive.detach(),
             "graphcg_orthogonality": orth.detach(),
             "graphcg_sparsity": sparse.detach(),
             "graphcg_full_rank": full_rank.detach(),
-            "graphcg_full_rank_penalty": full_rank.detach(),
+            "graphcg_full_rank_penalty": raw_full_rank.detach(),
+            "graphcg_raw_full_rank_penalty": raw_full_rank.detach(),
             "graphcg_direction_rank_target": torch.tensor(float(rank_target), device=z.device),
             "graphcg_rank_target": torch.tensor(float(rank_target), device=z.device),
             "graphcg_direction_effective_rank": effective_rank.detach(),
             "graphcg_effective_rank": effective_rank.detach(),
             "graphcg_direction_numerical_rank": numerical_rank.detach(),
             "graphcg_numerical_rank": numerical_rank.detach(),
+            "graphcg_raw_effective_rank": raw_effective_rank.detach(),
+            "graphcg_raw_numerical_rank": raw_numerical_rank.detach(),
+            "graphcg_full_rank_possible": torch.tensor(float(dirs.shape[0] <= dirs.shape[1]), device=z.device),
             "graphcg_direction_singular_min": active_singular_values.detach().min(),
             "graphcg_min_singular_value": active_singular_values.detach().min(),
             "graphcg_direction_singular_max": active_singular_values.detach().max(),
             "graphcg_max_singular_value": active_singular_values.detach().max(),
+            "graphcg_raw_singular_min": raw_active_singular_values.detach().min(),
+            "graphcg_raw_singular_max": raw_active_singular_values.detach().max(),
             "graphcg_singular_value_floor": torch.tensor(float(self.full_rank_margin), device=z.device),
             "graphcg_direction_norm_mean": norms.detach().mean(),
             "graphcg_direction_norm_min": norms.detach().min(),

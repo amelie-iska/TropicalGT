@@ -156,3 +156,11 @@
 - The GFlowNet reward is smoke-stage likelihood/margin based.  Low-weight GFlowNet was best in the 8-step tiny grid, while the 64-step ladder promoted `aux_0p25x`; both still need longer verifier/task-reward and multi-seed runs before promotion.
 - GraphCG is now full-rank-regularized, and matched grids exist, but GraphCG-only and full auxiliary weights have not yet shown BPB gains. Longer data-backed ablations must retune GraphCG/tropical weights before promotion.
 - TokenGT identifiers are deterministic finite-chart features for v1 smoke; high-scale runs should review the full upstream TokenGT implementation before architectural scaling.
+
+## Visualization and GraphCG Audit Follow-Up
+
+- Restricted filtration sliders to reasoning-node inspection plots only; trajectory persistence and analogical-memory plots now keep the dark simplicial side panel without irrelevant radius controls.
+- Replaced the GoT trajectory NLL surface with an exact Delaunay/TIN mesh whose vertices are the PCA trajectory states and whose z-values are the per-state NLLs; regenerated step-250 and fresh audit payloads report `touches_points=true` and `max_point_residual=0.0`.
+- Changed GraphCG steering to use an effective QR full-rank basis for projections, diagnostics, and visualizations while retaining raw-direction rank-collapse penalties.
+- Split each non-stop GFlowNet reasoning action into explicit graph micro-steps, so future inference states grow parse/check/rewrite/proposal-style filtered simplicial objects instead of a single coarse node.
+- Verification: `conda run -n tokengt python -m pytest TropicalGT-I/tests -q` passed with 52 tests.

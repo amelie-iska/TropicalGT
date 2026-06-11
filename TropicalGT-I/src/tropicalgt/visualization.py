@@ -120,6 +120,7 @@ def write_reasoning_visualizations(
     fig3d = go.Figure()
     if surface_pc3 is not None:
         fig3d.add_trace(surface_pc3)
+    fig3d.add_trace(_nll_anchor_trace(pca[:, 0], pca[:, 1], pca[:, 2], nll, name="Embedding surface anchors"))
     fig3d.add_trace(
         go.Scatter3d(
             x=pca[:, 0],
@@ -136,11 +137,12 @@ def write_reasoning_visualizations(
     fig3d.data[-1].customdata = node_indices
     fig3d.update_layout(title="TropicalGT-I validation graph-state PCA sample", scene=dict(xaxis_title="PC1", yaxis_title="PC2", zaxis_title="PC3"))
     panel_items = _simplicial_panel_items(filtered_objects, hover)
-    p3 = output_dir / "reasoning_trajectory_3d.html"; _write_plotly_dark_html(p3, fig3d, "TropicalGT-I validation graph-state PCA sample", panel_items)
+    p3 = output_dir / "reasoning_trajectory_3d.html"; _write_plotly_dark_html(p3, fig3d, "TropicalGT-I validation graph-state PCA sample", panel_items, show_filtration_slider=True)
     surface_nll, surface_nll_meta = _nll_surface_trace(pca[:, 0], pca[:, 1], nll, z_values=nll, mode="nll_height", name="Interpolating NLL surface through reasoning points")
     fig2 = go.Figure()
     if surface_nll is not None:
         fig2.add_trace(surface_nll)
+    fig2.add_trace(_nll_anchor_trace(pca[:, 0], pca[:, 1], nll, nll, name="NLL surface anchors"))
     fig2.add_trace(
         go.Scatter3d(
             x=pca[:, 0],
@@ -155,7 +157,7 @@ def write_reasoning_visualizations(
     )
     fig2.data[-1].customdata = node_indices
     fig2.update_layout(title="TropicalGT-I validation PCA with NLL height", scene=dict(xaxis_title="PC1", yaxis_title="PC2", zaxis_title="NLL"))
-    p2 = output_dir / "reasoning_trajectory_pca_nll.html"; _write_plotly_dark_html(p2, fig2, "TropicalGT-I validation PCA with NLL height", panel_items)
+    p2 = output_dir / "reasoning_trajectory_pca_nll.html"; _write_plotly_dark_html(p2, fig2, "TropicalGT-I validation PCA with NLL height", panel_items, show_filtration_slider=True)
     payload = output_dir / "reasoning_trajectory_payloads.json"
     points = []
     for idx, obj in enumerate(filtered_objects):
@@ -307,16 +309,16 @@ def write_got_trajectory_visualization(scaling_report: dict[str, object], output
     nll_values = np.asarray([float(row.get("nll", row.get("score", 0.0)) or 0.0) for row in candidates], dtype=float)
     hover = [_candidate_hover(row) for row in candidates]
     fig = go.Figure()
-    nll_surface, nll_surface_meta = _nll_surface_trace(
+    nll_surface, nll_surface_meta = _nll_triangulated_surface_trace(
         pca[:, 0],
         pca[:, 1],
         nll_values,
-        z_values=nll_values,
-        mode="nll_height",
-        name="Interpolating trajectory NLL surface through GoT nodes",
+        nll_values,
+        name="Exact triangulated trajectory NLL surface through GoT nodes",
     )
     if nll_surface is not None:
         fig.add_trace(nll_surface)
+    fig.add_trace(_nll_anchor_trace(pca[:, 0], pca[:, 1], nll_values, nll_values, name="NLL surface anchors"))
     for idx, row in enumerate(candidates):
         parent = row.get("parent")
         if isinstance(parent, str) and parent in id_to_idx:
@@ -365,7 +367,7 @@ def write_got_trajectory_visualization(scaling_report: dict[str, object], output
         [row.get("filtered_simplicial_object") if isinstance(row.get("filtered_simplicial_object"), dict) else {} for row in candidates],
         hover,
     )
-    _write_plotly_dark_html(path, fig, "Graph-of-thought trajectory PCA in embedding space", panel_items)
+    _write_plotly_dark_html(path, fig, "Graph-of-thought trajectory PCA in embedding space", panel_items, show_filtration_slider=True)
     payload = {
         "nodes": [
             {
@@ -1501,9 +1503,15 @@ def write_metric_visualizations(history: list[dict[str, float]], output_dir: str
         "graphcg_direction_singular_max",
         "graphcg_direction_svd_condition_proxy",
         "graphcg_full_rank_penalty",
+        "graphcg_raw_full_rank_penalty",
+        "graphcg_full_rank_possible",
         "graphcg_effective_rank",
         "graphcg_numerical_rank",
         "graphcg_rank_target",
+        "graphcg_raw_effective_rank",
+        "graphcg_raw_numerical_rank",
+        "graphcg_raw_singular_min",
+        "graphcg_raw_singular_max",
         "graphcg_min_singular_value",
         "graphcg_max_singular_value",
         "certificate_loss",
@@ -1552,11 +1560,13 @@ def write_metric_visualizations(history: list[dict[str, float]], output_dir: str
 def write_graphcg_training_visualizations(model, output_dir: str | Path) -> dict[str, str]:
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
-    directions = model.graphcg.directions.detach().cpu().float().numpy()
+    direction_tensor = model.graphcg.effective_directions(detach=True) if hasattr(model.graphcg, "effective_directions") else model.graphcg.directions.detach()
+    directions = direction_tensor.detach().cpu().float().numpy()
     if directions.size == 0:
         return {}
-    norms = np.linalg.norm(directions, axis=1, keepdims=True)
-    normalized = directions / np.maximum(norms, 1e-8)
+    raw_directions = model.graphcg.directions.detach().cpu().float().numpy()
+    norms = np.linalg.norm(raw_directions, axis=1, keepdims=True)
+    normalized = directions / np.maximum(np.linalg.norm(directions, axis=1, keepdims=True), 1e-8)
     gram = normalized @ normalized.T
     singular_values = np.linalg.svd(normalized, compute_uv=False)
     rank_margin = float(getattr(model.graphcg, "full_rank_margin", 0.05))
@@ -1576,9 +1586,9 @@ def write_graphcg_training_visualizations(model, output_dir: str | Path) -> dict
     )
     fig.update_layout(
         template="plotly_dark",
-        title=f"GraphCG direction Gram matrix (rank {numerical_rank}/{rank_target})",
+        title=f"GraphCG effective full-rank direction Gram matrix (rank {numerical_rank}/{rank_target})",
     )
-    _write_plotly_dark_html(gram_path, fig, f"GraphCG direction Gram matrix (rank {numerical_rank}/{rank_target})")
+    _write_plotly_dark_html(gram_path, fig, f"GraphCG effective full-rank direction Gram matrix (rank {numerical_rank}/{rank_target})")
 
     pca_path = output_dir / "graphcg_direction_pca.html"
     pca = _pca3(directions)
@@ -1599,10 +1609,10 @@ def write_graphcg_training_visualizations(model, output_dir: str | Path) -> dict
         )
     fig2.update_layout(
         template="plotly_dark",
-        title="GraphCG steering directions in PCA",
+        title="GraphCG effective steering directions in PCA",
         scene=dict(xaxis_title="PC1", yaxis_title="PC2", zaxis_title="PC3"),
     )
-    _write_plotly_dark_html(pca_path, fig2, "GraphCG steering directions in PCA")
+    _write_plotly_dark_html(pca_path, fig2, "GraphCG effective steering directions in PCA")
 
     sv_path = output_dir / "graphcg_direction_singular_values.html"
     fig3 = go.Figure(
@@ -1696,7 +1706,7 @@ def _action_color(action: str) -> str:
     return colors.get(action, "#94a3b8")
 
 
-def _write_plotly_dark_html(path: Path, fig: go.Figure, title: str, panel_items: list[dict[str, str]] | None = None) -> None:
+def _write_plotly_dark_html(path: Path, fig: go.Figure, title: str, panel_items: list[dict[str, str]] | None = None, show_filtration_slider: bool = False) -> None:
     fig.update_layout(
         template="plotly_dark",
         paper_bgcolor="#090b12",
@@ -1707,6 +1717,15 @@ def _write_plotly_dark_html(path: Path, fig: go.Figure, title: str, panel_items:
     chart = fig.to_html(full_html=False, include_plotlyjs="cdn", config={"displaylogo": False, "responsive": True})
     items = panel_items or []
     initial = items[0] if items else {"title": "Filtered simplicial object", "svg": "", "summary": "Hover a reasoning node to render its complex."}
+    controls_html = (
+        """<div class=\"filtration-controls\" id=\"filtration-controls\">
+        <label><span>Filtration radius</span><strong id=\"filtration-value\">all</strong></label>
+        <input id=\"filtration-slider\" type=\"range\" min=\"0\" max=\"1\" step=\"0.001\" value=\"1\" aria-label=\"filtered simplicial complex radius\">
+        <div class=\"hint\" id=\"filtration-hint\">Shows simplices with scalar filtration at or below the selected radius. Multiparameter summaries remain in the JSON payload.</div>
+      </div>"""
+        if show_filtration_slider
+        else ""
+    )
     path.write_text(
         f"""<!doctype html>
 <html>
@@ -1836,11 +1855,7 @@ def _write_plotly_dark_html(path: Path, fig: go.Figure, title: str, panel_items:
     <aside class="panel" aria-live="polite">
       <h1 id="simplicial-title">{html.escape(initial["title"])}</h1>
       <div class="summary" id="simplicial-summary">{initial["summary"]}</div>
-      <div class="filtration-controls" id="filtration-controls">
-        <label><span>Filtration radius</span><strong id="filtration-value">all</strong></label>
-        <input id="filtration-slider" type="range" min="0" max="1" step="0.001" value="1" aria-label="filtered simplicial complex radius">
-        <div class="hint" id="filtration-hint">Shows simplices with scalar filtration at or below the selected radius. Multiparameter summaries remain in the JSON payload.</div>
-      </div>
+      {controls_html}
       <div class="simplicial-object-panel" id="simplicial-svg">{initial["svg"]}</div>
     </aside>
   </main>
@@ -1872,6 +1887,10 @@ def _write_plotly_dark_html(path: Path, fig: go.Figure, title: str, panel_items:
       configureFiltrationSlider(item, panelSvg);
     }}
     function configureFiltrationSlider(item, root) {{
+      if (!filtrationSlider || !filtrationValue || !filtrationHint) {{
+        applyFiltrationThreshold(root, Infinity);
+        return;
+      }}
       const min = Number(item.filtration_min ?? 0);
       const max = Number(item.filtration_max ?? 1);
       const hasRange = Number.isFinite(max) && max > min;
@@ -2323,6 +2342,99 @@ def _nll_surface_trace(
         "smoothing": "inverse_distance_weighted_three_pass_neighbor_average",
         "max_point_residual": None,
     }
+
+
+def _nll_triangulated_surface_trace(
+    x_values: np.ndarray,
+    y_values: np.ndarray,
+    z_values: np.ndarray,
+    nll_values: np.ndarray,
+    name: str,
+) -> tuple[go.BaseTraceType | None, dict[str, object]]:
+    x = np.asarray(x_values, dtype=float).reshape(-1)
+    y = np.asarray(y_values, dtype=float).reshape(-1)
+    z = np.asarray(z_values, dtype=float).reshape(-1)
+    nll = np.asarray(nll_values, dtype=float).reshape(-1)
+    finite = np.isfinite(x) & np.isfinite(y) & np.isfinite(z) & np.isfinite(nll)
+    x = x[finite]
+    y = y[finite]
+    z = z[finite]
+    nll = nll[finite]
+    if x.size == 0:
+        return None, {"available": False, "reason": "no finite trajectory NLL points"}
+    unique: dict[tuple[float, float], int] = {}
+    keep = []
+    for idx, (px, py) in enumerate(zip(x, y)):
+        key = (round(float(px), 10), round(float(py), 10))
+        if key in unique:
+            continue
+        unique[key] = idx
+        keep.append(idx)
+    x = x[keep]
+    y = y[keep]
+    z = z[keep]
+    nll = nll[keep]
+    if x.size < 3 or _xy_rank(x, y) < 2:
+        return _smooth_anchored_surface(x, y, z, nll, name=name, mode="nll_height")
+    points = np.column_stack([x, y])
+    simplices: np.ndarray
+    try:
+        from scipy.spatial import Delaunay
+
+        simplices = np.asarray(Delaunay(points).simplices, dtype=int)
+    except Exception:
+        order = _angle_order(x, y)
+        simplices = np.asarray([[order[0], order[idx], order[idx + 1]] for idx in range(1, len(order) - 1)], dtype=int)
+    if simplices.size == 0:
+        return _smooth_anchored_surface(x, y, z, nll, name=name, mode="nll_height")
+    trace = go.Mesh3d(
+        x=x,
+        y=y,
+        z=z,
+        i=simplices[:, 0],
+        j=simplices[:, 1],
+        k=simplices[:, 2],
+        intensity=nll,
+        colorscale="Plasma",
+        opacity=0.52,
+        flatshading=False,
+        showscale=False,
+        name=name,
+        hovertemplate="PC1=%{x:.3f}<br>PC2=%{y:.3f}<br>surface z=%{z:.4f}<br>NLL=%{intensity:.4f}<extra></extra>",
+    )
+    return trace, {
+        "available": True,
+        "mode": "nll_height",
+        "surface_kind": "exact_delaunay_nll_mesh",
+        "interpolation": "Delaunay/TIN mesh whose vertices are exactly the GoT PCA states and whose z-coordinate is per-state NLL",
+        "point_count": int(x.size),
+        "triangle_count": int(simplices.shape[0]),
+        "nll_min": float(np.nanmin(nll)),
+        "nll_max": float(np.nanmax(nll)),
+        "nll_mean": float(np.nanmean(nll)),
+        "max_point_residual": 0.0,
+        "touches_points": True,
+    }
+
+
+def _nll_anchor_trace(x: np.ndarray, y: np.ndarray, z: np.ndarray, nll: np.ndarray, name: str) -> go.Scatter3d:
+    return go.Scatter3d(
+        x=np.asarray(x, dtype=float),
+        y=np.asarray(y, dtype=float),
+        z=np.asarray(z, dtype=float),
+        mode="markers",
+        marker=dict(
+            size=4,
+            color=np.asarray(nll, dtype=float),
+            colorscale="Plasma",
+            showscale=False,
+            symbol="diamond",
+            line=dict(width=2, color="#f8fafc"),
+        ),
+        name=name,
+        hovertemplate="surface anchor<br>PC1=%{x:.3f}<br>PC2=%{y:.3f}<br>surface z=%{z:.4f}<extra></extra>",
+        showlegend=True,
+    )
 
 
 def _smooth_anchored_surface(

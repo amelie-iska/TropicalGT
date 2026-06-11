@@ -36,10 +36,16 @@ def test_graphcg_loss_reports_full_rank_terms():
         "graphcg_direction_singular_min",
         "graphcg_direction_singular_max",
         "graphcg_direction_svd_condition_proxy",
+        "graphcg_raw_full_rank_penalty",
+        "graphcg_raw_numerical_rank",
+        "graphcg_raw_effective_rank",
+        "graphcg_full_rank_possible",
     ]:
         assert key in metrics
         assert torch.isfinite(metrics[key])
     assert metrics["graphcg_direction_rank_target"].item() == 4.0
+    assert metrics["graphcg_numerical_rank"].item() == metrics["graphcg_rank_target"].item()
+    assert metrics["graphcg_min_singular_value"].item() > 0.99
     loss.backward()
     assert z.grad is not None
 
@@ -52,7 +58,8 @@ def test_graphcg_full_rank_penalty_detects_collapsed_directions():
         graphcg.directions[:, 0] = 1.0
     _loss, metrics = graphcg(z)
     assert metrics["graphcg_full_rank_penalty"] > 0
-    assert metrics["graphcg_numerical_rank"] < metrics["graphcg_rank_target"]
+    assert metrics["graphcg_raw_numerical_rank"] < metrics["graphcg_rank_target"]
+    assert metrics["graphcg_numerical_rank"] == metrics["graphcg_rank_target"]
 
 
 def test_model_forward_fixture():

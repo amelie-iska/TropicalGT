@@ -9,7 +9,7 @@ import torch.nn.functional as F
 from .data import encode_bytes
 from .algebra import compute_topological_algebra_report
 from .diagnostics import ACTION_NAMES, graph_token_trace, per_record_nll, record_diagnostics
-from .records import GraphRecord, GraphTokenBatch
+from .records import GraphRecord, GraphTokenBatch, graph_decoding_order
 from .simplicial import build_filtered_simplicial_object, build_reasoning_trajectory_complex
 from .tokenizer import TokenGTTokenizer
 
@@ -42,25 +42,50 @@ def apply_reasoning_action(record: GraphRecord, action: str, rank: int = 0) -> G
         "compress": "compressed_state",
         "reject": "rejected_branch",
     }.get(safe_action, "reasoning_step")
-    text = {
-        "expand": f"Expand candidate {rank}: decompose the prompt into a next reasoning state.",
-        "merge": f"Merge candidate {rank}: combine active predecessors selected by tropical support.",
-        "refine": f"Refine candidate {rank}: sharpen the current graph state before answering.",
-        "retrieve": f"Retrieve candidate {rank}: attach an evidence placeholder for the prompt.",
-        "verify": f"Verify candidate {rank}: check consistency of the current reasoning path.",
-        "compress": f"Compress candidate {rank}: summarize the active proof state.",
-        "reject": f"Reject candidate {rank}: mark a low-reward branch for pruning.",
-    }[safe_action]
-    nodes.append({"id": node_id, "type": node_type, "text": text})
+    microsteps = _reasoning_microsteps(record, safe_action, rank)
+    headline = f"{safe_action.title()} candidate {rank}: execute {len(microsteps)} graph-of-thought micro-steps."
+    nodes.append({"id": node_id, "type": node_type, "text": headline, "action": safe_action, "microstep_count": len(microsteps)})
     if source is not None:
         edges.append({"source": source, "target": node_id, "type": f"{safe_action}_transition"})
+    previous = node_id
+    micro_payloads = []
+    for micro_idx, micro in enumerate(microsteps):
+        micro_id = _fresh_node_id(nodes, f"{safe_action}_{micro['kind']}")
+        payload = {
+            "id": micro_id,
+            "type": f"{node_type}_{micro['kind']}",
+            "text": micro["text"],
+            "action": safe_action,
+            "reasoning_step_id": node_id,
+            "microstep_index": micro_idx,
+            "filtration_hint": round((micro_idx + 1) / max(len(microsteps), 1), 6),
+        }
+        nodes.append(payload)
+        micro_payloads.append(payload)
+        edges.append({"source": previous, "target": micro_id, "type": "starts_microstep" if micro_idx == 0 else "next_microstep"})
+        if micro_idx > 0:
+            edges.append({"source": node_id, "target": micro_id, "type": "contains_microstep"})
+        previous = micro_id
+    updated_text = _append_reasoning_trace(record.text, safe_action, micro_payloads)
+    updated_reasoning = _append_reasoning_trace(record.reasoning, safe_action, micro_payloads) if record.reasoning else _append_reasoning_trace("", safe_action, micro_payloads)
+    metadata = {
+        **(record.metadata or {}),
+        "scaling_action": safe_action,
+        "scaling_rank": rank,
+        "reasoning_microstep_count": len(micro_payloads),
+        "reasoning_microsteps": [
+            {"id": item["id"], "type": item["type"], "text": item["text"], "microstep_index": item["microstep_index"]}
+            for item in micro_payloads
+        ],
+    }
+    metadata.update(graph_decoding_order(graph, seed=rank, record_id=f"{record.record_id}|{safe_action}{rank}"))
     return GraphRecord(
         record_id=f"{record.record_id}|{safe_action}{rank}",
-        text=record.text,
+        text=updated_text,
         question=record.question,
         answer=record.answer,
-        reasoning=record.reasoning,
-        metadata={**(record.metadata or {}), "scaling_action": safe_action, "scaling_rank": rank},
+        reasoning=updated_reasoning,
+        metadata=metadata,
         graph_json=graph,
     )
 
@@ -300,7 +325,10 @@ def _action_probs(row: torch.Tensor) -> list[dict[str, Any]]:
 
 
 def _graphcg_projection(model, graph_state: torch.Tensor, top_k: int = 4) -> list[dict[str, Any]]:
-    dirs = F.normalize(model.graphcg.directions.detach(), dim=-1)
+    if hasattr(model.graphcg, "effective_directions"):
+        dirs = F.normalize(model.graphcg.effective_directions(detach=True), dim=-1)
+    else:
+        dirs = F.normalize(model.graphcg.directions.detach(), dim=-1)
     states = F.normalize(graph_state.detach(), dim=-1)
     scores = (states @ dirs.t()).detach().cpu()
     norms = model.graphcg.directions.detach().norm(dim=-1).cpu()
@@ -313,6 +341,7 @@ def _graphcg_projection(model, graph_state: torch.Tensor, top_k: int = 4) -> lis
         rows.append(
             {
                 "direction_norms": [float(v) for v in norms.tolist()],
+                "basis": "effective_full_rank_qr" if hasattr(model.graphcg, "effective_directions") else "raw_normalized",
                 "mean_abs_offdiag_cosine": float(offdiag.abs().mean()),
                 "max_abs_offdiag_cosine": float(offdiag.abs().max()),
                 "top_directions": [
@@ -368,6 +397,71 @@ def _fresh_node_id(nodes: list[dict[str, Any]], prefix: str) -> str:
     while f"{prefix}_{idx:03d}" in existing:
         idx += 1
     return f"{prefix}_{idx:03d}"
+
+
+def _reasoning_microsteps(record: GraphRecord, action: str, rank: int) -> list[dict[str, str]]:
+    prompt = _clip_plain(record.question or record.text, 180)
+    answer = _clip_plain(record.answer, 120) or "unknown target"
+    templates = {
+        "expand": [
+            ("parse", "Parse the active prompt and isolate givens, unknowns, and graph constraints."),
+            ("subgoal", "Create a local subgoal node whose answer can reduce the current uncertainty."),
+            ("proposal", "Propose the next embedding-space state and attach it to the active reasoning frontier."),
+        ],
+        "merge": [
+            ("support", "Read the tropical active-support set and choose compatible predecessor states."),
+            ("align", "Align overlapping symbols, graph nodes, and certificate fragments across predecessors."),
+            ("commit", "Commit the merged proof state only where the aligned constraints agree."),
+        ],
+        "refine": [
+            ("localize", "Locate the weakest margin, ambiguous token support, or high-NLL subclaim."),
+            ("rewrite", "Rewrite that subclaim as a smaller graph operation with explicit dependencies."),
+            ("stabilize", "Update the state so its tropical margin and certificate agreement are easier to inspect."),
+        ],
+        "retrieve": [
+            ("query", "Form an analogical memory query from the current filtered simplicial object."),
+            ("match", "Retrieve candidate memories with similar persistence, free-resolution, and derived signatures."),
+            ("attach", "Attach the retrieved evidence as a separate graph branch for downstream verification."),
+        ],
+        "verify": [
+            ("claim", "Select the current claim and expose the assumptions that support it."),
+            ("check", "Check causal, topological, and algebraic consistency against the graph state."),
+            ("verdict", "Record a pass, repair, or rejection verdict before the next decoding action."),
+        ],
+        "compress": [
+            ("select", "Select the minimal active subcomplex carrying the useful reasoning state."),
+            ("summarize", "Summarize redundant branches while preserving persistent-homology witnesses."),
+            ("emit", "Emit a compact state for long-context continuation and BPB-aware decoding."),
+        ],
+        "reject": [
+            ("diagnose", "Identify the contradiction, low reward, or unstable tropical wall crossing."),
+            ("mark", "Mark the branch as inactive without deleting its audit trail."),
+            ("recover", "Return control to the surviving frontier states."),
+        ],
+    }
+    steps = templates.get(action, templates["expand"])
+    return [
+        {
+            "kind": kind,
+            "text": f"{action}:{kind} candidate {rank}. {body} Prompt: {prompt}. Target: {answer}.",
+        }
+        for kind, body in steps
+    ]
+
+
+def _append_reasoning_trace(text: str, action: str, microsteps: list[dict[str, Any]]) -> str:
+    block = "\n".join(
+        f"[got:{action}:{int(step.get('microstep_index', idx)) + 1}] {str(step.get('text', ''))}"
+        for idx, step in enumerate(microsteps)
+    )
+    if not block:
+        return text
+    return f"{text.rstrip()}\n{block}" if text else block
+
+
+def _clip_plain(value: str, limit: int) -> str:
+    clean = " ".join(str(value or "").split())
+    return clean if len(clean) <= limit else clean[: max(limit - 1, 0)] + "..."
 
 
 def _slice_graph_batch(batch: GraphTokenBatch, idx: int) -> GraphTokenBatch:
