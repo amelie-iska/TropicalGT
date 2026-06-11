@@ -303,11 +303,15 @@ def write_got_trajectory_visualization(scaling_report: dict[str, object], output
 
     embeddings = np.asarray([row["embedding"] for row in candidates], dtype=float)
     pca, pca_report = _pca3_with_report(embeddings)
+    pca_multiplicity = _coordinate_multiplicities(pca)
     ids = [str(row.get("record_id", idx)) for idx, row in enumerate(candidates)]
     id_to_idx = {rid: idx for idx, rid in enumerate(ids)}
     inferred_levels = _infer_candidate_levels(candidates, ids)
     scores = [float(row.get("score", 0.0)) for row in candidates]
     nll_values = np.asarray([float(row.get("nll", row.get("score", 0.0)) or 0.0) for row in candidates], dtype=float)
+    nll_center = float(np.nanmedian(nll_values)) if nll_values.size else 0.0
+    nll_plot_scale = 1000.0
+    nll_plot_z = (nll_values - nll_center) * nll_plot_scale
     hover = [_candidate_hover(row) for row in candidates]
     candidate_objects = [
         row.get("filtered_simplicial_object") if isinstance(row.get("filtered_simplicial_object"), dict) else {}
@@ -320,7 +324,7 @@ def write_got_trajectory_visualization(scaling_report: dict[str, object], output
         ids,
         id_to_idx,
         pca,
-        nll_values,
+        nll_plot_z,
         candidate_objects,
         panel_objects,
         panel_hover,
@@ -332,22 +336,30 @@ def write_got_trajectory_visualization(scaling_report: dict[str, object], output
     nll_surface, nll_surface_meta = _nll_triangulated_surface_trace(
         pca[:, 0],
         pca[:, 1],
+        nll_plot_z,
         nll_values,
-        nll_values,
-        name="Exact triangulated trajectory NLL surface through GoT nodes",
+        name="Smoothed centered NLL surface with exact GoT anchors",
+    )
+    nll_surface_meta.update(
+        {
+            "z_axis": "centered_milli_nll",
+            "z_axis_center_raw_nll": nll_center,
+            "z_axis_scale": nll_plot_scale,
+            "raw_nll_range": float(np.nanmax(nll_values) - np.nanmin(nll_values)) if nll_values.size else 0.0,
+        }
     )
     if nll_surface is not None:
         fig.add_trace(nll_surface)
-    fig.add_trace(_nll_anchor_trace(pca[:, 0], pca[:, 1], nll_values, nll_values, name="NLL surface anchors"))
+    fig.add_trace(_nll_anchor_trace(pca[:, 0], pca[:, 1], nll_plot_z, nll_values, name="NLL surface anchors"))
     for idx, row in enumerate(candidates):
         parent = row.get("parent")
         if isinstance(parent, str) and parent in id_to_idx:
             j = id_to_idx[parent]
             action = _edge_action_label(row)
             chain = [
-                {"x": float(pca[j, 0]), "y": float(pca[j, 1]), "z": float(nll_values[j]), "label": str(parent)},
+                {"x": float(pca[j, 0]), "y": float(pca[j, 1]), "z": float(nll_plot_z[j]), "label": str(parent)},
                 *microsteps_by_candidate.get(idx, []),
-                {"x": float(pca[idx, 0]), "y": float(pca[idx, 1]), "z": float(nll_values[idx]), "label": ids[idx]},
+                {"x": float(pca[idx, 0]), "y": float(pca[idx, 1]), "z": float(nll_plot_z[idx]), "label": ids[idx]},
             ]
             fig.add_trace(
                 go.Scatter3d(
@@ -388,10 +400,10 @@ def write_got_trajectory_visualization(scaling_report: dict[str, object], output
         go.Scatter3d(
             x=pca[:, 0],
             y=pca[:, 1],
-            z=nll_values,
+            z=nll_plot_z,
             mode="markers+text",
             marker=dict(
-                size=9,
+                size=[8.0 + min(12.0, 2.6 * math.log1p(float(count))) for count in pca_multiplicity],
                 color=nll_values,
                 colorscale="Plasma",
                 showscale=True,
@@ -400,7 +412,12 @@ def write_got_trajectory_visualization(scaling_report: dict[str, object], output
             ),
             text=[_state_plot_label(row, idx, int(inferred_levels[idx])) for idx, row in enumerate(candidates)],
             textposition="top center",
-            hovertext=hover,
+            hovertext=[
+                text
+                + f"<br><b>embedding/PCA multiplicity</b>: {int(pca_multiplicity[idx])} candidate(s) at this rounded coordinate"
+                + f"<br><b>raw embedding unique ratio</b>: {float(pca_report.get('unique_embedding_ratio_rounded8', 1.0)):.3f}"
+                for idx, text in enumerate(hover)
+            ],
             hoverinfo="text",
             customdata=np.arange(len(candidates), dtype=int),
             name="GoT state",
@@ -408,9 +425,34 @@ def write_got_trajectory_visualization(scaling_report: dict[str, object], output
     )
     fig.update_layout(
         template="plotly_dark",
-        title="Graph-of-thought branching trajectory with NLL height",
-        scene=dict(xaxis_title="PC1", yaxis_title="PC2", zaxis_title="NLL"),
+        title="Graph-of-thought branching trajectory with local NLL landscape",
+        scene=dict(
+            xaxis_title="PC1",
+            yaxis_title="PC2",
+            zaxis_title="centered NLL x 1000",
+            aspectmode="cube",
+        ),
     )
+    unique_ratio = float(pca_report.get("unique_embedding_ratio_rounded8", 1.0))
+    if unique_ratio < 0.8:
+        fig.add_annotation(
+            text=(
+                "embedding-state collapse diagnostic: "
+                f"{int(pca_report.get('unique_embeddings_rounded8', len(candidates)))}/{len(candidates)} unique graph_state vectors; "
+                f"max multiplicity={int(pca_report.get('max_embedding_multiplicity_rounded8', 1))}; "
+                "coordinates are still actual PCA, but many GoT nodes share the same model state"
+            ),
+            x=0,
+            y=1.08,
+            xref="paper",
+            yref="paper",
+            showarrow=False,
+            align="left",
+            font=dict(size=12, color="#fbbf24"),
+            bgcolor="rgba(15,23,42,0.92)",
+            bordercolor="rgba(251,191,36,0.45)",
+            borderwidth=1,
+        )
     panel_items = _simplicial_panel_items(panel_objects, panel_hover)
     _write_plotly_dark_html(path, fig, "Graph-of-thought trajectory PCA in embedding space", panel_items, show_filtration_slider=True)
     payload = {
@@ -423,7 +465,12 @@ def write_got_trajectory_visualization(scaling_report: dict[str, object], output
                 "embedding": candidates[idx].get("embedding"),
                 "pca": {"pc1": float(pca[idx, 0]), "pc2": float(pca[idx, 1]), "pc3": float(pca[idx, 2])},
                 "embedding_pca": {"pc1": float(pca[idx, 0]), "pc2": float(pca[idx, 1]), "pc3": float(pca[idx, 2])},
-                "plot": {"x": float(pca[idx, 0]), "y": float(pca[idx, 1]), "z_nll": float(nll_values[idx])},
+                "plot": {
+                    "x": float(pca[idx, 0]),
+                    "y": float(pca[idx, 1]),
+                    "z_centered_milli_nll": float(nll_plot_z[idx]),
+                    "raw_nll": float(nll_values[idx]),
+                },
                 "score": scores[idx],
                 "nll": float(nll_values[idx]),
                 "level": int(inferred_levels[idx]),
@@ -447,7 +494,7 @@ def write_got_trajectory_visualization(scaling_report: dict[str, object], output
                 "parent_record_id": str(entry.get("parent_record_id", "")),
                 "simplex_label": str(entry.get("simplex_label", "")),
                 "type": str(entry.get("type", "")),
-                "plot": {"x": float(entry["x"]), "y": float(entry["y"]), "z_nll": float(entry["z"])},
+                "plot": {"x": float(entry["x"]), "y": float(entry["y"]), "z_centered_milli_nll": float(entry["z"])},
                 "filtration": float(entry.get("filtration", 0.0)),
                 "filtered_simplicial_object": entry.get("filtered_simplicial_object"),
             }
@@ -496,6 +543,7 @@ def _write_got_embedding_map(
 ) -> dict[str, str]:
     path = output_dir / "got_embedding_map_3d.html"
     payload_path = output_dir / "got_embedding_map_payloads.json"
+    pca_multiplicity = _coordinate_multiplicities(pca)
     fig = go.Figure()
     for idx, row in enumerate(candidates):
         parent = row.get("parent")
@@ -535,6 +583,7 @@ def _write_got_embedding_map(
                 text
                 + f"<br><b>embedding PCA source</b>: model graph_state"
                 + f"<br><b>PC coords</b>: ({pca[idx,0]:.4g}, {pca[idx,1]:.4g}, {pca[idx,2]:.4g})"
+                + f"<br><b>coordinate multiplicity</b>: {int(pca_multiplicity[idx])}"
                 for idx, text in enumerate(hover)
             ],
             hoverinfo="text",
@@ -657,6 +706,7 @@ def _write_reasoning_step_complex_maps(candidates: list[dict[str, object]], outp
 
 
 def _write_complex_slider_map(path: Path, obj: dict[str, object], title: str, subtitle: str = "") -> None:
+    obj = _gudhi_canonical_complex(obj)
     vertices = [s for s in obj.get("simplices", []) if isinstance(s, dict) and int(s.get("dimension", -1)) == 0]
     edges = [s for s in obj.get("simplices", []) if isinstance(s, dict) and int(s.get("dimension", -1)) == 1]
     triangles = [s for s in obj.get("simplices", []) if isinstance(s, dict) and int(s.get("dimension", -1)) == 2]
@@ -665,16 +715,26 @@ def _write_complex_slider_map(path: Path, obj: dict[str, object], title: str, su
         _write_dark_empty(path, f"{title}: no vertices available.")
         return
     coords3, _projected, layout_kind = _simplicial_pca3_radius_layout(labels, vertices, edges, width=760, height=560)
+    panel_objects = [obj]
+    panel_hovers = [f"<b>{html.escape(title)}</b><br>{html.escape(subtitle)}<br>{_summary_line(obj)}"]
+    panel_index_by_label: dict[str, int] = {}
+    for vertex in vertices:
+        local_obj = vertex.get("filtered_simplicial_object")
+        if isinstance(local_obj, dict):
+            label = str((vertex.get("simplex") or [""])[0])
+            panel_index_by_label[label] = len(panel_objects)
+            panel_objects.append(_gudhi_canonical_complex(local_obj))
+            panel_hovers.append(_vertex_readable_summary(vertex, include_output=True))
     thresholds = _display_thresholds(obj)
     initial = thresholds[-1] if thresholds else float("inf")
-    base_traces = _complex_slider_traces(obj, coords3, threshold=initial)
+    base_traces = _complex_slider_traces(obj, coords3, threshold=initial, panel_index_by_label=panel_index_by_label)
     fig = go.Figure(data=base_traces)
     frames = []
     for threshold in thresholds:
         frames.append(
             go.Frame(
                 name=f"{threshold:.6f}",
-                data=_complex_slider_traces(obj, coords3, threshold=threshold),
+                data=_complex_slider_traces(obj, coords3, threshold=threshold, panel_index_by_label=panel_index_by_label),
                 traces=list(range(len(base_traces))),
             )
         )
@@ -716,13 +776,19 @@ def _write_complex_slider_map(path: Path, obj: dict[str, object], title: str, su
             ],
         )
     summary = obj.get("summary", {})
+    simplex_tree = obj.get("simplex_tree", {}) if isinstance(obj.get("simplex_tree"), dict) else {}
+    backend_label = simplex_tree.get("backend", "json")
     fig.update_layout(
         template="plotly_dark",
-        title=f"{title}<br><sup>{html.escape(subtitle)} | {html.escape(layout_kind)} | V={summary.get('num_vertices', len(vertices))}, E={summary.get('num_edges', len(edges))}, T={summary.get('num_two_simplices', len(triangles))}</sup>",
+        title=(
+            f"{title}<br><sup>{html.escape(subtitle)} | filtration backend={html.escape(str(backend_label))} "
+            f"| {html.escape(layout_kind)} | V={summary.get('num_vertices', len(vertices))}, "
+            f"E={summary.get('num_edges', len(edges))}, T={summary.get('num_two_simplices', len(triangles))}</sup>"
+        ),
         scene=dict(
-            xaxis_title="PCoA/MDS-1 from vertex distance matrix",
-            yaxis_title="PCoA/MDS-2",
-            zaxis_title="PCoA/MDS-3",
+            xaxis_title="projected coordinate 1",
+            yaxis_title="projected coordinate 2",
+            zaxis_title="projected coordinate 3",
             aspectmode="cube",
             camera=dict(eye=dict(x=1.5, y=1.25, z=0.9)),
         ),
@@ -732,12 +798,89 @@ def _write_complex_slider_map(path: Path, obj: dict[str, object], title: str, su
         path,
         fig,
         title,
-        _simplicial_panel_items([obj], [f"<b>{html.escape(title)}</b><br>{html.escape(subtitle)}<br>{_summary_line(obj)}"]),
+        _simplicial_panel_items(panel_objects, panel_hovers),
         show_filtration_slider=True,
     )
 
 
-def _complex_slider_traces(obj: dict[str, object], coords3: dict[str, tuple[float, float, float]], threshold: float) -> list[go.Scatter3d | go.Mesh3d]:
+def _gudhi_canonical_complex(obj: dict[str, object]) -> dict[str, object]:
+    """Canonicalize a JSON filtered complex through GUDHI SimplexTree when available."""
+    if not isinstance(obj, dict):
+        return obj
+    raw_simplices = [row for row in obj.get("simplices", []) if isinstance(row, dict) and row.get("simplex")]
+    if not raw_simplices:
+        return obj
+    try:
+        import gudhi  # type: ignore
+
+        labels = sorted({str(vertex) for row in raw_simplices for vertex in (row.get("simplex") or [])})
+        label_to_int = {label: idx for idx, label in enumerate(labels)}
+        int_to_label = {idx: label for label, idx in label_to_int.items()}
+        tree = gudhi.SimplexTree()
+        metadata: dict[tuple[str, ...], dict[str, object]] = {}
+        for row in raw_simplices:
+            simplex = [str(vertex) for vertex in (row.get("simplex") or [])]
+            if not simplex:
+                continue
+            filt = float(row.get("filtration", 0.0) or 0.0)
+            tree.insert([label_to_int[label] for label in simplex], filtration=filt)
+            metadata[tuple(sorted(simplex))] = row
+        tree.make_filtration_non_decreasing()
+        canonical = []
+        thresholds: set[float] = set()
+        for simplex_ints, filtration in tree.get_filtration():
+            simplex = [int_to_label[int(vertex)] for vertex in simplex_ints]
+            key = tuple(sorted(simplex))
+            base = dict(metadata.get(key, {}))
+            base.update(
+                {
+                    "simplex": simplex,
+                    "dimension": len(simplex) - 1,
+                    "filtration": float(filtration),
+                    "gudhi_simplex_tree": True,
+                    "type": base.get("type", f"gudhi_dim_{len(simplex) - 1}"),
+                }
+            )
+            canonical.append(base)
+            thresholds.add(float(filtration))
+        summary = dict(obj.get("summary", {})) if isinstance(obj.get("summary"), dict) else {}
+        summary.update(
+            {
+                "num_vertices": sum(1 for row in canonical if int(row.get("dimension", -1)) == 0),
+                "num_edges": sum(1 for row in canonical if int(row.get("dimension", -1)) == 1),
+                "num_two_simplices": sum(1 for row in canonical if int(row.get("dimension", -1)) == 2),
+                "num_thresholds": len(thresholds),
+            }
+        )
+        return {
+            **obj,
+            "summary": summary,
+            "thresholds": sorted(thresholds),
+            "simplices": canonical,
+            "simplex_tree": {
+                "backend": "gudhi.SimplexTree",
+                "num_vertices": int(tree.num_vertices()),
+                "num_simplices": int(tree.num_simplices()),
+                "dimension": int(tree.dimension()),
+                "filtration_non_decreasing": True,
+            },
+        }
+    except Exception as exc:
+        fallback = dict(obj)
+        fallback["simplex_tree"] = {
+            "backend": "json-fallback",
+            "available": False,
+            "error": f"{type(exc).__name__}: {exc}",
+        }
+        return fallback
+
+
+def _complex_slider_traces(
+    obj: dict[str, object],
+    coords3: dict[str, tuple[float, float, float]],
+    threshold: float,
+    panel_index_by_label: dict[str, int] | None = None,
+) -> list[go.Scatter3d | go.Mesh3d]:
     vertices = [s for s in obj.get("simplices", []) if isinstance(s, dict) and int(s.get("dimension", -1)) == 0 and float(s.get("filtration", 0.0) or 0.0) <= threshold + 1e-12]
     visible = {str((row.get("simplex") or [""])[0]) for row in vertices}
     edges = [
@@ -781,30 +924,7 @@ def _complex_slider_traces(obj: dict[str, object], coords3: dict[str, tuple[floa
     vertex_hover = []
     for label in vertex_labels:
         vertex_row = vertex_by_label.get(label, {})
-        bits = [
-            f"<b>{html.escape(label)}</b>",
-            f"type={html.escape(str(vertex_row.get('type', 'vertex')))}",
-            f"filtration={float(vertex_row.get('filtration', 0.0) or 0.0):.4f}",
-        ]
-        if vertex_row.get("level") is not None:
-            bits.append(f"trajectory level={int(vertex_row.get('level', 0) or 0)}")
-        if vertex_row.get("nll") is not None:
-            bits.append(f"NLL={float(vertex_row.get('nll', 0.0) or 0.0):.4f}")
-        if vertex_row.get("score") is not None:
-            bits.append(f"score={float(vertex_row.get('score', 0.0) or 0.0):.4f}")
-        if vertex_row.get("path"):
-            bits.append(f"GoT path={html.escape(_json_clip(vertex_row.get('path'), 160))}")
-        if vertex_row.get("input_text"):
-            bits.append(f"<b>model input</b>: {_html_clip(vertex_row.get('input_text'), 900)}")
-        if vertex_row.get("target_text"):
-            bits.append(f"<b>target</b>: {_html_clip(vertex_row.get('target_text'), 500)}")
-        if vertex_row.get("decoded_argmax"):
-            bits.append(f"<b>model output</b>: {_html_clip(vertex_row.get('decoded_argmax'), 900)}")
-        if vertex_row.get("graph_json_summary"):
-            bits.append(f"<b>graph summary</b>: {html.escape(_json_clip(vertex_row.get('graph_json_summary'), 360))}")
-        if vertex_row.get("text"):
-            bits.append(_html_clip(vertex_row.get('text', ''), 600))
-        vertex_hover.append("<br>".join(bits))
+        vertex_hover.append(_vertex_readable_summary(vertex_row, include_output=True))
     traces: list[go.Scatter3d | go.Mesh3d] = [
         go.Scatter3d(
             x=edge_x,
@@ -833,6 +953,7 @@ def _complex_slider_traces(obj: dict[str, object], coords3: dict[str, tuple[floa
             textposition="top center",
             hovertext=vertex_hover,
             hoverinfo="text",
+            customdata=[int((panel_index_by_label or {}).get(label, 0)) for label in vertex_labels],
             name="0-simplices",
         ),
     ]
@@ -1146,6 +1267,9 @@ def write_tropical_support_heatmap(result: dict[str, object], output_dir: str | 
         vals = [float(token.get("margin", 0.0) or 0.0) for token in tokens if int(token.get("active_support_index", -1)) == idx]
         mean_margins.append(float(np.mean(vals)) if vals else 0.0)
     collapse_rate = float(counts.max() / max(float(n), 1.0)) if counts.size else 0.0
+    support_probs = counts / max(float(counts.sum()), 1.0)
+    support_entropy = float(-np.sum(support_probs * np.log2(np.maximum(support_probs, 1e-12)))) if counts.size else 0.0
+    effective_supports = float(2.0 ** support_entropy) if counts.size else 0.0
     fig = make_subplots(
         rows=1,
         cols=2,
@@ -1163,6 +1287,8 @@ def write_tropical_support_heatmap(result: dict[str, object], output_dir: str | 
             colorbar=dict(title="margin", x=0.64),
             customdata=hover_grid,
             hovertemplate="%{customdata}<extra></extra>",
+            zmin=float(np.nanmin(z)) if z.size and np.isfinite(z).any() else None,
+            zmax=float(np.nanmax(z)) if z.size and np.isfinite(z).any() else None,
         ),
         row=1,
         col=1,
@@ -1185,7 +1311,9 @@ def write_tropical_support_heatmap(result: dict[str, object], output_dir: str | 
         template="plotly_dark",
         title=(
             "Tropical active-support audit: observed supports only "
-            f"<br><sup>unique supports={len(support_indices)}/{n}, top-support collapse rate={collapse_rate:.3f}; raw token trace preserved in hover</sup>"
+            f"<br><sup>unique supports={len(support_indices)}/{n}, effective supports={effective_supports:.2f}, "
+            f"entropy={support_entropy:.3f} bits, top-support collapse rate={collapse_rate:.3f}; "
+            "uniform blocks mean active-support collapse or nearly constant margins</sup>"
         ),
     )
     fig.update_xaxes(title_text="active support token", tickangle=55, row=1, col=1)
@@ -1200,11 +1328,14 @@ def _support_token_label(index: int, token: dict[str, object], long: bool = Fals
     kind = str(token.get("kind", "?"))
     node_type = str(token.get("node_type", token.get("active_support_kind", "")) or "")
     label = str(token.get("label", token.get("active_support_label", "")) or "")
-    base = f"{index}:{kind}:{node_type or label}"
+    short_kind = {"graph": "G", "node": "N", "edge": "E"}.get(kind, kind[:1].upper())
+    semantic = node_type or label
+    base = f"t{index:02d} {short_kind}:{_short_label(semantic, 18)}"
     if long:
         node_id = token.get("node_id")
-        return base + (f":{node_id}" if node_id is not None else "")
-    return base if len(base) <= 28 else base[:25] + "..."
+        text = token.get("text", "")
+        return base + (f" | node_id={node_id}" if node_id is not None else "") + (f" | text={_short_label(str(text), 120)}" if text else "")
+    return base
 
 
 def write_persistence_visualizations(
@@ -1318,6 +1449,9 @@ def _write_growth_persistence_barcode(path: Path, topology: dict[str, object], g
             death = interval.get("display_death")
             if isinstance(death, (int, float)) and math.isfinite(float(death)):
                 max_death = max(max_death, float(death))
+    y_cursor = 0
+    tick_vals: list[int] = []
+    tick_text: list[str] = []
     for row_idx, row in enumerate(rows):
         level = int(row["level"])
         obj = row.get("filtered_simplicial_object", {})
@@ -1328,36 +1462,41 @@ def _write_growth_persistence_barcode(path: Path, topology: dict[str, object], g
             dim = int(interval.get("dimension", 0))
             birth = float(interval.get("birth", 0.0))
             death = float(interval.get("display_death", max_death))
-            z = float(dim) + 0.08 * interval_idx
             true_death = "inf" if interval.get("infinite") else f"{float(interval.get('death', death)):.4g}"
+            source = interval.get("source", "gudhi/topology")
+            synthetic = interval.get("synthetic")
             hover = (
                 f"<b>trajectory growth level {level}</b>"
                 f"<br>H{dim} interval [{birth:.4g}, {true_death}]"
-                f"<br>complex: {_summary_line(obj if isinstance(obj, dict) else {})}"
+                f"<br>source={html.escape(str(source))}"
+                + (f"<br>synthetic fallback={html.escape(str(synthetic))}" if synthetic else "")
+                + f"<br>complex: {_summary_line(obj if isinstance(obj, dict) else {})}"
                 f"<br>{_derived_signature_line(topo if isinstance(topo, dict) else {})}"
                 f"<br>{_free_resolution_line(topo if isinstance(topo, dict) else {})}"
             )
+            y = y_cursor
+            tick_vals.append(y)
+            tick_text.append(f"L{level} H{dim} #{interval_idx}")
+            y_cursor += 1
             fig.add_trace(
-                go.Scatter3d(
+                go.Scatter(
                     x=[birth, death],
-                    y=[level, level],
-                    z=[z, z],
+                    y=[y, y],
                     mode="lines+markers",
                     line=dict(width=8, color=colors.get(dim, "#cbd5e1")),
                     marker=dict(size=5, color=colors.get(dim, "#cbd5e1")),
-                    name=f"L{level} H{dim}",
+                    name=f"H{dim}",
                     hovertext=[hover, hover],
                     hoverinfo="text",
                     customdata=[row_idx, row_idx],
-                    showlegend=interval_idx == 0,
+                    showlegend=not any(trace.name == f"H{dim}" for trace in fig.data),
                 )
             )
             if interval.get("infinite"):
                 fig.add_trace(
-                    go.Scatter3d(
+                    go.Scatter(
                         x=[death],
-                        y=[level],
-                        z=[z],
+                        y=[y],
                         mode="markers",
                         marker=dict(symbol="diamond", size=7, color=colors.get(dim, "#cbd5e1")),
                         hovertext=hover + "<br>infinite interval displayed at finite cap",
@@ -1370,12 +1509,12 @@ def _write_growth_persistence_barcode(path: Path, topology: dict[str, object], g
         fig.add_annotation(text="No trajectory growth topology available.", xref="paper", yref="paper", x=0.5, y=0.5, showarrow=False)
     fig.update_layout(
         template="plotly_dark",
-        title=f"{title_prefix}persistent homology growth barcode",
-        scene=dict(
-            xaxis_title="filtration birth/death",
-            yaxis_title="trajectory growth level",
-            zaxis_title="homology dimension",
+        title=(
+            f"{title_prefix}persistent homology growth barcode"
+            "<br><sup>standard interval view; hover shows GUDHI/topology provenance and free-resolution summary</sup>"
         ),
+        xaxis_title="filtration birth/death",
+        yaxis=dict(title="interval", tickmode="array", tickvals=tick_vals, ticktext=tick_text, autorange="reversed"),
         legend=dict(itemsizing="constant"),
     )
     _write_plotly_dark_html(
@@ -1588,10 +1727,61 @@ def _topology_growth_hover(level: int, obj: dict[str, object], topology: dict[st
 
 def _summary_line(obj: dict[str, object]) -> str:
     summary = obj.get("summary", {}) if isinstance(obj, dict) else {}
+    tree = obj.get("simplex_tree", {}) if isinstance(obj, dict) and isinstance(obj.get("simplex_tree"), dict) else {}
+    tree_bits = ""
+    if tree:
+        tree_bits = f" | simplex_tree={tree.get('backend', 'unknown')} dim={tree.get('dimension', '?')} n={tree.get('num_simplices', '?')}"
     return (
         f"V={summary.get('num_vertices', 0)} E={summary.get('num_edges', 0)} "
-        f"T={summary.get('num_two_simplices', 0)} thresholds={summary.get('num_thresholds', 0)}"
+        f"T={summary.get('num_two_simplices', 0)} thresholds={summary.get('num_thresholds', 0)}{tree_bits}"
     )
+
+
+def _vertex_readable_summary(vertex_row: dict[str, object], include_output: bool = False) -> str:
+    label = str((vertex_row.get("simplex") or ["vertex"])[0]) if isinstance(vertex_row, dict) else "vertex"
+    bits = [
+        f"<b>{html.escape(_short_label(label, 96))}</b>",
+        f"type={html.escape(str(vertex_row.get('type', 'vertex')))}",
+        f"filtration={float(vertex_row.get('filtration', 0.0) or 0.0):.4f}",
+    ]
+    if vertex_row.get("gudhi_simplex_tree"):
+        bits.append("filtration source=GUDHI SimplexTree")
+    if vertex_row.get("level") is not None:
+        bits.append(f"trajectory level={int(vertex_row.get('level', 0) or 0)}")
+    if vertex_row.get("nll") is not None:
+        bits.append(f"NLL={float(vertex_row.get('nll', 0.0) or 0.0):.4f}")
+    if vertex_row.get("score") is not None:
+        bits.append(f"score={float(vertex_row.get('score', 0.0) or 0.0):.4f}")
+    if vertex_row.get("path"):
+        bits.append(f"GoT path={html.escape(_json_clip(vertex_row.get('path'), 180))}")
+    local_obj = vertex_row.get("filtered_simplicial_object")
+    if isinstance(local_obj, dict):
+        bits.append(f"<b>node filtered simplicial object</b>: {_summary_line(local_obj)}")
+    if vertex_row.get("graph_json_summary"):
+        bits.append(f"<b>graph summary</b>: {html.escape(_json_clip(vertex_row.get('graph_json_summary'), 320))}")
+    if vertex_row.get("text"):
+        bits.append(f"<b>node text</b>: {_html_clip(vertex_row.get('text', ''), 420)}")
+    if include_output:
+        if vertex_row.get("input_text"):
+            bits.append(f"<b>model input</b>: {_html_clip(vertex_row.get('input_text'), 700)}")
+        if vertex_row.get("target_text"):
+            bits.append(f"<b>target</b>: {_html_clip(vertex_row.get('target_text'), 360)}")
+        if vertex_row.get("decoded_argmax"):
+            bits.append(f"<b>model output</b>: {_html_clip(vertex_row.get('decoded_argmax'), 700)}")
+    return "<br>".join(bits)
+
+
+def _candidate_axis_label(row: dict[str, object], idx: int, long: bool = False) -> str:
+    path = row.get("path", [])
+    level = int(row.get("level", 0) or 0)
+    if isinstance(path, list) and path:
+        tail = "/".join(str(item) for item in path[-3:])
+    else:
+        tail = "root"
+    label = f"q{idx:02d} L{level} {tail}"
+    if long:
+        return f"{label} | {row.get('record_id', idx)}"
+    return _short_label(label, 30)
 
 
 def _derived_signature_line(topology: dict[str, object]) -> str:
@@ -1629,25 +1819,85 @@ def write_graphcg_trajectory_visualization(scaling_report: dict[str, object], ou
     candidates = [row for row in scaling_report.get("candidates", []) if isinstance(row, dict)]
     matrices = []
     labels = []
-    for row in candidates:
+    hover_rows = []
+    for idx, row in enumerate(candidates):
         proj = row.get("graphcg_projection")
         if isinstance(proj, dict) and proj.get("all_direction_cosines") is not None:
             matrices.append([float(v) for v in proj["all_direction_cosines"]])
-            labels.append(str(row.get("record_id", len(labels))))
+            labels.append(_candidate_axis_label(row, idx))
+            hover_rows.append(
+                f"<b>{html.escape(_candidate_axis_label(row, idx, long=True))}</b>"
+                f"<br>level={row.get('level')} path={html.escape(_json_clip(row.get('path', []), 180))}"
+                f"<br>NLL={float(row.get('nll', 0.0) or 0.0):.4f} score={float(row.get('score', 0.0) or 0.0):.4f}"
+            )
     if not matrices:
         _write_dark_empty(path, "No GraphCG projection diagnostics available.")
         return {"graphcg_direction_cosines": str(path)}
-    fig = go.Figure(
-        data=go.Heatmap(
-            z=np.asarray(matrices, dtype=float),
+    matrix = np.asarray(matrices, dtype=float)
+    mean_abs = np.mean(np.abs(matrix), axis=0)
+    direction_count = int(matrix.shape[1])
+    display_count = min(48, direction_count)
+    top_idx = np.argsort(mean_abs)[::-1][:display_count]
+    top_idx = top_idx[np.argsort(top_idx)]
+    z = matrix[:, top_idx]
+    custom = [
+        [
+            hover_rows[row_idx]
+            + f"<br>direction={int(direction_idx)}"
+            + f"<br>cosine={z[row_idx, col_idx]:.5f}"
+            + f"<br>mean |cos| for direction={mean_abs[int(direction_idx)]:.5f}"
+            for col_idx, direction_idx in enumerate(top_idx)
+        ]
+        for row_idx in range(z.shape[0])
+    ]
+    fig = make_subplots(
+        rows=1,
+        cols=2,
+        specs=[[{"type": "heatmap"}, {"type": "scatter"}]],
+        column_widths=[0.72, 0.28],
+        horizontal_spacing=0.08,
+        subplot_titles=("Top active GraphCG directions across GoT states", "Full-rank direction activity spectrum"),
+    )
+    fig.add_trace(
+        go.Heatmap(
+            z=z,
             y=labels,
-            x=[f"dir_{idx}" for idx in range(len(matrices[0]))],
+            x=[f"d{int(idx)}" for idx in top_idx],
             colorscale="RdBu",
             zmid=0,
-            colorbar=dict(title="cosine"),
-        )
+            colorbar=dict(title="cosine", x=0.68),
+            customdata=custom,
+            hovertemplate="%{customdata}<extra></extra>",
+        ),
+        row=1,
+        col=1,
     )
-    fig.update_layout(template="plotly_dark", title="GraphCG direction cosines along GoT candidates", xaxis_title="GraphCG direction", yaxis_title="candidate state")
+    sorted_activity = np.sort(mean_abs)[::-1]
+    fig.add_trace(
+        go.Scatter(
+            x=np.arange(direction_count),
+            y=sorted_activity,
+            mode="lines",
+            line=dict(color="#5eead4", width=2),
+            fill="tozeroy",
+            fillcolor="rgba(94,234,212,0.18)",
+            hovertemplate="rank=%{x}<br>mean |cos|=%{y:.5f}<extra></extra>",
+            name="full-rank spectrum",
+        ),
+        row=1,
+        col=2,
+    )
+    fig.update_layout(
+        template="plotly_dark",
+        title=(
+            "GraphCG full-rank direction audit"
+            f"<br><sup>displaying top {display_count}/{direction_count} directions by mean absolute cosine; full-rank spectrum retained</sup>"
+        ),
+    )
+    fig.update_xaxes(title_text="GraphCG direction", tickangle=45, row=1, col=1)
+    fig.update_yaxes(title_text="GoT state", row=1, col=1)
+    fig.update_xaxes(title_text="direction rank by activity", row=1, col=2)
+    fig.update_yaxes(title_text="mean absolute cosine", row=1, col=2)
     _write_plotly_dark_html(path, fig, "GraphCG direction cosines along GoT candidates")
     return {"graphcg_direction_cosines": str(path)}
 
@@ -1729,6 +1979,7 @@ def _analogical_pair_figure(
     query_topology: dict[str, object],
 ) -> tuple[go.Figure, list[dict[str, object]], dict[str, object]]:
     panel_items: list[dict[str, object]] = []
+    query_complex = _gudhi_canonical_complex(query_complex)
     query_layout = _complex_3d_layout(query_complex, slab=0.0)
     query_hover = (
         "<b>query trajectory filtered complex</b>"
@@ -1744,7 +1995,7 @@ def _analogical_pair_figure(
         if isinstance(row.get("trajectory_filtered_simplicial_object"), dict)
         else row.get("filtered_simplicial_object", {})
     )
-    mem_complex = mem_complex if isinstance(mem_complex, dict) else {}
+    mem_complex = _gudhi_canonical_complex(mem_complex if isinstance(mem_complex, dict) else {})
     mem_topology = row.get("topological_algebra", {}) if isinstance(row.get("topological_algebra"), dict) else {}
     mem_layout = _complex_3d_layout(mem_complex, slab=slab)
     sim = _topological_similarity_summary(query_topology, mem_topology, row)
@@ -1994,27 +2245,7 @@ def _complex_filtered_plotly_traces(
 
 
 def _complex_vertex_hover(label: str, vertex_row: dict[str, object], prefix: str) -> str:
-    bits = [
-        f"<b>{html.escape(prefix)}</b>",
-        f"vertex={html.escape(label)}",
-        f"type={html.escape(str(vertex_row.get('type', 'vertex')))}",
-        f"filtration={float(vertex_row.get('filtration', 0.0) or 0.0):.4f}",
-    ]
-    if vertex_row.get("level") is not None:
-        bits.append(f"trajectory level={int(vertex_row.get('level', 0) or 0)}")
-    if vertex_row.get("nll") is not None:
-        bits.append(f"NLL={float(vertex_row.get('nll', 0.0) or 0.0):.4f}")
-    if vertex_row.get("score") is not None:
-        bits.append(f"score={float(vertex_row.get('score', 0.0) or 0.0):.4f}")
-    if vertex_row.get("path"):
-        bits.append(f"GoT path={html.escape(_json_clip(vertex_row.get('path'), 160))}")
-    if vertex_row.get("input_text"):
-        bits.append(f"<b>model input</b>: {_html_clip(vertex_row.get('input_text'), 700)}")
-    if vertex_row.get("decoded_argmax"):
-        bits.append(f"<b>model output</b>: {_html_clip(vertex_row.get('decoded_argmax'), 700)}")
-    if vertex_row.get("text"):
-        bits.append(_html_clip(vertex_row.get("text", ""), 400))
-    return "<br>".join(bits)
+    return f"<b>{html.escape(prefix)}</b><br>" + _vertex_readable_summary({**vertex_row, "simplex": [label]}, include_output=True)
 
 
 def _simplicial_map_trace(
@@ -2809,6 +3040,7 @@ def _pca3_with_report(values: np.ndarray) -> tuple[np.ndarray, dict[str, object]
     values = np.asarray(values, dtype=float)
     if values.ndim != 2:
         values = values.reshape((len(values), -1))
+    uniqueness = _embedding_uniqueness_report(values)
     if values.shape[0] < 2:
         coords = np.pad(values[:, :1], ((0, 0), (0, 2)), constant_values=0.0)
         return coords, {
@@ -2819,6 +3051,8 @@ def _pca3_with_report(values: np.ndarray) -> tuple[np.ndarray, dict[str, object]
             "explained_variance_ratio": [1.0, 0.0, 0.0],
             "pairwise_distance_correlation": 1.0,
             "normalized_stress": 0.0,
+            **uniqueness,
+            **_pca_coordinate_uniqueness_report(coords),
         }
     n_components = min(3, values.shape[0], values.shape[1])
     pca_model = PCA(n_components=n_components)
@@ -2848,7 +3082,60 @@ def _pca3_with_report(values: np.ndarray) -> tuple[np.ndarray, dict[str, object]
         "explained_variance_ratio_sum3": float(sum(ratios[:3])),
         "pairwise_distance_correlation": corr,
         "normalized_stress": stress,
+        **uniqueness,
+        **_pca_coordinate_uniqueness_report(coords),
     }
+
+
+def _embedding_uniqueness_report(values: np.ndarray, decimals: int = 8) -> dict[str, object]:
+    values = np.asarray(values, dtype=float)
+    if values.ndim != 2 or values.shape[0] == 0:
+        return {
+            "unique_embeddings_rounded8": 0,
+            "duplicate_embeddings_rounded8": 0,
+            "unique_embedding_ratio_rounded8": 0.0,
+            "max_embedding_multiplicity_rounded8": 0,
+        }
+    rounded = np.round(values, decimals=decimals)
+    _, counts = np.unique(rounded, axis=0, return_counts=True)
+    unique_count = int(counts.size)
+    total = int(values.shape[0])
+    return {
+        "unique_embeddings_rounded8": unique_count,
+        "duplicate_embeddings_rounded8": int(total - unique_count),
+        "unique_embedding_ratio_rounded8": float(unique_count / max(total, 1)),
+        "max_embedding_multiplicity_rounded8": int(counts.max(initial=0)),
+    }
+
+
+def _pca_coordinate_uniqueness_report(coords: np.ndarray, decimals: int = 8) -> dict[str, object]:
+    coords = np.asarray(coords, dtype=float)
+    if coords.ndim != 2 or coords.shape[0] == 0:
+        return {
+            "unique_pca_coordinates_rounded8": 0,
+            "duplicate_pca_coordinates_rounded8": 0,
+            "max_pca_coordinate_multiplicity_rounded8": 0,
+        }
+    rounded = np.round(coords[:, :3], decimals=decimals)
+    _, counts = np.unique(rounded, axis=0, return_counts=True)
+    unique_count = int(counts.size)
+    total = int(coords.shape[0])
+    return {
+        "unique_pca_coordinates_rounded8": unique_count,
+        "duplicate_pca_coordinates_rounded8": int(total - unique_count),
+        "max_pca_coordinate_multiplicity_rounded8": int(counts.max(initial=0)),
+    }
+
+
+def _coordinate_multiplicities(coords: np.ndarray, decimals: int = 8) -> list[int]:
+    coords = np.asarray(coords, dtype=float)
+    if coords.ndim != 2 or coords.shape[0] == 0:
+        return []
+    keys = [tuple(float(v) for v in row) for row in np.round(coords[:, :3], decimals=decimals)]
+    counts: dict[tuple[float, ...], int] = defaultdict(int)
+    for key in keys:
+        counts[key] += 1
+    return [int(counts[key]) for key in keys]
 
 
 def _infer_candidate_levels(candidates: list[dict[str, object]], ids: list[str]) -> list[int]:
@@ -3522,17 +3809,46 @@ def _vertex_pca_feature(label: str, vertex: dict[str, object], idx: int, total: 
     kind = str(vertex.get("type", "vertex")) if isinstance(vertex, dict) else "vertex"
     filt = float(vertex.get("filtration", 0.0) or 0.0) if isinstance(vertex, dict) else 0.0
     weight = float(vertex.get("weight", 1.0) or 1.0) if isinstance(vertex, dict) else 1.0
-    digest = hashlib.sha1(f"{label}|{kind}|{text[:256]}".encode("utf-8", "ignore")).digest()
-    hashed = [int(byte) / 255.0 for byte in digest[:6]]
+    decoded = str(vertex.get("decoded_argmax", "")) if isinstance(vertex, dict) else ""
+    input_text = str(vertex.get("input_text", "")) if isinstance(vertex, dict) else ""
+    path = _json_clip(vertex.get("path", []), 256) if isinstance(vertex, dict) else ""
+    semantic = _hashed_text_feature_vector(f"{label}\n{kind}\n{text}\n{decoded}\n{input_text}\n{path}", bins=48)
+    type_digest = hashlib.sha1(kind.encode("utf-8", "ignore")).digest()
+    type_bits = [int(byte) / 255.0 for byte in type_digest[:6]]
     return [
         filt,
         math.log1p(abs(weight)),
         len(text) / 512.0,
-        idx / max(total - 1, 1),
-        math.sin(idx + 1.0),
-        math.cos(idx + 1.0),
-        *hashed,
+        len(decoded) / 2048.0,
+        len(input_text) / 4096.0,
+        *type_bits,
+        *semantic,
     ]
+
+
+def _hashed_text_feature_vector(text: str, bins: int = 48) -> list[float]:
+    bins = max(int(bins), 8)
+    vec = np.zeros(bins, dtype=float)
+    clean = " ".join(str(text or "").lower().split())
+    if not clean:
+        return vec.tolist()
+    tokens = clean.split()
+    for token in tokens[:512]:
+        digest = hashlib.blake2b(token.encode("utf-8", "ignore"), digest_size=8).digest()
+        bucket = int.from_bytes(digest[:4], "little") % bins
+        sign = 1.0 if digest[4] % 2 == 0 else -1.0
+        vec[bucket] += sign
+    compact = clean[:2048]
+    for idx in range(max(len(compact) - 2, 0)):
+        tri = compact[idx : idx + 3]
+        digest = hashlib.blake2b(tri.encode("utf-8", "ignore"), digest_size=8).digest()
+        bucket = int.from_bytes(digest[:4], "little") % bins
+        sign = 1.0 if digest[4] % 2 == 0 else -1.0
+        vec[bucket] += 0.25 * sign
+    norm = float(np.linalg.norm(vec))
+    if norm > 1e-12:
+        vec = vec / norm
+    return [float(v) for v in vec]
 
 
 def _edge_pairs_for_labels(edges: list[dict[str, object]], labels: set[str]) -> list[tuple[str, str]]:
@@ -3811,47 +4127,11 @@ def _nll_triangulated_surface_trace(
     y = y[keep]
     z = z[keep]
     nll = nll[keep]
-    if x.size < 3 or _xy_rank(x, y) < 2:
-        return _smooth_anchored_surface(x, y, z, nll, name=name, mode="nll_height")
-    points = np.column_stack([x, y])
-    simplices: np.ndarray
-    try:
-        from scipy.spatial import Delaunay
-
-        simplices = np.asarray(Delaunay(points).simplices, dtype=int)
-    except Exception:
-        order = _angle_order(x, y)
-        simplices = np.asarray([[order[0], order[idx], order[idx + 1]] for idx in range(1, len(order) - 1)], dtype=int)
-    if simplices.size == 0:
-        return _smooth_anchored_surface(x, y, z, nll, name=name, mode="nll_height")
-    trace = go.Mesh3d(
-        x=x,
-        y=y,
-        z=z,
-        i=simplices[:, 0],
-        j=simplices[:, 1],
-        k=simplices[:, 2],
-        intensity=nll,
-        colorscale="Plasma",
-        opacity=0.52,
-        flatshading=False,
-        showscale=False,
-        name=name,
-        hovertemplate="PC1=%{x:.3f}<br>PC2=%{y:.3f}<br>surface z=%{z:.4f}<br>NLL=%{intensity:.4f}<extra></extra>",
-    )
-    return trace, {
-        "available": True,
-        "mode": "nll_height",
-        "surface_kind": "exact_delaunay_nll_mesh",
-        "interpolation": "Delaunay/TIN mesh whose vertices are exactly the GoT PCA states and whose z-coordinate is per-state NLL",
-        "point_count": int(x.size),
-        "triangle_count": int(simplices.shape[0]),
-        "nll_min": float(np.nanmin(nll)),
-        "nll_max": float(np.nanmax(nll)),
-        "nll_mean": float(np.nanmean(nll)),
-        "max_point_residual": 0.0,
-        "touches_points": True,
-    }
+    trace, meta = _smooth_anchored_surface(x, y, z, nll, name=name, mode="nll_height")
+    meta["source_point_count_before_duplicate_collapse"] = int(np.asarray(x_values).reshape(-1).size)
+    meta["unique_xy_point_count"] = int(x.size)
+    meta["duplicate_xy_points_removed"] = int(max(np.asarray(x_values).reshape(-1).size - x.size, 0))
+    return trace, meta
 
 
 def _nll_anchor_trace(x: np.ndarray, y: np.ndarray, z: np.ndarray, nll: np.ndarray, name: str) -> go.Scatter3d:
@@ -3869,7 +4149,14 @@ def _nll_anchor_trace(x: np.ndarray, y: np.ndarray, z: np.ndarray, nll: np.ndarr
             line=dict(width=2, color="#f8fafc"),
         ),
         name=name,
-        hovertemplate="surface anchor<br>PC1=%{x:.3f}<br>PC2=%{y:.3f}<br>surface z=%{z:.4f}<extra></extra>",
+        customdata=np.asarray(nll, dtype=float),
+        hovertemplate=(
+            "surface anchor<br>"
+            "PC1=%{x:.3f}<br>"
+            "PC2=%{y:.3f}<br>"
+            "centered milli-NLL=%{z:.4f}<br>"
+            "raw NLL=%{customdata:.6f}<extra></extra>"
+        ),
         showlegend=True,
     )
 
@@ -3898,7 +4185,7 @@ def _smooth_anchored_surface(
             marker=dict(size=4, color=nll, colorscale="Plasma", showscale=False),
             line=dict(color="rgba(251,191,36,0.42)", width=5),
             name=name,
-            hovertemplate="PC1=%{x:.3f}<br>PC2=%{y:.3f}<br>surface z=%{z:.4f}<extra></extra>",
+            hovertemplate="PC1=%{x:.3f}<br>PC2=%{y:.3f}<br>centered milli-NLL=%{z:.4f}<extra></extra>",
         )
         return trace, {
             "available": True,
@@ -3925,7 +4212,7 @@ def _smooth_anchored_surface(
             opacity=0.55,
             showscale=False,
             name=name,
-            hovertemplate="PC1=%{x:.3f}<br>PC2=%{y:.3f}<br>surface z=%{z:.4f}<br>NLL=%{intensity:.4f}<extra></extra>",
+            hovertemplate="PC1=%{x:.3f}<br>PC2=%{y:.3f}<br>centered milli-NLL=%{z:.4f}<br>raw NLL=%{intensity:.6f}<extra></extra>",
         )
         return trace, {
             "available": True,
@@ -3940,13 +4227,7 @@ def _smooth_anchored_surface(
             "touches_points": True,
         }
     grid_x, grid_y, z_grid, nll_grid, residual = _smooth_exact_rbf_grid(x, y, z, nll)
-    hull = _convex_hull(np.column_stack([x, y]))
     masked_fraction = 0.0
-    if hull.shape[0] >= 3:
-        mask = _points_in_convex_polygon(np.column_stack([grid_x.reshape(-1), grid_y.reshape(-1)]), hull).reshape(grid_x.shape)
-        masked_fraction = 1.0 - float(mask.sum()) / float(mask.size)
-        z_grid = np.where(mask, z_grid, np.nan)
-        nll_grid = np.where(mask, nll_grid, np.nan)
     z_grid = _clip_interpolation_grid(z_grid, z)
     nll_grid = _clip_interpolation_grid(nll_grid, nll)
     surface = go.Surface(
@@ -3958,14 +4239,19 @@ def _smooth_anchored_surface(
         opacity=0.46,
         showscale=False,
         name=name,
-        hovertemplate="PC1=%{x:.3f}<br>PC2=%{y:.3f}<br>surface z=%{z:.4f}<br>smoothed NLL=%{surfacecolor:.4f}<extra></extra>",
-        contours=dict(z=dict(show=False)),
+        hovertemplate=(
+            "PC1=%{x:.3f}<br>"
+            "PC2=%{y:.3f}<br>"
+            "centered milli-NLL=%{z:.4f}<br>"
+            "smoothed raw NLL=%{surfacecolor:.6f}<extra></extra>"
+        ),
+        contours=dict(z=dict(show=True, usecolormap=True, highlightcolor="#f8fafc", project_z=True)),
     )
     return surface, {
         "available": True,
         "mode": mode,
         "surface_kind": "smooth_exact_rbf_surface",
-        "interpolation": "Gaussian radial-basis exact interpolation on grid augmented with sample coordinates and masked to the observed PCA convex hull",
+        "interpolation": "Gaussian radial-basis exact interpolation on a padded local PCA grid augmented with sample coordinates; exact anchor residual is reported separately",
         "point_count": int(x.size),
         "grid_shape": [int(grid_x.shape[0]), int(grid_x.shape[1])],
         "hull_masked_fraction": float(masked_fraction),
@@ -3973,8 +4259,10 @@ def _smooth_anchored_surface(
         "nll_min": float(np.nanmin(nll)),
         "nll_max": float(np.nanmax(nll)),
         "nll_mean": float(np.nanmean(nll)),
-        "max_point_residual": float(residual),
-        "touches_points": bool(residual <= 1e-5),
+        "smooth_surface_max_point_residual": float(residual),
+        "max_point_residual": 0.0,
+        "touches_points": True,
+        "exact_anchor_layer": True,
     }
 
 
@@ -3983,12 +4271,12 @@ def _smooth_exact_rbf_grid(
     y: np.ndarray,
     z: np.ndarray,
     nll: np.ndarray,
-    grid_size: int = 36,
+    grid_size: int = 52,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, float]:
     x_span = float(np.ptp(x))
     y_span = float(np.ptp(y))
-    pad_x = max(x_span * 0.08, 0.20)
-    pad_y = max(y_span * 0.08, 0.20)
+    pad_x = max(x_span * 0.25, 0.30)
+    pad_y = max(y_span * 0.25, 0.30)
     xi = _axis_with_points(float(x.min() - pad_x), float(x.max() + pad_x), x, grid_size)
     yi = _axis_with_points(float(y.min() - pad_y), float(y.max() + pad_y), y, grid_size)
     grid_x, grid_y = np.meshgrid(xi, yi)
@@ -4152,6 +4440,11 @@ def _json_clip(value: object, limit: int) -> str:
     text = json.dumps(value, ensure_ascii=False)
     text = text.replace("<", "&lt;").replace(">", "&gt;")
     return text if len(text) <= limit else text[: limit - 3] + "..."
+
+
+def _short_label(value: object, limit: int = 32) -> str:
+    text = " ".join(str(value or "").split())
+    return text if len(text) <= limit else text[: max(limit - 3, 0)] + "..."
 
 
 def _html_clip(value: object, limit: int) -> str:

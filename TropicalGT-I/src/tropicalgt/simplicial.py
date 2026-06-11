@@ -121,6 +121,8 @@ def build_reasoning_trajectory_complex(candidates: list[dict[str, Any]], up_to_l
                 "target_text": row.get("target_text", ""),
                 "decoded_argmax": row.get("decoded_argmax", ""),
                 "graph_json_summary": row.get("graph_json_summary", {}),
+                "filtered_simplicial_object": row.get("filtered_simplicial_object", {}),
+                "topological_algebra": row.get("topological_algebra", {}),
                 "weight": round(1.0 / (1.0 + max(nll, 0.0)), 6),
             }
         )
