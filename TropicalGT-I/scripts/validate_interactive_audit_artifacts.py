@@ -119,7 +119,9 @@ def _validate_file_set(row_dir: Path, errors: list[str]) -> dict[str, str]:
                 _assert("trajectory-complex map" in html, errors, f"{rel} is not mapping trajectory complexes")
                 _assert("slider filters domain" in html and "sliders" in html, errors, f"{rel} is missing Plotly filtration slider for the simplicial map")
             if key == "tropical_support":
-                _assert("observed supports only" in html and "top-support collapse rate" in html, errors, f"{rel} is not the interpretable support audit view")
+                support_audit = "observed supports only" in html and "top-support collapse rate" in html
+                collapse_audit = "active-support collapse diagnostic" in html and "Collapse metrics" in html
+                _assert(support_audit or collapse_audit, errors, f"{rel} is not the interpretable support audit view")
     return files
 
 

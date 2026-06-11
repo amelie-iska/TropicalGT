@@ -1335,6 +1335,95 @@ def write_tropical_support_heatmap(result: dict[str, object], output_dir: str | 
         ),
         encoding="utf-8",
     )
+    if len(support_indices) == 1:
+        margin_profile = z[:, 0].tolist() if z.ndim == 2 and z.shape[1] else [float(token.get("margin", 0.0) or 0.0) for token in tokens]
+        row_numbers = list(range(n))
+        token_kinds = [str(token.get("kind", "?")) for token in tokens]
+        table_rows = [
+            ("tokens", str(int(n))),
+            ("observed supports", f"{len(support_indices)}/{n}"),
+            ("effective supports", f"{effective_supports:.3f}"),
+            ("entropy", f"{support_entropy:.3f} bits"),
+            ("collapse rate", f"{collapse_rate:.3f}"),
+            ("top support", support_labels[0] if support_labels else "n/a"),
+            ("mean margin", f"{float(mean_margins[0]) if mean_margins else 0.0:.4f}"),
+        ]
+        fig = make_subplots(
+            rows=1,
+            cols=3,
+            specs=[[{"type": "heatmap"}, {"type": "scatter"}, {"type": "table"}]],
+            column_widths=[0.42, 0.36, 0.22],
+            horizontal_spacing=0.08,
+            subplot_titles=("Collapsed active support strip", "Margin profile by graph-token order", "Collapse metrics"),
+        )
+        fig.add_trace(
+            go.Heatmap(
+                z=z,
+                x=support_labels,
+                y=query_labels,
+                colorscale="Cividis",
+                showscale=False,
+                customdata=hover_grid,
+                hovertemplate="%{customdata}<extra></extra>",
+                zmin=0.0,
+                zmax=max(float(np.nanmax(z)), 1.0) if z.size and np.isfinite(z).any() else 1.0,
+            ),
+            row=1,
+            col=1,
+        )
+        fig.add_trace(
+            go.Scatter(
+                x=row_numbers,
+                y=margin_profile,
+                mode="lines+markers",
+                line=dict(color="#5eead4", width=2),
+                marker=dict(
+                    size=7,
+                    color=margin_profile,
+                    colorscale="Cividis",
+                    cmin=0.0,
+                    cmax=max(float(np.nanmax(z)), 1.0) if z.size and np.isfinite(z).any() else 1.0,
+                    line=dict(color="#e8eef8", width=0.7),
+                ),
+                customdata=[
+                    f"token={html.escape(query_labels[i])}<br>kind={html.escape(token_kinds[i])}<br>margin={float(margin_profile[i]):.5f}<br>{hover_grid[i][0]}"
+                    for i in range(n)
+                ],
+                hovertemplate="%{customdata}<extra></extra>",
+                name="margin profile",
+            ),
+            row=1,
+            col=2,
+        )
+        fig.add_trace(
+            go.Table(
+                header=dict(values=["metric", "value"], fill_color="#111827", font=dict(color="#e8eef8", size=12), align="left"),
+                cells=dict(
+                    values=[[row[0] for row in table_rows], [row[1] for row in table_rows]],
+                    fill_color="#0f172a",
+                    font=dict(color="#dbeafe", size=11),
+                    align="left",
+                    height=28,
+                ),
+            ),
+            row=1,
+            col=3,
+        )
+        fig.update_layout(
+            template="plotly_dark",
+            title=(
+                "Tropical active-support collapse diagnostic"
+                f"<br><sup>all visible query tokens choose {html.escape(support_labels[0] if support_labels else 'one support')}; "
+                "the line plot shows per-token margin variation rather than hiding it inside a uniform heatmap block</sup>"
+            ),
+            margin=dict(t=126, l=88, r=40, b=96),
+        )
+        fig.update_xaxes(title_text="active support token", tickangle=45, row=1, col=1)
+        fig.update_yaxes(title_text="query token", row=1, col=1)
+        fig.update_xaxes(title_text="graph-token index", row=1, col=2)
+        fig.update_yaxes(title_text="active-support margin", row=1, col=2)
+        _write_plotly_dark_html(path, fig, "Tropical active-support collapse diagnostic")
+        return {"tropical_support_heatmap": str(path), "tropical_support_payload": str(payload_path)}
     fig = make_subplots(
         rows=1,
         cols=2,
@@ -2080,9 +2169,15 @@ def write_graphcg_trajectory_visualization(scaling_report: dict[str, object], ou
             "GraphCG full-rank direction audit"
             f"<br><sup>heatmap encodes |cosine| for top {display_count}/{direction_count} directions; signed cosine is in hover; active nonzero rank={active_rank}</sup>"
         ),
+        margin=dict(t=112, l=92, r=44, b=92),
     )
-    fig.update_xaxes(title_text="GraphCG direction", tickangle=45, row=1, col=1)
-    fig.update_yaxes(title_text="GoT state", row=1, col=1)
+    x_labels = [f"d{int(idx)}" for idx in top_idx]
+    x_step = max(1, int(math.ceil(len(x_labels) / 12)))
+    x_tickvals = [label for pos, label in enumerate(x_labels) if pos % x_step == 0 or pos == len(x_labels) - 1]
+    y_step = max(1, int(math.ceil(len(labels) / 24)))
+    y_tickvals = [label for pos, label in enumerate(labels) if pos % y_step == 0 or pos == len(labels) - 1]
+    fig.update_xaxes(title_text="GraphCG direction", tickangle=0, tickmode="array", tickvals=x_tickvals, ticktext=x_tickvals, row=1, col=1)
+    fig.update_yaxes(title_text="GoT state", tickmode="array", tickvals=y_tickvals, ticktext=y_tickvals, row=1, col=1)
     fig.update_xaxes(title_text="direction rank by activity", row=1, col=2)
     fig.update_yaxes(title_text="mean absolute cosine", row=1, col=2)
     _write_plotly_dark_html(path, fig, "GraphCG direction cosines along GoT candidates")
@@ -3446,6 +3541,7 @@ def _write_plotly_dark_html(path: Path, fig: go.Figure, title: str, panel_items:
     )
     chart = fig.to_html(full_html=False, include_plotlyjs="cdn", config={"displaylogo": False, "responsive": True})
     items = panel_items or []
+    has_panel = bool(items)
     initial_index = max(range(len(items)), key=lambda idx: float(items[idx].get("complexity", 0.0))) if items else 0
     initial = items[initial_index] if items else {"title": "Filtered simplicial object", "svg": "", "summary": "Hover a reasoning node to render its complex."}
     controls_html = (
@@ -3455,6 +3551,28 @@ def _write_plotly_dark_html(path: Path, fig: go.Figure, title: str, panel_items:
         <div class=\"hint\" id=\"filtration-hint\">Shows simplices with scalar filtration at or below the selected radius. Multiparameter summaries remain in the JSON payload.</div>
       </div>"""
         if show_filtration_slider
+        else ""
+    )
+    layout_class = "layout has-panel" if has_panel else "layout no-panel"
+    panel_html = (
+        f"""
+    <aside class="panel" aria-live="polite">
+      <h1 id="simplicial-title">{html.escape(initial["title"])}</h1>
+      <div class="summary" id="simplicial-summary">{initial["summary"]}</div>
+      {controls_html}
+      <div class="simplicial-object-panel" id="simplicial-svg">{initial["svg"]}</div>
+    </aside>"""
+        if has_panel
+        else ""
+    )
+    hover_html = (
+        f"""
+  <div class="hover-simplicial-card" id="hover-simplicial-card" role="tooltip" aria-label="hovered filtered simplicial object">
+    <h2 id="hover-simplicial-title">{html.escape(initial["title"])}</h2>
+    <div class="hover-summary" id="hover-simplicial-summary">{initial["summary"]}</div>
+    <div id="hover-simplicial-svg">{initial["svg"]}</div>
+  </div>"""
+        if has_panel
         else ""
     )
     path.write_text(
@@ -3487,10 +3605,16 @@ def _write_plotly_dark_html(path: Path, fig: go.Figure, title: str, panel_items:
       grid-template-columns: minmax(0, 1fr) minmax(320px, 420px);
       min-height: 100vh;
     }}
+    .layout.no-panel {{
+      grid-template-columns: minmax(0, 1fr);
+    }}
     .chart {{
       min-width: 0;
       min-height: 100vh;
       border-right: 1px solid var(--edge);
+    }}
+    .layout.no-panel .chart {{
+      border-right: 0;
     }}
     .panel {{
       background: linear-gradient(180deg, rgba(16, 22, 35, 0.98), rgba(9, 11, 18, 0.98));
@@ -3582,20 +3706,11 @@ def _write_plotly_dark_html(path: Path, fig: go.Figure, title: str, panel_items:
   </style>
 </head>
 <body>
-  <main class="layout">
+  <main class="{layout_class}">
     <section class="chart" id="chart">{chart}</section>
-    <aside class="panel" aria-live="polite">
-      <h1 id="simplicial-title">{html.escape(initial["title"])}</h1>
-      <div class="summary" id="simplicial-summary">{initial["summary"]}</div>
-      {controls_html}
-      <div class="simplicial-object-panel" id="simplicial-svg">{initial["svg"]}</div>
-    </aside>
+    {panel_html}
   </main>
-  <div class="hover-simplicial-card" id="hover-simplicial-card" role="tooltip" aria-label="hovered filtered simplicial object">
-    <h2 id="hover-simplicial-title">{html.escape(initial["title"])}</h2>
-    <div class="hover-summary" id="hover-simplicial-summary">{initial["summary"]}</div>
-    <div id="hover-simplicial-svg">{initial["svg"]}</div>
-  </div>
+  {hover_html}
   <script>
     const simplicialPanels = {json.dumps(items)};
     const panelTitle = document.getElementById("simplicial-title");
