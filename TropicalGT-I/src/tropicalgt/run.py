@@ -582,6 +582,10 @@ def train(config_path: str | Path, resume_from: str | Path | None = None, max_st
             audit_max_simplices=audit_max_simplices,
             allow_stop=bool(cfg.get("viz_scale_allow_stop", False)),
             diverse_actions=bool(cfg.get("viz_scale_diverse_actions", True)),
+            stochastic_actions=bool(cfg.get("viz_scale_stochastic_actions", False)),
+            sampling_temperature=float(cfg.get("viz_scale_sampling_temperature", 1.0)),
+            sampling_exploration=float(cfg.get("viz_scale_sampling_exploration", 0.0)),
+            sampling_seed=int(cfg.get("viz_scale_sampling_seed", seed + step)),
         )
         if memory_bank is not None:
             records = memory_records_from_scaling_report(
@@ -728,6 +732,10 @@ def _run_periodic_validation_round(
                     audit_max_simplices=audit_max_simplices,
                     allow_stop=bool(cfg.get("periodic_viz_scale_allow_stop", cfg.get("viz_scale_allow_stop", False))),
                     diverse_actions=bool(cfg.get("periodic_viz_scale_diverse_actions", cfg.get("viz_scale_diverse_actions", True))),
+                    stochastic_actions=bool(cfg.get("periodic_viz_scale_stochastic_actions", cfg.get("viz_scale_stochastic_actions", False))),
+                    sampling_temperature=float(cfg.get("periodic_viz_scale_sampling_temperature", cfg.get("viz_scale_sampling_temperature", 1.0))),
+                    sampling_exploration=float(cfg.get("periodic_viz_scale_sampling_exploration", cfg.get("viz_scale_sampling_exploration", 0.0))),
+                    sampling_seed=int(cfg.get("periodic_viz_scale_sampling_seed", seed + step + example_idx)),
                 )
                 audit_result: dict[str, Any] = {
                     "inference_scaling": scaling,

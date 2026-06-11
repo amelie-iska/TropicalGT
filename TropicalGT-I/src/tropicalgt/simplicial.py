@@ -116,6 +116,7 @@ def build_reasoning_trajectory_complex(candidates: list[dict[str, Any]], up_to_l
                 "score": score,
                 "nll": nll,
                 "path": row.get("path", []),
+                "embedding": row.get("embedding", []),
                 "weight": round(1.0 / (1.0 + max(nll, 0.0)), 6),
             }
         )

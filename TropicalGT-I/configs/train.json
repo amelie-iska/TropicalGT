@@ -22,7 +22,7 @@
   "device": "auto",
   "output_dir": "TropicalGT-I/outputs/train",
   "checkpoint_dir": "TropicalGT-I/checkpoints",
-  "checkpoint_every": 5000,
+  "checkpoint_every": 250,
   "keys_path": "keys.txt",
   "graph_bpb_side_weight": 1.0,
   "wandb_html_max_bytes": 5000000,
@@ -42,8 +42,8 @@
   "periodic_ph_backend": "gudhi",
   "periodic_audit_max_simplices": 512,
   "periodic_viz_got_scaling": true,
-  "periodic_viz_scale_depth": 7,
-  "periodic_viz_scale_width": 8,
+  "periodic_viz_scale_depth": 8,
+  "periodic_viz_scale_width": 10,
   "periodic_viz_scale_branch_factor": 4,
   "periodic_viz_scale_allow_stop": false,
   "periodic_viz_scale_diverse_actions": true,
@@ -61,12 +61,24 @@
   "viz_scale_allow_stop": false,
   "viz_scale_diverse_actions": true,
   "viz_got_record_pool": 48,
-  "tokengt": {"max_nodes": 64, "max_edges": 128, "node_id_dim": 16, "feature_dim": 48, "graph_token": true},
+  "tokengt": {
+    "max_nodes": 64,
+    "max_edges": 128,
+    "node_id_dim": 16,
+    "feature_dim": 48,
+    "graph_token": true
+  },
   "hybrid_data": {
     "enabled": true,
     "seed": 1729,
     "sources": [
-      {"kind": "parquet", "name": "tropicalgt_hf_reasoning", "root": "TropicalGT-I/data/toricgt/curated_hf_shards", "weight": 0.7, "required": true},
+      {
+        "kind": "parquet",
+        "name": "tropicalgt_hf_reasoning",
+        "root": "TropicalGT-I/data/toricgt/curated_hf_shards",
+        "weight": 0.7,
+        "required": true
+      },
       {
         "kind": "parameter_golf_bin",
         "name": "openai_parameter_golf",
@@ -102,6 +114,24 @@
     "target_utilization": "approximately 97 percent after int8+zlib export plus stripped code bytes",
     "size_checked_with": "TropicalGT-I/scripts/estimate_parameter_golf_export_size.py"
   },
-  "inference_scaling": {"depth": 7, "width": 8, "branch_factor": 4},
-  "wandb": {"enabled": true, "mode": "online", "project": "TropicalGT-I"}
+  "inference_scaling": {
+    "depth": 8,
+    "width": 10,
+    "branch_factor": 4,
+    "stochastic_actions": true,
+    "sampling_temperature": 2.5,
+    "sampling_exploration": 0.45,
+    "sampling_seed": 1729
+  },
+  "wandb": {
+    "enabled": true,
+    "mode": "online",
+    "project": "TropicalGT-I"
+  },
+  "periodic_viz_scale_stochastic_actions": true,
+  "periodic_viz_scale_sampling_temperature": 2.5,
+  "periodic_viz_scale_sampling_exploration": 0.45,
+  "viz_scale_stochastic_actions": true,
+  "viz_scale_sampling_temperature": 2.5,
+  "viz_scale_sampling_exploration": 0.45
 }

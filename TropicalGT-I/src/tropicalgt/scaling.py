@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from copy import deepcopy
+import hashlib
 from typing import Any
 
 import torch
@@ -105,6 +106,10 @@ def run_inference_scaling(
     audit_max_simplices: int = 1024,
     allow_stop: bool = False,
     diverse_actions: bool = True,
+    stochastic_actions: bool = False,
+    sampling_temperature: float = 1.0,
+    sampling_exploration: float = 0.0,
+    sampling_seed: int | None = None,
 ) -> dict[str, Any]:
     depth = max(int(depth), 0)
     width = max(int(width), 1)
@@ -148,6 +153,10 @@ def run_inference_scaling(
                 allow_stop=allow_stop,
                 diverse_actions=diverse_actions,
                 path=row.get("path", []),
+                stochastic=stochastic_actions,
+                temperature=sampling_temperature,
+                exploration=sampling_exploration,
+                seed=_branch_sampling_seed(sampling_seed, row.get("record_id", ""), level, rank, row.get("path", [])),
             )
             for branch_rank, action_row in enumerate(actions):
                 child = apply_reasoning_action(row["record"], action_row["action"], rank=branch_rank)
@@ -197,6 +206,10 @@ def run_inference_scaling(
         "branch_factor": branch_factor,
         "allow_stop": bool(allow_stop),
         "diverse_actions": bool(diverse_actions),
+        "stochastic_actions": bool(stochastic_actions),
+        "sampling_temperature": float(sampling_temperature),
+        "sampling_exploration": float(sampling_exploration),
+        "sampling_seed": sampling_seed,
         "evaluated_candidates": len(evaluated),
         "levels": levels,
         "best": _public_candidate(best),
@@ -340,6 +353,10 @@ def _select_branch_actions(
     allow_stop: bool = False,
     diverse_actions: bool = True,
     path: list[str] | None = None,
+    stochastic: bool = False,
+    temperature: float = 1.0,
+    exploration: float = 0.0,
+    seed: int | None = None,
 ) -> list[dict[str, Any]]:
     branch_factor = max(int(branch_factor), 1)
     path_counts = {action: list(path or []).count(action) for action in ACTION_NAMES}
@@ -355,6 +372,14 @@ def _select_branch_actions(
         fallback = next((row for row in action_probs if str(row.get("action", "")) != "stop"), None)
         return [fallback or {"action": "expand", "probability": 1.0, "audit_selection_score": 1.0}]
     ranked = sorted(candidates, key=lambda item: float(item.get("audit_selection_score", 0.0)), reverse=True)
+    if stochastic:
+        return _sample_branch_actions(
+            ranked,
+            branch_factor=branch_factor,
+            temperature=temperature,
+            exploration=exploration,
+            seed=seed,
+        )
     if not diverse_actions:
         return ranked[:branch_factor]
     selected: list[dict[str, Any]] = []
@@ -375,6 +400,44 @@ def _select_branch_actions(
     for row in ranked:
         add_action(str(row.get("action", "")))
     return selected[:branch_factor] or ranked[:branch_factor]
+
+
+def _sample_branch_actions(
+    ranked: list[dict[str, Any]],
+    branch_factor: int,
+    temperature: float = 1.0,
+    exploration: float = 0.0,
+    seed: int | None = None,
+) -> list[dict[str, Any]]:
+    if not ranked:
+        return []
+    branch_factor = max(1, min(int(branch_factor), len(ranked)))
+    temperature = max(float(temperature), 1e-4)
+    exploration = max(0.0, min(float(exploration), 0.95))
+    probs = torch.tensor([max(float(row.get("probability", 0.0)), 1e-9) for row in ranked], dtype=torch.float64)
+    logits = torch.log(probs) / temperature
+    weights = torch.softmax(logits, dim=0)
+    if exploration > 0.0:
+        weights = (1.0 - exploration) * weights + exploration / float(weights.numel())
+    generator = torch.Generator(device="cpu")
+    if seed is not None:
+        generator.manual_seed(int(seed) % (2**63 - 1))
+    indices = torch.multinomial(weights, num_samples=branch_factor, replacement=False, generator=generator)
+    selected = []
+    for sample_rank, idx in enumerate(indices.tolist()):
+        row = dict(ranked[int(idx)])
+        row["sampling_weight"] = float(weights[int(idx)])
+        row["sampling_rank"] = sample_rank
+        row["audit_selection_score"] = float(row.get("audit_selection_score", row.get("probability", 0.0)))
+        selected.append(row)
+    return selected
+
+
+def _branch_sampling_seed(base_seed: int | None, record_id: object, level: int, rank: int, path: object) -> int | None:
+    if base_seed is None:
+        return None
+    digest = hashlib.sha1(f"{base_seed}|{record_id}|{level}|{rank}|{path}".encode("utf-8", "ignore")).digest()
+    return int.from_bytes(digest[:8], "big", signed=False)
 
 
 def _graphcg_projection(model, graph_state: torch.Tensor, top_k: int = 4) -> list[dict[str, Any]]:

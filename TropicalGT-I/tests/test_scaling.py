@@ -74,3 +74,36 @@ def test_select_branch_actions_filters_stop_and_preserves_diversity():
     selected = _select_branch_actions(probs, branch_factor=3, allow_stop=False, diverse_actions=True)
     actions = [row["action"] for row in selected]
     assert actions == ["merge", "expand", "verify"]
+
+
+def test_select_branch_actions_supports_reproducible_stochastic_sampling():
+    probs = [
+        {"action": "expand", "probability": 0.45},
+        {"action": "verify", "probability": 0.25},
+        {"action": "retrieve", "probability": 0.15},
+        {"action": "refine", "probability": 0.10},
+        {"action": "merge", "probability": 0.05},
+    ]
+    sampled_a = _select_branch_actions(
+        probs,
+        branch_factor=3,
+        allow_stop=False,
+        diverse_actions=True,
+        stochastic=True,
+        temperature=2.0,
+        exploration=0.35,
+        seed=1234,
+    )
+    sampled_b = _select_branch_actions(
+        probs,
+        branch_factor=3,
+        allow_stop=False,
+        diverse_actions=True,
+        stochastic=True,
+        temperature=2.0,
+        exploration=0.35,
+        seed=1234,
+    )
+    assert [row["action"] for row in sampled_a] == [row["action"] for row in sampled_b]
+    assert all("sampling_weight" in row for row in sampled_a)
+    assert len({row["action"] for row in sampled_a}) == 3

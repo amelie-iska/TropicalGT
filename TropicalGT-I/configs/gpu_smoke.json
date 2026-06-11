@@ -39,8 +39,44 @@
   "viz_scale_depth": 1,
   "viz_scale_width": 2,
   "viz_scale_branch_factor": 2,
-  "tokengt": {"max_nodes": 48, "max_edges": 96, "node_id_dim": 16, "feature_dim": 48, "graph_token": true},
-  "model": {"dim": 96, "hidden_dim": 96, "graph_feature_dim": 48, "num_actions": 8, "graphcg_num_directions": 96, "graphcg_active_directions": 32, "gflownet_weight": 0.02, "graphcg_weight": 0.02, "certificate_weight": 0.001, "wall_margin_threshold": 0.001, "memory_dim": 32},
-  "inference_scaling": {"depth": 2, "width": 3, "branch_factor": 2},
-  "wandb": {"enabled": true, "mode": "online", "project": "TropicalGT-I"}
+  "tokengt": {
+    "max_nodes": 48,
+    "max_edges": 96,
+    "node_id_dim": 16,
+    "feature_dim": 48,
+    "graph_token": true
+  },
+  "model": {
+    "dim": 96,
+    "hidden_dim": 96,
+    "graph_feature_dim": 48,
+    "num_actions": 8,
+    "graphcg_num_directions": 96,
+    "graphcg_active_directions": 32,
+    "gflownet_weight": 0.02,
+    "graphcg_weight": 0.02,
+    "certificate_weight": 0.001,
+    "wall_margin_threshold": 0.001,
+    "memory_dim": 32
+  },
+  "inference_scaling": {
+    "depth": 2,
+    "width": 3,
+    "branch_factor": 2,
+    "stochastic_actions": true,
+    "sampling_temperature": 2.2,
+    "sampling_exploration": 0.4,
+    "sampling_seed": 1729
+  },
+  "wandb": {
+    "enabled": true,
+    "mode": "online",
+    "project": "TropicalGT-I"
+  },
+  "periodic_viz_scale_stochastic_actions": true,
+  "periodic_viz_scale_sampling_temperature": 2.2,
+  "periodic_viz_scale_sampling_exploration": 0.4,
+  "viz_scale_stochastic_actions": true,
+  "viz_scale_sampling_temperature": 2.2,
+  "viz_scale_sampling_exploration": 0.4
 }

@@ -15,7 +15,7 @@ from plotly.subplots import make_subplots
 
 from .data import encode_bytes
 from .diagnostics import per_record_nll, record_diagnostics
-from .simplicial import build_filtered_simplicial_object
+from .simplicial import build_filtered_simplicial_object, build_reasoning_trajectory_complex
 
 
 def collect_states(
@@ -302,7 +302,7 @@ def write_got_trajectory_visualization(scaling_report: dict[str, object], output
         return {"got_trajectory_3d": str(path), "got_payloads": str(payload_path)}
 
     embeddings = np.asarray([row["embedding"] for row in candidates], dtype=float)
-    pca = _pca3(embeddings)
+    pca, pca_report = _pca3_with_report(embeddings)
     ids = [str(row.get("record_id", idx)) for idx, row in enumerate(candidates)]
     id_to_idx = {rid: idx for idx, rid in enumerate(ids)}
     inferred_levels = _infer_candidate_levels(candidates, ids)
@@ -414,6 +414,7 @@ def write_got_trajectory_visualization(scaling_report: dict[str, object], output
     panel_items = _simplicial_panel_items(panel_objects, panel_hover)
     _write_plotly_dark_html(path, fig, "Graph-of-thought trajectory PCA in embedding space", panel_items, show_filtration_slider=True)
     payload = {
+        "embedding_pca_diagnostics": pca_report,
         "nodes": [
             {
                 "record_id": ids[idx],
@@ -459,7 +460,453 @@ def write_got_trajectory_visualization(scaling_report: dict[str, object], output
         "nll_surface": nll_surface_meta,
     }
     payload_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
-    return {"got_trajectory_3d": str(path), "got_payloads": str(payload_path)}
+    extra_paths = {}
+    extra_paths.update(
+        _write_got_embedding_map(
+            scaling_report,
+            output_dir,
+            candidates,
+            ids,
+            id_to_idx,
+            pca,
+            nll_values,
+            hover,
+            inferred_levels,
+            pca_report,
+        )
+    )
+    extra_paths.update(_write_full_trajectory_complex_map(scaling_report, output_dir))
+    extra_paths.update(_write_reasoning_step_complex_maps(candidates, output_dir))
+    return {"got_trajectory_3d": str(path), "got_payloads": str(payload_path), **extra_paths}
+
+
+def _write_got_embedding_map(
+    scaling_report: dict[str, object],
+    output_dir: Path,
+    candidates: list[dict[str, object]],
+    ids: list[str],
+    id_to_idx: dict[str, int],
+    pca: np.ndarray,
+    nll_values: np.ndarray,
+    hover: list[str],
+    inferred_levels: np.ndarray,
+    pca_report: dict[str, object],
+) -> dict[str, str]:
+    path = output_dir / "got_embedding_map_3d.html"
+    payload_path = output_dir / "got_embedding_map_payloads.json"
+    fig = go.Figure()
+    for idx, row in enumerate(candidates):
+        parent = row.get("parent")
+        if isinstance(parent, str) and parent in id_to_idx:
+            j = id_to_idx[parent]
+            action = _edge_action_label(row)
+            fig.add_trace(
+                go.Scatter3d(
+                    x=[float(pca[j, 0]), float(pca[idx, 0])],
+                    y=[float(pca[j, 1]), float(pca[idx, 1])],
+                    z=[float(pca[j, 2]), float(pca[idx, 2])],
+                    mode="lines",
+                    line=dict(color=_action_color(action), width=4),
+                    hovertext=f"{html.escape(parent)} -> {html.escape(ids[idx])}<br>action={html.escape(action)}",
+                    hoverinfo="text",
+                    showlegend=False,
+                    name=f"edge:{action}",
+                )
+            )
+    fig.add_trace(
+        go.Scatter3d(
+            x=pca[:, 0],
+            y=pca[:, 1],
+            z=pca[:, 2],
+            mode="markers+text",
+            marker=dict(
+                size=8,
+                color=nll_values,
+                colorscale="Turbo",
+                showscale=True,
+                colorbar=dict(title="NLL"),
+                line=dict(width=1.2, color="#e8eef8"),
+            ),
+            text=[_state_plot_label(row, idx, int(inferred_levels[idx])) for idx, row in enumerate(candidates)],
+            textposition="top center",
+            hovertext=[
+                text
+                + f"<br><b>embedding PCA source</b>: model graph_state"
+                + f"<br><b>PC coords</b>: ({pca[idx,0]:.4g}, {pca[idx,1]:.4g}, {pca[idx,2]:.4g})"
+                for idx, text in enumerate(hover)
+            ],
+            hoverinfo="text",
+            customdata=np.arange(len(candidates), dtype=int),
+            name="GoT state: actual graph_state PCA",
+        )
+    )
+    fig.update_layout(
+        template="plotly_dark",
+        title=(
+            "Graph-of-thought embedding-space trajectory map "
+            f"(actual graph_state PCA; distance corr={float(pca_report.get('pairwise_distance_correlation', 0.0)):.3f}, "
+            f"stress={float(pca_report.get('normalized_stress', 0.0)):.3f})"
+        ),
+        scene=dict(xaxis_title="PC1(graph_state)", yaxis_title="PC2(graph_state)", zaxis_title="PC3(graph_state)"),
+        annotations=[
+            dict(
+                text=html.escape(str(pca_report)),
+                x=0,
+                y=-0.12,
+                xref="paper",
+                yref="paper",
+                showarrow=False,
+                align="left",
+                font=dict(size=10, color="#9fb3c8"),
+            )
+        ],
+    )
+    _write_plotly_dark_html(path, fig, "Graph-of-thought embedding-space trajectory map")
+    payload = {
+        "coordinate_source": "PCA of model graph_state embeddings; no level/tree layout coordinates are used",
+        "sampling": {
+            "stochastic_actions": bool(scaling_report.get("stochastic_actions", False)),
+            "temperature": scaling_report.get("sampling_temperature"),
+            "exploration": scaling_report.get("sampling_exploration"),
+            "seed": scaling_report.get("sampling_seed"),
+        },
+        "embedding_pca_diagnostics": pca_report,
+        "nodes": [
+            {
+                "record_id": ids[idx],
+                "parent": candidates[idx].get("parent"),
+                "path": candidates[idx].get("path", []),
+                "level": int(inferred_levels[idx]),
+                "nll": float(nll_values[idx]),
+                "embedding_pca": {"pc1": float(pca[idx, 0]), "pc2": float(pca[idx, 1]), "pc3": float(pca[idx, 2])},
+                "embedding": candidates[idx].get("embedding"),
+            }
+            for idx in range(len(candidates))
+        ],
+        "edges": [
+            {"source": row.get("parent"), "target": ids[idx], "action": _edge_action_label(row)}
+            for idx, row in enumerate(candidates)
+            if row.get("parent") is not None
+        ],
+    }
+    payload_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+    return {"got_embedding_map_3d": str(path), "got_embedding_map_payloads": str(payload_path)}
+
+
+def _write_full_trajectory_complex_map(scaling_report: dict[str, object], output_dir: Path) -> dict[str, str]:
+    obj = scaling_report.get("trajectory_filtered_simplicial_object")
+    if not isinstance(obj, dict):
+        candidates = [row for row in scaling_report.get("candidates", []) if isinstance(row, dict)]
+        if candidates:
+            obj = build_reasoning_trajectory_complex(candidates)
+    if not isinstance(obj, dict):
+        return {}
+    path = output_dir / "got_full_trajectory_complex.html"
+    payload_path = output_dir / "got_full_trajectory_complex_payload.json"
+    title = "Full graph-of-thought trajectory filtered simplicial complex"
+    _write_complex_slider_map(path, obj, title=title, subtitle="Full trajectory complex; slider filters simplices by scalar radius/filtration.")
+    payload_path.write_text(json.dumps({"filtered_simplicial_object": obj}, indent=2), encoding="utf-8")
+    return {"got_full_trajectory_complex": str(path), "got_full_trajectory_complex_payload": str(payload_path)}
+
+
+def _write_reasoning_step_complex_maps(candidates: list[dict[str, object]], output_dir: Path) -> dict[str, str]:
+    directory = output_dir / "reasoning_step_complex_maps"
+    directory.mkdir(parents=True, exist_ok=True)
+    rows = []
+    for idx, row in enumerate(candidates):
+        obj = row.get("filtered_simplicial_object")
+        if not isinstance(obj, dict):
+            continue
+        record_id = str(row.get("record_id", f"step-{idx}"))
+        file_name = f"reasoning_step_{idx:03d}.html"
+        path = directory / file_name
+        _write_complex_slider_map(
+            path,
+            obj,
+            title=f"Reasoning step filtered simplicial complex map: q{idx}",
+            subtitle=f"record_id={record_id}; level={row.get('level')}; path={row.get('path', [])}",
+        )
+        rows.append(
+            {
+                "index": idx,
+                "record_id": record_id,
+                "level": int(row.get("level", 0) or 0),
+                "path": row.get("path", []),
+                "file": file_name,
+                "summary": obj.get("summary", {}),
+            }
+        )
+    index_path = directory / "index.html"
+    _write_reasoning_step_complex_index(index_path, rows)
+    manifest_path = directory / "manifest.json"
+    manifest_path.write_text(json.dumps({"steps": rows}, indent=2), encoding="utf-8")
+    return {
+        "got_reasoning_step_complex_index": str(index_path),
+        "got_reasoning_step_complex_manifest": str(manifest_path),
+    }
+
+
+def _write_complex_slider_map(path: Path, obj: dict[str, object], title: str, subtitle: str = "") -> None:
+    vertices = [s for s in obj.get("simplices", []) if isinstance(s, dict) and int(s.get("dimension", -1)) == 0]
+    edges = [s for s in obj.get("simplices", []) if isinstance(s, dict) and int(s.get("dimension", -1)) == 1]
+    triangles = [s for s in obj.get("simplices", []) if isinstance(s, dict) and int(s.get("dimension", -1)) == 2]
+    labels = [str((row.get("simplex") or [f"v{idx}"])[0]) for idx, row in enumerate(vertices)]
+    if not labels:
+        _write_dark_empty(path, f"{title}: no vertices available.")
+        return
+    coords3, _projected, layout_kind = _simplicial_pca3_radius_layout(labels, vertices, edges, width=760, height=560)
+    thresholds = _display_thresholds(obj)
+    initial = thresholds[-1] if thresholds else float("inf")
+    base_traces = _complex_slider_traces(obj, coords3, threshold=initial)
+    fig = go.Figure(data=base_traces)
+    frames = []
+    for threshold in thresholds:
+        frames.append(
+            go.Frame(
+                name=f"{threshold:.6f}",
+                data=_complex_slider_traces(obj, coords3, threshold=threshold),
+                traces=list(range(len(base_traces))),
+            )
+        )
+    fig.frames = frames
+    if frames:
+        steps = [
+            {
+                "args": [[frame.name], {"frame": {"duration": 0, "redraw": True}, "mode": "immediate", "transition": {"duration": 0}}],
+                "label": f"{float(frame.name):.3f}",
+                "method": "animate",
+            }
+            for frame in frames
+        ]
+        fig.update_layout(
+            sliders=[
+                {
+                    "active": len(steps) - 1,
+                    "currentvalue": {"prefix": "radius/filtration <= ", "font": {"color": "#dbeafe"}},
+                    "pad": {"t": 44},
+                    "steps": steps,
+                }
+            ],
+            updatemenus=[
+                {
+                    "type": "buttons",
+                    "showactive": False,
+                    "x": 0.02,
+                    "y": 0,
+                    "xanchor": "left",
+                    "yanchor": "top",
+                    "buttons": [
+                        {
+                            "label": "play filtration",
+                            "method": "animate",
+                            "args": [None, {"frame": {"duration": 260, "redraw": True}, "fromcurrent": True, "transition": {"duration": 0}}],
+                        }
+                    ],
+                }
+            ],
+        )
+    summary = obj.get("summary", {})
+    fig.update_layout(
+        template="plotly_dark",
+        title=f"{title}<br><sup>{html.escape(subtitle)} | {html.escape(layout_kind)} | V={summary.get('num_vertices', len(vertices))}, E={summary.get('num_edges', len(edges))}, T={summary.get('num_two_simplices', len(triangles))}</sup>",
+        scene=dict(
+            xaxis_title="PCoA/MDS-1 from vertex distance matrix",
+            yaxis_title="PCoA/MDS-2",
+            zaxis_title="PCoA/MDS-3",
+            aspectmode="cube",
+            camera=dict(eye=dict(x=1.5, y=1.25, z=0.9)),
+        ),
+        legend=dict(itemsizing="constant"),
+    )
+    _write_plotly_dark_html(
+        path,
+        fig,
+        title,
+        _simplicial_panel_items([obj], [f"<b>{html.escape(title)}</b><br>{html.escape(subtitle)}<br>{_summary_line(obj)}"]),
+        show_filtration_slider=True,
+    )
+
+
+def _complex_slider_traces(obj: dict[str, object], coords3: dict[str, tuple[float, float, float]], threshold: float) -> list[go.Scatter3d | go.Mesh3d]:
+    vertices = [s for s in obj.get("simplices", []) if isinstance(s, dict) and int(s.get("dimension", -1)) == 0 and float(s.get("filtration", 0.0) or 0.0) <= threshold + 1e-12]
+    visible = {str((row.get("simplex") or [""])[0]) for row in vertices}
+    edges = [
+        s for s in obj.get("simplices", [])
+        if isinstance(s, dict)
+        and int(s.get("dimension", -1)) == 1
+        and float(s.get("filtration", 0.0) or 0.0) <= threshold + 1e-12
+        and all(str(v) in visible for v in (s.get("simplex") or [])[:2])
+    ]
+    triangles = [
+        s for s in obj.get("simplices", [])
+        if isinstance(s, dict)
+        and int(s.get("dimension", -1)) == 2
+        and float(s.get("filtration", 0.0) or 0.0) <= threshold + 1e-12
+        and all(str(v) in visible for v in (s.get("simplex") or [])[:3])
+    ]
+    edge_x: list[float | None] = []
+    edge_y: list[float | None] = []
+    edge_z: list[float | None] = []
+    edge_hover: list[str | None] = []
+    for edge in edges:
+        simplex = edge.get("simplex") or []
+        if len(simplex) < 2:
+            continue
+        a, b = str(simplex[0]), str(simplex[1])
+        if a not in coords3 or b not in coords3:
+            continue
+        ax, ay, az = coords3[a]
+        bx, by, bz = coords3[b]
+        label = f"{html.escape(a)} -> {html.escape(b)}<br>filtration={float(edge.get('filtration', 0.0) or 0.0):.4f}<br>type={html.escape(str(edge.get('type', 'edge')))}"
+        edge_x.extend([ax, bx, None])
+        edge_y.extend([ay, by, None])
+        edge_z.extend([az, bz, None])
+        edge_hover.extend([label, label, None])
+    labels = [str((row.get("simplex") or [""])[0]) for row in vertices]
+    vertex_x = [coords3[label][0] for label in labels if label in coords3]
+    vertex_y = [coords3[label][1] for label in labels if label in coords3]
+    vertex_z = [coords3[label][2] for label in labels if label in coords3]
+    vertex_labels = [label for label in labels if label in coords3]
+    vertex_by_label = {str((row.get("simplex") or [""])[0]): row for row in vertices}
+    vertex_hover = [
+        f"<b>{html.escape(label)}</b><br>type={html.escape(str(vertex_by_label.get(label, {}).get('type', 'vertex')))}"
+        f"<br>filtration={float(vertex_by_label.get(label, {}).get('filtration', 0.0) or 0.0):.4f}"
+        f"<br>{_html_clip(vertex_by_label.get(label, {}).get('text', ''), 600)}"
+        for label in vertex_labels
+    ]
+    traces: list[go.Scatter3d | go.Mesh3d] = [
+        go.Scatter3d(
+            x=edge_x,
+            y=edge_y,
+            z=edge_z,
+            mode="lines",
+            line=dict(width=4, color="rgba(125,211,252,0.66)"),
+            hovertext=edge_hover,
+            hoverinfo="text",
+            name="1-simplices",
+        ),
+        go.Scatter3d(
+            x=vertex_x,
+            y=vertex_y,
+            z=vertex_z,
+            mode="markers+text",
+            marker=dict(
+                size=7,
+                color=[float(vertex_by_label.get(label, {}).get("filtration", 0.0) or 0.0) for label in vertex_labels],
+                colorscale="Viridis",
+                showscale=True,
+                colorbar=dict(title="filtration"),
+                line=dict(color="#e8eef8", width=1),
+            ),
+            text=[label[:16] for label in vertex_labels],
+            textposition="top center",
+            hovertext=vertex_hover,
+            hoverinfo="text",
+            name="0-simplices",
+        ),
+    ]
+    mesh_vertices: dict[str, int] = {}
+    mesh_x: list[float] = []
+    mesh_y: list[float] = []
+    mesh_z: list[float] = []
+    tri_i: list[int] = []
+    tri_j: list[int] = []
+    tri_k: list[int] = []
+    for tri in triangles[:400]:
+        simplex = [str(v) for v in (tri.get("simplex") or [])[:3]]
+        if len(simplex) < 3 or any(label not in coords3 for label in simplex):
+            continue
+        indices = []
+        for label in simplex:
+            if label not in mesh_vertices:
+                mesh_vertices[label] = len(mesh_x)
+                x, y, z = coords3[label]
+                mesh_x.append(x)
+                mesh_y.append(y)
+                mesh_z.append(z)
+            indices.append(mesh_vertices[label])
+        tri_i.append(indices[0]); tri_j.append(indices[1]); tri_k.append(indices[2])
+    traces.append(
+        go.Mesh3d(
+            x=mesh_x,
+            y=mesh_y,
+            z=mesh_z,
+            i=tri_i,
+            j=tri_j,
+            k=tri_k,
+            color="rgba(94,234,212,0.22)",
+            opacity=0.36,
+            name="2-simplices",
+            hoverinfo="skip",
+            showscale=False,
+        )
+    )
+    return traces
+
+
+def _display_thresholds(obj: dict[str, object], max_steps: int = 32) -> list[float]:
+    raw = obj.get("thresholds", []) if isinstance(obj, dict) else []
+    values = sorted({float(v) for v in raw if isinstance(v, (int, float)) and math.isfinite(float(v))})
+    if not values:
+        values = sorted(
+            {
+                float(row.get("filtration", 0.0) or 0.0)
+                for row in obj.get("simplices", [])
+                if isinstance(row, dict) and isinstance(row.get("filtration", 0.0), (int, float))
+            }
+        )
+    if not values:
+        return [1.0]
+    if len(values) <= max_steps:
+        return values
+    keep = np.linspace(0, len(values) - 1, max_steps, dtype=int)
+    return [values[int(idx)] for idx in keep]
+
+
+def _write_reasoning_step_complex_index(path: Path, rows: list[dict[str, object]]) -> None:
+    body = "\n".join(
+        "<tr>"
+        f"<td>{int(row['index'])}</td>"
+        f"<td><a href='{html.escape(str(row['file']))}'>{html.escape(str(row['record_id']))}</a></td>"
+        f"<td>{int(row.get('level', 0))}</td>"
+        f"<td>{html.escape(_json_clip(row.get('path', []), 96))}</td>"
+        f"<td>{html.escape(_json_clip(row.get('summary', {}), 140))}</td>"
+        "</tr>"
+        for row in rows
+    ) or "<tr><td colspan='5'>No reasoning-step complexes were generated.</td></tr>"
+    path.write_text(
+        f"""<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Reasoning step simplicial complex maps</title>
+  <style>
+    :root {{ color-scheme: dark; }}
+    body {{ margin: 0; background: #090b12; color: #e8eef8; font-family: Inter, ui-sans-serif, system-ui, sans-serif; }}
+    main {{ max-width: 1180px; margin: 0 auto; padding: 32px 24px; }}
+    table {{ width: 100%; border-collapse: collapse; background: #101623; border: 1px solid rgba(148,163,184,0.25); }}
+    th, td {{ padding: 10px 12px; border-bottom: 1px solid rgba(148,163,184,0.15); text-align: left; font-size: 13px; vertical-align: top; }}
+    th {{ color: #99f6e4; }}
+    a {{ color: #7dd3fc; text-decoration: none; }}
+    a:hover {{ text-decoration: underline; }}
+    p {{ color: #9fb3c8; line-height: 1.55; }}
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Reasoning step filtered simplicial complex maps</h1>
+    <p>Each row opens a separate 3D PCoA/MDS radius-filtered complex for one sampled graph-of-thought state.  These are deliberately separate from the embedding-space trajectory map.</p>
+    <table>
+      <thead><tr><th>index</th><th>complex map</th><th>level</th><th>path</th><th>summary</th></tr></thead>
+      <tbody>{body}</tbody>
+    </table>
+  </main>
+</body>
+</html>
+""",
+        encoding="utf-8",
+    )
 
 
 def _got_microstep_entries(
@@ -1943,16 +2390,54 @@ def write_graphcg_training_visualizations(model, output_dir: str | Path) -> dict
 
 
 def _pca3(values: np.ndarray) -> np.ndarray:
+    coords, _report = _pca3_with_report(values)
+    return coords
+
+
+def _pca3_with_report(values: np.ndarray) -> tuple[np.ndarray, dict[str, object]]:
     values = np.asarray(values, dtype=float)
     if values.ndim != 2:
         values = values.reshape((len(values), -1))
     if values.shape[0] < 2:
-        return np.pad(values[:, :1], ((0, 0), (0, 2)), constant_values=0.0)
+        coords = np.pad(values[:, :1], ((0, 0), (0, 2)), constant_values=0.0)
+        return coords, {
+            "coordinate_source": "model graph_state embeddings",
+            "method": "sklearn PCA",
+            "n_samples": int(values.shape[0]),
+            "embedding_dim": int(values.shape[1]) if values.ndim == 2 else 0,
+            "explained_variance_ratio": [1.0, 0.0, 0.0],
+            "pairwise_distance_correlation": 1.0,
+            "normalized_stress": 0.0,
+        }
     n_components = min(3, values.shape[0], values.shape[1])
-    coords = PCA(n_components=n_components).fit_transform(values)
+    pca_model = PCA(n_components=n_components)
+    coords = pca_model.fit_transform(values)
     if coords.shape[1] < 3:
         coords = np.pad(coords, ((0, 0), (0, 3 - coords.shape[1])), constant_values=0.0)
-    return coords
+    original_dist = _pairwise_euclidean(values)
+    projected_dist = _pairwise_euclidean(coords)
+    mask = np.triu(np.ones_like(original_dist, dtype=bool), k=1)
+    target = original_dist[mask]
+    realized = projected_dist[mask]
+    if target.size >= 2 and float(np.std(target)) > 1e-12 and float(np.std(realized)) > 1e-12:
+        corr = float(np.corrcoef(target, realized)[0, 1])
+    else:
+        corr = 1.0
+    denom = max(float(np.dot(target, target)), 1e-12)
+    stress = math.sqrt(float(np.dot(target - realized, target - realized)) / denom)
+    ratios = [float(v) for v in getattr(pca_model, "explained_variance_ratio_", np.asarray([], dtype=float)).tolist()]
+    if len(ratios) < 3:
+        ratios.extend([0.0] * (3 - len(ratios)))
+    return coords, {
+        "coordinate_source": "model graph_state embeddings",
+        "method": "sklearn PCA",
+        "n_samples": int(values.shape[0]),
+        "embedding_dim": int(values.shape[1]),
+        "explained_variance_ratio": ratios[:3],
+        "explained_variance_ratio_sum3": float(sum(ratios[:3])),
+        "pairwise_distance_correlation": corr,
+        "normalized_stress": stress,
+    }
 
 
 def _infer_candidate_levels(candidates: list[dict[str, object]], ids: list[str]) -> list[int]:

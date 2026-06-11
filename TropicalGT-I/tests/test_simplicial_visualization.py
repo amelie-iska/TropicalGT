@@ -129,6 +129,10 @@ def test_got_trajectory_visualization_renders_simplicial_panel_and_nll_surface(t
     }
     paths = write_got_trajectory_visualization(scaling, tmp_path)
     html = Path(paths["got_trajectory_3d"]).read_text(encoding="utf-8")
+    embedding_map_html = Path(paths["got_embedding_map_3d"]).read_text(encoding="utf-8")
+    full_complex_html = Path(paths["got_full_trajectory_complex"]).read_text(encoding="utf-8")
+    step_index_html = Path(paths["got_reasoning_step_complex_index"]).read_text(encoding="utf-8")
+    step_manifest = json.loads(Path(paths["got_reasoning_step_complex_manifest"]).read_text(encoding="utf-8"))
     payload = json.loads(Path(paths["got_payloads"]).read_text(encoding="utf-8"))
     assert "simplicial-object-panel" in html
     assert "hover-simplicial-card" in html
@@ -150,6 +154,20 @@ def test_got_trajectory_visualization_renders_simplicial_panel_and_nll_surface(t
     assert payload["nodes"][1]["decoded_argmax"] == "output"
     assert payload["nodes"][1]["level"] == 1
     assert payload["nodes"][1]["filtered_simplicial_object"]["summary"]["num_vertices"] >= 1
+    assert payload["embedding_pca_diagnostics"]["coordinate_source"] == "model graph_state embeddings"
+    assert "Graph-of-thought embedding-space trajectory map" in embedding_map_html
+    assert "actual graph_state PCA" in embedding_map_html
+    assert "distance corr" in embedding_map_html
+    assert "Full graph-of-thought trajectory filtered simplicial complex" in full_complex_html
+    assert "Filtration radius" in full_complex_html
+    assert "play filtration" in full_complex_html
+    assert "Reasoning step filtered simplicial complex maps" in step_index_html
+    assert len(step_manifest["steps"]) == 4
+    first_step = tmp_path / "reasoning_step_complex_maps" / "reasoning_step_000.html"
+    assert first_step.exists()
+    first_step_html = first_step.read_text(encoding="utf-8")
+    assert "Filtration radius" in first_step_html
+    assert "play filtration" in first_step_html
 
 
 def test_simplicial_svg_wraps_long_topological_paths():

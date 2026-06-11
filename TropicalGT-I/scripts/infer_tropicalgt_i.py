@@ -27,6 +27,10 @@ def main() -> None:
     parser.add_argument("--scale-depth", type=int, default=None)
     parser.add_argument("--scale-width", type=int, default=None)
     parser.add_argument("--scale-branch-factor", type=int, default=None)
+    parser.add_argument("--scale-stochastic-actions", action="store_true")
+    parser.add_argument("--scale-sampling-temperature", type=float, default=None)
+    parser.add_argument("--scale-sampling-exploration", type=float, default=None)
+    parser.add_argument("--scale-sampling-seed", type=int, default=None)
     parser.add_argument("--output", default="")
     parser.add_argument("--audit-output-dir", default="")
     parser.add_argument("--audit-level", choices=["none", "basic", "topology", "algebra", "full"], default="none")
@@ -68,6 +72,14 @@ def main() -> None:
     scale_depth = int(scaling_cfg.get("depth", 0) if args.scale_depth is None else args.scale_depth)
     scale_width = int(scaling_cfg.get("width", 3) if args.scale_width is None else args.scale_width)
     scale_branch_factor = int(scaling_cfg.get("branch_factor", 2) if args.scale_branch_factor is None else args.scale_branch_factor)
+    scale_stochastic = bool(scaling_cfg.get("stochastic_actions", False) or args.scale_stochastic_actions)
+    scale_temperature = float(
+        scaling_cfg.get("sampling_temperature", 1.0) if args.scale_sampling_temperature is None else args.scale_sampling_temperature
+    )
+    scale_exploration = float(
+        scaling_cfg.get("sampling_exploration", 0.0) if args.scale_sampling_exploration is None else args.scale_sampling_exploration
+    )
+    scale_seed = int(scaling_cfg.get("sampling_seed", cfg.get("seed", 1729)) if args.scale_sampling_seed is None else args.scale_sampling_seed)
     x, y, gb, _ = collate_records(
         [rec],
         int(cfg.get("seq_len", 128)),
@@ -135,6 +147,10 @@ def main() -> None:
             audit_level=args.audit_level,
             ph_backend=args.audit_ph_backend,
             audit_max_simplices=args.audit_max_simplices,
+            stochastic_actions=scale_stochastic,
+            sampling_temperature=scale_temperature,
+            sampling_exploration=scale_exploration,
+            sampling_seed=scale_seed,
         )
     if args.memory_bank:
         bank = AnalogicalMemoryBank(args.memory_bank, max_records=args.memory_max_records)
