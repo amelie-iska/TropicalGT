@@ -189,3 +189,110 @@ Current report:
 - gate: `audit_metric_provenance.py --fail-on-uncovered` passes.
 
 The default scan covers active source, scripts, READMEs, and this current visualization-audit note. Historical planning logs are not part of the default gate because they intentionally preserve older iteration notes; scan them explicitly with `--scan planning` when reviewing archival status language.
+
+## 2026-06-11 Iteration: Analogical Simplicial-Map Honesty
+
+Implemented after the critique that the analogical-memory figure looked too regular and did not make the filtered-complex map readable.
+
+- The analogical retrieval artifact now builds domain/codomain filtered complexes from the actual query and memory trajectory embeddings used by the audit payload.
+- The displayed correspondence is checked simplex-by-simplex on the visible filtered skeleton:
+  - preserved vertex correspondences are always shown,
+  - preserved 1-simplex/2-simplex correspondences are counted separately,
+  - failed edge/face correspondences are recorded and labeled as failures rather than silently rendered as a simplicial map.
+- The 3D plot now separates:
+  - domain complex vertices,
+  - codomain complex vertices,
+  - preserved simplex-map edges,
+  - vertex-only correspondences where the displayed edge/face condition fails,
+  - an explicit diagnostic table with domain/codomain simplex counts, preserved counts, failed counts, vectorized persistence distance, and warning text.
+- Hover text was rewritten around the model record id, reasoning path, model output/preview text, NLL/reward, filtration, and simplex-map status.
+
+Remaining limitation:
+
+- The map is a nearest-neighbor/persistence-feature retrieval diagnostic over sampled trajectory complexes. It is not yet a learned functor between derived categories, and it is explicitly labeled as such. A true derived-equivalence certificate still requires a backend for minimal multigraded resolutions and chain-map verification.
+
+## 2026-06-11 Iteration: Optional Meet-In-The-Middle Decoding
+
+Implemented the requested meet-in-the-middle toggle from `references/2303.07295v1.pdf` as a graph-aware TropicalGT-I adaptation.
+
+- Added `TropicalGT-I/src/tropicalgt/decoding.py` with:
+  - `MeetInMiddleConfig`,
+  - `meet_in_middle_config`,
+  - `encode_record_bytes_reverse`,
+  - `meet_in_middle_batch`.
+- Added an off-by-default `meet_in_middle` config block to every active TropicalGT-I config.
+- The implemented mode is `shared_weight_reverse_pass`:
+  - graph-conditioned byte records are scored left-to-right and right-to-left by the same TropicalGT-I checkpoint,
+  - causal DAG graphs keep their topological autoregressive order before reversal,
+  - non-causal/cyclic graphs keep the deterministic seeded random autoregressive order before reversal,
+  - the join token is evaluated at the configured split point.
+- Logged/evaluated metrics include:
+  - `mim_reverse_nll`,
+  - `mim_bidirectional_nll`,
+  - `mim_agreement_loss`,
+  - `mim_join_token_match_rate`,
+  - `mim_true_meet_logprob_mean`,
+  - `mim_candidate_count`,
+  - `mim_loss`,
+  - `mim_agreement_weight`,
+  - `mim_reverse_nll_weight`.
+- Training only adds the MIM objective when `agreement_weight` or `reverse_nll_weight` is nonzero. This is deliberate because the current 1760-dimensional training run already consumes about 20 GiB VRAM on the RTX 4090.
+- Evaluation and inference expose CLI overrides:
+  - `eval_tropicalgt_i.py --meet-in-middle` / `--no-meet-in-middle`,
+  - `infer_tropicalgt_i.py --meet-in-middle` / `--no-meet-in-middle`.
+- W&B priorities now reserve `09_meet_in_middle` for MIM diagnostics, shifting system/optimizer namespaces to `10_system` and `11_optimization`.
+
+Verification:
+
+- Focused tests passed:
+  - `pytest TropicalGT-I/tests/test_meet_in_middle_decoding.py TropicalGT-I/tests/test_losses_and_model.py TropicalGT-I/tests/test_training_metrics.py -q`
+  - result: `13 passed`.
+- Provenance coverage passed after registering the MIM metrics:
+  - `audit_metric_provenance.py --fail-on-uncovered`
+  - result: all active findings covered.
+
+Current limitation:
+
+- This is not yet a separately trained bidirectional pair of LTR/RTL language models. It is an honest shared-weight reverse-pass implementation compatible with the current artifact-size and VRAM constraints. A separate reverse checkpoint can be added later through `reverse_model_path` once the export budget is re-audited.
+
+## 2026-06-11 Iteration: Sample-First Browser Index
+
+Implemented after the critique that the browser view should be sample-based rather than artifact-category-based.
+
+- Added `TropicalGT-I/scripts/build_sample_browser_index.py`.
+- The builder scans an audit root for every sampled row/input directory with `inference_scaling_tree.json`.
+- It emits `codex_browser_index.html` where each sampled row/input is the top-level unit.
+- Each sample card includes:
+  - record id prefix and directory,
+  - candidate/state count,
+  - edge count,
+  - growth-level count,
+  - NLL min/std,
+  - PCA distance-correlation,
+  - input/target/model-output preview,
+  - NLL-progress summary,
+  - analogical-map warning/failure counts.
+- Each sample card links to that sample's:
+  - GoT NLL landscape,
+  - embedding map,
+  - full trajectory complex,
+  - reasoning-step complexes,
+  - persistence barcode,
+  - Betti/free-resolution growth,
+  - vectorized persistence representations,
+  - actual persistence landscapes,
+  - analogical simplicial map,
+  - analogical top-k index,
+  - GraphCG direction audit,
+  - tropical support audit.
+- `validate_interactive_audit_artifacts.py` now optionally validates `codex_browser_index.html` for sample cards, per-sample artifact buttons, and broken relative links.
+- Current local browser mirror:
+  - `/Users/amelieschreiber/Documents/LaTeX-projects/TropicalGT-audit-browser/step_00000250/got_audit/codex_browser_index.html`
+- Current remote generated dashboard:
+  - `TropicalGT-I/outputs/train/periodic/step_00000250/got_audit/codex_browser_index.html`
+
+Browser check:
+
+- Codex browser loaded `http://127.0.0.1:8765/codex_browser_index.html`.
+- The page reported `3` sample cards and `39` per-sample artifact buttons.
+- Clicking `Sample 01 / GoT NLL landscape` correctly loaded `example_01/got_trajectory_pca_3d.html` and marked `Sample 01` active.

@@ -127,8 +127,8 @@ def _row(root: Path, name: str) -> Path:
     ]
     _write(row / "reasoning_step_complex_maps/manifest.json", json.dumps({"steps": steps}))
     _write(row / "analogical_simplicial_maps.json", json.dumps({"maps": [
-        {"codomain_complex_source": "trajectory_filtered_simplicial_object", "edge_preservation_rate": 0.25, "domain_simplex_tree": {"backend": "gudhi.SimplexTree"}, "codomain_simplex_tree": {"backend": "gudhi.SimplexTree"}, "displayed_domain_vertices": 2, "displayed_codomain_vertices": 2},
-        {"codomain_complex_source": "trajectory_filtered_simplicial_object", "edge_preservation_rate": 0.5, "domain_simplex_tree": {"backend": "gudhi.SimplexTree"}, "codomain_simplex_tree": {"backend": "gudhi.SimplexTree"}, "displayed_domain_vertices": 2, "displayed_codomain_vertices": 2},
+        {"codomain_complex_source": "trajectory_filtered_simplicial_object", "edge_preservation_rate": 0.25, "domain_simplex_tree": {"backend": "gudhi.SimplexTree"}, "codomain_simplex_tree": {"backend": "gudhi.SimplexTree"}, "displayed_domain_vertices": 2, "displayed_codomain_vertices": 2, "is_simplicial_on_displayed_skeleton": False, "preserved_edge_pairs": [{"query_edge": ["a", "b"], "memory_edge": ["x", "y"]}], "failed_edge_pairs": [{"query_edge": ["b", "c"], "memory_edge": ["y", "z"]}], "preserved_edge_query_vertices": ["a", "b"]},
+        {"codomain_complex_source": "trajectory_filtered_simplicial_object", "edge_preservation_rate": 0.5, "domain_simplex_tree": {"backend": "gudhi.SimplexTree"}, "codomain_simplex_tree": {"backend": "gudhi.SimplexTree"}, "displayed_domain_vertices": 2, "displayed_codomain_vertices": 2, "is_simplicial_on_displayed_skeleton": False, "preserved_edge_pairs": [{"query_edge": ["a", "b"], "memory_edge": ["x", "y"]}], "failed_edge_pairs": [], "preserved_edge_query_vertices": ["a", "b"]},
     ]}))
     _write(
         row / "tropical_support_payload.json",
@@ -178,7 +178,7 @@ def _row(root: Path, name: str) -> Path:
         "tropical_support_heatmap.html": _html("Tropical active support", "Plotly.newPlot observed supports only top-support collapse rate"),
         "graphcg_direction_cosines.html": _html("GraphCG full-rank direction audit"),
         "analogical_memory_topk_index.html": _html("Analogical top-k retrieval", "table"),
-        "analogical_memory_map_02.html": _html("Analogical simplicial map trajectory-complex map", "Plotly.newPlot slider filters domain and codomain sliders binary filtered-complex map"),
+        "analogical_memory_map_02.html": _html("Analogical simplicial map trajectory-complex map", "Plotly.newPlot slider filters domain and codomain sliders binary filtered-complex map vertex-only correspondences preserved 1-simplex map"),
         "trajectory_persistence/persistence_barcode.html": _html("Trajectory persistence barcode"),
         "trajectory_persistence/persistence_module_betti.html": _html("Trajectory persistence Betti", "Plotly.newPlot 2D matrix decorative 3D"),
         "trajectory_persistence/persistence_representations.html": _html("Trajectory GUDHI persistence vectorization", "Plotly.newPlot Fast train/eval features"),

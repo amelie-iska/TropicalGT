@@ -9,6 +9,7 @@ sys.path.insert(0, str(ROOT / "src"))
 
 import torch
 from tropicalgt.algebra import compute_topological_algebra_report
+from tropicalgt.decoding import meet_in_middle_batch
 from tropicalgt.diagnostics import gflownet_diagnostics, graphcg_diagnostics, record_diagnostics
 from tropicalgt.memory import AnalogicalMemoryBank, memory_records_from_scaling_report, query_signature_from_report
 from tropicalgt.metrics import batch_bpb_metrics
@@ -47,8 +48,15 @@ def main() -> None:
     parser.add_argument("--memory-save", action="store_true", help="Append inference-scaling candidates to the memory bank")
     parser.add_argument("--memory-retrieve-top-k", type=int, default=0, help="Retrieve this many analogical memories")
     parser.add_argument("--memory-max-records", type=int, default=2048)
+    parser.add_argument("--meet-in-middle", action="store_true", help="Enable graph-aware meet-in-the-middle reverse-pass diagnostics")
+    parser.add_argument("--no-meet-in-middle", action="store_true", help="Disable meet-in-the-middle diagnostics even if enabled in config")
     args = parser.parse_args()
     cfg = load_config(args.config)
+    mim_cfg = dict(cfg.get("meet_in_middle", {}))
+    if args.meet_in_middle:
+        mim_cfg["enabled"] = True
+    if args.no_meet_in_middle:
+        mim_cfg["enabled"] = False
     if args.audit_all and args.audit_level == "none":
         args.audit_level = "full"
     if args.audit_all and args.audit_output_dir == "":
@@ -133,6 +141,30 @@ def main() -> None:
         "graphcg": graphcg_diagnostics(model, out["graph_state"]),
         "compression": batch_bpb_metrics(out["nll"], y, gb, [rec], float(cfg.get("graph_bpb_side_weight", 1.0))),
     }
+    if bool(mim_cfg.get("enabled", False)):
+        mim_report = meet_in_middle_batch(
+            model,
+            [rec],
+            tok,
+            int(cfg.get("seq_len", 128)),
+            device,
+            graph_autoregressive=bool(cfg.get("graph_autoregressive_decoding", True)),
+            seed=int(cfg.get("seed", 1729)),
+            config=mim_cfg,
+            forward_logits=out.get("logits"),
+            forward_nll=out.get("nll"),
+            require_grad=False,
+        )
+        result["meet_in_middle"] = {
+            "enabled": True,
+            "mode": mim_report.get("mode", ""),
+            "shared_weight_reverse_pass": bool(mim_report.get("metrics", {}).get("mim_shared_weight_reverse_pass", 0.0)),
+            "metrics": mim_report.get("metrics", {}),
+            "records": mim_report.get("records", []),
+            "note": "Shared-weight reverse-pass diagnostic unless a separately trained right-to-left checkpoint is configured.",
+        }
+    else:
+        result["meet_in_middle"] = {"enabled": False}
     if scale_depth > 0:
         result["inference_scaling"] = run_inference_scaling(
             model,

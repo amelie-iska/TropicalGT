@@ -25,8 +25,15 @@ def main() -> None:
     parser.add_argument("--render-visualizations", action="store_true")
     parser.add_argument("--visualization-output-dir", default="")
     parser.add_argument("--viz-limit", type=int, default=None)
+    parser.add_argument("--meet-in-middle", action="store_true", help="Enable config-compatible meet-in-the-middle diagnostics for this eval run")
+    parser.add_argument("--no-meet-in-middle", action="store_true", help="Disable meet-in-the-middle diagnostics even if enabled in config")
     args = parser.parse_args()
     cfg = load_config(args.config)
+    mim_cfg = dict(cfg.get("meet_in_middle", {}))
+    if args.meet_in_middle:
+        mim_cfg["enabled"] = True
+    if args.no_meet_in_middle:
+        mim_cfg["enabled"] = False
     device = torch.device("cuda" if torch.cuda.is_available() and cfg.get("device", "auto") != "cpu" else "cpu")
     model, obj = load_checkpoint(args.checkpoint, device)
     ds = make_dataset_from_config(cfg, args.split)
@@ -45,6 +52,7 @@ def main() -> None:
         audit_max_simplices=int(args.audit_max_simplices or cfg.get("audit_max_simplices", 1024)),
         graph_autoregressive=bool(cfg.get("graph_autoregressive_decoding", True)),
         ar_seed=int(cfg.get("seed", 1729)),
+        meet_in_middle=mim_cfg,
     )
     if args.render_visualizations:
         vis_dir = Path(args.visualization_output_dir or cfg.get("output_dir", "TropicalGT-I/outputs/smoke")) / f"eval_{args.split}_visualizations"

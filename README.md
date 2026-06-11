@@ -133,8 +133,27 @@ W&B scalar metrics are organized by prefixed priority groups rather than logged 
 - `06_graph_data`: graph-token counts, node/edge ratios, causal/random graph AR rates, OAI source rate.
 - `07_algebra_topology`: persistence, Betti, free-resolution, derived-signature summaries.
 - `08_memory`: analogical memory query and bank metrics.
-- `09_system`: VRAM, step time, examples/sec, tokens/sec.
-- `10_optimization`: learning rate, gradient norm, sampler settings.
+- `09_meet_in_middle`: optional MIM reverse-pass diagnostics, bidirectional NLL, join-token agreement, and MIM objective weights.
+- `10_system`: VRAM, step time, examples/sec, tokens/sec.
+- `11_optimization`: learning rate, gradient norm, sampler settings.
+
+### Meet-in-the-middle decoding toggle
+
+`meet_in_middle` is an off-by-default config block in every TropicalGT-I config:
+
+```json
+"meet_in_middle": {
+  "enabled": false,
+  "mode": "shared_weight_reverse_pass",
+  "split_ratio": 0.5,
+  "agreement_weight": 0.0,
+  "reverse_nll_weight": 0.0,
+  "max_records": 0,
+  "reverse_model_path": ""
+}
+```
+
+When enabled, TropicalGT-I runs a graph-aware adaptation of Meet-in-the-Middle decoding: the same graph-autoregressive byte stream is scored left-to-right and right-to-left, using causal topological order for DAGs and seeded random order for non-causal graphs. The current implementation uses a shared TropicalGT-I checkpoint for the reverse pass unless `reverse_model_path` is supplied later. It reports `mim_reverse_nll`, `mim_bidirectional_nll`, `mim_agreement_loss`, `mim_join_token_match_rate`, and per-record join diagnostics. Nonzero `agreement_weight` or `reverse_nll_weight` adds the MIM objective during training, so reduce batch/context first on the 1760-dim train config if GPU headroom is tight. For one-off checks, use `eval_tropicalgt_i.py --meet-in-middle` or `infer_tropicalgt_i.py --meet-in-middle`.
 
 Local W&B run directories are disposable and should be cleaned after smoke iterations:
 
@@ -179,7 +198,7 @@ The current full training config is sized for the OpenAI Parameter-Golf 16MB art
 
 - model width/hidden size `1760`, memory width `220`, about `38.6M` parameters before int8+zlib export.
 - estimated stripped competition export `15,633,708` bytes, leaving about `366,292` bytes under the `16,000,000` byte cap.
-- `seq_len: 1024`, `batch_size: 80`, `checkpoint_every: 5000`, `max_steps: 20000`.
+- `seq_len: 1024`, `batch_size: 68`, `checkpoint_every: 250`, `max_steps: 20000`.
 - exact blockwise tropical ring attention over graph tokens with `graph_tropical_block_size: 32`.
 - pooled long-context sequence tropical ring attention with `sequence_tropical_max_tokens: 32`, `sequence_tropical_block_size: 16`, and residual weight `0.125`.
 - graph-aware autoregressive decoding: causal topological order for DAGs, deterministic random order for non-causal/cyclic graphs.
@@ -284,6 +303,15 @@ TropicalGT-I/scripts/infer_tropicalgt_i.py \
 ```
 
 This writes a dark-mode graph-of-thought PCA trajectory whose nodes are reasoning candidates and whose edges are parent-child expansions. Hovering over a node renders the filtered simplicial complex attached to that reasoning step directly in a cursor-following hover card and in the side panel. The 3D trajectory includes three labeled NLL layers: a smooth projected NLL/fitness landscape over actual model `graph_state` PCA coordinates plus rendered microstep anchors with grid cells pinned to measured anchor values, a local sample-supported interpolating NLL sheet that passes through those anchors, and an actual sampled NLL landscape mesh through sampled reasoning states, with residual/provenance metadata in JSON. The persistence bundle includes barcodes, Betti/free-resolution growth, `persistence_representations.html` for GUDHI vector summaries, and `persistence_landscapes.html` for the actual GUDHI landscape functions `lambda_k(t)` by trajectory-growth level. The JSON payload stores the full complex, multiparameter persistence report, vectorized persistence summaries, commutative-algebra proxies, derived-equivalence signature, GraphCG direction diagnostics, NLL-surface metadata, NLL-progress diagnostics, and analogical memory retrieval details.
+
+For Codex/browser review of a periodic audit, generate the sample-first dashboard so each sampled row/input is the top-level unit:
+
+```bash
+PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python \
+TropicalGT-I/scripts/build_sample_browser_index.py \
+TropicalGT-I/outputs/train/periodic/step_00000250/got_audit \
+--output TropicalGT-I/outputs/train/periodic/step_00000250/got_audit/codex_browser_index.html
+```
 
 Metric and visualization provenance can be audited with:
 

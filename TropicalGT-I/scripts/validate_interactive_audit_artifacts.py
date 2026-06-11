@@ -127,8 +127,8 @@ def _validate_file_set(row_dir: Path, errors: list[str]) -> dict[str, str]:
     return files
 
 
-def _validate_browser_index(row_dir: Path, errors: list[str]) -> dict[str, Any]:
-    index = row_dir / "browser_index.html"
+def _validate_html_index(row_dir: Path, file_name: str, errors: list[str]) -> dict[str, Any]:
+    index = row_dir / file_name
     if not index.exists():
         return {"available": False}
     html = _read_text(index)
@@ -140,8 +140,22 @@ def _validate_browser_index(row_dir: Path, errors: list[str]) -> dict[str, Any]:
         target = (row_dir / ref).resolve()
         if not target.exists():
             broken.append(ref)
-    _assert(not broken, errors, f"browser_index.html has broken relative refs: {broken[:8]}")
+    _assert(not broken, errors, f"{file_name} has broken relative refs: {broken[:8]}")
     return {"available": True, "relative_refs": len([r for r in refs if not r.startswith(("#", "http://", "https://", "file://", "data:"))]), "broken_refs": broken}
+
+
+def _validate_browser_index(row_dir: Path, errors: list[str]) -> dict[str, Any]:
+    return _validate_html_index(row_dir, "browser_index.html", errors)
+
+
+def _validate_codex_browser_index(row_dir: Path, errors: list[str]) -> dict[str, Any]:
+    result = _validate_html_index(row_dir, "codex_browser_index.html", errors)
+    if result.get("available"):
+        html = _read_text(row_dir / "codex_browser_index.html")
+        _assert("Sample-first audit" in html, errors, "codex_browser_index.html is not sample-first")
+        _assert("section class=\"sample\"" in html, errors, "codex_browser_index.html has no sample cards")
+        _assert("button class=\"artifact\"" in html, errors, "codex_browser_index.html has no per-sample artifact buttons")
+    return result
 
 
 def validate_row(row_dir: Path, *, min_candidates: int = 8, min_depth: int = 2, nll_residual_tol: float = 1e-6) -> dict[str, Any]:
@@ -320,8 +334,13 @@ def validate_row(row_dir: Path, *, min_candidates: int = 8, min_depth: int = 2, 
         _assert(all(isinstance(row.get("domain_simplex_tree"), dict) and row["domain_simplex_tree"].get("backend") == "gudhi.SimplexTree" for row in maps if isinstance(row, dict)), errors, "analogical maps are missing domain GUDHI SimplexTree provenance")
         _assert(all(isinstance(row.get("codomain_simplex_tree"), dict) and row["codomain_simplex_tree"].get("backend") == "gudhi.SimplexTree" for row in maps if isinstance(row, dict)), errors, "analogical maps are missing codomain GUDHI SimplexTree provenance")
         _assert(all(_finite_float(row.get("displayed_domain_vertices"), 0.0) > 0 and _finite_float(row.get("displayed_codomain_vertices"), 0.0) > 0 for row in maps if isinstance(row, dict)), errors, "analogical maps are missing displayed vertex counts")
+        _assert(all("is_simplicial_on_displayed_skeleton" in row for row in maps if isinstance(row, dict)), errors, "analogical maps are missing displayed-skeleton simplicial status")
+        _assert(all(isinstance(row.get("preserved_edge_pairs"), list) and isinstance(row.get("failed_edge_pairs"), list) for row in maps if isinstance(row, dict)), errors, "analogical maps are missing preserved/failed edge evidence")
+        _assert(all(isinstance(row.get("preserved_edge_query_vertices"), list) for row in maps if isinstance(row, dict)), errors, "analogical maps are missing preserved-edge vertex sets")
         edge_rates = {_finite_float(row.get("edge_preservation_rate"), -1.0) for row in maps if isinstance(row, dict)}
         _assert(len(edge_rates) > 1 or len(maps) <= 1, errors, "analogical map edge-preservation rates are all identical")
+        analogical_html = _read_text(row_dir / REQUIRED_HTML["analogical_map"][0]) if (row_dir / REQUIRED_HTML["analogical_map"][0]).exists() else ""
+        _assert("vertex-only correspondences" in analogical_html and "preserved 1-simplex map" in analogical_html, errors, "analogical map HTML does not distinguish preserved simplices from vertex-only correspondences")
 
     steps = [row for row in manifest.get("steps", []) if isinstance(row, dict)]
     _assert(len(steps) == len(candidates), errors, "reasoning-step complex map count does not match candidates")
@@ -335,6 +354,7 @@ def validate_row(row_dir: Path, *, min_candidates: int = 8, min_depth: int = 2, 
             _assert("Filtration radius" in step_html and "play filtration" in step_html, errors, f"{step_file.name} missing filtration controls")
 
     browser_index = _validate_browser_index(row_dir, errors)
+    codex_browser_index = _validate_codex_browser_index(row_dir, errors)
     nll_values = np.asarray([_finite_float(row.get("nll")) for row in nodes], dtype=float) if nodes else np.asarray([])
     embedding_dist = _pairwise_euclidean(embeddings) if embeddings.ndim == 2 else np.zeros((0, 0))
     tri = embedding_dist[np.triu_indices(len(embedding_dist), 1)] if len(embedding_dist) > 1 else np.asarray([])
@@ -345,6 +365,7 @@ def validate_row(row_dir: Path, *, min_candidates: int = 8, min_depth: int = 2, 
         "errors": errors,
         "files": files,
         "browser_index": browser_index,
+        "codex_browser_index": codex_browser_index,
         "candidates": len(candidates),
         "edges": len(edges),
         "levels": [int(v) for v in levels],

@@ -59,6 +59,15 @@
     "wall_margin_threshold": 0.001,
     "memory_dim": 32
   },
+  "meet_in_middle": {
+    "enabled": false,
+    "mode": "shared_weight_reverse_pass",
+    "split_ratio": 0.5,
+    "agreement_weight": 0.0,
+    "reverse_nll_weight": 0.0,
+    "max_records": 0,
+    "reverse_model_path": ""
+  },
   "inference_scaling": {
     "depth": 2,
     "width": 3,

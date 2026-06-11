@@ -19,7 +19,7 @@ The graph structural byte budget is derived from the actual TokenGT graph tuple:
 
 All training records are graph structured. The moved TropicalGT reasoning shards carry graph JSON and also receive deterministic sequential text path graphs. The OpenAI Parameter-Golf FineWeb stream is loaded from `external/parameter-golf/data/datasets/fineweb10B_sp1024` and decoded with `external/parameter-golf/data/tokenizers/fineweb_1024_bpe.model`; every sampled token window becomes a causal sequential DAG before TokenGT tokenization. Graphs with causal DAG structure are decoded autoregressively in topological order. Cyclic or explicitly non-causal graphs use deterministic seeded random autoregressive order.
 
-The current full `configs/train.json` model is cap-sized for Parameter Golf: width/hidden size `1760`, memory width `220`, about `38.6M` raw parameters, and an estimated stripped int8+zlib competition export of `15,633,708` bytes. The CUDA training shape is `seq_len: 1024`, `batch_size: 80`, and `checkpoint_every: 5000`; the latest hybrid readiness dry run allocated `21,484 MB` on the RTX 4090 and passed all gates. Tropical ring attention is used in two places without duplicating parameters: exact blockwise graph-token attention (`graph_tropical_block_size: 32`) and pooled long-context sequence attention (`sequence_tropical_max_tokens: 32`, `sequence_tropical_block_size: 16`, residual weight `0.125`).
+The current full `configs/train.json` model is cap-sized for Parameter Golf: width/hidden size `1760`, memory width `220`, about `38.6M` raw parameters, and an estimated stripped int8+zlib competition export of `15,633,708` bytes. The CUDA training shape is `seq_len: 1024`, `batch_size: 68`, and `checkpoint_every: 250`; recent readiness/live runs allocate roughly `18-20 GiB` on the RTX 4090. Tropical ring attention is used in two places without duplicating parameters: exact blockwise graph-token attention (`graph_tropical_block_size: 32`) and pooled long-context sequence attention (`sequence_tropical_max_tokens: 32`, `sequence_tropical_block_size: 16`, residual weight `0.125`).
 
 W&B metrics are logged in priority-ordered namespaces so the dashboard opens around the important quantities first:
 
@@ -30,7 +30,7 @@ W&B metrics are logged in priority-ordered namespaces so the dashboard opens aro
 - `04_gflownet`: trajectory-balance and reward diagnostics.
 - `05_graphcg`: full-rank GraphCG diagnostics and direction spectra.
 - `06_graph_data`: graph-token counts, causal/random graph AR rates, and OAI source rate.
-- `07_algebra_topology`, `08_memory`, `09_system`, and `10_optimization`: topology/algebra, analogical memory, throughput/VRAM, and optimizer/sampler metrics.
+- `07_algebra_topology`, `08_memory`, `09_meet_in_middle`, `10_system`, and `11_optimization`: topology/algebra, analogical memory, optional bidirectional decoding, throughput/VRAM, and optimizer/sampler metrics.
 
 The online project has been cleaned so only the latest useful smoke run remains (`pzpw99m7`). Local `wandb/` directories are disposable smoke artifacts and can be removed after syncing useful runs.
 
@@ -39,6 +39,8 @@ All tropical margins, GraphCG factors, GFlowNet rewards, persistence summaries, 
 Run `scripts/analyze_bpb_ablations.py` on one or more `train_report.json` files to generate JSON/Markdown/HTML screens ranking which logged metrics correlate with `bpb`, `graph_bpb`, `eval_bpb`, and `eval_graph_bpb`. The report also emits best-by-target summaries with the lowest run, baseline delta, runner-up, and runner-up margin for each BPB target. Use those rankings to choose matched ablations; do not treat correlations as causal wins. Run `scripts/run_bpb_ablation_grid.py` to generate same-seed variants such as `no_graphcg`, `no_gflownet`, `no_certificate`, `no_tropical_regularizers`, and `no_auxiliary`, optionally train them in sequence, and immediately analyze their BPB deltas.
 
 Use `configs/gpu_ablation.json` for bounded data-backed RTX 4090 ablation ladders between smoke tests and the full `configs/train.json` run. It keeps the moved parquet dataset, TokenGT graphification, topology audits, graph-BPB accounting, and dark Plotly correlation report, but caps train/validation records and step count so candidate auxiliary losses can be screened before longer training. The built-in grid variants include zero-ablation controls and nonzero half/quarter-weight settings such as `aux_0p5x`, `aux_0p25x`, `gflownet_0p25x`, `graphcg_0p25x`, and `tropical_0p25x`.
+
+`meet_in_middle.enabled` optionally activates the graph-aware meet-in-the-middle adaptation. It scores the same graph-autoregressive byte stream left-to-right and right-to-left, using topological order for causal DAGs and deterministic random order for non-causal graphs. It is off by default because the reverse pass adds memory and compute; use `eval_tropicalgt_i.py --meet-in-middle` or `infer_tropicalgt_i.py --meet-in-middle` for inspection before adding nonzero training weights.
 
 ## Papers and Assets
 
@@ -83,6 +85,17 @@ The full training config validates and renders artifacts every `250` steps. Each
 The rolling manifest is `TropicalGT-I/outputs/train/periodic/manifest.jsonl`. W&B logs the scalar validation metrics at the same step and uploads the first configured HTML artifacts under `periodic_eval/step_XXXXXXXX/...`.
 
 The visualization renderer is intentionally audit-oriented rather than decorative. Graph-of-thought trajectories are rendered as branching graphs in PCA embedding space with NLL as height. The NLL landscape has three explicit layers: a smooth projected NLL/fitness surrogate over actual model `graph_state` PCA coordinates plus rendered microstep anchors whose grid cells are pinned to the measured anchors, a local sample-supported interpolating NLL sheet through those anchors, and an actual sampled NLL landscape mesh through sampled reasoning states with zero recorded residual. Filtered simplicial objects are rendered as dark SVGs in the side panel and hover card, with a scalar filtration-radius slider and multiparameter persistence data retained in the JSON payload. Long causal text-path complexes wrap into lanes for legibility.
+
+For browser review, generate the sample-first dashboard for any periodic audit directory:
+
+```bash
+PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python \
+TropicalGT-I/scripts/build_sample_browser_index.py \
+TropicalGT-I/outputs/train/periodic/step_00000250/got_audit \
+--output TropicalGT-I/outputs/train/periodic/step_00000250/got_audit/codex_browser_index.html
+```
+
+That index makes each sampled row/input the top-level unit, with links below it for that sample's GoT trajectory, NLL landscape, filtered complexes, persistence/vectorized topology, analogical memory maps, GraphCG directions, and tropical-support audit.
 
 The trajectory persistence bundle now includes `trajectory_persistence/persistence_representations.html` and `trajectory_persistence/persistence_landscapes.html`. The representations page uses GUDHI vector methods to plot fast persistence landscapes, Betti curves, persistence images, silhouettes, persistence lengths, topological vectors, and entropy summaries. The landscapes page plots the actual GUDHI landscape functions `lambda_k(t)` over trajectory-growth levels, plus a heatmap for the first finite homology dimension available in the audit. These vectorized features are also summarized under the algebra/topology metric namespace for train/eval/W&B use. They are cached NumPy/scikit-learn features in this implementation, suitable for rewards, retrieval keys, diagnostics, and ablations; they are not PyTorch autograd losses unless replaced by a differentiable surrogate.
 

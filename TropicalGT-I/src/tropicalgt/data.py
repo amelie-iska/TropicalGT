@@ -394,6 +394,11 @@ class FixtureGraphDataset(Dataset):
 
 def encode_bytes(text: str, seq_len: int) -> tuple[torch.Tensor, torch.Tensor]:
     ids = [b + 1 for b in text.encode("utf-8", "ignore")[: seq_len + 1]]
+    return encode_byte_ids(ids, seq_len)
+
+
+def encode_byte_ids(ids: list[int], seq_len: int) -> tuple[torch.Tensor, torch.Tensor]:
+    ids = [int(token) for token in ids[: seq_len + 1]]
     if len(ids) < 2:
         ids = ids + [1] * (2 - len(ids))
     x = ids[:-1][:seq_len]

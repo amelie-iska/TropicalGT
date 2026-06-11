@@ -3042,6 +3042,7 @@ def _analogical_pair_figure(
     initial = thresholds[-1] if thresholds else 1.0
     data = _analogical_pair_traces(query_complex, query_layout, mem_complex, mem_layout, sim_map, row, sim, idx, panel_idx, initial)
     fig = go.Figure(data=data)
+    quality_table = _analogical_quality_table_trace(row, sim, sim_map, idx)
     frames = []
     frame_thresholds = list(reversed(thresholds))
     for threshold in frame_thresholds:
@@ -3089,12 +3090,13 @@ def _analogical_pair_figure(
                 }
             ],
         )
+    fig.add_trace(quality_table)
     fig.update_layout(
         template="plotly_dark",
         title=(
             f"Analogical reasoning memory retrieval as simplicial maps: rank {idx + 1} "
             "trajectory-complex map from query domain to retrieved codomain"
-            "<br><sup>binary filtered-complex map; slider filters domain, codomain, and visible map edges; hover shows vertex-level model output and topology provenance</sup>"
+            "<br><sup>binary filtered-complex map; gold lines preserve displayed 1-simplices, rose lines are vertex-only correspondences; slider filters domain, codomain, and visible map edges</sup>"
         ),
         scene=dict(
             xaxis=dict(title="domain / codomain embedding slabs", range=[-0.78, slab + 0.78]),
@@ -3104,7 +3106,62 @@ def _analogical_pair_figure(
         ),
         legend=dict(itemsizing="constant"),
     )
+    if not bool(sim_map.get("is_simplicial_on_displayed_skeleton")):
+        fig.add_annotation(
+            text=(
+                "not a simplicial map on the displayed skeleton: "
+                f"edges {int(sim_map.get('preserved_edges', 0))}/{int(sim_map.get('checked_edges', 0))}, "
+                f"2-simplices {int(sim_map.get('preserved_two_simplices', 0))}/{int(sim_map.get('checked_two_simplices', 0))}"
+            ),
+            x=0.02,
+            y=0.99,
+            xref="paper",
+            yref="paper",
+            showarrow=False,
+            align="left",
+            font=dict(size=12, color="#fecdd3"),
+            bgcolor="rgba(127,29,29,0.72)",
+            bordercolor="rgba(251,113,133,0.55)",
+            borderwidth=1,
+        )
     return fig, panel_items, map_report
+
+
+def _analogical_quality_table_trace(
+    row: dict[str, object],
+    sim: dict[str, float],
+    sim_map: dict[str, object],
+    idx: int,
+) -> go.Table:
+    status = "simplicial" if bool(sim_map.get("is_simplicial_on_displayed_skeleton")) else "vertex map only"
+    rows = [
+        ("rank", str(idx + 1)),
+        ("memory", _short_label(str(row.get("memory_id", idx)), 24)),
+        ("retrieval", f"{float(row.get('retrieval_score', 0.0)):.4f}"),
+        ("PH similarity", f"{float(sim.get('persistent_homology_similarity', 0.0)):.4f}"),
+        ("free-res similarity", f"{float(sim.get('free_resolution_similarity', 0.0)):.4f}"),
+        ("derived similarity", f"{float(sim.get('derived_signature_similarity', 0.0)):.4f}"),
+        ("edge preservation", f"{int(sim_map.get('preserved_edges', 0))}/{int(sim_map.get('checked_edges', 0))} = {float(sim_map.get('edge_preservation_rate', 0.0)):.3f}"),
+        ("2-simplex preservation", f"{int(sim_map.get('preserved_two_simplices', 0))}/{int(sim_map.get('checked_two_simplices', 0))} = {float(sim_map.get('two_simplex_preservation_rate', 0.0)):.3f}"),
+        ("display status", status),
+    ]
+    return go.Table(
+        domain=dict(x=[0.70, 0.995], y=[0.02, 0.34]),
+        header=dict(
+            values=["map diagnostic", "value"],
+            fill_color="#111827",
+            font=dict(color="#e8eef8", size=11),
+            align="left",
+        ),
+        cells=dict(
+            values=[[row[0] for row in rows], [row[1] for row in rows]],
+            fill_color=[["#0f172a"] * len(rows), ["#0b1220"] * len(rows)],
+            font=dict(color="#dbeafe", size=10),
+            align="left",
+            height=24,
+        ),
+        name="simplicial map diagnostics",
+    )
 
 
 def _combined_display_thresholds(a: dict[str, object], b: dict[str, object]) -> list[float]:
@@ -3132,7 +3189,7 @@ def _analogical_pair_traces(
     traces: list[go.Scatter3d | go.Mesh3d] = []
     traces.extend(_complex_filtered_plotly_traces(query_complex, query_layout, 0, "domain: query trajectory complex", "#55d6be", "query domain", threshold))
     traces.extend(_complex_filtered_plotly_traces(mem_complex, mem_layout, panel_idx, f"codomain: memory {idx + 1} trajectory complex", _memory_color(idx), f"memory {idx + 1} codomain", threshold))
-    traces.append(_simplicial_map_trace(query_complex, mem_complex, query_layout, mem_layout, sim_map, panel_idx, row, sim, threshold))
+    traces.extend(_simplicial_map_traces(query_complex, mem_complex, query_layout, mem_layout, sim_map, panel_idx, row, sim, threshold))
     marker = dict(size=11, color=_memory_color(idx), showscale=False, line=dict(width=1.2, color="#e8eef8"))
     panel_hover = (
         f"<b>rank {idx + 1} retrieved memory</b>"
@@ -3285,7 +3342,7 @@ def _salient_complex_text_labels(labels: list[str], vertex_by_label: dict[str, d
     return [_short_label(label, 14) if idx in keep else "" for idx, label in enumerate(labels)]
 
 
-def _simplicial_map_trace(
+def _simplicial_map_traces(
     query_obj: dict[str, object],
     memory_obj: dict[str, object],
     query_layout: dict[str, tuple[float, float, float]],
@@ -3295,22 +3352,23 @@ def _simplicial_map_trace(
     row: dict[str, object],
     sim: dict[str, float],
     threshold: float,
-) -> go.Scatter3d:
+) -> list[go.Scatter3d]:
     q_vertex = _vertex_by_label(query_obj)
     m_vertex = _vertex_by_label(memory_obj)
     map_rows = sim_map.get("vertex_map", []) if isinstance(sim_map.get("vertex_map"), list) else []
     raw_map_count = len(map_rows)
-    max_visible_map_edges = 72
+    max_visible_map_edges = 54
     if len(map_rows) > max_visible_map_edges:
         map_rows = sorted(
             [row for row in map_rows if isinstance(row, dict)],
             key=lambda row: float(row.get("score", 0.0) or 0.0),
             reverse=True,
         )[:max_visible_map_edges]
-    xs: list[float | None] = []
-    ys: list[float | None] = []
-    zs: list[float | None] = []
-    hover: list[str | None] = []
+    preserved_query_vertices = set(sim_map.get("preserved_edge_query_vertices", [])) if isinstance(sim_map.get("preserved_edge_query_vertices"), list) else set()
+    traces_by_kind = {
+        "preserved": {"x": [], "y": [], "z": [], "hover": []},
+        "vertex_only": {"x": [], "y": [], "z": [], "hover": []},
+    }
     for mapping in map_rows:
         if not isinstance(mapping, dict):
             continue
@@ -3330,6 +3388,7 @@ def _simplicial_map_trace(
             f"<b>simplicial map candidate</b>"
             f"<br>{html.escape(q)} -> {html.escape(m)}"
             f"<br>vertex score={float(mapping.get('score', 0.0)):.4f}"
+            f"<br>line class={'preserves at least one displayed 1-simplex' if q in preserved_query_vertices else 'vertex-only correspondence'}"
             f"<br>edge preservation={float(sim_map.get('edge_preservation_rate', 0.0)):.4f}"
             f"<br>2-simplex preservation={float(sim_map.get('two_simplex_preservation_rate', 0.0)):.4f}"
             f"<br>displayed map edges={len(map_rows)}/{raw_map_count} top-scoring vertex maps"
@@ -3339,21 +3398,35 @@ def _simplicial_map_trace(
             f"<br><br><b>domain vertex</b><br>{q_summary}"
             f"<br><br><b>codomain vertex</b><br>{m_summary}"
         )
-        xs.extend([qx, mx, None])
-        ys.extend([qy, my, None])
-        zs.extend([qz, mz, None])
-        hover.extend([text, text, None])
-    return go.Scatter3d(
-        x=xs,
-        y=ys,
-        z=zs,
-        mode="lines",
-        line=dict(color="rgba(251,191,36,0.58)", width=3),
-        name=f"simplicial map to {row.get('memory_id')}",
-        hovertext=hover,
-        hoverinfo="text",
-        customdata=[panel_idx if value is not None else None for value in xs],
-    )
+        bucket = "preserved" if q in preserved_query_vertices else "vertex_only"
+        traces_by_kind[bucket]["x"].extend([qx, mx, None])
+        traces_by_kind[bucket]["y"].extend([qy, my, None])
+        traces_by_kind[bucket]["z"].extend([qz, mz, None])
+        traces_by_kind[bucket]["hover"].extend([text, text, None])
+    return [
+        go.Scatter3d(
+            x=traces_by_kind["preserved"]["x"],
+            y=traces_by_kind["preserved"]["y"],
+            z=traces_by_kind["preserved"]["z"],
+            mode="lines",
+            line=dict(color="rgba(250,204,21,0.76)", width=4),
+            name=f"preserved 1-simplex map to {row.get('memory_id')}",
+            hovertext=traces_by_kind["preserved"]["hover"],
+            hoverinfo="text",
+            customdata=[panel_idx if value is not None else None for value in traces_by_kind["preserved"]["x"]],
+        ),
+        go.Scatter3d(
+            x=traces_by_kind["vertex_only"]["x"],
+            y=traces_by_kind["vertex_only"]["y"],
+            z=traces_by_kind["vertex_only"]["z"],
+            mode="lines",
+            line=dict(color="rgba(251,113,133,0.34)", width=2),
+            name=f"vertex-only correspondences to {row.get('memory_id')}",
+            hovertext=traces_by_kind["vertex_only"]["hover"],
+            hoverinfo="text",
+            customdata=[panel_idx if value is not None else None for value in traces_by_kind["vertex_only"]["x"]],
+        ),
+    ]
 
 
 def _write_analogical_topk_index(path: Path, pair_pages: list[dict[str, object]], map_reports: list[dict[str, object]]) -> None:
@@ -3623,6 +3696,10 @@ def _simplicial_map_between_complexes(query_obj: dict[str, object], memory_obj: 
     query_edges = _complex_edge_pairs(query_obj)
     preserved_edges = 0
     checked_edges = 0
+    preserved_edge_pairs: list[dict[str, object]] = []
+    failed_edge_pairs: list[dict[str, object]] = []
+    preserved_edge_query_vertices: set[str] = set()
+    preserved_edge_memory_vertices: set[str] = set()
     for a, b in query_edges:
         if a not in mapping or b not in mapping:
             continue
@@ -3630,10 +3707,18 @@ def _simplicial_map_between_complexes(query_obj: dict[str, object], memory_obj: 
         ma, mb = mapping[a], mapping[b]
         if ma == mb or frozenset((ma, mb)) in memory_edges:
             preserved_edges += 1
+            preserved_edge_query_vertices.update([a, b])
+            preserved_edge_memory_vertices.update([ma, mb])
+            if len(preserved_edge_pairs) < 64:
+                preserved_edge_pairs.append({"query_edge": [a, b], "memory_edge": [ma, mb]})
+        elif len(failed_edge_pairs) < 64:
+            failed_edge_pairs.append({"query_edge": [a, b], "memory_edge": [ma, mb]})
     memory_triangles = {frozenset(simplex) for simplex in _complex_simplices(memory_obj, 2)}
     query_triangles = _complex_simplices(query_obj, 2)
     preserved_triangles = 0
     checked_triangles = 0
+    preserved_two_simplex_faces: list[dict[str, object]] = []
+    failed_two_simplex_faces: list[dict[str, object]] = []
     for simplex in query_triangles:
         if any(v not in mapping for v in simplex):
             continue
@@ -3641,6 +3726,10 @@ def _simplicial_map_between_complexes(query_obj: dict[str, object], memory_obj: 
         mapped = frozenset(mapping[v] for v in simplex)
         if len(mapped) <= 2 or mapped in memory_triangles:
             preserved_triangles += 1
+            if len(preserved_two_simplex_faces) < 64:
+                preserved_two_simplex_faces.append({"query_simplex": list(simplex), "memory_simplex": sorted(mapped)})
+        elif len(failed_two_simplex_faces) < 64:
+            failed_two_simplex_faces.append({"query_simplex": list(simplex), "memory_simplex": sorted(mapped)})
     edge_rate = preserved_edges / checked_edges if checked_edges else 1.0
     triangle_rate = preserved_triangles / checked_triangles if checked_triangles else 1.0
     return {
@@ -3650,9 +3739,15 @@ def _simplicial_map_between_complexes(query_obj: dict[str, object], memory_obj: 
         "checked_edges": checked_edges,
         "preserved_edges": preserved_edges,
         "edge_preservation_rate": float(edge_rate),
+        "preserved_edge_pairs": preserved_edge_pairs,
+        "failed_edge_pairs": failed_edge_pairs,
+        "preserved_edge_query_vertices": sorted(preserved_edge_query_vertices),
+        "preserved_edge_memory_vertices": sorted(preserved_edge_memory_vertices),
         "checked_two_simplices": checked_triangles,
         "preserved_two_simplices": preserved_triangles,
         "two_simplex_preservation_rate": float(triangle_rate),
+        "preserved_two_simplex_faces": preserved_two_simplex_faces,
+        "failed_two_simplex_faces": failed_two_simplex_faces,
         "is_simplicial_on_displayed_skeleton": bool(edge_rate >= 0.999 and triangle_rate >= 0.999),
     }
 

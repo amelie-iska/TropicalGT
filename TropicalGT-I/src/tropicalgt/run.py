@@ -15,6 +15,7 @@ from tqdm.auto import tqdm
 
 from .algebra import compute_topological_algebra_report, summarize_algebra_reports
 from .data import ChunkShuffleSampler, ParquetGraphDataset, dataset_manifest, encode_record_bytes, make_dataset_from_config
+from .decoding import meet_in_middle_batch, meet_in_middle_config
 from .diagnostics import record_diagnostics
 from .memory import AnalogicalMemoryBank, memory_records_from_scaling_report, query_signature_from_report
 from .metrics import aggregate_bpb_metrics, batch_bpb_metrics, explicit_graph_json_bytes, graph_token_structural_bytes
@@ -184,7 +185,28 @@ WANDB_PRIORITY_GROUPS: tuple[tuple[str, tuple[str, ...]], ...] = (
         ),
     ),
     (
-        "09_system",
+        "09_meet_in_middle",
+        (
+            "mim_enabled",
+            "mim_shared_weight_reverse_pass",
+            "mim_loss",
+            "mim_reverse_nll",
+            "mim_bidirectional_nll",
+            "mim_agreement_loss",
+            "mim_join_token_match_rate",
+            "mim_true_meet_logprob_mean",
+            "mim_candidate_count",
+            "mim_agreement_weight",
+            "mim_reverse_nll_weight",
+            "eval_mim_enabled",
+            "eval_mim_reverse_nll",
+            "eval_mim_bidirectional_nll",
+            "eval_mim_agreement_loss",
+            "eval_mim_join_token_match_rate",
+        ),
+    ),
+    (
+        "10_system",
         (
             "gpu_mem_mb",
             "step_time_s",
@@ -195,7 +217,7 @@ WANDB_PRIORITY_GROUPS: tuple[tuple[str, tuple[str, ...]], ...] = (
         ),
     ),
     (
-        "10_optimization",
+        "11_optimization",
         (
             "optimizer_lr",
             "grad_norm",
@@ -271,7 +293,8 @@ def configure_wandb_metrics(run: Any) -> None:
             "00_primary/loss",
             "00_primary/nll",
             "01_losses/loss_regularizer_total",
-            "09_system/gpu_mem_mb",
+            "09_meet_in_middle/mim_loss",
+            "10_system/gpu_mem_mb",
         ):
             run.define_metric(metric, step_metric="step")
     except Exception:
@@ -382,6 +405,7 @@ def train(config_path: str | Path, resume_from: str | Path | None = None, max_st
     periodic_audit_level = str(cfg.get("periodic_audit_level", cfg.get("audit_level", "none")))
     periodic_ph_backend = str(cfg.get("periodic_ph_backend", ph_backend))
     periodic_audit_max_simplices = int(cfg.get("periodic_audit_max_simplices", audit_max_simplices))
+    mim_cfg = meet_in_middle_config(cfg.get("meet_in_middle"))
     step = 0
     loaded_step = 0
     resume_path = str(resume_from) if resume_from else ""
@@ -416,11 +440,39 @@ def train(config_path: str | Path, resume_from: str | Path | None = None, max_st
             x = x.to(device); y = y.to(device)
             opt.zero_grad(set_to_none=True)
             out = model(x, graph_batch, y)
-            out["loss"].backward()
+            train_loss = out["loss"]
+            mim_report: dict[str, Any] | None = None
+            if mim_cfg.enabled:
+                mim_report = meet_in_middle_batch(
+                    model,
+                    list(_records),
+                    tokenizer,
+                    seq_len,
+                    device,
+                    graph_autoregressive=bool(cfg.get("graph_autoregressive_decoding", True)),
+                    seed=seed + step,
+                    config=mim_cfg,
+                    forward_logits=out.get("logits"),
+                    forward_nll=out.get("nll"),
+                    require_grad=(mim_cfg.agreement_weight > 0.0 or mim_cfg.reverse_nll_weight > 0.0),
+                )
+                if torch.is_tensor(mim_report.get("loss")):
+                    train_loss = train_loss + mim_report["loss"]
+            train_loss.backward()
             grad_norm = torch.nn.utils.clip_grad_norm_(model.parameters(), float(cfg.get("grad_clip", 1.0)))
             opt.step()
             metrics_last = {k: float(v.detach().cpu()) for k, v in out.items() if torch.is_tensor(v) and v.ndim == 0}
-            metrics_last["loss"] = float(out["loss"].detach().cpu())
+            metrics_last["loss"] = float(train_loss.detach().cpu())
+            if mim_report is not None:
+                metrics_last.update(
+                    {
+                        key: float(value)
+                        for key, value in mim_report.get("metrics", {}).items()
+                        if isinstance(value, (int, float))
+                    }
+                )
+            else:
+                metrics_last["mim_enabled"] = 0.0
             metrics_last["ppl"] = float(math.exp(min(metrics_last.get("nll", metrics_last["loss"]), 20)))
             metrics_last.update(batch_bpb_metrics(metrics_last.get("nll", metrics_last["loss"]), y, graph_batch, _records, graph_bpb_side_weight))
             metrics_last["bpb_proxy"] = metrics_last["bpb"]
@@ -547,6 +599,7 @@ def train(config_path: str | Path, resume_from: str | Path | None = None, max_st
         graph_bpb_side_weight=graph_bpb_side_weight,
         graph_autoregressive=bool(cfg.get("graph_autoregressive_decoding", True)),
         ar_seed=seed,
+        meet_in_middle=cfg.get("meet_in_middle"),
     )
     metrics_last.update({f"eval_{k}": v for k, v in eval_report.items() if isinstance(v, (int, float))})
     if wb:
@@ -688,6 +741,7 @@ def _run_periodic_validation_round(
         audit_max_simplices=audit_max_simplices,
         graph_autoregressive=graph_autoregressive,
         ar_seed=seed + step,
+        meet_in_middle=cfg.get("meet_in_middle"),
     )
     eval_path = step_dir / "validation_report.json"
     eval_path.write_text(json.dumps(eval_report, indent=2), encoding="utf-8")
@@ -944,7 +998,9 @@ def evaluate_model(
     audit_max_simplices: int = 1024,
     graph_autoregressive: bool = False,
     ar_seed: int = 0,
+    meet_in_middle: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
+    mim_cfg = meet_in_middle_config(meet_in_middle)
     loader = DataLoader(
         dataset,
         batch_size=batch_size,
@@ -962,11 +1018,34 @@ def evaluate_model(
     causal_dag_total = 0
     random_graph_total = 0
     parameter_golf_total = 0
+    mim_metric_sums: dict[str, float] = {}
+    mim_batches = 0
+    mim_records: list[dict[str, Any]] = []
     model.eval()
     with torch.no_grad():
         for x, y, graph_batch, records in loader:
             x = x.to(device); y = y.to(device)
             out = model(x, graph_batch, y)
+            if mim_cfg.enabled:
+                mim_report = meet_in_middle_batch(
+                    model,
+                    list(records),
+                    tokenizer,
+                    seq_len,
+                    device,
+                    graph_autoregressive=graph_autoregressive,
+                    seed=ar_seed,
+                    config=mim_cfg,
+                    forward_logits=out.get("logits"),
+                    forward_nll=out.get("nll"),
+                    require_grad=False,
+                )
+                mim_batches += 1
+                for key, value in mim_report.get("metrics", {}).items():
+                    if isinstance(value, (int, float)):
+                        mim_metric_sums[key] = mim_metric_sums.get(key, 0.0) + float(value)
+                if details_limit > 0 and len(mim_records) < details_limit:
+                    mim_records.extend(mim_report.get("records", [])[: max(details_limit - len(mim_records), 0)])
             tokens = int((y != 0).sum().item())
             total_loss += float(out["nll"].detach().cpu()) * max(tokens, 1)
             total_tokens += max(tokens, 1); batches += 1
@@ -1022,6 +1101,26 @@ def evaluate_model(
         "graph_autoregressive_decoding_enabled": 1.0 if graph_autoregressive else 0.0,
         **bpb,
     }
+    if mim_cfg.enabled:
+        report.update(
+            {
+                key: value / max(mim_batches, 1)
+                for key, value in mim_metric_sums.items()
+            }
+        )
+        report["meet_in_middle"] = {
+            "enabled": True,
+            "mode": mim_cfg.mode if not mim_cfg.reverse_model_path else "explicit_reverse_model_requested",
+            "shared_weight_reverse_pass": not bool(mim_cfg.reverse_model_path),
+            "split_ratio": mim_cfg.split_ratio,
+            "agreement_weight": mim_cfg.agreement_weight,
+            "reverse_nll_weight": mim_cfg.reverse_nll_weight,
+            "batches": mim_batches,
+            "records": mim_records,
+            "note": "Current implementation uses a shared TropicalGT-I model on the reversed graph-byte order unless reverse_model_path is supplied.",
+        }
+    else:
+        report["mim_enabled"] = 0.0
     if details:
         report["records"] = details
     return report
