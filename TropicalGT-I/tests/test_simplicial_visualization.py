@@ -40,7 +40,7 @@ def test_visualization_payload_contains_filtered_objects(tmp_path: Path):
     assert "decoded_argmax" in payload["points"][0]
     assert payload["nll_surface"]["nll_height"]["touches_points"] is True
     assert payload["nll_surface"]["nll_height"]["surface_kind"] in {
-        "smooth_exact_rbf_surface",
+        "sample_supported_local_idw_surface",
         "degenerate_interpolating_polyline",
         "sparse_exact_triangular_nll_mesh",
     }
@@ -60,7 +60,7 @@ def test_visualization_payload_contains_filtered_objects(tmp_path: Path):
     assert "data-pca-z" in html
     assert "zero-simplex" in html
     assert "filtration-layer" in html
-    assert "Interpolating NLL surface" in html
+    assert "sample-supported" in html or "Smoothed NLL surface" in html or "Interpolating NLL surface" in html
 
 
 def test_visualization_payload_contains_topology_when_audited(tmp_path: Path):
@@ -139,11 +139,11 @@ def test_got_trajectory_visualization_renders_simplicial_panel_and_nll_surface(t
     assert 'aria-label="hovered filtered simplicial object"' in html
     assert "<svg" in html
     assert "filtration-layer" in html
-    assert "Exact triangulated trajectory NLL surface" in html
+    assert "Sample-supported local centered NLL surface" in html
     assert "NLL surface anchors" in html
     assert payload["nll_surface"]["available"] is True
     assert payload["nll_surface"]["touches_points"] is True
-    assert payload["nll_surface"]["surface_kind"] in {"smooth_exact_rbf_surface", "sparse_exact_triangular_nll_mesh", "exact_delaunay_nll_mesh"}
+    assert payload["nll_surface"]["surface_kind"] in {"sample_supported_local_idw_surface", "sparse_exact_triangular_nll_mesh", "exact_delaunay_nll_mesh"}
     assert payload["nll_surface"]["max_point_residual"] < 1e-5
     assert len(payload["edges"]) == 3
     assert sum(1 for edge in payload["edges"] if edge["source"] == record.record_id) == 2

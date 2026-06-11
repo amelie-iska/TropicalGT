@@ -66,8 +66,12 @@ def _row(root: Path, name: str) -> Path:
         "nll_surface": {
             "available": True,
             "touches_points": True,
-            "surface_kind": "exact_delaunay_nll_mesh",
+            "surface_kind": "sample_supported_local_idw_surface",
             "max_point_residual": 0.0,
+            "z_axis": "centered_scaled_nll",
+            "raw_nll_range": 0.3,
+            "exact_anchor_layer": True,
+            "support_radius": 0.5,
         },
     }
     _write(row / "inference_scaling_tree.json", json.dumps({"stochastic_actions": True, "sampling_temperature": 2.0, "sampling_exploration": 0.4, "candidates": candidates}))
@@ -75,26 +79,45 @@ def _row(root: Path, name: str) -> Path:
     _write(row / "got_embedding_map_payloads.json", json.dumps({"coordinate_source": "PCA of model graph_state embeddings; no level/tree layout coordinates are used", "nodes": nodes}))
     _write(
         row / "got_full_trajectory_complex_payload.json",
-        json.dumps({"filtered_simplicial_object": {"summary": {"num_vertices": 4, "num_edges": 3, "num_two_simplices": 0}, "simplices": []}}),
+        json.dumps(
+            {
+                "filtered_simplicial_object": {
+                    "summary": {"num_vertices": 4, "num_edges": 3, "num_two_simplices": 0},
+                    "simplex_tree": {"backend": "gudhi.SimplexTree", "dimension": 1, "num_simplices": 7},
+                    "simplices": [
+                        {"simplex": ["root"], "dimension": 0, "embedding": [0, 0, 0], "input_text": "i", "decoded_argmax": "o"},
+                        {"simplex": ["a"], "dimension": 0, "embedding": [1, 0, 0], "input_text": "i", "decoded_argmax": "o"},
+                        {"simplex": ["b"], "dimension": 0, "embedding": [0, 1, 0], "input_text": "i", "decoded_argmax": "o"},
+                        {"simplex": ["c"], "dimension": 0, "embedding": [1, 1, 0], "input_text": "i", "decoded_argmax": "o"},
+                        {"simplex": ["root", "a"], "dimension": 1},
+                        {"simplex": ["root", "b"], "dimension": 1},
+                        {"simplex": ["a", "c"], "dimension": 1},
+                    ],
+                }
+            }
+        ),
     )
-    steps = [{"file": f"reasoning_step_{idx:03d}.html", "summary": {"num_vertices": 1}} for idx in range(4)]
+    steps = [
+        {"file": f"reasoning_step_{idx:03d}.html", "summary": {"num_vertices": 1}, "simplex_tree": {"backend": "gudhi.SimplexTree"}}
+        for idx in range(4)
+    ]
     _write(row / "reasoning_step_complex_maps/manifest.json", json.dumps({"steps": steps}))
     _write(row / "analogical_simplicial_maps.json", json.dumps({"maps": [
-        {"codomain_complex_source": "trajectory_filtered_simplicial_object", "edge_preservation_rate": 0.25},
-        {"codomain_complex_source": "trajectory_filtered_simplicial_object", "edge_preservation_rate": 0.5},
+        {"codomain_complex_source": "trajectory_filtered_simplicial_object", "edge_preservation_rate": 0.25, "domain_simplex_tree": {"backend": "gudhi.SimplexTree"}, "codomain_simplex_tree": {"backend": "gudhi.SimplexTree"}, "displayed_domain_vertices": 2, "displayed_codomain_vertices": 2},
+        {"codomain_complex_source": "trajectory_filtered_simplicial_object", "edge_preservation_rate": 0.5, "domain_simplex_tree": {"backend": "gudhi.SimplexTree"}, "codomain_simplex_tree": {"backend": "gudhi.SimplexTree"}, "displayed_domain_vertices": 2, "displayed_codomain_vertices": 2},
     ]}))
     _write(row / "inference_audit.json", "{}")
     html_files = {
         "got_embedding_map_3d.html": _html("Graph-of-thought embedding-space trajectory map actual graph_state PCA"),
-        "got_trajectory_pca_3d.html": _html("Graph-of-thought branching trajectory NLL"),
-        "got_full_trajectory_complex.html": _html("Full graph-of-thought trajectory filtered simplicial complex", "Plotly.newPlot play filtration Filtration radius model input model output"),
+        "got_trajectory_pca_3d.html": _html("Graph-of-thought branching trajectory centered NLL"),
+        "got_full_trajectory_complex.html": _html("Full graph-of-thought trajectory filtered simplicial complex", "Plotly.newPlot play filtration Filtration radius model input model output filtration backend="),
         "reasoning_step_complex_maps/index.html": _html("Reasoning step filtered simplicial complex maps", "table"),
         "tropical_support_heatmap.html": _html("Tropical active support", "Plotly.newPlot observed supports only top-support collapse rate"),
-        "graphcg_direction_cosines.html": _html("GraphCG direction cosines"),
+        "graphcg_direction_cosines.html": _html("GraphCG full-rank direction audit"),
         "analogical_memory_topk_index.html": _html("Analogical top-k retrieval", "table"),
-        "analogical_memory_map_02.html": _html("Analogical simplicial map trajectory-complex map", "Plotly.newPlot slider filters both complexes sliders"),
+        "analogical_memory_map_02.html": _html("Analogical simplicial map trajectory-complex map", "Plotly.newPlot slider filters domain and codomain sliders binary filtered-complex map"),
         "trajectory_persistence/persistence_barcode.html": _html("Trajectory persistence barcode"),
-        "trajectory_persistence/persistence_module_betti.html": _html("Trajectory persistence Betti"),
+        "trajectory_persistence/persistence_module_betti.html": _html("Trajectory persistence Betti", "Plotly.newPlot 2D matrix decorative 3D"),
     }
     for rel, content in html_files.items():
         _write(row / rel, content)

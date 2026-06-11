@@ -14,15 +14,15 @@ import numpy as np
 
 REQUIRED_HTML = {
     "embedding_map": ("got_embedding_map_3d.html", ("Graph-of-thought embedding-space trajectory map", "actual graph_state PCA")),
-    "trajectory_nll": ("got_trajectory_pca_3d.html", ("Graph-of-thought branching trajectory", "NLL")),
-    "full_complex": ("got_full_trajectory_complex.html", ("Full graph-of-thought trajectory filtered simplicial complex", "play filtration")),
+    "trajectory_nll": ("got_trajectory_pca_3d.html", ("Graph-of-thought branching trajectory", "centered NLL")),
+    "full_complex": ("got_full_trajectory_complex.html", ("Full graph-of-thought trajectory filtered simplicial complex", "play filtration", "filtration backend=")),
     "step_complex_index": ("reasoning_step_complex_maps/index.html", ("Reasoning step filtered simplicial complex maps",)),
     "tropical_support": ("tropical_support_heatmap.html", ("Tropical", "support")),
-    "graphcg": ("graphcg_direction_cosines.html", ("GraphCG",)),
+    "graphcg": ("graphcg_direction_cosines.html", ("GraphCG", "full-rank direction audit")),
     "analogical_index": ("analogical_memory_topk_index.html", ("Analogical top-k retrieval",)),
-    "analogical_map": ("analogical_memory_map_02.html", ("Analogical", "simplicial")),
+    "analogical_map": ("analogical_memory_map_02.html", ("Analogical", "simplicial", "binary filtered-complex map")),
     "trajectory_barcode": ("trajectory_persistence/persistence_barcode.html", ("Trajectory", "barcode")),
-    "trajectory_betti": ("trajectory_persistence/persistence_module_betti.html", ("Trajectory", "Betti")),
+    "trajectory_betti": ("trajectory_persistence/persistence_module_betti.html", ("Trajectory", "Betti", "2D matrix", "decorative 3D")),
 }
 
 REQUIRED_JSON = {
@@ -115,7 +115,7 @@ def _validate_file_set(row_dir: Path, errors: list[str]) -> dict[str, str]:
                 _assert("model input" in html and "model output" in html, errors, f"{rel} does not expose model input/output in hover payload")
             if key == "analogical_map":
                 _assert("trajectory-complex map" in html, errors, f"{rel} is not mapping trajectory complexes")
-                _assert("slider filters both complexes" in html and "sliders" in html, errors, f"{rel} is missing Plotly filtration slider for the simplicial map")
+                _assert("slider filters domain" in html and "sliders" in html, errors, f"{rel} is missing Plotly filtration slider for the simplicial map")
             if key == "tropical_support":
                 _assert("observed supports only" in html and "top-support collapse rate" in html, errors, f"{rel} is not the interpretable support audit view")
     return files
@@ -210,13 +210,20 @@ def validate_row(row_dir: Path, *, min_candidates: int = 8, min_depth: int = 2, 
     _assert(surface.get("available") is True, errors, "NLL surface unavailable")
     _assert(surface.get("touches_points") is True, errors, "NLL surface is not point-anchored")
     _assert(_finite_float(surface.get("max_point_residual"), 999.0) <= nll_residual_tol, errors, "NLL surface residual exceeds tolerance")
+    _assert(surface.get("z_axis") == "centered_scaled_nll", errors, "NLL trajectory surface is not rendered with centered scaled-NLL z-axis")
+    _assert(_finite_float(surface.get("raw_nll_range"), -1.0) >= 0.0, errors, "NLL surface payload is missing raw_nll_range")
+    _assert(surface.get("exact_anchor_layer") is True, errors, "NLL surface is missing exact anchor layer metadata")
+    _assert(surface.get("surface_kind") == "sample_supported_local_idw_surface", errors, "NLL surface is not using sample-supported local interpolation")
+    _assert(_finite_float(surface.get("support_radius"), -1.0) > 0.0, errors, "NLL surface payload is missing a positive support_radius")
 
     _assert(len(embedded_nodes) == len(nodes), errors, "embedding map payload node count differs from trajectory payload")
     _assert(embedding_payload.get("coordinate_source", "").startswith("PCA of model graph_state embeddings"), errors, "embedding map payload has wrong coordinate source")
 
     full_obj = full_complex_payload.get("filtered_simplicial_object", {})
     summary = full_obj.get("summary", {}) if isinstance(full_obj, dict) else {}
+    simplex_tree = full_obj.get("simplex_tree", {}) if isinstance(full_obj, dict) and isinstance(full_obj.get("simplex_tree"), dict) else {}
     full_vertices = [row for row in full_obj.get("simplices", []) if isinstance(row, dict) and int(row.get("dimension", -1)) == 0] if isinstance(full_obj, dict) else []
+    _assert(simplex_tree.get("backend") == "gudhi.SimplexTree", errors, "full trajectory complex payload is missing GUDHI SimplexTree provenance")
     _assert(int(summary.get("num_vertices", 0) or 0) >= len(candidates), errors, "full trajectory complex has fewer vertices than candidates")
     _assert(int(summary.get("num_edges", 0) or 0) >= len(edges), errors, "full trajectory complex has fewer edges than trajectory")
     _assert(sum(1 for row in full_vertices if row.get("embedding")) == len(full_vertices), errors, "full trajectory complex vertices do not all carry embeddings")
@@ -227,11 +234,15 @@ def validate_row(row_dir: Path, *, min_candidates: int = 8, min_depth: int = 2, 
         maps = _read_json(maps_path).get("maps", [])
         _assert(bool(maps), errors, "analogical_simplicial_maps.json contains no maps")
         _assert(all(row.get("codomain_complex_source") == "trajectory_filtered_simplicial_object" for row in maps if isinstance(row, dict)), errors, "analogical maps are not using trajectory-level memory complexes")
+        _assert(all(isinstance(row.get("domain_simplex_tree"), dict) and row["domain_simplex_tree"].get("backend") == "gudhi.SimplexTree" for row in maps if isinstance(row, dict)), errors, "analogical maps are missing domain GUDHI SimplexTree provenance")
+        _assert(all(isinstance(row.get("codomain_simplex_tree"), dict) and row["codomain_simplex_tree"].get("backend") == "gudhi.SimplexTree" for row in maps if isinstance(row, dict)), errors, "analogical maps are missing codomain GUDHI SimplexTree provenance")
+        _assert(all(_finite_float(row.get("displayed_domain_vertices"), 0.0) > 0 and _finite_float(row.get("displayed_codomain_vertices"), 0.0) > 0 for row in maps if isinstance(row, dict)), errors, "analogical maps are missing displayed vertex counts")
         edge_rates = {_finite_float(row.get("edge_preservation_rate"), -1.0) for row in maps if isinstance(row, dict)}
         _assert(len(edge_rates) > 1 or len(maps) <= 1, errors, "analogical map edge-preservation rates are all identical")
 
     steps = [row for row in manifest.get("steps", []) if isinstance(row, dict)]
     _assert(len(steps) == len(candidates), errors, "reasoning-step complex map count does not match candidates")
+    _assert(all(isinstance(row.get("simplex_tree"), dict) and row["simplex_tree"].get("backend") == "gudhi.SimplexTree" for row in steps), errors, "reasoning-step manifest is missing GUDHI SimplexTree provenance")
     for idx in [0, len(steps) // 2, len(steps) - 1] if steps else []:
         step = steps[idx]
         step_file = row_dir / "reasoning_step_complex_maps" / str(step.get("file", ""))
