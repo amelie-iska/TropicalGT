@@ -351,6 +351,16 @@ def write_got_trajectory_visualization(scaling_report: dict[str, object], output
     )
     if nll_surface is not None:
         fig.add_trace(nll_surface)
+        footprint_trace, footprint_meta = _nll_support_footprint_trace(
+            pca[:, 0],
+            pca[:, 1],
+            nll_plot_z,
+            nll_values,
+            name="NLL local-support footprint",
+        )
+        if footprint_trace is not None:
+            fig.add_trace(footprint_trace)
+            nll_surface_meta["support_footprint_layer"] = footprint_meta
     fig.add_trace(_nll_anchor_trace(pca[:, 0], pca[:, 1], nll_plot_z, nll_values, name="NLL surface anchors"))
     for idx, row in enumerate(candidates):
         parent = row.get("parent")
@@ -455,6 +465,27 @@ def write_got_trajectory_visualization(scaling_report: dict[str, object], output
             borderwidth=1,
         )
         fig.update_layout(margin=dict(t=122))
+    raw_nll_range = float(np.nanmax(nll_values) - np.nanmin(nll_values)) if nll_values.size else 0.0
+    if raw_nll_range < 0.01:
+        fig.add_annotation(
+            text=(
+                "NLL field diagnostic: raw range="
+                f"{raw_nll_range:.6g}; z-axis shows centered NLL scaled by {nll_plot_scale:.1f}.<br>"
+                "The lifted surface is exact at anchors; the lower translucent sheet is the local support footprint."
+            ),
+            x=0,
+            y=0.985,
+            xref="paper",
+            yref="paper",
+            showarrow=False,
+            align="left",
+            font=dict(size=12, color="#bae6fd"),
+            bgcolor="rgba(15,23,42,0.88)",
+            bordercolor="rgba(125,211,252,0.42)",
+            borderwidth=1,
+        )
+        current_margin = fig.layout.margin.to_plotly_json() if fig.layout.margin else {}
+        fig.update_layout(margin=dict(t=max(int(current_margin.get("t", 82)), 138)))
     panel_items = _simplicial_panel_items(panel_objects, panel_hover)
     _write_plotly_dark_html(path, fig, "Graph-of-thought trajectory PCA in embedding space", panel_items, show_filtration_slider=True)
     payload = {
@@ -735,7 +766,8 @@ def _write_complex_slider_map(path: Path, obj: dict[str, object], title: str, su
     base_traces = _complex_slider_traces(obj, coords3, threshold=initial, panel_index_by_label=panel_index_by_label)
     fig = go.Figure(data=base_traces)
     frames = []
-    for threshold in thresholds:
+    frame_thresholds = list(reversed(thresholds))
+    for threshold in frame_thresholds:
         frames.append(
             go.Frame(
                 name=f"{threshold:.6f}",
@@ -756,7 +788,7 @@ def _write_complex_slider_map(path: Path, obj: dict[str, object], title: str, su
         fig.update_layout(
             sliders=[
                 {
-                    "active": len(steps) - 1,
+                    "active": 0,
                     "currentvalue": {"prefix": "radius/filtration <= ", "font": {"color": "#dbeafe"}},
                     "pad": {"t": 44},
                     "steps": steps,
@@ -2185,7 +2217,8 @@ def _analogical_pair_figure(
     data = _analogical_pair_traces(query_complex, query_layout, mem_complex, mem_layout, sim_map, row, sim, idx, panel_idx, initial)
     fig = go.Figure(data=data)
     frames = []
-    for threshold in thresholds:
+    frame_thresholds = list(reversed(thresholds))
+    for threshold in frame_thresholds:
         frames.append(
             go.Frame(
                 name=f"{threshold:.6f}",
@@ -2206,7 +2239,7 @@ def _analogical_pair_figure(
         fig.update_layout(
             sliders=[
                 {
-                    "active": len(steps) - 1,
+                    "active": 0,
                     "currentvalue": {"prefix": "domain/codomain filtration <= ", "font": {"color": "#dbeafe"}},
                     "pad": {"t": 42},
                     "steps": steps,
@@ -3646,6 +3679,27 @@ def _write_plotly_dark_html(path: Path, fig: go.Figure, title: str, panel_items:
       if (hoverCard) hoverCard.classList.remove("visible");
     }}
     const plot = document.querySelector("#chart .plotly-graph-div");
+    function forceConfiguredPlotlyFrame() {{
+      if (!plot || typeof Plotly === "undefined") return;
+      const sliders = (plot.layout && plot.layout.sliders) || [];
+      const slider = sliders.length ? sliders[0] : null;
+      if (!slider || !Array.isArray(slider.steps) || !slider.steps.length) return;
+      const active = Number.isFinite(Number(slider.active)) ? Number(slider.active) : 0;
+      const step = slider.steps[Math.max(0, Math.min(slider.steps.length - 1, active))];
+      const args = step && Array.isArray(step.args) ? step.args : null;
+      const frameName = args && Array.isArray(args[0]) ? args[0][0] : null;
+      if (!frameName) return;
+      const animation = Plotly.animate(plot, [frameName], {{
+        mode: "immediate",
+        frame: {{duration: 0, redraw: true}},
+        transition: {{duration: 0}}
+      }});
+      if (animation && typeof animation.then === "function") {{
+        animation.then(() => Plotly.relayout(plot, {{"sliders[0].active": active}})).catch(() => {{}});
+      }} else {{
+        try {{ Plotly.relayout(plot, {{"sliders[0].active": active}}); }} catch (err) {{}}
+      }}
+    }}
     if (plot && simplicialPanels.length) {{
       setPanel(initialPanelIndex);
       plot.on("plotly_hover", (event) => {{
@@ -3661,6 +3715,8 @@ def _write_plotly_dark_html(path: Path, fig: go.Figure, title: str, panel_items:
       plot.on("plotly_unhover", hideHoverCard);
       plot.on("plotly_relayout", hideHoverCard);
     }}
+    window.setTimeout(forceConfiguredPlotlyFrame, 150);
+    window.setTimeout(forceConfiguredPlotlyFrame, 650);
   </script>
 </body>
 </html>
@@ -4375,6 +4431,74 @@ def _nll_triangulated_surface_trace(
     return trace, meta
 
 
+def _nll_support_footprint_trace(
+    x_values: np.ndarray,
+    y_values: np.ndarray,
+    z_values: np.ndarray,
+    nll_values: np.ndarray,
+    name: str,
+) -> tuple[go.BaseTraceType | None, dict[str, object]]:
+    x = np.asarray(x_values, dtype=float).reshape(-1)
+    y = np.asarray(y_values, dtype=float).reshape(-1)
+    z = np.asarray(z_values, dtype=float).reshape(-1)
+    nll = np.asarray(nll_values, dtype=float).reshape(-1)
+    finite = np.isfinite(x) & np.isfinite(y) & np.isfinite(z) & np.isfinite(nll)
+    x = x[finite]
+    y = y[finite]
+    z = z[finite]
+    nll = nll[finite]
+    if x.size < 3 or _xy_rank(x, y) < 2:
+        return None, {"available": False, "reason": "insufficient non-collinear NLL anchors"}
+    source_count = int(x.size)
+    x, y, z, nll, duplicate_meta = _collapse_duplicate_xy_for_surface(x, y, z, nll)
+    grid_x, grid_y, z_grid, nll_grid, _, support_meta = _supported_local_idw_grid(x, y, z, nll, grid_size=72)
+    finite_z = z_grid[np.isfinite(z_grid)]
+    if finite_z.size == 0:
+        return None, {"available": False, "reason": "support grid is empty"}
+    z_range = float(np.nanmax(z) - np.nanmin(z)) if z.size else 0.0
+    floor_z = float(np.nanmin(z) - max(z_range * 0.22, 0.42))
+    footprint_z = np.where(np.isfinite(z_grid), floor_z, np.nan)
+    trace = go.Surface(
+        x=grid_x,
+        y=grid_y,
+        z=footprint_z,
+        surfacecolor=nll_grid,
+        colorscale="Plasma",
+        opacity=0.14,
+        showscale=False,
+        name=name,
+        hovertemplate=(
+            "local support footprint<br>"
+            "PC1=%{x:.3f}<br>"
+            "PC2=%{y:.3f}<br>"
+            "projected z=%{z:.3f}<br>"
+            "local smoothed raw NLL=%{surfacecolor:.6f}<br>"
+            "visible only near observed reasoning states<extra></extra>"
+        ),
+        contours=dict(z=dict(show=False)),
+        lighting=dict(ambient=0.76, diffuse=0.34, specular=0.08, roughness=0.88),
+        showlegend=True,
+    )
+    meta = {
+        "available": True,
+        "surface_kind": "projected_local_support_footprint",
+        "source_point_count_before_duplicate_collapse": source_count,
+        "unique_xy_point_count": int(x.size),
+        "floor_z": floor_z,
+        "purpose": "Shows the area around actual PCA anchors where the local NLL field is evaluated; not an additional model prediction layer.",
+        "masked_fraction": float(support_meta.get("masked_fraction", 0.0)),
+        "support_radius": float(support_meta.get("support_radius", 0.0)),
+        "support_policy": support_meta.get("support_policy", "union of local sample neighborhoods"),
+    }
+    meta.update(
+        {
+            "duplicate_xy_group_count": int(duplicate_meta.get("duplicate_xy_group_count", 0)),
+            "max_duplicate_xy_multiplicity": int(duplicate_meta.get("max_duplicate_xy_multiplicity", 1)),
+        }
+    )
+    return trace, meta
+
+
 def _nll_visual_scale(nll_values: np.ndarray, target_range: float = 4.0) -> float:
     values = np.asarray(nll_values, dtype=float)
     values = values[np.isfinite(values)]
@@ -4520,36 +4644,50 @@ def _smooth_anchored_surface(
             "max_point_residual": 0.0,
             "touches_points": True,
         }
-    grid_x, grid_y, z_grid, nll_grid, residual, support_meta = _supported_local_idw_grid(x, y, z, nll)
-    surface = go.Surface(
-        x=grid_x,
-        y=grid_y,
-        z=z_grid,
-        surfacecolor=nll_grid,
+    _, _, _, _, residual, support_meta = _supported_local_idw_grid(x, y, z, nll)
+    faces = _triangulate_xy_faces(x, y)
+    mesh_kwargs: dict[str, object] = {}
+    if faces:
+        mesh_kwargs.update(
+            {
+                "i": [int(face[0]) for face in faces],
+                "j": [int(face[1]) for face in faces],
+                "k": [int(face[2]) for face in faces],
+            }
+        )
+    else:
+        mesh_kwargs["alphahull"] = 0
+    surface = go.Mesh3d(
+        x=x,
+        y=y,
+        z=z,
+        intensity=nll,
         colorscale="Plasma",
-        opacity=0.64,
+        opacity=0.28,
         showscale=False,
         name=name,
         hovertemplate=(
+            "exact NLL anchor mesh<br>"
             "PC1=%{x:.3f}<br>"
             "PC2=%{y:.3f}<br>"
             "centered scaled NLL=%{z:.4f}<br>"
-            "local smoothed raw NLL=%{surfacecolor:.6f}<br>"
-            "surface shown only inside sample-supported neighborhoods<extra></extra>"
+            "raw NLL=%{intensity:.6f}<br>"
+            "triangles interpolate only between observed PCA states<extra></extra>"
         ),
-        contours=dict(z=dict(show=True, usecolormap=True, highlightcolor="#f8fafc", project_z=True, width=2)),
+        flatshading=True,
+        lighting=dict(ambient=0.82, diffuse=0.26, specular=0.05, roughness=0.92),
+        **mesh_kwargs,
     )
     return surface, {
         "available": True,
         "mode": mode,
-        "surface_kind": "sample_supported_local_idw_surface",
-        "interpolation": "Modified Shepard/local IDW interpolation on a PCA grid augmented with sample coordinates; cells outside the union of sample-supported neighborhoods are masked",
+        "surface_kind": "exact_delaunay_nll_mesh",
+        "interpolation": "Exact piecewise-linear triangulation through observed PCA states; the separate support footprint carries the smoothed local IDW neighborhood field",
         "point_count": int(x.size),
-        "grid_shape": [int(grid_x.shape[0]), int(grid_x.shape[1])],
         "hull_masked_fraction": float(support_meta.get("masked_fraction", 0.0)),
         "support_radius": float(support_meta.get("support_radius", 0.0)),
         "support_policy": support_meta.get("support_policy", "union of local sample neighborhoods"),
-        "value_clipping": "none; IDW is a convex weighted average of observed values",
+        "value_clipping": "none; lifted mesh uses observed anchor values exactly",
         "nll_min": float(np.nanmin(nll)),
         "nll_max": float(np.nanmax(nll)),
         "nll_mean": float(np.nanmean(nll)),
@@ -4557,6 +4695,7 @@ def _smooth_anchored_surface(
         "max_point_residual": 0.0,
         "touches_points": True,
         "exact_anchor_layer": True,
+        "triangulated_face_count": int(len(faces)),
     }
 
 
@@ -4635,6 +4774,33 @@ def _positive_pairwise_distances(points: np.ndarray) -> np.ndarray:
     diff = points[:, None, :] - points[None, :, :]
     dist = np.sqrt(np.sum(diff * diff, axis=-1))
     return dist[dist > 1e-10]
+
+
+def _triangulate_xy_faces(x: np.ndarray, y: np.ndarray) -> list[tuple[int, int, int]]:
+    points = np.column_stack([np.asarray(x, dtype=float), np.asarray(y, dtype=float)])
+    if points.shape[0] < 3 or _xy_rank(points[:, 0], points[:, 1]) < 2:
+        return []
+    try:
+        from scipy.spatial import Delaunay  # type: ignore
+
+        tri = Delaunay(points)
+        faces = []
+        for simplex in tri.simplices:
+            a, b, c = [int(v) for v in simplex]
+            if len({a, b, c}) == 3:
+                faces.append((a, b, c))
+        return faces
+    except Exception:
+        order = _angle_order(points[:, 0], points[:, 1])
+        if order.size < 3:
+            return []
+        anchor = int(order[0])
+        faces = []
+        for pos in range(1, int(order.size) - 1):
+            a, b, c = anchor, int(order[pos]), int(order[pos + 1])
+            if len({a, b, c}) == 3:
+                faces.append((a, b, c))
+        return faces
 
 
 def _local_idw_interpolate(

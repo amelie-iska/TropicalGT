@@ -217,7 +217,20 @@ def validate_row(row_dir: Path, *, min_candidates: int = 8, min_depth: int = 2, 
     _assert(surface.get("z_axis") == "centered_scaled_nll", errors, "NLL trajectory surface is not rendered with centered scaled-NLL z-axis")
     _assert(_finite_float(surface.get("raw_nll_range"), -1.0) >= 0.0, errors, "NLL surface payload is missing raw_nll_range")
     _assert(surface.get("exact_anchor_layer") is True, errors, "NLL surface is missing exact anchor layer metadata")
-    _assert(surface.get("surface_kind") == "sample_supported_local_idw_surface", errors, "NLL surface is not using sample-supported local interpolation")
+    surface_kind = surface.get("surface_kind")
+    _assert(
+        surface_kind in {"sample_supported_local_idw_surface", "exact_delaunay_nll_mesh"},
+        errors,
+        "NLL surface is neither a sample-supported local field nor an exact point-anchored mesh",
+    )
+    if surface_kind == "exact_delaunay_nll_mesh":
+        footprint = surface.get("support_footprint_layer", {})
+        _assert(isinstance(footprint, dict) and footprint.get("available") is True, errors, "Exact NLL mesh is missing its smoothed support footprint")
+        _assert(
+            footprint.get("surface_kind") == "projected_local_support_footprint",
+            errors,
+            "Exact NLL mesh footprint is not the projected local support layer",
+        )
     _assert(_finite_float(surface.get("support_radius"), -1.0) > 0.0, errors, "NLL surface payload is missing a positive support_radius")
 
     support_metrics = support_payload.get("metrics", {}) if isinstance(support_payload, dict) else {}
