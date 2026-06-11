@@ -159,7 +159,7 @@
 
 ## Visualization and GraphCG Audit Follow-Up
 
-- Restricted filtration sliders to reasoning-node inspection plots only; trajectory persistence and analogical-memory plots now keep the dark simplicial side panel without irrelevant radius controls.
+- Restricted filtration sliders to plots whose primary object is a filtered-complex inspection: reasoning-node plots and analogical simplicial-map retrieval keep the slider, while trajectory persistence summary plots keep the dark simplicial side panel without unrelated controls.
 - Replaced the GoT trajectory NLL surface with an exact Delaunay/TIN mesh whose vertices are the PCA trajectory states and whose z-values are the per-state NLLs; regenerated step-250 and fresh audit payloads report `touches_points=true` and `max_point_residual=0.0`.
 - Changed GraphCG steering to use an effective QR full-rank basis for projections, diagnostics, and visualizations while retaining raw-direction rank-collapse penalties.
 - Split each non-stop GFlowNet reasoning action into explicit graph micro-steps, so future inference states grow parse/check/rewrite/proposal-style filtered simplicial objects instead of a single coarse node.

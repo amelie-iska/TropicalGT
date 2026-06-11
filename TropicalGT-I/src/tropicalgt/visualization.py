@@ -1003,6 +1003,7 @@ def write_analogical_memory_visualization(
         fig,
         "Analogical simplicial map retrieval",
         panel_items,
+        show_filtration_slider=True,
     )
     map_path.write_text(
         json.dumps(

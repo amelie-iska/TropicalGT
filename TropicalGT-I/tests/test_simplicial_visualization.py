@@ -188,8 +188,8 @@ def test_analogical_memory_visualization_renders_simplicial_maps(tmp_path: Path)
     assert "persistent homology similarity" in html
     assert "free-resolution similarity" in html
     assert "simplicial-object-panel" in html
-    assert '<input id="filtration-slider"' not in html
-    assert '<div class="filtration-controls"' not in html
+    assert '<input id="filtration-slider"' in html
+    assert '<div class="filtration-controls"' in html
     assert maps["maps"][0]["edge_preservation_rate"] >= 0.0
     assert maps["maps"][0]["derived_signature_similarity"] >= 0.0
 
