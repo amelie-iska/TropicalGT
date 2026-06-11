@@ -11,6 +11,7 @@ import numpy as np
 import torch
 from sklearn.decomposition import PCA
 import plotly.graph_objects as go
+from plotly.offline import get_plotlyjs
 from plotly.subplots import make_subplots
 
 from .data import encode_bytes
@@ -853,7 +854,7 @@ def _write_complex_slider_map(path: Path, obj: dict[str, object], title: str, su
     base_traces = _complex_slider_traces(obj, coords3, threshold=initial, panel_index_by_label=panel_index_by_label)
     fig = go.Figure(data=base_traces)
     frames = []
-    frame_thresholds = list(reversed(thresholds))
+    frame_thresholds = thresholds
     for threshold in frame_thresholds:
         frames.append(
             go.Frame(
@@ -872,12 +873,15 @@ def _write_complex_slider_map(path: Path, obj: dict[str, object], title: str, su
             }
             for frame in frames
         ]
+        active_frame = max(0, len(steps) - 1)
         fig.update_layout(
             sliders=[
                 {
-                    "active": 0,
+                    "active": active_frame,
                     "currentvalue": {"prefix": "radius/filtration <= ", "font": {"color": "#dbeafe"}},
                     "pad": {"t": 44},
+                    "x": 0.06,
+                    "len": 0.88,
                     "steps": steps,
                 }
             ],
@@ -891,9 +895,9 @@ def _write_complex_slider_map(path: Path, obj: dict[str, object], title: str, su
                     "yanchor": "top",
                     "buttons": [
                         {
-                            "label": "play filtration",
+                            "label": "play filtration min-to-max",
                             "method": "animate",
-                            "args": [None, {"frame": {"duration": 260, "redraw": True}, "fromcurrent": True, "transition": {"duration": 0}}],
+                            "args": [None, {"frame": {"duration": 220, "redraw": True}, "fromcurrent": False, "transition": {"duration": 0}}],
                         }
                     ],
                 }
@@ -1049,6 +1053,7 @@ def _complex_slider_traces(
     for label in vertex_labels:
         vertex_row = vertex_by_label.get(label, {})
         vertex_hover.append(_vertex_readable_summary(vertex_row, include_output=True))
+    show_text = len(vertex_labels) <= 36
     traces: list[go.Scatter3d | go.Mesh3d] = [
         go.Scatter3d(
             x=edge_x,
@@ -1073,8 +1078,12 @@ def _complex_slider_traces(
                 colorbar=dict(title="filtration"),
                 line=dict(color="#e8eef8", width=1),
             ),
-            text=[label[:16] for label in vertex_labels],
+            text=[
+                _short_complex_vertex_label(label, vertex_by_label.get(label, {}), pos) if show_text else ""
+                for pos, label in enumerate(vertex_labels)
+            ],
             textposition="top center",
+            textfont=dict(size=9, color="#dbeafe"),
             hovertext=vertex_hover,
             hoverinfo="text",
             customdata=[int((panel_index_by_label or {}).get(label, 0)) for label in vertex_labels],
@@ -1118,6 +1127,30 @@ def _complex_slider_traces(
         )
     )
     return traces
+
+
+def _short_complex_vertex_label(label: str, vertex: dict[str, object] | None = None, idx: int = 0) -> str:
+    vertex = vertex or {}
+    vertex_type = str(vertex.get("type", "") or "").lower()
+    action = vertex.get("action") or vertex.get("step_action") or vertex.get("operator")
+    level = vertex.get("level")
+    if action:
+        prefix = str(action).replace("_", "-")[:10]
+    elif "problem" in vertex_type:
+        prefix = "problem"
+    elif "graph" in vertex_type:
+        prefix = "graph"
+    elif "reason" in vertex_type or "step" in vertex_type:
+        prefix = "step"
+    elif "seq" in vertex_type:
+        prefix = "seq"
+    else:
+        prefix = "v"
+    if isinstance(level, (int, float)) and math.isfinite(float(level)):
+        return f"{prefix} L{int(level)}"
+    if label.startswith("seq_") or label.startswith("step_") or label.startswith("expand_"):
+        return label[:18]
+    return f"{prefix}{idx:02d}"
 
 
 def _display_thresholds(obj: dict[str, object], max_steps: int = 32) -> list[float]:
@@ -1768,7 +1801,6 @@ def _write_growth_persistence_barcode(path: Path, topology: dict[str, object], g
     panel_objects = []
     panel_hover = []
     backend_counts: dict[str, int] = defaultdict(int)
-    synthetic_count = 0
     interval_count = 0
     max_death = 1.0
     for row in rows:
@@ -1776,8 +1808,6 @@ def _write_growth_persistence_barcode(path: Path, topology: dict[str, object], g
         backend_counts[_persistence_backend_label(topo if isinstance(topo, dict) else {})] += len(row.get("intervals", []))
         for interval in row["intervals"]:
             interval_count += 1
-            if interval.get("synthetic"):
-                synthetic_count += 1
             death = interval.get("display_death")
             if isinstance(death, (int, float)) and math.isfinite(float(death)):
                 max_death = max(max_death, float(death))
@@ -1800,12 +1830,10 @@ def _write_growth_persistence_barcode(path: Path, topology: dict[str, object], g
             death = float(interval.get("display_death", max_death))
             true_death = "inf" if interval.get("infinite") else f"{float(interval.get('death', death)):.4g}"
             source = interval.get("source") or _persistence_backend_label(topo if isinstance(topo, dict) else {})
-            synthetic = interval.get("synthetic")
             hover = (
                 f"<b>trajectory growth level {level}</b>"
                 f"<br>H{dim} interval [{birth:.4g}, {true_death}]"
                 f"<br>source={html.escape(str(source))}"
-                + (f"<br>synthetic fallback={html.escape(str(synthetic))}" if synthetic else "")
                 + f"<br>complex: {_summary_line(obj if isinstance(obj, dict) else {})}"
                 f"<br>{_derived_signature_line(topo if isinstance(topo, dict) else {})}"
                 f"<br>{_free_resolution_line(topo if isinstance(topo, dict) else {})}"
@@ -1844,10 +1872,10 @@ def _write_growth_persistence_barcode(path: Path, topology: dict[str, object], g
             tick_vals.append(level_start + (level_interval_count - 1) / 2.0)
             dim_counts = Counter(int(interval.get("dimension", 0)) for interval in row["intervals"])
             dim_summary = " ".join(f"H{dim}:{count}" for dim, count in sorted(dim_counts.items()))
-            tick_text.append(f"L{level} ({level_interval_count}; {dim_summary})")
+            tick_text.append(f"L{level}<br><span style='font-size:9px'>{level_interval_count} int; {dim_summary}</span>")
         else:
             tick_vals.append(float(y_cursor))
-            tick_text.append(f"L{level} (0)")
+            tick_text.append(f"L{level}<br><span style='font-size:9px'>0 int</span>")
             y_cursor += 1
     if not rows:
         fig.add_annotation(text="No trajectory growth topology available.", xref="paper", yref="paper", x=0.5, y=0.5, showarrow=False)
@@ -1857,13 +1885,14 @@ def _write_growth_persistence_barcode(path: Path, topology: dict[str, object], g
         title=(
             f"{title_prefix}persistent homology growth barcode"
             "<br><sup>standard interval view with level-grouped y-axis; "
-            f"intervals={interval_count}, synthetic fallback={synthetic_count}; "
+            f"intervals={interval_count}; "
             f"backends={html.escape(backend_summary)}; "
-            "hover shows GUDHI/topology provenance and free-resolution summary</sup>"
+            "hover shows GUDHI/topology provenance and free-resolution summary; regular bands indicate either stable topology or collapsed/regular filtration, not visual smoothing</sup>"
         ),
         xaxis_title="filtration birth/death",
-        yaxis=dict(title="trajectory level (interval counts by homology dimension)", tickmode="array", tickvals=tick_vals, ticktext=tick_text, autorange="reversed", tickfont=dict(size=10)),
+        yaxis=dict(title="trajectory level", tickmode="array", tickvals=tick_vals, ticktext=tick_text, autorange="reversed", tickfont=dict(size=10)),
         legend=dict(itemsizing="constant"),
+        height=max(640, min(1250, 280 + 18 * max(1, len(tick_vals)) + 3 * max(1, interval_count))),
     )
     _write_plotly_dark_html(
         path,
@@ -2483,7 +2512,7 @@ def _trajectory_growth_rows(topology: dict[str, object], growth: list[object] | 
         topo = item.get("topological_algebra") if isinstance(item.get("topological_algebra"), dict) else {}
         topo = _topology_with_persistence_representations(topo)
         obj = item.get("filtered_simplicial_object") if isinstance(item.get("filtered_simplicial_object"), dict) else {}
-        intervals, _ = _prepare_barcode_intervals(_intervals_or_synthetic_h0(topo), epsilon=0.0)
+        intervals, _ = _prepare_barcode_intervals(_persistence_intervals_only(topo), epsilon=0.0)
         rows.append(
             {
                 "level": int(item.get("level", idx)),
@@ -2495,7 +2524,7 @@ def _trajectory_growth_rows(topology: dict[str, object], growth: list[object] | 
         )
     if not rows and isinstance(topology, dict):
         topology = _topology_with_persistence_representations(topology)
-        intervals, _ = _prepare_barcode_intervals(_intervals_or_synthetic_h0(topology), epsilon=0.0)
+        intervals, _ = _prepare_barcode_intervals(_persistence_intervals_only(topology), epsilon=0.0)
         rows.append(
             {
                 "level": 0,
@@ -2536,19 +2565,11 @@ def _topology_with_persistence_representations(topology: dict[str, object]) -> d
         return enriched
 
 
-def _intervals_or_synthetic_h0(topology: dict[str, object]) -> list[dict[str, object]]:
+def _persistence_intervals_only(topology: dict[str, object]) -> list[dict[str, object]]:
     intervals = topology.get("persistence", {}).get("intervals", []) if isinstance(topology.get("persistence"), dict) else []
     if intervals:
         return [row for row in intervals if isinstance(row, dict)]
-    states = topology.get("persistence_module", {}).get("states", []) if isinstance(topology.get("persistence_module"), dict) else []
-    if not states:
-        return []
-    first = states[0] if isinstance(states[0], dict) else {}
-    betti0 = int(first.get("betti", {}).get("0", 0)) if isinstance(first.get("betti"), dict) else 0
-    if betti0 <= 0:
-        return []
-    birth = float(first.get("threshold", 0.0) or 0.0)
-    return [{"dimension": 0, "birth": birth, "death": None, "infinite": True, "synthetic": "module_beta0"}]
+    return []
 
 
 def _as_float_list(values: object) -> list[float]:
@@ -2747,7 +2768,7 @@ def write_graphcg_trajectory_visualization(scaling_report: dict[str, object], ou
     candidate_entropy = -np.sum(row_probs * np.log2(np.maximum(row_probs, 1e-12)), axis=1)
     candidate_effective_dirs = np.power(2.0, candidate_entropy)
     direction_count = int(matrix.shape[1])
-    display_count = min(64, direction_count)
+    display_count = min(32, direction_count)
     top_idx = np.argsort(mean_abs)[::-1][:display_count]
     top_idx = top_idx[np.argsort(top_idx)]
     z_signed = matrix[:, top_idx]
@@ -2793,7 +2814,7 @@ def write_graphcg_trajectory_visualization(scaling_report: dict[str, object], ou
                 "direction_activity_sorted": [float(v) for v in sorted_activity.tolist()],
                 "direction_signed_mean_sorted": [float(v) for v in sorted_signed.tolist()],
                 "activity_threshold_p90": active_floor,
-                "interpretation": "GraphCG directions are full-rank: the heatmap shows top activity for readability, while the spectrum and candidate effective-direction counts summarize all directions.",
+                "interpretation": "GraphCG directions are full-rank: the heatmap intentionally shows the highest-activity subset for readability, while the spectrum and candidate effective-direction counts summarize every embedding direction.",
             },
             indent=2,
         ),
@@ -2808,10 +2829,10 @@ def write_graphcg_trajectory_visualization(scaling_report: dict[str, object], ou
         horizontal_spacing=0.10,
         vertical_spacing=0.16,
         subplot_titles=(
-            "Top active directions across GoT states",
+            "Readable top-direction heatmap",
             "Full-rank activity spectrum",
-            "Candidate activity and effective direction count",
-            "Signed bias vs absolute activity",
+            "Candidate activity by sampled GoT state",
+            "Signed bias for every direction",
         ),
     )
     fig.add_trace(
@@ -2896,15 +2917,16 @@ def write_graphcg_trajectory_visualization(scaling_report: dict[str, object], ou
             "GraphCG full-rank direction audit"
             f"<br><sup>top heatmap shows {display_count}/{direction_count} directions for readability; spectrum/effective counts audit all directions; active nonzero rank={active_rank}</sup>"
         ),
-        margin=dict(t=122, l=92, r=48, b=90),
+        margin=dict(t=122, l=80, r=48, b=86),
+        height=920,
     )
     x_labels = [f"d{int(idx)}" for idx in top_idx]
     x_step = max(1, int(math.ceil(len(x_labels) / 12)))
     x_tickvals = [label for pos, label in enumerate(x_labels) if pos % x_step == 0 or pos == len(x_labels) - 1]
-    y_step = max(1, int(math.ceil(len(labels) / 24)))
+    y_step = max(1, int(math.ceil(len(labels) / 12)))
     y_tickvals = [label for pos, label in enumerate(compact_labels) if pos % y_step == 0 or pos == len(compact_labels) - 1]
     fig.update_xaxes(title_text="GraphCG direction", tickangle=0, tickmode="array", tickvals=x_tickvals, ticktext=x_tickvals, row=1, col=1)
-    fig.update_yaxes(title_text="GoT state", tickmode="array", tickvals=y_tickvals, ticktext=y_tickvals, row=1, col=1)
+    fig.update_yaxes(title_text="GoT state index (hover for path)", tickmode="array", tickvals=y_tickvals, ticktext=y_tickvals, row=1, col=1, tickfont=dict(size=9))
     fig.update_xaxes(title_text="direction rank by activity", row=1, col=2)
     fig.update_yaxes(title_text="mean absolute cosine", row=1, col=2)
     fig.update_xaxes(title_text="GoT candidate index", row=2, col=1)
@@ -4422,7 +4444,7 @@ def _action_color(action: str) -> str:
     return colors.get(action, "#94a3b8")
 
 
-def _write_plotly_dark_html(path: Path, fig: go.Figure, title: str, panel_items: list[dict[str, str]] | None = None, show_filtration_slider: bool = False) -> None:
+def _write_plotly_dark_html(path: Path, fig: go.Figure, title: str, panel_items: list[dict[str, object]] | None = None, show_filtration_slider: bool = False) -> None:
     existing_margin = fig.layout.margin.to_plotly_json() if fig.layout.margin else {}
     top_margin = max(int(existing_margin.get("t", 0) or 0), 78)
     fig.update_layout(
@@ -4437,16 +4459,22 @@ def _write_plotly_dark_html(path: Path, fig: go.Figure, title: str, panel_items:
             t=top_margin,
         ),
     )
-    chart = fig.to_html(full_html=False, include_plotlyjs="cdn", config={"displaylogo": False, "responsive": True})
+    plotly_asset = path.parent / "plotly.min.js"
+    if not plotly_asset.exists():
+        plotly_asset.write_text(get_plotlyjs(), encoding="utf-8")
+    chart = (
+        '<script src="plotly.min.js"></script>'
+        + fig.to_html(full_html=False, include_plotlyjs=False, config={"displaylogo": False, "responsive": True})
+    )
     items = panel_items or []
     has_panel = bool(items)
     initial_index = max(range(len(items)), key=lambda idx: float(items[idx].get("complexity", 0.0))) if items else 0
-    initial = items[initial_index] if items else {"title": "Filtered simplicial object", "svg": "", "summary": "Hover a reasoning node to render its complex."}
+    initial = items[initial_index] if items else {"title": "Filtered simplicial object", "svg": "", "plot": {}, "summary": "Hover a reasoning node to render its complex."}
     controls_html = (
         """<div class=\"filtration-controls\" id=\"filtration-controls\">
         <label><span>Filtration radius</span><strong id=\"filtration-value\">all</strong></label>
         <input id=\"filtration-slider\" type=\"range\" min=\"0\" max=\"1\" step=\"0.001\" value=\"1\" aria-label=\"filtered simplicial complex radius\">
-        <div class=\"hint\" id=\"filtration-hint\">Shows simplices with scalar filtration at or below the selected radius. Multiparameter summaries remain in the JSON payload.</div>
+        <div class=\"hint\" id=\"filtration-hint\">Left is the smallest visible filtration; right is the full selected complex. Multiparameter summaries remain in the JSON payload.</div>
       </div>"""
         if show_filtration_slider
         else ""
@@ -4458,7 +4486,11 @@ def _write_plotly_dark_html(path: Path, fig: go.Figure, title: str, panel_items:
       <h1 id="simplicial-title">{html.escape(initial["title"])}</h1>
       <div class="summary" id="simplicial-summary">{initial["summary"]}</div>
       {controls_html}
-      <div class="simplicial-object-panel" id="simplicial-svg">{initial["svg"]}</div>
+      <div class="simplicial-object-plot" id="simplicial-plot" aria-label="interactive selected filtered simplicial complex"></div>
+      <details class="static-preview">
+        <summary>Static SVG fallback</summary>
+        <div class="simplicial-object-panel" id="simplicial-svg">{initial["svg"]}</div>
+      </details>
     </aside>"""
         if has_panel
         else ""
@@ -4559,6 +4591,29 @@ def _write_plotly_dark_html(path: Path, fig: go.Figure, title: str, panel_items:
       box-shadow: inset 0 0 0 1px rgba(255,255,255,0.03), 0 18px 36px rgba(0,0,0,0.24);
     }}
     .simplicial-object-panel svg {{ width: 100%; height: auto; display: block; }}
+    .simplicial-object-plot {{
+      width: 100%;
+      height: min(48vh, 460px);
+      min-height: 340px;
+      border: 1px solid rgba(94, 234, 212, 0.22);
+      background: #070a12;
+      border-radius: 8px;
+      margin-bottom: 12px;
+      overflow: hidden;
+      box-shadow: inset 0 0 0 1px rgba(255,255,255,0.03), 0 18px 36px rgba(0,0,0,0.24);
+    }}
+    .static-preview {{
+      border: 1px solid rgba(148, 163, 184, 0.16);
+      border-radius: 8px;
+      background: rgba(7, 10, 18, 0.46);
+      padding: 8px;
+    }}
+    .static-preview summary {{
+      cursor: pointer;
+      color: #99f6e4;
+      font-size: 11px;
+      margin-bottom: 8px;
+    }}
     .hover-simplicial-card {{
       position: fixed;
       z-index: 40;
@@ -4590,8 +4645,8 @@ def _write_plotly_dark_html(path: Path, fig: go.Figure, title: str, panel_items:
       color: var(--muted);
       font-size: 10px;
       line-height: 1.35;
-      max-height: 168px;
-      overflow: hidden;
+      max-height: 220px;
+      overflow: auto;
       margin-bottom: 6px;
     }}
     .hover-simplicial-card svg {{ width: 100%; height: auto; display: block; }}
@@ -4614,6 +4669,7 @@ def _write_plotly_dark_html(path: Path, fig: go.Figure, title: str, panel_items:
     const panelTitle = document.getElementById("simplicial-title");
     const panelSummary = document.getElementById("simplicial-summary");
     const panelSvg = document.getElementById("simplicial-svg");
+    const panelPlot = document.getElementById("simplicial-plot");
     const hoverCard = document.getElementById("hover-simplicial-card");
     const hoverTitle = document.getElementById("hover-simplicial-title");
     const hoverSummary = document.getElementById("hover-simplicial-summary");
@@ -4631,6 +4687,7 @@ def _write_plotly_dark_html(path: Path, fig: go.Figure, title: str, panel_items:
       panelSummary.innerHTML = item.summary || "";
       panelSvg.innerHTML = item.svg || "";
       configureFiltrationSlider(item, panelSvg);
+      renderPanelComplex(item);
     }}
     function configureFiltrationSlider(item, root) {{
       if (!filtrationSlider || !filtrationValue || !filtrationHint) {{
@@ -4664,7 +4721,147 @@ def _write_plotly_dark_html(path: Path, fig: go.Figure, title: str, panel_items:
         const threshold = Number(filtrationSlider.value);
         filtrationValue.textContent = Number.isFinite(threshold) ? threshold.toFixed(3) : "all";
         applyFiltrationThreshold(panelSvg, threshold);
+        renderPanelComplex(simplicialPanels[activePanelIndex]);
       }});
+    }}
+    function panelThreshold(item) {{
+      if (!item) return Infinity;
+      if (filtrationSlider && !filtrationSlider.disabled) {{
+        const value = Number(filtrationSlider.value);
+        if (Number.isFinite(value)) return value;
+      }}
+      const plot = item.plot || {{}};
+      const max = Number(plot.filtration_max ?? item.filtration_max ?? 1);
+      return Number.isFinite(max) ? max : Infinity;
+    }}
+    function buildPanelTraces(item) {{
+      const plot = (item && item.plot) || {{}};
+      const vertices = Array.isArray(plot.vertices) ? plot.vertices : [];
+      const edges = Array.isArray(plot.edges) ? plot.edges : [];
+      const triangles = Array.isArray(plot.triangles) ? plot.triangles : [];
+      const threshold = panelThreshold(item);
+      const visible = new Set(vertices.filter((v) => Number(v.filtration ?? 0) <= threshold + 1e-12).map((v) => String(v.label)));
+      const vertexByLabel = new Map(vertices.map((v) => [String(v.label), v]));
+      const edgeX = [], edgeY = [], edgeZ = [], edgeHover = [];
+      edges.forEach((e) => {{
+        const a = vertexByLabel.get(String(e.a));
+        const b = vertexByLabel.get(String(e.b));
+        if (!a || !b || !visible.has(String(e.a)) || !visible.has(String(e.b))) return;
+        if (Number(e.filtration ?? 0) > threshold + 1e-12) return;
+        const hover = `<b>1-simplex</b><br>${{e.a}} -> ${{e.b}}<br>filtration=${{Number(e.filtration ?? 0).toFixed(4)}}<br>type=${{e.type || "edge"}}`;
+        edgeX.push(a.x, b.x, null);
+        edgeY.push(a.y, b.y, null);
+        edgeZ.push(a.z, b.z, null);
+        edgeHover.push(hover, hover, null);
+      }});
+      const shownVertices = vertices.filter((v) => visible.has(String(v.label)));
+      const showLabels = shownVertices.length <= 42;
+      const traces = [
+        {{
+          type: "scatter3d",
+          mode: "lines",
+          x: edgeX,
+          y: edgeY,
+          z: edgeZ,
+          line: {{color: "rgba(125,211,252,0.70)", width: 4}},
+          hovertext: edgeHover,
+          hoverinfo: "text",
+          name: "1-simplices"
+        }},
+      ];
+      const meshIndex = new Map();
+      const meshX = [], meshY = [], meshZ = [], triI = [], triJ = [], triK = [];
+      function meshVertex(label) {{
+        const key = String(label);
+        if (meshIndex.has(key)) return meshIndex.get(key);
+        const v = vertexByLabel.get(key);
+        if (!v) return null;
+        const idx = meshX.length;
+        meshIndex.set(key, idx);
+        meshX.push(v.x); meshY.push(v.y); meshZ.push(v.z);
+        return idx;
+      }}
+      triangles.forEach((tri) => {{
+        if (Number(tri.filtration ?? 0) > threshold + 1e-12) return;
+        const labels = Array.isArray(tri.vertices) ? tri.vertices.map(String) : [];
+        if (labels.length < 3 || labels.some((label) => !visible.has(label))) return;
+        const idxs = labels.slice(0, 3).map(meshVertex);
+        if (idxs.some((idx) => idx === null || idx === undefined)) return;
+        triI.push(idxs[0]); triJ.push(idxs[1]); triK.push(idxs[2]);
+      }});
+      if (triI.length) {{
+        traces.push({{
+          type: "mesh3d",
+          x: meshX,
+          y: meshY,
+          z: meshZ,
+          i: triI,
+          j: triJ,
+          k: triK,
+          color: "rgba(94,234,212,0.28)",
+          opacity: 0.34,
+          name: "2-simplices",
+          hoverinfo: "skip",
+          showscale: false
+        }});
+      }}
+      traces.push({{
+        type: "scatter3d",
+        mode: showLabels ? "markers+text" : "markers",
+        x: shownVertices.map((v) => v.x),
+        y: shownVertices.map((v) => v.y),
+        z: shownVertices.map((v) => v.z),
+        text: shownVertices.map((v) => showLabels ? (v.short_label || String(v.label).slice(0, 16)) : ""),
+        textposition: "top center",
+        textfont: {{color: "#dbeafe", size: 10}},
+        marker: {{
+          size: shownVertices.map((v) => Number(v.size ?? 7)),
+          color: shownVertices.map((v) => Number(v.filtration ?? 0)),
+          colorscale: "Viridis",
+          showscale: true,
+          colorbar: {{title: "filtration", len: 0.58}},
+          line: {{color: "#e8eef8", width: 1.1}}
+        }},
+        hovertext: shownVertices.map((v) => v.hover || `<b>${{v.label}}</b><br>filtration=${{Number(v.filtration ?? 0).toFixed(4)}}`),
+        hoverinfo: "text",
+        name: "0-simplices"
+      }});
+      return traces;
+    }}
+    function renderPanelComplex(item) {{
+      if (!panelPlot || typeof Plotly === "undefined") return;
+      const plot = (item && item.plot) || {{}};
+      if (!Array.isArray(plot.vertices) || !plot.vertices.length) {{
+        panelPlot.innerHTML = "<div style='padding:16px;color:#99a8bd'>No selected filtered simplicial complex vertices available.</div>";
+        return;
+      }}
+      panelPlot.innerHTML = "<div id='selected-complex-graph' style='width:100%;height:100%;'></div>";
+      const selectedGraph = panelPlot.querySelector("#selected-complex-graph");
+      if (!selectedGraph) return;
+      const layout = {{
+        template: "plotly_dark",
+        paper_bgcolor: "#070a12",
+        plot_bgcolor: "#070a12",
+        margin: {{l: 0, r: 0, t: 28, b: 0}},
+        title: {{
+          text: `selected complex: ${{plot.vertex_count || plot.vertices.length}} vertices, ${{plot.edge_count || 0}} edges, ${{plot.triangle_count || 0}} faces`,
+          font: {{size: 11, color: "#dbeafe"}}
+        }},
+        scene: {{
+          xaxis: {{title: "PCA/MDS-1", gridcolor: "rgba(125,211,252,0.22)", zerolinecolor: "rgba(226,232,240,0.25)"}},
+          yaxis: {{title: "PCA/MDS-2", gridcolor: "rgba(125,211,252,0.22)", zerolinecolor: "rgba(226,232,240,0.25)"}},
+          zaxis: {{title: "PCA/MDS-3", gridcolor: "rgba(125,211,252,0.22)", zerolinecolor: "rgba(226,232,240,0.25)"}},
+          aspectmode: "cube",
+          camera: {{eye: {{x: 1.45, y: 1.25, z: 0.95}}}}
+        }},
+        legend: {{orientation: "h", y: -0.05}},
+        showlegend: true
+      }};
+      try {{
+        Plotly.newPlot(selectedGraph, buildPanelTraces(item), layout, {{displaylogo: false, responsive: false}});
+      }} catch (err) {{
+        panelPlot.innerHTML = `<div style='padding:16px;color:#fb7185'>Could not render selected complex: ${{err && err.message ? err.message : err}}</div>`;
+      }}
     }}
     function positionHoverCard(pointerEvent) {{
       if (!hoverCard || !pointerEvent) return;
@@ -4697,7 +4894,7 @@ def _write_plotly_dark_html(path: Path, fig: go.Figure, title: str, panel_items:
       const sliders = (plot.layout && plot.layout.sliders) || [];
       const slider = sliders.length ? sliders[0] : null;
       if (!slider || !Array.isArray(slider.steps) || !slider.steps.length) return;
-      const active = Number.isFinite(Number(slider.active)) ? Number(slider.active) : 0;
+      const active = Math.max(0, slider.steps.length - 1);
       const step = slider.steps[Math.max(0, Math.min(slider.steps.length - 1, active))];
       const args = step && Array.isArray(step.args) ? step.args : null;
       const frameName = args && Array.isArray(args[0]) ? args[0][0] : null;
@@ -4716,6 +4913,16 @@ def _write_plotly_dark_html(path: Path, fig: go.Figure, title: str, panel_items:
     if (plot && simplicialPanels.length) {{
       setPanel(initialPanelIndex);
       plot.on("plotly_hover", (event) => {{
+        const point = (event.points || []).find((p) => p.customdata !== undefined && p.customdata !== null);
+        if (!point) return;
+        const raw = Array.isArray(point.customdata) ? point.customdata[0] : point.customdata;
+        const idx = Number(raw);
+        if (Number.isFinite(idx)) {{
+          setPanel(idx);
+          renderHoverCard(idx, event.event);
+        }}
+      }});
+      plot.on("plotly_click", (event) => {{
         const point = (event.points || []).find((p) => p.customdata !== undefined && p.customdata !== null);
         if (!point) return;
         const raw = Array.isArray(point.customdata) ? point.customdata[0] : point.customdata;
@@ -4748,8 +4955,8 @@ def _write_dark_empty(path: Path, message: str) -> None:
     )
 
 
-def _simplicial_panel_items(objects: list[dict[str, object]], hover: list[str]) -> list[dict[str, str]]:
-    items: list[dict[str, str]] = []
+def _simplicial_panel_items(objects: list[dict[str, object]], hover: list[str]) -> list[dict[str, object]]:
+    items: list[dict[str, object]] = []
     for idx, obj in enumerate(objects):
         summary = obj.get("summary", {}) if isinstance(obj, dict) else {}
         title = str(obj.get("record_id", f"reasoning-state-{idx}")) if isinstance(obj, dict) else f"reasoning-state-{idx}"
@@ -4780,7 +4987,8 @@ def _simplicial_panel_items(objects: list[dict[str, object]], hover: list[str]) 
                 "title": title,
                 "summary": summary_html,
                 "compact_summary": compact_summary,
-                "svg": _simplicial_object_svg(obj if isinstance(obj, dict) else {}),
+                "svg": _simplicial_object_svg(obj if isinstance(obj, dict) else {}, max_vertices=160),
+                "plot": _simplicial_plot_payload(obj if isinstance(obj, dict) else {}),
                 "complexity": complexity,
                 "filtration_min": filtration_min,
                 "filtration_max": filtration_max,
@@ -4793,7 +5001,89 @@ def _simplicial_panel_items(objects: list[dict[str, object]], hover: list[str]) 
     return items
 
 
-def _simplicial_object_svg(obj: dict[str, object], width: int = 380, height: int = 270, max_vertices: int = 64) -> str:
+def _simplicial_plot_payload(obj: dict[str, object], max_vertices: int = 220) -> dict[str, object]:
+    obj = _gudhi_canonical_complex(obj)
+    simplices = obj.get("simplices", []) if isinstance(obj, dict) else []
+    vertices = [s for s in simplices if isinstance(s, dict) and int(s.get("dimension", -1)) == 0]
+    edges = [s for s in simplices if isinstance(s, dict) and int(s.get("dimension", -1)) == 1]
+    triangles = [s for s in simplices if isinstance(s, dict) and int(s.get("dimension", -1)) == 2]
+    labels = [str((s.get("simplex") or [f"v{idx}"])[0]) for idx, s in enumerate(vertices)]
+    source_label_count = len(labels)
+    if len(labels) > max_vertices:
+        # Keep deterministic order but prefer actual model/GUDHI vertices with lower filtration first.
+        ordered = sorted(
+            enumerate(vertices),
+            key=lambda row: (float(row[1].get("filtration", 0.0) or 0.0), str((row[1].get("simplex") or [""])[0])),
+        )
+        keep_idx = {idx for idx, _row in ordered[:max_vertices]}
+        vertices = [row for idx, row in enumerate(vertices) if idx in keep_idx]
+        labels = [str((s.get("simplex") or [f"v{idx}"])[0]) for idx, s in enumerate(vertices)]
+    visible = set(labels)
+    coords3, _projected, layout_kind = _simplicial_pca3_radius_layout(labels, vertices, edges, width=760, height=560)
+    vertex_by_label = {str((row.get("simplex") or [""])[0]): row for row in vertices}
+    threshold_values = _display_thresholds(obj, max_steps=96)
+    payload_vertices: list[dict[str, object]] = []
+    for idx, label in enumerate(labels):
+        row = vertex_by_label.get(label, {})
+        x, y, z = coords3.get(label, (0.0, 0.0, 0.0))
+        filt = float(row.get("filtration", 0.0) or 0.0)
+        payload_vertices.append(
+            {
+                "label": label,
+                "short_label": _short_complex_vertex_label(label, row, idx),
+                "x": float(x),
+                "y": float(y),
+                "z": float(z),
+                "size": 7.0 + 4.0 * max(0.0, min(1.0, float(z))),
+                "filtration": filt,
+                "type": str(row.get("type", "vertex")),
+                "hover": _vertex_readable_summary(row, include_output=True),
+            }
+        )
+    payload_edges: list[dict[str, object]] = []
+    for edge in edges:
+        simplex = [str(v) for v in (edge.get("simplex") or [])[:2]]
+        if len(simplex) < 2 or simplex[0] not in visible or simplex[1] not in visible:
+            continue
+        payload_edges.append(
+            {
+                "a": simplex[0],
+                "b": simplex[1],
+                "filtration": float(edge.get("filtration", 0.0) or 0.0),
+                "type": str(edge.get("type", "edge")),
+            }
+        )
+    payload_triangles: list[dict[str, object]] = []
+    for tri in triangles[:1200]:
+        simplex = [str(v) for v in (tri.get("simplex") or [])[:3]]
+        if len(simplex) < 3 or any(label not in visible for label in simplex):
+            continue
+        payload_triangles.append(
+            {
+                "vertices": simplex,
+                "filtration": float(tri.get("filtration", 0.0) or 0.0),
+                "type": str(tri.get("type", "2-simplex")),
+            }
+        )
+    return {
+        "layout_kind": layout_kind,
+        "vertices": payload_vertices,
+        "edges": payload_edges,
+        "triangles": payload_triangles,
+        "thresholds": threshold_values,
+        "filtration_min": min(threshold_values) if threshold_values else 0.0,
+        "filtration_max": max(threshold_values) if threshold_values else 0.0,
+        "vertex_count": len(payload_vertices),
+        "edge_count": len(payload_edges),
+        "triangle_count": len(payload_triangles),
+        "source_vertex_count": sum(1 for row in simplices if isinstance(row, dict) and int(row.get("dimension", -1)) == 0),
+        "source_edge_count": sum(1 for row in simplices if isinstance(row, dict) and int(row.get("dimension", -1)) == 1),
+        "source_triangle_count": sum(1 for row in simplices if isinstance(row, dict) and int(row.get("dimension", -1)) == 2),
+        "truncated_for_interactive_panel": source_label_count > len(payload_vertices),
+    }
+
+
+def _simplicial_object_svg(obj: dict[str, object], width: int = 380, height: int = 270, max_vertices: int = 160) -> str:
     simplices = obj.get("simplices", []) if isinstance(obj, dict) else []
     vertices = [s for s in simplices if isinstance(s, dict) and int(s.get("dimension", -1)) == 0]
     edges = [s for s in simplices if isinstance(s, dict) and int(s.get("dimension", -1)) == 1]

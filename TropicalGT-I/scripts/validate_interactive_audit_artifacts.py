@@ -113,10 +113,17 @@ def _validate_file_set(row_dir: Path, errors: list[str]) -> dict[str, str]:
             html = _read_text(path)
             for needle in needles:
                 _assert(needle in html, errors, f"{rel} missing marker {needle!r}")
+            _assert("synthetic fallback" not in html, errors, f"{rel} contains retired synthetic persistence fallback text")
+            _assert("module_beta0" not in html, errors, f"{rel} contains retired module_beta0 synthetic interval text")
             if key not in {"step_complex_index", "analogical_index"}:
                 _assert(_html_has_plotly(html), errors, f"{rel} does not look like a Plotly/interactive page")
+                _assert("plotly.min.js" in html, errors, f"{rel} does not use the local Plotly asset")
+            if key in {"embedding_map", "full_complex", "analogical_map", "trajectory_barcode", "trajectory_betti"}:
+                _assert("simplicial-object-plot" in html and "selected-complex-graph" in html, errors, f"{rel} does not render the selected complex as a live Plotly panel")
+                _assert("plotly_click" in html, errors, f"{rel} does not support click-to-select for the simplicial detail panel")
             if key == "full_complex":
                 _assert("model input" in html and "model output" in html, errors, f"{rel} does not expose model input/output in hover payload")
+                _assert("play filtration min-to-max" in html, errors, f"{rel} does not use the flipped min-to-max filtration control")
             if key == "analogical_map":
                 _assert("trajectory-complex map" in html, errors, f"{rel} is not mapping trajectory complexes")
                 _assert("slider filters domain" in html and "sliders" in html, errors, f"{rel} is missing Plotly filtration slider for the simplicial map")
@@ -124,6 +131,8 @@ def _validate_file_set(row_dir: Path, errors: list[str]) -> dict[str, str]:
                 support_audit = "observed supports only" in html and "top-support collapse rate" in html
                 collapse_audit = "active-support collapse diagnostic" in html and "Collapse metrics" in html
                 _assert(support_audit or collapse_audit, errors, f"{rel} is not the interpretable support audit view")
+            if key == "graphcg":
+                _assert("Readable top-direction heatmap" in html, errors, f"{rel} does not use the readable GraphCG top-direction audit layout")
     return files
 
 

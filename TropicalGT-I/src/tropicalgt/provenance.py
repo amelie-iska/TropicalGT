@@ -153,11 +153,11 @@ PROVENANCE_REGISTRY: tuple[ProvenanceEntry, ...] = (
     ),
     ProvenanceEntry(
         name="synthetic_h0_fallback",
-        kind="visual_fallback",
+        kind="retired_visual_fallback",
         surface="persistence barcode plot",
         optimize_directly=False,
-        description="Display-only H0 bars produced only when a topology payload has no finite intervals.",
-        replacement_or_guardrail="Never log as training topology; validator favors real GUDHI representation payloads.",
+        description="Retired display-only H0 bars that used to be produced when a topology payload had no finite intervals.",
+        replacement_or_guardrail="Keep absent from visualization code; barcode plots should show real GUDHI intervals or no interval rows.",
         match_terms=("_intervals_or_synthetic_h0", "synthetic fallback", "synthetic_count", "module_beta0", 'interval.get("synthetic")'),
     ),
     ProvenanceEntry(

@@ -25,7 +25,7 @@ def _write(path: Path, text: str) -> None:
 
 
 def _html(title: str, extra: str = "Plotly.newPlot play filtration Filtration radius") -> str:
-    return f"<!doctype html><title>{title}</title><body>{title} {extra}</body>"
+    return f"<!doctype html><title>{title}</title><script src='plotly.min.js'></script><body>{title} {extra}</body>"
 
 
 def _row(root: Path, name: str) -> Path:
@@ -170,17 +170,17 @@ def _row(root: Path, name: str) -> Path:
     html_files = {
         "got_embedding_map_3d.html": _html(
             "Graph-of-thought embedding-space trajectory map actual graph_state PCA",
-            "Plotly.newPlot simplicial-object-panel hover-simplicial-card",
+            "Plotly.newPlot simplicial-object-panel simplicial-object-plot selected-complex-graph hover-simplicial-card plotly_click",
         ),
         "got_trajectory_pca_3d.html": _html("Graph-of-thought branching trajectory centered NLL"),
-        "got_full_trajectory_complex.html": _html("Full graph-of-thought trajectory filtered simplicial complex", "Plotly.newPlot play filtration Filtration radius model input model output filtration backend="),
+        "got_full_trajectory_complex.html": _html("Full graph-of-thought trajectory filtered simplicial complex", "Plotly.newPlot play filtration min-to-max Filtration radius model input model output filtration backend= simplicial-object-plot selected-complex-graph plotly_click"),
         "reasoning_step_complex_maps/index.html": _html("Reasoning step filtered simplicial complex maps", "table"),
         "tropical_support_heatmap.html": _html("Tropical active support", "Plotly.newPlot observed supports only top-support collapse rate"),
-        "graphcg_direction_cosines.html": _html("GraphCG full-rank direction audit"),
+        "graphcg_direction_cosines.html": _html("GraphCG full-rank direction audit", "Plotly.newPlot Readable top-direction heatmap"),
         "analogical_memory_topk_index.html": _html("Analogical top-k retrieval", "table"),
-        "analogical_memory_map_02.html": _html("Analogical simplicial map trajectory-complex map", "Plotly.newPlot slider filters domain and codomain sliders binary filtered-complex map vertex-only correspondences preserved 1-simplex map"),
-        "trajectory_persistence/persistence_barcode.html": _html("Trajectory persistence barcode"),
-        "trajectory_persistence/persistence_module_betti.html": _html("Trajectory persistence Betti", "Plotly.newPlot 2D matrix decorative 3D"),
+        "analogical_memory_map_02.html": _html("Analogical simplicial map trajectory-complex map", "Plotly.newPlot slider filters domain and codomain sliders binary filtered-complex map vertex-only correspondences preserved 1-simplex map simplicial-object-plot selected-complex-graph plotly_click"),
+        "trajectory_persistence/persistence_barcode.html": _html("Trajectory persistence barcode", "Plotly.newPlot simplicial-object-plot selected-complex-graph plotly_click"),
+        "trajectory_persistence/persistence_module_betti.html": _html("Trajectory persistence Betti", "Plotly.newPlot 2D matrix decorative 3D simplicial-object-plot selected-complex-graph plotly_click"),
         "trajectory_persistence/persistence_representations.html": _html("Trajectory GUDHI persistence vectorization", "Plotly.newPlot Fast train/eval features"),
         "trajectory_persistence/persistence_landscapes.html": _html("Trajectory Actual GUDHI persistence landscape functions", "Plotly.newPlot lambda_1(t) not norm-only summaries"),
     }
