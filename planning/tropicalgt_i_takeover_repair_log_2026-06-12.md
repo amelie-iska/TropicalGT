@@ -139,3 +139,12 @@ Current validator failures for `TropicalGT-I/outputs/multi_sample_browser/latest
 - Patched `run_multi_inference_audits.py` so `--audit-preset full` preserves caller sampling temperature/exploration and defaults to stochastic actions instead of silently forcing deterministic sampling.
 - Focused tests passed: GoT NLL visualization, analogical memory visualization, and full-audit preset contract.
 - Launched refreshed CPU-side model-backed browser QA from the active latest checkpoint with full audit depth/width/branch, stochastic actions, GUDHI, memory top-k 8, and no GPU contention with live training. Output root is recorded in `/tmp/tropicalgt_takeover_out.txt`.
+
+
+## Repair Cycle Update: 2026-06-12 Memory Gate And Certificate Telemetry
+
+- Added `AnalogicalMemoryQualityGate` in `TropicalGT-I/src/tropicalgt/memory.py`. Memory insertion is now explicitly quality-gated: configured thresholds can require model-probability Jensen-Shannon filtered complexes, enough probability vertices/simplices, topological algebra payloads, nonnegative NLL improvement, score/BPB/NLL/margin thresholds, and a minimum composite quality score.
+- Added `memory_quality_gate_summary` so periodic audits can report candidates seen, eligible trajectories, rejected trajectories, and rejection reasons. Retrieval can still request many analogies, but the bank is curated; early training may correctly produce no retrievable memories.
+- Updated training configs with `memory_quality_*` defaults requiring model-probability complexes, at least four probability vertices, at least three simplices, topological algebra, and nonnegative NLL improvement before storage.
+- Expanded certificate telemetry. `certificate_loss` remains the raw negative log mass assigned to allowed support sets, but W&B now also receives allowed-mass mean/min, node/edge/graph agreement and loss, disallowed-support rate, graph-support rate, node->graph support rate, edge->graph support rate, and token-order support transition rate.
+- Focused tests passed after fixes for `dimension=0` and `level=0` truthiness bugs in the memory gate: `test_metrics_and_memory.py` and `test_training_metrics.py` (`13 passed`).

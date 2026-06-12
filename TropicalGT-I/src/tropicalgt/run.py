@@ -25,7 +25,7 @@ from .data import (
 )
 from .decoding import meet_in_middle_batch, meet_in_middle_config
 from .diagnostics import describe_graph_tokens, record_diagnostics
-from .memory import AnalogicalMemoryBank, memory_records_from_scaling_report, query_signature_from_report
+from .memory import AnalogicalMemoryBank, AnalogicalMemoryQualityGate, memory_quality_gate_summary, memory_records_from_scaling_report, query_signature_from_report
 from .metrics import aggregate_bpb_metrics, batch_bpb_metrics, explicit_graph_json_bytes, graph_token_structural_bytes
 from .model import TropicalGTConfig, TropicalGTModel
 from .scaling import run_inference_scaling
@@ -91,6 +91,7 @@ WANDB_PRIORITY_GROUPS: tuple[tuple[str, tuple[str, ...]], ...] = (
             "support_entropy",
             "support_soft_entropy",
             "support_unique_frac",
+            "support_transition_rate",
             "self_support_rate",
             "invalid_support_rate",
             "margin_mean",
@@ -109,6 +110,16 @@ WANDB_PRIORITY_GROUPS: tuple[tuple[str, tuple[str, ...]], ...] = (
             "certificate_coverage",
             "certificate_edge_agreement",
             "certificate_node_agreement",
+            "certificate_graph_agreement",
+            "certificate_allowed_mass_mean",
+            "certificate_allowed_mass_min",
+            "certificate_node_loss",
+            "certificate_edge_loss",
+            "certificate_graph_loss",
+            "certificate_disallowed_support_rate",
+            "certificate_graph_support_rate",
+            "certificate_node_graph_support_rate",
+            "certificate_edge_graph_support_rate",
         ),
     ),
     (
@@ -190,6 +201,9 @@ WANDB_PRIORITY_GROUPS: tuple[tuple[str, tuple[str, ...]], ...] = (
             "analogical_memory_query_norm",
             "analogical_memory_records_added",
             "analogical_memory_bank_size",
+            "analogical_memory_candidates_seen",
+            "analogical_memory_eligible",
+            "analogical_memory_rejected",
         ),
     ),
     (
@@ -441,6 +455,7 @@ def train(config_path: str | Path, resume_from: str | Path | None = None, max_st
     graph_bpb_side_weight = float(cfg.get("graph_bpb_side_weight", 1.0))
     memory_bank_path = str(cfg.get("memory_bank_path", ""))
     memory_bank = AnalogicalMemoryBank(memory_bank_path, max_records=int(cfg.get("memory_max_records", 2048))) if memory_bank_path else None
+    memory_quality_gate = AnalogicalMemoryQualityGate.from_config(cfg) if memory_bank is not None else None
     memory_records_added = 0
     periodic_artifacts: list[dict[str, Any]] = []
     validation_every = int(cfg.get("validation_every_steps", cfg.get("eval_every_steps", 0)) or 0)
@@ -745,12 +760,22 @@ def train(config_path: str | Path, resume_from: str | Path | None = None, max_st
                     source=f"train:{run_name}:step{step}",
                     min_score=cfg.get("memory_min_score"),
                     max_records=int(cfg.get("memory_records_per_audit", 8)),
+                    quality_gate=memory_quality_gate,
+                )
+                gate_summary = memory_quality_gate_summary(
+                    scaling,
+                    memory_quality_gate,
+                    min_score=cfg.get("memory_min_score"),
+                    max_records=int(cfg.get("memory_records_per_audit", 8)),
                 )
                 memory_bank.extend(records)
                 memory_bank.save()
                 memory_records_added += len(records)
                 metrics_last["analogical_memory_records_added"] = float(memory_records_added)
                 metrics_last["analogical_memory_bank_size"] = float(len(memory_bank.records))
+                metrics_last["analogical_memory_candidates_seen"] = float(gate_summary.get("candidate_count", 0))
+                metrics_last["analogical_memory_eligible"] = float(gate_summary.get("eligible_count", 0))
+                metrics_last["analogical_memory_rejected"] = float(gate_summary.get("rejected_count", 0))
             vis_paths.update(
                 {
                     f"train_{key}": value
@@ -843,6 +868,9 @@ def _run_periodic_validation_round(
     metrics = {f"eval_{key}": value for key, value in eval_report.items() if isinstance(value, (int, float))}
     vis_paths: dict[str, str] = {}
     memory_added_this_round = 0
+    periodic_memory_candidates_seen = 0
+    periodic_memory_eligible = 0
+    periodic_memory_rejected = 0
     if render_visualizations:
         vis_paths.update(
             {
@@ -910,7 +938,17 @@ def _run_periodic_validation_round(
                         source=memory_source,
                         min_score=cfg.get("memory_min_score"),
                         max_records=int(cfg.get("memory_records_per_audit", 8)),
+                        quality_gate=memory_quality_gate,
                     )
+                    gate_summary = memory_quality_gate_summary(
+                        scaling,
+                        memory_quality_gate,
+                        min_score=cfg.get("memory_min_score"),
+                        max_records=int(cfg.get("memory_records_per_audit", 8)),
+                    )
+                    periodic_memory_candidates_seen += int(gate_summary.get("candidate_count", 0) or 0)
+                    periodic_memory_eligible += int(gate_summary.get("eligible_count", 0) or 0)
+                    periodic_memory_rejected += int(gate_summary.get("rejected_count", 0) or 0)
                     memory_bank.extend(records)
                     memory_bank.save()
                     memory_added_this_round += len(records)
@@ -919,6 +957,7 @@ def _run_periodic_validation_round(
                         "bank_path": str(memory_bank.path),
                         "bank_size": len(memory_bank.records),
                         "records_added": len(records),
+                        "quality_gate": gate_summary,
                         "top_k": int(cfg.get("periodic_memory_retrieve_top_k", 5)),
                         "retrieved": memory_bank.retrieve(
                             query_embedding,
@@ -944,6 +983,9 @@ def _run_periodic_validation_round(
                 memory_records_added += memory_added_this_round
                 metrics["analogical_memory_records_added"] = float(memory_records_added)
                 metrics["analogical_memory_bank_size"] = float(len(memory_bank.records))
+                metrics["analogical_memory_candidates_seen"] = float(periodic_memory_candidates_seen)
+                metrics["analogical_memory_eligible"] = float(periodic_memory_eligible)
+                metrics["analogical_memory_rejected"] = float(periodic_memory_rejected)
     report = {
         "step": step,
         "validation": str(eval_path),
@@ -954,6 +996,9 @@ def _run_periodic_validation_round(
         "audit_max_simplices": audit_max_simplices,
         "memory_records_added_this_round": memory_added_this_round,
         "memory_records_added_total": memory_records_added,
+        "memory_quality_candidates_seen": periodic_memory_candidates_seen,
+        "memory_quality_eligible": periodic_memory_eligible,
+        "memory_quality_rejected": periodic_memory_rejected,
     }
     report_path = step_dir / "periodic_validation_artifacts.json"
     report_path.write_text(json.dumps(report, indent=2), encoding="utf-8")

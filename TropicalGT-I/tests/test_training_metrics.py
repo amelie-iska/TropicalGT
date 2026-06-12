@@ -78,6 +78,10 @@ def test_training_history_contains_certificate_and_throughput_metrics(tmp_path: 
     for key in [
         "certificate_loss",
         "certificate_agreement",
+        "certificate_allowed_mass_mean",
+        "certificate_disallowed_support_rate",
+        "certificate_node_graph_support_rate",
+        "support_transition_rate",
         "wall_hit_rate",
         "examples_per_sec",
         "tokens_per_sec",
@@ -115,6 +119,9 @@ def test_wandb_metrics_are_namespaced_by_priority():
             "gflownet_tb": 0.1,
             "graphcg_full_rank": 1.0,
             "sequence_tropical_margin_mean": 0.4,
+            "certificate_allowed_mass_mean": 0.9,
+            "support_transition_rate": 0.25,
+            "analogical_memory_rejected": 2.0,
             "causal_dag_ar_rate": 0.75,
             "gpu_mem_mb": 21484.0,
         }
@@ -122,6 +129,9 @@ def test_wandb_metrics_are_namespaced_by_priority():
     assert list(payload)[:4] == ["step", "00_primary/eval_bpb", "00_primary/bpb", "00_primary/loss"]
     assert payload["01_losses/gflownet_tb"] == 0.1
     assert payload["03_tropical/sequence_tropical_margin_mean"] == 0.4
+    assert payload["03_tropical/certificate_allowed_mass_mean"] == 0.9
+    assert payload["03_tropical/support_transition_rate"] == 0.25
+    assert payload["08_memory/analogical_memory_rejected"] == 2.0
     assert payload["05_graphcg/graphcg_full_rank"] == 1.0
     assert payload["06_graph_data/causal_dag_ar_rate"] == 0.75
     assert payload["00_primary/gpu_mem_mb"] == 21484.0

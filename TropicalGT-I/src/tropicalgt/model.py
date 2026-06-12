@@ -103,6 +103,7 @@ class TropicalGTModel(nn.Module):
             "support_entropy": support_entropy.detach(),
             "support_soft_entropy": soft_entropy.detach(),
             "support_unique_frac": tropical_support_unique_fraction(trop.support, graph_batch.attention_mask).detach(),
+            "support_transition_rate": tropical_support_transition_rate(trop.support, graph_batch.attention_mask).detach(),
             "self_support_rate": self_support_rate.detach(),
             "invalid_support_rate": invalid_support_rate.detach(),
             "margin_mean": _safe_mean(valid_margin).detach(),
@@ -179,21 +180,51 @@ def tropical_certificate_objective(scores: Tensor, support: Tensor, graph_batch:
         zero = scores.sum() * 0.0
         return zero, {
             "certificate_agreement": zero.detach(),
+            "certificate_coverage": zero.detach(),
+            "certificate_allowed_mass_mean": zero.detach(),
+            "certificate_allowed_mass_min": zero.detach(),
             "certificate_edge_agreement": zero.detach(),
             "certificate_node_agreement": zero.detach(),
+            "certificate_graph_agreement": zero.detach(),
+            "certificate_edge_loss": zero.detach(),
+            "certificate_node_loss": zero.detach(),
+            "certificate_graph_loss": zero.detach(),
+            "certificate_disallowed_support_rate": zero.detach(),
+            "certificate_graph_support_rate": zero.detach(),
+            "certificate_node_graph_support_rate": zero.detach(),
+            "certificate_edge_graph_support_rate": zero.detach(),
         }
     log_probs = F.log_softmax(scores, dim=-1)
     target_log_probs = torch.logsumexp(log_probs.masked_fill(~targets, -torch.inf), dim=-1)
-    loss = -target_log_probs.masked_select(valid).mean()
+    target_log_probs = torch.nan_to_num(target_log_probs, neginf=-80.0, posinf=0.0)
+    per_token_loss = -target_log_probs
+    allowed_mass = torch.exp(target_log_probs).clamp_min(0.0).clamp_max(1.0)
+    loss = per_token_loss.masked_select(valid).mean()
     support_allowed = targets.gather(-1, support.unsqueeze(-1)).squeeze(-1) & valid
     type_ids = graph_batch.token_type_ids
     edge_mask = valid & type_ids.eq(1)
     node_mask = valid & type_ids.eq(0)
+    graph_mask = valid & type_ids.eq(2)
+    support_clamped = support.clamp_min(0).clamp_max(max(type_ids.shape[1] - 1, 0))
+    support_type_ids = type_ids.gather(1, support_clamped)
+    graph_support = valid & support_type_ids.eq(2)
+    disallowed_support = valid & ~support_allowed
+    valid_allowed_mass = allowed_mass.masked_select(valid)
     metrics = {
         "certificate_agreement": _rate(support_allowed, valid).detach(),
         "certificate_coverage": _rate(targets.any(dim=-1) & valid, valid).detach(),
+        "certificate_allowed_mass_mean": _safe_mean(valid_allowed_mass).detach(),
+        "certificate_allowed_mass_min": _safe_min(valid_allowed_mass).detach(),
         "certificate_edge_agreement": _rate(support_allowed, edge_mask).detach(),
         "certificate_node_agreement": _rate(support_allowed, node_mask).detach(),
+        "certificate_graph_agreement": _rate(support_allowed, graph_mask).detach(),
+        "certificate_edge_loss": _safe_mean(per_token_loss.masked_select(edge_mask)).detach(),
+        "certificate_node_loss": _safe_mean(per_token_loss.masked_select(node_mask)).detach(),
+        "certificate_graph_loss": _safe_mean(per_token_loss.masked_select(graph_mask)).detach(),
+        "certificate_disallowed_support_rate": _rate(disallowed_support, valid).detach(),
+        "certificate_graph_support_rate": _rate(graph_support, valid).detach(),
+        "certificate_node_graph_support_rate": _rate(graph_support & node_mask, node_mask).detach(),
+        "certificate_edge_graph_support_rate": _rate(graph_support & edge_mask, edge_mask).detach(),
     }
     return loss, metrics
 
@@ -231,6 +262,16 @@ def tropical_support_boundary_hit_rate(support: Tensor, mask: Tensor, graph_toke
     last = (graph_token_counts - 1).clamp_min(0)[:, None].expand_as(support)
     wall = (support.eq(0) | support.eq(last)) & mask
     return wall.float().sum() / mask.float().sum().clamp_min(1.0)
+
+
+def tropical_support_transition_rate(support: Tensor, mask: Tensor) -> Tensor:
+    if support.shape[1] < 2:
+        return support.sum() * 0.0
+    valid_pairs = mask[:, 1:] & mask[:, :-1]
+    if valid_pairs.sum() == 0:
+        return support.sum() * 0.0
+    switches = support[:, 1:].ne(support[:, :-1]) & valid_pairs
+    return switches.float().sum() / valid_pairs.float().sum().clamp_min(1.0)
 
 
 def tropical_self_support_rate(support: Tensor, mask: Tensor) -> Tensor:

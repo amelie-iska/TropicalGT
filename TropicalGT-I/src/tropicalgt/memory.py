@@ -4,6 +4,7 @@ from collections import deque
 from dataclasses import asdict, dataclass
 import hashlib
 import json
+import math
 from pathlib import Path
 from typing import Any, Iterable
 
@@ -29,6 +30,97 @@ class AnalogicalMemoryRecord:
     topological_algebra: dict[str, Any]
     derived_signature: dict[str, Any]
     metadata: dict[str, Any]
+
+
+@dataclass(frozen=True)
+class AnalogicalMemoryQualityGate:
+    """Conservative insertion gate for analogical trajectory memories.
+
+    Retrieval may ask for many analogies, but storage is curated: a trajectory is
+    admitted only when model-derived probability topology and configured quality
+    thresholds are present. If no early trajectory clears the gate, the memory
+    bank should legitimately remain empty.
+    """
+
+    min_score: float | None = None
+    min_quality_score: float | None = None
+    max_nll: float | None = None
+    max_bpb: float | None = None
+    min_nll_improvement: float | None = None
+    min_margin_mean: float | None = None
+    require_probability_complex: bool = True
+    min_probability_vertices: int = 2
+    min_probability_simplices: int = 1
+    require_topological_algebra: bool = True
+
+    @classmethod
+    def from_config(cls, cfg: dict[str, Any] | None = None, *, min_score: float | None = None) -> "AnalogicalMemoryQualityGate":
+        cfg = cfg or {}
+        return cls(
+            min_score=_optional_float(cfg.get("memory_quality_min_score", cfg.get("memory_min_score", min_score))),
+            min_quality_score=_optional_float(cfg.get("memory_quality_min_quality_score")),
+            max_nll=_optional_float(cfg.get("memory_quality_max_nll")),
+            max_bpb=_optional_float(cfg.get("memory_quality_max_bpb")),
+            min_nll_improvement=_optional_float(cfg.get("memory_quality_min_nll_improvement")),
+            min_margin_mean=_optional_float(cfg.get("memory_quality_min_margin_mean")),
+            require_probability_complex=bool(cfg.get("memory_quality_require_probability_complex", True)),
+            min_probability_vertices=max(0, int(cfg.get("memory_quality_min_probability_vertices", 2))),
+            min_probability_simplices=max(0, int(cfg.get("memory_quality_min_probability_simplices", 1))),
+            require_topological_algebra=bool(cfg.get("memory_quality_require_topological_algebra", True)),
+        )
+
+    def evaluate(
+        self,
+        row: dict[str, Any],
+        *,
+        scaling_report: dict[str, Any] | None = None,
+        probability_complex: dict[str, Any] | None = None,
+        topology: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        score = _safe_float(row.get("score"), 0.0)
+        nll = _safe_float(row.get("nll"), 0.0)
+        bpb = nll / math.log(2.0) if math.isfinite(nll) else math.inf
+        margin_mean = _safe_float(row.get("margin_mean"), 0.0)
+        improvement = _nll_improvement(row, scaling_report or {})
+        quality_score = score - 0.05 * nll + max(0.0, improvement if improvement is not None else 0.0)
+        probability_report = _probability_complex_quality(probability_complex or {})
+        topology_report = _topology_quality(topology or {})
+        reasons: list[str] = []
+        if self.min_score is not None and score < self.min_score:
+            reasons.append("score_below_threshold")
+        if self.min_quality_score is not None and quality_score < self.min_quality_score:
+            reasons.append("quality_score_below_threshold")
+        if self.max_nll is not None and nll > self.max_nll:
+            reasons.append("nll_above_threshold")
+        if self.max_bpb is not None and bpb > self.max_bpb:
+            reasons.append("bpb_above_threshold")
+        if self.min_nll_improvement is not None:
+            if improvement is None or improvement < self.min_nll_improvement:
+                reasons.append("nll_improvement_below_threshold")
+        if self.min_margin_mean is not None and margin_mean < self.min_margin_mean:
+            reasons.append("margin_mean_below_threshold")
+        if self.require_probability_complex:
+            if not probability_report["available"]:
+                reasons.append("probability_complex_unavailable")
+            if probability_report["probability_vertices"] < self.min_probability_vertices:
+                reasons.append("insufficient_probability_vertices")
+            if probability_report["simplices"] < self.min_probability_simplices:
+                reasons.append("insufficient_probability_simplices")
+        if self.require_topological_algebra and not topology_report["available"]:
+            reasons.append("topological_algebra_unavailable")
+        return {
+            "passed": not reasons,
+            "reasons": reasons,
+            "score": score,
+            "quality_score": quality_score,
+            "nll": nll,
+            "bpb": bpb,
+            "nll_improvement": improvement,
+            "margin_mean": margin_mean,
+            "probability_complex": probability_report,
+            "topological_algebra": topology_report,
+            "thresholds": asdict(self),
+        }
 
 
 class AnalogicalMemoryHead(nn.Module):
@@ -195,12 +287,14 @@ def memory_records_from_scaling_report(
     source: str = "inference",
     min_score: float | None = None,
     max_records: int = 8,
+    quality_gate: AnalogicalMemoryQualityGate | dict[str, Any] | None = None,
 ) -> list[AnalogicalMemoryRecord]:
     candidates = [row for row in scaling_report.get("candidates", []) if isinstance(row, dict)]
     if not candidates:
         best = scaling_report.get("best")
         candidates = [best] if isinstance(best, dict) else []
     records = []
+    gate = _coerce_quality_gate(quality_gate, min_score=min_score)
     trajectory_embeddings = [
         [float(v) for v in row.get("embedding", [])]
         for row in candidates
@@ -217,12 +311,18 @@ def memory_records_from_scaling_report(
     trajectory_algebra = _compact_topological_algebra(scaling_report.get("trajectory_topological_algebra", {}))
     trajectory_probability_algebra = _compact_topological_algebra(scaling_report.get("trajectory_probability_topological_algebra", {}))
     for row in sorted(candidates, key=lambda item: float(item.get("score", 0.0)), reverse=True)[:max_records]:
-        score = float(row.get("score", 0.0))
-        if min_score is not None and score < min_score:
-            continue
+        score = _safe_float(row.get("score"), 0.0)
         topology = _compact_topological_algebra(row.get("topological_algebra") or trajectory_algebra or {})
         row_complex = _compact_filtered_object(row.get("filtered_simplicial_object", {}))
         row_probability_complex = _compact_filtered_object(row.get("probability_filtered_simplicial_object", {}))
+        quality_report = gate.evaluate(
+            row,
+            scaling_report=scaling_report,
+            probability_complex=row_probability_complex or trajectory_probability_complex,
+            topology=topology or trajectory_algebra,
+        )
+        if not quality_report["passed"]:
+            continue
         embedding = [float(v) for v in row.get("embedding", [])]
         signature = signature_vector(topology)
         memory_id = _memory_id(row.get("record_id", ""), embedding, signature)
@@ -249,11 +349,156 @@ def memory_records_from_scaling_report(
                     "trajectory_summary": trajectory_complex.get("summary", {}) if isinstance(trajectory_complex, dict) else {},
                     "trajectory_probability_summary": trajectory_probability_complex.get("summary", {}) if isinstance(trajectory_probability_complex, dict) else {},
                     "trajectory_probability_topological_algebra_summary": trajectory_probability_algebra.get("summary", {}) if isinstance(trajectory_probability_algebra, dict) else {},
+                    "quality_gate": quality_report,
                     "memory_payload_policy": "compact_real_trajectory_payload_no_duplicate_full_complexes",
                 },
             )
         )
     return records
+
+
+
+def memory_quality_gate_summary(
+    scaling_report: dict[str, Any],
+    quality_gate: AnalogicalMemoryQualityGate | dict[str, Any] | None = None,
+    *,
+    min_score: float | None = None,
+    max_records: int = 8,
+) -> dict[str, Any]:
+    gate = _coerce_quality_gate(quality_gate, min_score=min_score)
+    candidates = [row for row in scaling_report.get("candidates", []) if isinstance(row, dict)]
+    if not candidates and isinstance(scaling_report.get("best"), dict):
+        candidates = [scaling_report["best"]]
+    trajectory_algebra = _compact_topological_algebra(scaling_report.get("trajectory_topological_algebra", {}))
+    trajectory_probability_complex = _compact_filtered_object(scaling_report.get("trajectory_probability_filtered_simplicial_object", {}))
+    reason_counts: dict[str, int] = {}
+    rows: list[dict[str, Any]] = []
+    for row in sorted(candidates, key=lambda item: _safe_float(item.get("score"), 0.0), reverse=True)[:max_records]:
+        topology = _compact_topological_algebra(row.get("topological_algebra") or trajectory_algebra or {})
+        probability_complex = _compact_filtered_object(row.get("probability_filtered_simplicial_object", {})) or trajectory_probability_complex
+        report = gate.evaluate(row, scaling_report=scaling_report, probability_complex=probability_complex, topology=topology)
+        for reason in report["reasons"]:
+            reason_counts[reason] = reason_counts.get(reason, 0) + 1
+        rows.append(
+            {
+                "record_id": str(row.get("record_id", "")),
+                "level": row.get("level"),
+                "path": row.get("path", []),
+                "passed": bool(report["passed"]),
+                "reasons": report["reasons"],
+                "score": report["score"],
+                "quality_score": report["quality_score"],
+                "nll": report["nll"],
+                "bpb": report["bpb"],
+                "nll_improvement": report["nll_improvement"],
+                "probability_vertices": report["probability_complex"]["probability_vertices"],
+                "probability_simplices": report["probability_complex"]["simplices"],
+                "topological_algebra_available": report["topological_algebra"]["available"],
+            }
+        )
+    eligible = sum(1 for row in rows if row["passed"])
+    return {
+        "candidate_count": len(rows),
+        "eligible_count": eligible,
+        "rejected_count": len(rows) - eligible,
+        "reason_counts": reason_counts,
+        "thresholds": asdict(gate),
+        "rows": rows,
+        "policy": "store_only_quality_gated_model_probability_trajectory_memories",
+    }
+
+
+def _coerce_quality_gate(quality_gate: AnalogicalMemoryQualityGate | dict[str, Any] | None, *, min_score: float | None = None) -> AnalogicalMemoryQualityGate:
+    if isinstance(quality_gate, AnalogicalMemoryQualityGate):
+        if min_score is not None and quality_gate.min_score is None:
+            values = asdict(quality_gate)
+            values["min_score"] = min_score
+            return AnalogicalMemoryQualityGate(**values)
+        return quality_gate
+    if isinstance(quality_gate, dict):
+        return AnalogicalMemoryQualityGate.from_config(quality_gate, min_score=min_score)
+    return AnalogicalMemoryQualityGate(min_score=min_score, require_probability_complex=False, require_topological_algebra=False)
+
+
+def _optional_float(value: Any) -> float | None:
+    if value is None or value == "":
+        return None
+    try:
+        out = float(value)
+    except (TypeError, ValueError):
+        return None
+    return out if math.isfinite(out) else None
+
+
+def _safe_float(value: Any, default: float = 0.0) -> float:
+    try:
+        out = float(value)
+    except (TypeError, ValueError):
+        return default
+    return out if math.isfinite(out) else default
+
+
+def _nll_improvement(row: dict[str, Any], scaling_report: dict[str, Any]) -> float | None:
+    current = _safe_float(row.get("nll"), math.inf)
+    candidates = [cand for cand in scaling_report.get("candidates", []) if isinstance(cand, dict)]
+    roots = [_safe_float(cand.get("nll"), math.inf) for cand in candidates if _candidate_level(cand) == 0]
+    roots = [value for value in roots if math.isfinite(value)]
+    if not roots or not math.isfinite(current):
+        return None
+    return min(roots) - current
+
+
+def _candidate_level(row: dict[str, Any]) -> int:
+    try:
+        return int(row.get("level", -1))
+    except (TypeError, ValueError):
+        return -1
+
+
+def _probability_complex_quality(obj: dict[str, Any]) -> dict[str, Any]:
+    if not isinstance(obj, dict) or obj.get("available") is False:
+        return {"available": False, "vertices": 0, "probability_vertices": 0, "simplices": 0, "filtration_model": ""}
+    simplices = obj.get("simplices") if isinstance(obj.get("simplices"), list) else []
+    summary = obj.get("summary") if isinstance(obj.get("summary"), dict) else {}
+    vertices = sum(1 for simplex in simplices if isinstance(simplex, dict) and _simplex_dimension(simplex) == 0)
+    probability_vertices = sum(
+        1
+        for simplex in simplices
+        if isinstance(simplex, dict)
+        and _simplex_dimension(simplex) == 0
+        and any(isinstance(simplex.get(key), list) and len(simplex.get(key, [])) > 0 for key in ("probability", "model_probability_vector", "probability_vector"))
+    )
+    simplex_count = len(simplices) or int(summary.get("simplices", summary.get("simplex_count", 0)) or 0)
+    filtration_model = str(summary.get("filtration_model", obj.get("filtration_model", "")) or "")
+    available = bool(probability_vertices or ("jensen_shannon" in filtration_model and simplex_count > 0))
+    return {
+        "available": available,
+        "vertices": vertices,
+        "probability_vertices": probability_vertices,
+        "simplices": simplex_count,
+        "filtration_model": filtration_model,
+    }
+
+
+def _simplex_dimension(simplex: dict[str, Any]) -> int:
+    try:
+        return int(simplex.get("dimension", -1))
+    except (TypeError, ValueError):
+        return -1
+
+
+def _topology_quality(topology: dict[str, Any]) -> dict[str, Any]:
+    if not isinstance(topology, dict) or topology.get("available") is False:
+        return {"available": False, "has_persistence": False, "has_free_resolution": False, "has_commutative_algebra": False}
+    has_persistence = bool(topology.get("persistence") or topology.get("persistence_summary") or topology.get("betti_numbers"))
+    ca = topology.get("commutative_algebra") if isinstance(topology.get("commutative_algebra"), dict) else {}
+    has_free = any(isinstance(ca.get(key), dict) and bool(ca.get(key)) for key in ("two_parameter_free_resolution", "multiparameter_free_resolution_proxy"))
+    return {
+        "available": bool(has_persistence or has_free or topology.get("derived_equivalence_signature")),
+        "has_persistence": has_persistence,
+        "has_free_resolution": has_free,
+        "has_commutative_algebra": bool(ca),
+    }
 
 
 def _compact_filtered_object(obj: Any, *, max_simplices: int = 512, max_vector_len: int = 4096) -> dict[str, Any]:

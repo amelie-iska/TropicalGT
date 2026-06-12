@@ -29,6 +29,12 @@
   "memory_bank_path": "TropicalGT-I/outputs/gpu_ablation/analogical_memory/reasoning_memory.jsonl",
   "memory_max_records": 512,
   "memory_records_per_audit": 4,
+  "memory_quality_require_probability_complex": true,
+  "memory_quality_min_probability_vertices": 4,
+  "memory_quality_min_probability_simplices": 3,
+  "memory_quality_require_topological_algebra": true,
+  "memory_quality_min_nll_improvement": 0.0,
+  "memory_quality_min_margin_mean": 0.0,
   "viz_limit": 8,
   "audit_level": "topology",
   "ph_backend": "gudhi",
@@ -40,7 +46,13 @@
   "viz_scale_depth": 1,
   "viz_scale_width": 2,
   "viz_scale_branch_factor": 2,
-  "tokengt": {"max_nodes": 64, "max_edges": 128, "node_id_dim": 16, "feature_dim": 48, "graph_token": true},
+  "tokengt": {
+    "max_nodes": 64,
+    "max_edges": 128,
+    "node_id_dim": 16,
+    "feature_dim": 48,
+    "graph_token": true
+  },
   "model": {
     "dim": 128,
     "hidden_dim": 128,
@@ -61,6 +73,14 @@
     "max_records": 0,
     "reverse_model_path": ""
   },
-  "inference_scaling": {"depth": 2, "width": 3, "branch_factor": 2},
-  "wandb": {"enabled": false, "mode": "offline", "project": "TropicalGT-I"}
+  "inference_scaling": {
+    "depth": 2,
+    "width": 3,
+    "branch_factor": 2
+  },
+  "wandb": {
+    "enabled": false,
+    "mode": "offline",
+    "project": "TropicalGT-I"
+  }
 }
