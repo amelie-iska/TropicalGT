@@ -28,6 +28,13 @@ def test_topological_algebra_report_has_multiparameter_data():
     proxy = report["commutative_algebra"]["multiparameter_free_resolution_proxy"]
     assert proxy["ring"] == "F2[x_filtration,x_dimension,x_position]"
     assert proxy["free_chain_modules"]
+    assert proxy["determinantal_ideals"]["available"] is True
+    assert proxy["fitting_ideals"]["available"] is True
+    assert proxy["buchsbaum_eisenbud"]["available"] is True
+    assert "maps" in proxy["determinantal_ideals"]
+    assert "maps" in proxy["fitting_ideals"]
+    assert "rank_exactness_checks" in proxy["buchsbaum_eisenbud"]
+    assert proxy["minimal_free_resolution"]["available"] is False
     summary = summarize_algebra_reports([report])
     assert summary["algebra_reports"] == 1.0
 

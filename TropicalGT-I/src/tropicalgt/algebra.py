@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections import Counter, defaultdict
-from itertools import combinations, product
+from itertools import combinations, permutations, product
 from math import comb, isinf
 from typing import Any, Iterable
 import warnings
@@ -39,6 +39,11 @@ def compute_topological_algebra_report(
     boundaries = _boundary_reports(by_dim, max_syzygy_basis=max_syzygy_basis)
     homology = _homology_report(by_dim, boundaries)
     persistence_module = _persistence_module_report(closed["simplices"])
+    two_parameter = _two_parameter_module_report(
+        closed["simplices"],
+        max_grid=max_multiparameter_grid,
+        max_pairs=max_rank_invariant_pairs,
+    )
     multiparameter = _multiparameter_module_report(
         closed["simplices"],
         max_grid=max_multiparameter_grid,
@@ -63,6 +68,7 @@ def compute_topological_algebra_report(
         "persistence": persistence,
         "persistence_representations": persistence_representations,
         "persistence_module": persistence_module,
+        "two_parameter_persistence": two_parameter,
         "multiparameter_persistence": multiparameter,
         "graph_metrics": graph_metrics,
         "external_backends": {"multipers": _multipers_backend_status()},
@@ -84,12 +90,14 @@ def compute_topological_algebra_report(
             "taylor_resolution_upper_bound": _taylor_resolution_report(sr),
             "boundary_syzygies": boundaries["syzygies"],
             "dg_commutative_algebra": dgca,
-            "multiparameter_free_resolution_proxy": _multiparameter_free_resolution_proxy(multiparameter),
+            "two_parameter_free_resolution": _multigraded_free_resolution_report(two_parameter),
+            "multiparameter_free_resolution_proxy": _multigraded_free_resolution_report(multiparameter),
             "notes": [
                 "Boundary syzygies are F2 nullspaces of displayed boundary maps.",
                 "Taylor ranks are nonminimal upper bounds for the displayed Stanley-Reisner generators.",
                 "Hochster Betti data is exact on the bounded vertex subset named in the report.",
-                "Multigraded chain modules and monomial boundary labels are exact for the displayed finite multi-filtered complex over F2[x1,x2,x3].",
+                "Two-parameter chain modules and monomial boundary labels are exact for the displayed finite bifiltered complex over F2[x_filtration,x_dimension].",
+                "Three-parameter chain modules and monomial boundary labels are exact for the displayed finite multi-filtered complex over F2[x_filtration,x_dimension,x_position].",
             ],
         }
     return report
@@ -121,6 +129,12 @@ def summarize_algebra_reports(reports: list[dict[str, Any]], prefix: str = "alge
         for report in enabled
     ]
     out[f"{prefix}topological_vector_l2_mean"] = float(np.mean(topvec_norms)) if topvec_norms else 0.0
+    out[f"{prefix}two_parameter_grid_points_mean"] = float(
+        np.mean([len(report.get("two_parameter_persistence", {}).get("fiber_rank_profile", [])) for report in enabled])
+    )
+    out[f"{prefix}two_parameter_h0_rank_samples_mean"] = float(
+        np.mean([len(report.get("two_parameter_persistence", {}).get("rank_invariant_samples", [])) for report in enabled])
+    )
     out[f"{prefix}multiparameter_grid_points_mean"] = float(
         np.mean([len(report.get("multiparameter_persistence", {}).get("fiber_rank_profile", [])) for report in enabled])
     )
@@ -162,6 +176,201 @@ def compute_persistence_representations_from_intervals(
         image_resolution=image_resolution,
         topological_vector_threshold=topological_vector_threshold,
     )
+
+
+def compute_level_radius_bifiltration_report(
+    growth: list[dict[str, Any]] | None,
+    *,
+    object_key: str = "filtered_simplicial_object",
+    max_simplices: int = 1024,
+    max_rank_invariant_pairs: int = 64,
+) -> dict[str, Any]:
+    """Compute the explicit trajectory bifiltration as a finite k[x,y]-module.
+
+    The variables are x_level and x_radius.  The grade (i, j) contains the
+    subcomplex K_{level <= i, radius <= r_j}; all chain groups and boundary
+    maps are over F2 for the bounded finite complex.  This is the object used
+    by the interactive two-parameter persistence plots.
+    """
+
+    rows = [row for row in (growth or []) if isinstance(row, dict)]
+    if not rows:
+        return {
+            "available": False,
+            "num_parameters": 2,
+            "parameters": _level_radius_parameters(),
+            "coefficient_ring": "F2[x_level,x_radius]",
+            "fiber_rank_profile": [],
+            "rank_invariant_samples": [],
+            "reason": "trajectory growth rows unavailable",
+        }
+
+    closed_by_level: dict[int, list[dict[str, Any]]] = {}
+    all_thresholds: set[float] = {0.0}
+    for idx, item in enumerate(rows):
+        level = int(item.get("level", idx) or 0)
+        obj = item.get(object_key) if isinstance(item.get(object_key), dict) else {}
+        closed = _closed_complex(obj, max_simplices=max_simplices)["simplices"]
+        closed_by_level[level] = closed
+        all_thresholds.update(float(row.get("filtration", 0.0) or 0.0) for row in closed)
+
+    levels = sorted(closed_by_level)
+    thresholds = sorted(all_thresholds)
+    if len(thresholds) > 64:
+        take = np.linspace(0, len(thresholds) - 1, 64).round().astype(int)
+        thresholds = [thresholds[int(idx)] for idx in take]
+
+    subsets: dict[tuple[int, int], list[dict[str, Any]]] = {}
+    fiber_profile: list[dict[str, Any]] = []
+    generator_by_simplex: dict[tuple[str, ...], dict[str, Any]] = {}
+
+    for level in levels:
+        level_simplices: dict[tuple[str, ...], dict[str, Any]] = {}
+        for src_level in levels:
+            if src_level > level:
+                continue
+            for simplex in closed_by_level.get(src_level, []):
+                key = tuple(simplex["simplex"])
+                existing = level_simplices.get(key)
+                if existing is None or float(simplex.get("filtration", 0.0) or 0.0) < float(existing.get("filtration", 0.0) or 0.0):
+                    level_simplices[key] = {**simplex, "first_level": src_level}
+                    prior = generator_by_simplex.get(key)
+                    if prior is None or (src_level, float(simplex.get("filtration", 0.0) or 0.0)) < (
+                        int(prior["multidegree"][0]),
+                        float(prior.get("filtration", 0.0) or 0.0),
+                    ):
+                        generator_by_simplex[key] = {
+                            **simplex,
+                            "multidegree": [src_level, _bucket(float(simplex.get("filtration", 0.0) or 0.0))],
+                            "first_level": src_level,
+                        }
+        for threshold in thresholds:
+            radius_grade = _bucket(threshold)
+            subset = [row for row in level_simplices.values() if float(row.get("filtration", 0.0) or 0.0) <= threshold + 1e-12]
+            grade = (level, radius_grade)
+            subsets[grade] = subset
+            by_dim = _simplices_by_dim(subset)
+            boundaries = _boundary_reports(by_dim, max_syzygy_basis=0)
+            homology = _homology_report(by_dim, boundaries)
+            fiber_profile.append(
+                {
+                    "grade": [level, radius_grade],
+                    "level": level,
+                    "radius": float(threshold),
+                    "chain_group_ranks": {str(dim): len(rows_) for dim, rows_ in sorted(by_dim.items())},
+                    "betti": homology["betti"],
+                    "boundary_ranks": {key: value.get("rank", 0) for key, value in boundaries.get("maps", {}).items()},
+                    "euler_characteristic": _euler_characteristic(by_dim),
+                }
+            )
+
+    grid_points = sorted(subsets)
+    rank_samples: list[dict[str, Any]] = []
+    for i, u in enumerate(grid_points):
+        for v in grid_points[i + 1 :]:
+            if _leq(u, v):
+                rank_samples.append({"source_grade": list(u), "target_grade": list(v), "h0_rank": _h0_inclusion_rank(subsets[u], subsets[v])})
+                if len(rank_samples) >= max_rank_invariant_pairs:
+                    break
+        if len(rank_samples) >= max_rank_invariant_pairs:
+            break
+
+    generators = sorted(generator_by_simplex.values(), key=lambda row: (row["multidegree"], row["dimension"], row["simplex"]))
+    boundary = _multigraded_boundary_monomials_named(generators, ["x_level", "x_radius"])
+    report = {
+        "available": True,
+        "num_parameters": 2,
+        "parameters": _level_radius_parameters(),
+        "coefficient_ring": "F2[x_level,x_radius]",
+        "levels": levels,
+        "radii": thresholds,
+        "chain_module_generators": [
+            {
+                "simplex": row["simplex"],
+                "homological_degree": int(row["dimension"]),
+                "multidegree": row["multidegree"],
+                "filtration": float(row.get("filtration", 0.0) or 0.0),
+                "source": row.get("source", "observed"),
+            }
+            for row in generators
+        ],
+        "boundary_monomials": boundary,
+        "grid_axes": [levels, [_bucket(radius) for radius in thresholds]],
+        "fiber_rank_profile": fiber_profile,
+        "rank_invariant_samples": rank_samples,
+        "notes": [
+            "A finite 2-parameter persistence module is represented as a multigraded F2[x_level,x_radius]-module.",
+            "Each fiber is computed by F2 chain complexes on K_{level,radius}; H0 rank samples are exact inclusion-induced ranks.",
+            "Minimal free resolutions are unavailable unless a CAS backend certifies them; the emitted resolution is the exact multigraded free chain presentation plus labeled boundary maps.",
+        ],
+    }
+    report["free_resolution"] = _multigraded_free_resolution_report(report)
+    return report
+
+
+def _two_parameter_module_report(
+    simplices: list[dict[str, Any]],
+    max_grid: int,
+    max_pairs: int,
+) -> dict[str, Any]:
+    if not simplices:
+        return {"available": False, "num_parameters": 2, "parameters": _filtration_dimension_parameters(), "fiber_rank_profile": [], "rank_invariant_samples": []}
+    max_dim = max(int(row["dimension"]) for row in simplices) or 1
+    enriched = []
+    for row in simplices:
+        multidegree = [_bucket(float(row.get("filtration", 0.0) or 0.0)), _bucket(int(row["dimension"]) / max_dim)]
+        enriched.append({**row, "multidegree": multidegree})
+    grid_axes = [_axis_values(enriched, idx, max_grid=max_grid) for idx in range(2)]
+    grid_points = list(product(*grid_axes))
+    fiber_profile = []
+    for point in grid_points:
+        subset = [row for row in enriched if _leq(row["multidegree"], point)]
+        by_dim = _simplices_by_dim(subset)
+        boundaries = _boundary_reports(by_dim, max_syzygy_basis=0)
+        homology = _homology_report(by_dim, boundaries)
+        fiber_profile.append(
+            {
+                "grade": list(point),
+                "chain_group_ranks": {str(dim): len(rows) for dim, rows in sorted(by_dim.items())},
+                "betti": homology["betti"],
+                "boundary_ranks": {key: value.get("rank", 0) for key, value in boundaries.get("maps", {}).items()},
+                "euler_characteristic": _euler_characteristic(by_dim),
+            }
+        )
+    report = {
+        "available": True,
+        "num_parameters": 2,
+        "parameters": _filtration_dimension_parameters(),
+        "coefficient_ring": "F2[x_filtration,x_dimension]",
+        "chain_module_generators": [
+            {"simplex": row["simplex"], "homological_degree": int(row["dimension"]), "multidegree": row["multidegree"], "source": row.get("source", "observed")}
+            for row in enriched
+        ],
+        "boundary_monomials": _multigraded_boundary_monomials_named(enriched, ["x_filtration", "x_dimension"]),
+        "grid_axes": [list(axis) for axis in grid_axes],
+        "fiber_rank_profile": fiber_profile,
+        "rank_invariant_samples": _h0_rank_invariant_samples_generic(enriched, grid_points, max_pairs=max_pairs),
+        "notes": [
+            "This is a genuine two-parameter finite module over scalar filtration and simplex dimension.",
+            "Trajectory growth uses the separate explicit F2[x_level,x_radius] bifiltration report.",
+        ],
+    }
+    report["free_resolution"] = _multigraded_free_resolution_report(report)
+    return report
+
+
+def _level_radius_parameters() -> list[dict[str, str]]:
+    return [
+        {"name": "trajectory_level", "meaning": "reasoning growth level in the sampled graph-of-thought"},
+        {"name": "radius", "meaning": "scalar radius/filtration threshold"},
+    ]
+
+
+def _filtration_dimension_parameters() -> list[dict[str, str]]:
+    return [
+        {"name": "filtration", "meaning": "original scalar filtration threshold"},
+        {"name": "simplex_dimension", "meaning": "normalized homological/simplex dimension"},
+    ]
 
 
 def _multiparameter_module_report(
@@ -233,23 +442,341 @@ def _multiparameter_module_report(
     }
 
 
-def _multiparameter_free_resolution_proxy(multiparameter: dict[str, Any]) -> dict[str, Any]:
-    generators = multiparameter.get("chain_module_generators", [])
+def _multigraded_free_resolution_report(module: dict[str, Any]) -> dict[str, Any]:
+    generators = module.get("chain_module_generators", [])
     by_degree: Counter[int] = Counter(int(row.get("homological_degree", 0)) for row in generators)
-    boundary_counts = {
-        key: len(value)
-        for key, value in multiparameter.get("boundary_monomials", {}).items()
-        if isinstance(value, list)
-    }
+    boundary_counts = {key: len(value) for key, value in module.get("boundary_monomials", {}).items() if isinstance(value, list)}
+    matrices = _monomial_boundary_matrices(module)
+    determinantal = _determinantal_ideal_report(module, matrices)
+    fitting = _fitting_ideal_report(matrices, determinantal)
+    be = _buchsbaum_eisenbud_complex_report(module, matrices, determinantal)
     return {
-        "ring": multiparameter.get("coefficient_ring"),
-        "free_chain_modules": [
-            {"homological_degree": degree, "rank": count}
-            for degree, count in sorted(by_degree.items())
-        ],
+        "ring": module.get("coefficient_ring"),
+        "method": "finite_multigraded_free_chain_presentation",
+        "field": "F2",
+        "free_chain_modules": [{"homological_degree": degree, "rank": count} for degree, count in sorted(by_degree.items())],
         "monomial_labeled_boundary_entry_counts": boundary_counts,
-        "interpretation": "A multigraded free chain complex over the multiparameter polynomial ring; minimal free resolutions of homology modules require a CAS/backend.",
+        "determinantal_ideals": determinantal,
+        "fitting_ideals": fitting,
+        "buchsbaum_eisenbud": be,
+        "minimal_free_resolution": {
+            "available": False,
+            "reason": "minimal multigraded free resolution, Groebner bases, ideal grade/depth, and certified Buchsbaum-Eisenbud multipliers require a CAS backend such as Macaulay2/Singular/Sage; not silently approximated",
+        },
+        "interpretation": "Exact multigraded free chain presentation over the reported polynomial ring; determinantal/Fitting data is computed from bounded monomial boundary matrices; this is not a certified minimal free resolution unless a CAS certificate is attached.",
     }
+
+
+def _monomial_boundary_matrices(module: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    generators = module.get("chain_module_generators", [])
+    by_degree: dict[int, list[tuple[str, ...]]] = defaultdict(list)
+    for row in generators if isinstance(generators, list) else []:
+        try:
+            degree = int(row.get("homological_degree", 0))
+            simplex = tuple(str(part) for part in row.get("simplex", []))
+        except Exception:
+            continue
+        by_degree[degree].append(simplex)
+    by_degree = {degree: sorted(set(rows), key=lambda key: (len(key), key)) for degree, rows in by_degree.items()}
+    out: dict[str, dict[str, Any]] = {}
+    boundary_monomials = module.get("boundary_monomials", {})
+    if not isinstance(boundary_monomials, dict):
+        return out
+    variable_count = len(_ring_variable_names(str(module.get("coefficient_ring", ""))))
+    for key, entries in boundary_monomials.items():
+        if not str(key).startswith("d") or not isinstance(entries, list):
+            continue
+        try:
+            degree = int(str(key)[1:])
+        except ValueError:
+            continue
+        row_labels = by_degree.get(degree - 1, [])
+        col_labels = by_degree.get(degree, [])
+        row_index = {label: idx for idx, label in enumerate(row_labels)}
+        col_index = {label: idx for idx, label in enumerate(col_labels)}
+        matrix_entries: dict[tuple[int, int], tuple[int, ...]] = {}
+        for entry in entries:
+            if not isinstance(entry, dict):
+                continue
+            source = tuple(str(part) for part in entry.get("source_simplex", []))
+            target = tuple(str(part) for part in entry.get("target_face", []))
+            if source not in col_index or target not in row_index:
+                continue
+            exponent_raw = entry.get("monomial_exponent", [])
+            exponent = tuple(int(v) for v in exponent_raw) if isinstance(exponent_raw, list) else tuple()
+            if variable_count and len(exponent) < variable_count:
+                exponent = tuple(list(exponent) + [0] * (variable_count - len(exponent)))
+            matrix_entries[(row_index[target], col_index[source])] = exponent
+        incidence = np.zeros((len(row_labels), len(col_labels)), dtype=np.uint8)
+        for rc in matrix_entries:
+            incidence[rc] = 1
+        out[str(key)] = {
+            "homological_degree": degree,
+            "source_rank": len(col_labels),
+            "target_rank": len(row_labels),
+            "row_labels": [list(label) for label in row_labels],
+            "column_labels": [list(label) for label in col_labels],
+            "entries": matrix_entries,
+            "rank_over_F2_incidence": int(_rank_mod2(incidence)),
+            "nonzero_entries": int(incidence.sum()),
+        }
+    return out
+
+
+def _ring_variable_names(ring: str) -> list[str]:
+    if "[" not in ring or "]" not in ring:
+        return []
+    inside = ring.split("[", 1)[1].split("]", 1)[0]
+    return [part.strip() for part in inside.split(",") if part.strip()]
+
+
+def _determinantal_ideal_report(
+    module: dict[str, Any],
+    matrices: dict[str, dict[str, Any]],
+    *,
+    max_minor_size: int = 3,
+    max_minors_per_size: int = 96,
+) -> dict[str, Any]:
+    variables = _ring_variable_names(str(module.get("coefficient_ring", "")))
+    maps: dict[str, Any] = {}
+    for key, matrix in sorted(matrices.items(), key=lambda item: item[0]):
+        m = int(matrix.get("target_rank", 0))
+        n = int(matrix.get("source_rank", 0))
+        rank = int(matrix.get("rank_over_F2_incidence", 0))
+        entries = matrix.get("entries", {}) if isinstance(matrix.get("entries"), dict) else {}
+        by_size: list[dict[str, Any]] = []
+        for size in range(1, min(m, n, max_minor_size) + 1):
+            total_minors = comb(m, size) * comb(n, size)
+            sampled = total_minors > max_minors_per_size
+            nonzero: list[dict[str, Any]] = []
+            checked = 0
+            for row_choice in combinations(range(m), size):
+                for col_choice in combinations(range(n), size):
+                    poly = _minor_polynomial_mod2(entries, row_choice, col_choice, len(variables))
+                    checked += 1
+                    if poly:
+                        nonzero.append(
+                            {
+                                "rows": list(row_choice),
+                                "columns": list(col_choice),
+                                "polynomial": _polynomial_to_string(poly, variables),
+                                "term_exponents": [list(exp) for exp in sorted(poly)],
+                            }
+                        )
+                    if checked >= max_minors_per_size:
+                        break
+                if checked >= max_minors_per_size:
+                    break
+            by_size.append(
+                {
+                    "ideal": f"I_{size}({key})",
+                    "minor_size": size,
+                    "total_minors": int(total_minors),
+                    "checked_minors": int(checked),
+                    "sampled": bool(sampled),
+                    "nonzero_generator_count_in_checked_minors": int(len(nonzero)),
+                    "nonzero_generator_samples": nonzero[:16],
+                    "numeric_rank_implication": (
+                        "all minors of this size vanish" if size > rank else "at least one minor of this size is nonzero over the F2 incidence specialization"
+                    ),
+                }
+            )
+        maps[key] = {
+            "shape": [m, n],
+            "rank_over_F2_incidence": rank,
+            "nonzero_entries": int(matrix.get("nonzero_entries", 0)),
+            "determinantal_ideals_by_minor_size": by_size,
+            "rank_certificate": {
+                "rank": rank,
+                "all_(rank+1)_minors_vanish": True,
+                "some_rank_minor_nonzero": bool(rank == 0 or rank <= min(m, n)),
+                "certificate_kind": "F2 row-reduction plus bounded monomial minor samples",
+            },
+        }
+    return {
+        "available": True,
+        "ring": module.get("coefficient_ring"),
+        "field": "F2",
+        "maps": maps,
+        "sample_policy": {"max_minor_size": max_minor_size, "max_minors_per_size": max_minors_per_size},
+        "notes": [
+            "For numeric F2 boundary matrices, determinantal/Fitting ideals collapse to rank facts; the nontrivial entries here are monomial-labeled boundary matrices over the displayed polynomial ring.",
+            "Large determinantal ideals are sampled for browser/runtime safety; use the emitted CAS payload to certify full ideals and Groebner bases when needed.",
+        ],
+    }
+
+
+def _minor_polynomial_mod2(
+    entries: dict[tuple[int, int], tuple[int, ...]],
+    rows: tuple[int, ...],
+    cols: tuple[int, ...],
+    variable_count: int,
+) -> set[tuple[int, ...]]:
+    size = len(rows)
+    terms: Counter[tuple[int, ...]] = Counter()
+    for perm in permutations(range(size)):
+        exponent = [0] * variable_count
+        ok = True
+        for ridx, cpos in enumerate(perm):
+            entry = entries.get((rows[ridx], cols[cpos]))
+            if entry is None:
+                ok = False
+                break
+            if variable_count == 0:
+                exponent = []
+            else:
+                padded = list(entry) + [0] * max(0, variable_count - len(entry))
+                exponent = [a + int(b) for a, b in zip(exponent, padded[:variable_count])]
+        if ok:
+            terms[tuple(exponent)] += 1
+    return {exp for exp, count in terms.items() if count % 2 == 1}
+
+
+def _polynomial_to_string(poly: set[tuple[int, ...]], variables: list[str]) -> str:
+    if not poly:
+        return "0"
+    if not variables:
+        return "1"
+    return " + ".join(_multi_monomial_named(exp, variables) for exp in sorted(poly))
+
+
+def _fitting_ideal_report(matrices: dict[str, dict[str, Any]], determinantal: dict[str, Any]) -> dict[str, Any]:
+    maps = determinantal.get("maps", {}) if isinstance(determinantal, dict) else {}
+    out: dict[str, Any] = {}
+    for key, matrix in sorted(matrices.items(), key=lambda item: item[0]):
+        target_rank = int(matrix.get("target_rank", 0))
+        incidence_rank = int(matrix.get("rank_over_F2_incidence", 0))
+        det_by_size = {
+            int(row.get("minor_size", -1)): row
+            for row in maps.get(key, {}).get("determinantal_ideals_by_minor_size", [])
+            if isinstance(row, dict)
+        }
+        interesting_j = sorted({0, max(target_rank - incidence_rank - 1, 0), max(target_rank - incidence_rank, 0), min(target_rank, max(target_rank - incidence_rank + 1, 0)), target_rank})
+        rows = []
+        for j in interesting_j:
+            minor_size = target_rank - j
+            if minor_size <= 0:
+                rows.append({"fitting_index": int(j), "ideal": f"Fitt_{j}(coker {key})", "minor_size": 0, "status": "unit_ideal", "generators": ["1"]})
+                continue
+            det = det_by_size.get(minor_size)
+            if det is None:
+                rows.append(
+                    {
+                        "fitting_index": int(j),
+                        "ideal": f"Fitt_{j}(coker {key})",
+                        "minor_size": int(minor_size),
+                        "status": "not_enumerated_in_browser_report",
+                        "reason": "minor size exceeds bounded determinantal enumeration; certify with CAS for the full ideal",
+                        "numeric_rank_implication": "zero under F2 incidence rank" if minor_size > incidence_rank else "nonzero possible under F2 incidence rank",
+                    }
+                )
+            else:
+                rows.append(
+                    {
+                        "fitting_index": int(j),
+                        "ideal": f"Fitt_{j}(coker {key})",
+                        "minor_size": int(minor_size),
+                        "status": "bounded_generators_reported",
+                        "sampled": bool(det.get("sampled", False)),
+                        "checked_minors": int(det.get("checked_minors", 0)),
+                        "nonzero_generator_count_in_checked_minors": int(det.get("nonzero_generator_count_in_checked_minors", 0)),
+                        "generator_samples": det.get("nonzero_generator_samples", []),
+                    }
+                )
+        out[key] = {"presentation": f"C_{key[1:]} -> C_{int(key[1:]) - 1} -> coker({key}) -> 0", "target_free_rank": target_rank, "fitting_invariants": rows}
+    return {
+        "available": True,
+        "definition": "Fitt_j(coker(phi)) = I_{rank(target)-j}(phi), generated by the corresponding minors of the presentation matrix.",
+        "maps": out,
+    }
+
+
+def _buchsbaum_eisenbud_complex_report(
+    module: dict[str, Any],
+    matrices: dict[str, dict[str, Any]],
+    determinantal: dict[str, Any],
+) -> dict[str, Any]:
+    generators = module.get("chain_module_generators", [])
+    chain_ranks: Counter[int] = Counter(int(row.get("homological_degree", 0)) for row in generators if isinstance(row, dict))
+    degrees = sorted(chain_ranks)
+    composition_checks = []
+    variable_count = len(_ring_variable_names(str(module.get("coefficient_ring", ""))))
+    variables = _ring_variable_names(str(module.get("coefficient_ring", "")))
+    for degree in degrees:
+        left = matrices.get(f"d{degree}")
+        right = matrices.get(f"d{degree + 1}")
+        if not left or not right:
+            continue
+        comp = _composition_zero_report(left, right, variables)
+        composition_checks.append({"at": f"d{degree} o d{degree + 1}", **comp})
+    exactness = []
+    for degree in degrees:
+        b = int(chain_ranks[degree])
+        rank_out = int(matrices.get(f"d{degree}", {}).get("rank_over_F2_incidence", 0))
+        rank_in = int(matrices.get(f"d{degree + 1}", {}).get("rank_over_F2_incidence", 0))
+        homology_rank = max(b - rank_out - rank_in, 0)
+        exactness.append(
+            {
+                "chain_module": f"C_{degree}",
+                "free_rank": b,
+                "rank_outgoing_boundary": rank_out,
+                "rank_incoming_boundary": rank_in,
+                "finite_F2_homology_rank": homology_rank,
+                "exact_at_chain_module_over_F2_incidence": bool(homology_rank == 0),
+            }
+        )
+    maximal_minor_inputs = []
+    det_maps = determinantal.get("maps", {}) if isinstance(determinantal, dict) else {}
+    for key, matrix in sorted(matrices.items(), key=lambda item: item[0]):
+        rank = int(matrix.get("rank_over_F2_incidence", 0))
+        candidates = []
+        for row in det_maps.get(key, {}).get("determinantal_ideals_by_minor_size", []):
+            if isinstance(row, dict) and int(row.get("minor_size", -1)) == rank:
+                candidates = row.get("nonzero_generator_samples", [])[:8]
+                break
+        maximal_minor_inputs.append({"map": key, "rank": rank, "maximal_minor_samples": candidates})
+    return {
+        "available": True,
+        "criterion_used_for_finite_display": "Buchsbaum-Eisenbud rank/exactness shadow: d_i d_{i+1}=0 and rank(d_i)+rank(d_{i+1})=rank(C_i) over the finite F2 incidence specialization.",
+        "composition_zero_checks": composition_checks,
+        "rank_exactness_checks": exactness,
+        "maximal_minor_inputs_for_multipliers": maximal_minor_inputs,
+        "buchsbaum_eisenbud_multipliers": {
+            "available": False,
+            "reason": "BE multipliers are symbolic complementary-minor relations in the polynomial coordinate ring; this report emits the maximal-minor inputs but requires a CAS backend to certify multiplier equations and grade/depth exactness conditions.",
+        },
+        "grade_depth_conditions": {
+            "available": False,
+            "reason": "Ideal grade/depth and regular-element checks for determinantal ideals require Macaulay2/Singular/Sage; no proxy is substituted.",
+        },
+    }
+
+
+def _composition_zero_report(left: dict[str, Any], right: dict[str, Any], variables: list[str]) -> dict[str, Any]:
+    variable_count = len(variables)
+    left_entries = left.get("entries", {}) if isinstance(left.get("entries"), dict) else {}
+    right_entries = right.get("entries", {}) if isinstance(right.get("entries"), dict) else {}
+    left_rows = int(left.get("target_rank", 0))
+    middle = int(left.get("source_rank", 0))
+    right_cols = int(right.get("source_rank", 0))
+    nonzero_entries = []
+    checked = 0
+    for i in range(left_rows):
+        for j in range(right_cols):
+            terms: Counter[tuple[int, ...]] = Counter()
+            for k in range(middle):
+                a = left_entries.get((i, k))
+                b = right_entries.get((k, j))
+                if a is None or b is None:
+                    continue
+                aa = list(a) + [0] * max(0, variable_count - len(a))
+                bb = list(b) + [0] * max(0, variable_count - len(b))
+                terms[tuple(int(x) + int(y) for x, y in zip(aa[:variable_count], bb[:variable_count]))] += 1
+            poly = {exp for exp, count in terms.items() if count % 2 == 1}
+            checked += 1
+            if poly:
+                nonzero_entries.append({"row": i, "column": j, "polynomial": _polynomial_to_string(poly, variables)})
+    return {"checked_entries": checked, "is_zero_over_F2_monomial_matrix": not nonzero_entries, "nonzero_entry_samples": nonzero_entries[:8]}
 
 
 def _axis_values(enriched: list[dict[str, Any]], index: int, max_grid: int) -> tuple[int, ...]:
@@ -269,7 +796,10 @@ def _leq(left: Iterable[int], right: Iterable[int]) -> bool:
 
 
 def _multi_monomial(exponent: Iterable[int]) -> str:
-    names = ["x_filtration", "x_dimension", "x_position"]
+    return _multi_monomial_named(exponent, ["x_filtration", "x_dimension", "x_position"])
+
+
+def _multi_monomial_named(exponent: Iterable[int], names: list[str]) -> str:
     pieces = []
     for name, power in zip(names, exponent):
         power = int(power)
@@ -297,6 +827,10 @@ def _multipers_backend_status() -> dict[str, Any]:
 
 
 def _multigraded_boundary_monomials(enriched: list[dict[str, Any]]) -> dict[str, list[dict[str, Any]]]:
+    return _multigraded_boundary_monomials_named(enriched, ["x_filtration", "x_dimension", "x_position"])
+
+
+def _multigraded_boundary_monomials_named(enriched: list[dict[str, Any]], names: list[str]) -> dict[str, list[dict[str, Any]]]:
     by_key = {tuple(row["simplex"]): row for row in enriched}
     out: dict[str, list[dict[str, Any]]] = defaultdict(list)
     for row in enriched:
@@ -317,7 +851,7 @@ def _multigraded_boundary_monomials(enriched: list[dict[str, Any]]) -> dict[str,
                     "source_multidegree": row["multidegree"],
                     "target_multidegree": face_row["multidegree"],
                     "monomial_exponent": exponent,
-                    "monomial": _multi_monomial(exponent),
+                    "monomial": _multi_monomial_named(exponent, names),
                 }
             )
     return dict(out)
@@ -326,6 +860,14 @@ def _multigraded_boundary_monomials(enriched: list[dict[str, Any]]) -> dict[str,
 def _h0_rank_invariant_samples(
     enriched: list[dict[str, Any]],
     grid_points: list[tuple[int, int, int]],
+    max_pairs: int,
+) -> list[dict[str, Any]]:
+    return _h0_rank_invariant_samples_generic(enriched, grid_points, max_pairs=max_pairs)
+
+
+def _h0_rank_invariant_samples_generic(
+    enriched: list[dict[str, Any]],
+    grid_points: list[tuple[int, ...]],
     max_pairs: int,
 ) -> list[dict[str, Any]]:
     pairs = []

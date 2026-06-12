@@ -21,7 +21,7 @@ TropicalGT develops reasoning agents that use tropical geometry in transformer e
 - `TropicalGT-I/configs/smoke.json` is a CPU fixture smoke config.
 - `TropicalGT-I/configs/gpu_smoke.json` is the RTX 4090 data-backed smoke config.
 - `TropicalGT-I/configs/gpu_ablation.json` is a bounded data-backed RTX 4090 config for matched BPB/graph-BPB ablation grids.
-- `TropicalGT-I/configs/train_full_dataset_active.json` is the active full-dataset training config; `TropicalGT-I/configs/train.json` is a legacy cap-sized review config.
+- `TropicalGT-I/configs/train_full_dataset_pg_bpb_step0_full24b_b44.json` is the current fresh step-0 full-dataset Parameter-Golf BPB run config; `TropicalGT-I/configs/train_full_dataset_active.json` is an older full-dataset path, and `TropicalGT-I/configs/train.json` is a legacy cap-sized review config.
 - `TropicalGT-I/assets/tropicalgt_neurips_research_paper.tex` is the paper source.
 - `planning/` contains reference synthesis and implementation notes.
 - `external/` contains separate fork checkouts and is intentionally gitignored by this repo.
@@ -58,7 +58,7 @@ cd ../..
 
 This creates `external/oai-parameter-golf/data/datasets/fineweb10B_sp1024` and `external/oai-parameter-golf/data/tokenizers/fineweb_1024_bpe.model`. The manifest reports `19,473,201,340` SP1024 train tokens across `195` train shards, plus the moved Hugging Face reasoning parquet shards. Those data files are gitignored. Every OAI sample is graph structured before batching: each token window becomes a causal DAG of sequence chunks, while non-causal/cyclic graphs elsewhere use deterministic random autoregressive node order.
 
-Data-backed configs set `require_data: true`, and the OAI source is required. Missing or unreadable required parquet/OAI shards fail loudly instead of silently training on fixture examples or a partial hybrid. `train_full_dataset_active.json` also requires both `tropicalgt_hf_reasoning` and `openai_parameter_golf`, at least `10,000,000,000` available train token slots, and at least `10,000,000,000` configured training token slots. The parquet loader builds a row-group metadata index over train/validation/test shards and reads records through a bounded row-group cache controlled by `cache_shards`; it does not concatenate the full moved dataset into memory. The hybrid sampler uses deterministic weighted indexed sampling over already graph-structured sources.
+Data-backed configs set `require_data: true`, and the OAI source is required. Missing or unreadable required parquet/OAI shards fail loudly instead of silently training on fixture examples or a partial hybrid. The current `train_full_dataset_pg_bpb_step0_full24b_b44.json` run requires both `tropicalgt_hf_reasoning` and `openai_parameter_golf` and uses the full audited train token-slot budget, not a 10B floor. The parquet loader builds a row-group metadata index over train/validation/test shards and reads records through a bounded row-group cache controlled by `cache_shards`; it does not concatenate the full moved dataset into memory. The hybrid sampler uses deterministic weighted indexed sampling over already graph-structured sources.
 
 Audit the data budget before a long run:
 
@@ -120,7 +120,7 @@ TropicalGT-I/scripts/train_tropicalgt_i.py \
 --config TropicalGT-I/configs/gpu_smoke.json
 ```
 
-The script reads the W&B API key from `keys.txt` when W&B is enabled. It logs NLL, exact text BPB, graph-BPB, graph side-information BPB, optimistic graph-conditioned BPB, GFlowNet trajectory-balance loss, GraphCG losses, full-rank singular-spectrum diagnostics, direction geometry, finite graph-certificate loss/agreement, tropical support entropy, tropical margins, margin-threshold wall-hit rate, graph token counts, graph structural byte counts, explicit graph JSON byte counts, graph JSON fallback/sequentialization rates, algebraic persistence summaries, analogical-memory query norms, examples/sec, tokens/sec, GPU memory, and generated HTML artifacts.
+The script reads the W&B API key from `keys.txt` when W&B is enabled. It logs NLL, exact text BPB, graph-BPB, graph side-information BPB, optimistic graph-conditioned BPB, GFlowNet trajectory-balance loss, GraphCG losses, full-rank singular-spectrum diagnostics, direction geometry, finite graph-certificate loss/agreement, tropical support entropy, tropical margins, margin-threshold wall-hit rate, graph token counts, graph structural byte counts, explicit graph JSON byte counts, graph JSON fallback/sequentialization rates, algebraic persistence summaries, analogical-memory query norms, examples/sec, tokens/sec, GPU memory, losses, objectives, and regularizers. Interactive HTML artifacts are not logged to W&B unless explicitly opted in with `wandb.log_interactive_artifacts: true` and a positive `wandb.html_artifact_limit`.
 
 W&B scalar metrics are organized by prefixed priority groups rather than logged as one flat pile:
 
@@ -194,7 +194,45 @@ PYTHONPATH=TropicalGT-I/src python TropicalGT-I/scripts/train_tropicalgt_i.py --
 
 ## Data-backed training launch
 
-The active full-dataset run uses `TropicalGT-I/configs/train_full_dataset_active.json`, not the bounded smoke or review-loop configs. It is intentionally configured to keep training over more than ten billion sequence-token slots while requiring both real data sources:
+### Current full-dataset BPB repair run
+
+The current fresh step-0 Parameter-Golf BPB repair run uses:
+
+```text
+config: TropicalGT-I/configs/train_full_dataset_pg_bpb_step0_full24b_b44.json
+run name: tropicalgt_i_pg_bpb_step0_full24b_b44
+batch_size: 44
+seq_len: 1024
+max_steps: 537083
+configured token slots: 24,198,811,648
+audited available token slots: 24,198,796,288
+dataset roots:
+  - TropicalGT-I/data/toricgt/curated_hf_shards
+  - external/oai-parameter-golf/data/datasets/fineweb10B_sp1024
+```
+
+This config is intended to use roughly 18-20GB VRAM on an RTX 4090 while
+leaving headroom for implementation tests and browser/inference probes. Its
+readiness audit must pass the required-source gates for both the moved
+Hugging Face reasoning shards and the OpenAI Parameter-Golf SP1024 cache. Do
+not describe a run as full-dataset unless it uses both data roots and the full
+audited token-slot budget.
+
+```bash
+PYTHONPATH=TropicalGT-I/src \
+python TropicalGT-I/scripts/train_tropicalgt_i.py \
+--config TropicalGT-I/configs/train_full_dataset_pg_bpb_step0_full24b_b44.json
+```
+
+W&B should remain scalar-first by default: losses, BPB metrics, objectives,
+regularizers, throughput, graph/tropical/GraphCG diagnostics, and memory/topology
+metrics are logged online. Periodic and final interactive browser artifacts are
+local optional outputs controlled by `periodic_interactive_artifacts_enabled`
+and `final_interactive_artifacts_enabled`. HTML/media upload to W&B is a separate
+explicit opt-in: set `wandb.log_interactive_artifacts: true` and a positive
+`wandb.html_artifact_limit`.
+
+The older full-dataset run path uses `TropicalGT-I/configs/train_full_dataset_active.json`, not the bounded smoke or review-loop configs. It is intentionally configured to keep training over more than ten billion sequence-token slots while requiring both real data sources:
 
 - `seq_len: 1024`, `batch_size: 4`, `max_steps: 2500000`, for `10,240,000,000` configured training token slots.
 - Required source `tropicalgt_hf_reasoning`: `117` train parquet shards, `4,633,582` examples, `4,744,787,968` token slots.
@@ -311,9 +349,9 @@ TropicalGT-I/scripts/infer_tropicalgt_i.py \
 --output TropicalGT-I/outputs/gpu_smoke/inference_full_audit.json
 ```
 
-This writes a dark-mode graph-of-thought PCA trajectory whose nodes are reasoning candidates and whose edges are parent-child expansions. Hovering over a node renders the filtered simplicial complex attached to that reasoning step directly in a cursor-following hover card and in the side panel. The 3D trajectory now uses exact sampled model NLL anchors and a surface-contact projection contract: every plotted reasoning node and edge endpoint lies on the displayed NLL energy landscape with payload plot.z equal to plot.z_surface, while each node retains the raw centered/scaled NLL value for audit. Missing NLL, embedding, or probability outputs are reported as unavailable diagnostics instead of synthetic/proxy geometry. The persistence bundle includes barcodes, Betti/free-resolution growth, `persistence_representations.html` for GUDHI vector summaries, and `persistence_landscapes.html` for the actual GUDHI landscape functions `lambda_k(t)` by trajectory-growth level. The JSON payload stores the full Euclidean radius complex, the Jensen-Shannon probability complex, simplex-tree provenance, multiparameter persistence report, vectorized persistence summaries, commutative-algebra proxies, derived-equivalence signature, GraphCG direction diagnostics with projection-basis proof, NLL-surface metadata, NLL-progress diagnostics, and analogical memory retrieval details.
+This writes a dark-mode graph-of-thought PCA trajectory whose nodes are reasoning candidates and whose edges are parent-child expansions. Hovering over a node renders the filtered simplicial complex attached to that reasoning step directly in a cursor-following hover card and in the side panel. The 3D trajectory uses observed model-evaluated NLL anchors and a surface-contact projection contract: every plotted reasoning node and edge endpoint lies on the displayed NLL energy landscape with payload plot.z equal to plot.z_surface, while each node retains the raw centered/scaled NLL value for audit. Missing NLL, embedding, or probability outputs are reported as unavailable diagnostics instead of synthetic/proxy geometry. The persistence bundle includes barcodes, Betti/free-resolution growth, `persistence_representations.html` for GUDHI vector summaries, and `persistence_landscapes.html` for the actual GUDHI landscape functions `lambda_k(t)` by trajectory-growth level. The JSON payload stores the full Euclidean radius complex, the Jensen-Shannon probability complex, simplex-tree provenance, multiparameter persistence report, vectorized persistence summaries, commutative-algebra proxies, derived-equivalence signature, GraphCG direction diagnostics with projection-basis proof, NLL-surface metadata, NLL-progress diagnostics, and analogical memory retrieval details.
 
-For Codex/browser review of a periodic audit, generate the sample-first dashboard so each sampled row/input is the top-level unit. Each sample card links to the GoT NLL landscape, embedding map, full radius complex, full simplex tree, Jensen-Shannon probability complex, probability simplex tree, every reasoning-step complex/tree, persistence pages, per-rank analogical maps, GraphCG, tropical support, and metric/audit pages:
+For Codex/browser review of a periodic audit, generate the sample-first dashboard so each inference row/input is the top-level unit. Each sample card links to the GoT NLL landscape, embedding map, full radius complex, full simplex tree, Jensen-Shannon probability complex, probability simplex tree, every reasoning-step complex/tree, persistence pages, per-rank analogical probability correspondences, GraphCG, tropical support, and metric/audit pages:
 
 ```bash
 PYTHONPATH=TropicalGT-I/src python \
@@ -344,6 +382,36 @@ python -m http.server 8977 \
 ```
 
 Open `http://127.0.0.1:8977/browser_index.html`. When `--memory-save` or retrieval is enabled and no explicit `--memory-bank` is supplied, `run_multi_inference_audits.py` creates a clean bundle-local bank at `TropicalGT-I/outputs/multi_sample_browser/latest/browser_memory/reasoning_memory.jsonl`; pass `--memory-bank` only when intentionally reusing an existing bank. The first sample may have no non-self memory yet; later samples should retrieve earlier sample trajectories and render per-rank model-probability correspondences from `trajectory_probability_filtered_simplicial_object` complexes with `model_probability_jensen_shannon_assignment` provenance. These pages are not allowed to imply a passed simplicial map when the finite certificate fails: `analogical_simplicial_maps.json` records relative per-rank `pair_page` links, Jensen-Shannon assignment costs, edge/face preservation, filtration distortion, and the pass/fail certificate. If a browser cannot create a WebGL context, pages with selected simplicial objects promote a static SVG preview from the same payload instead of silently leaving only the Plotly WebGL error. Top-level non-growth `persistence_landscapes.html` pages redirect to the real `trajectory_persistence/persistence_landscapes.html` growth landscape plot when the bundle includes it. Add `--skip-existing` only when intentionally reusing prior sample directories.
+
+For deeper/wider acceptance browser review from a stable checkpoint snapshot,
+use the full preset. It enforces minimum depth `5`, width `8`, branch factor
+`4`, trace limit `8192`, topology budget `8192`, and memory retrieval top-k
+`8`. Browser audit commands pass `--require-complete-reasoning-steps`, so a
+rendered trajectory fails closed if any candidate lacks model NLL, graph-state
+embedding, action probabilities, complete graph-token trace, Jensen-Shannon
+probability complex, Euclidean graph-token embedding complex, GraphCG
+directions, or a directed GoT parent edge. Pass
+`--no-scale-stochastic-actions` when the acceptance artifact must use
+deterministic branch expansion from model action probabilities:
+
+```bash
+PYTHONPATH=TropicalGT-I/src:TropicalGT-I/scripts \
+python TropicalGT-I/scripts/run_multi_inference_audits.py \
+--config TropicalGT-I/configs/train_full_dataset_pg_bpb_step0_full24b_b44.json \
+--checkpoint TropicalGT-I/checkpoints/tropicalgt_i_pg_bpb_step0_full24b_b44.latest.pt \
+--output-root TropicalGT-I/outputs/multi_sample_browser/full_audit_deepwide \
+--samples 1 \
+--audit-preset full \
+--no-scale-stochastic-actions \
+--memory-bank TropicalGT-I/outputs/multi_sample_browser/latest/browser_memory/reasoning_memory.jsonl \
+--memory-retrieve-top-k 8 \
+--title "TropicalGT-I Full Deep/Wide Model-Derived Reasoning Audit"
+```
+
+`--audit-output-dir` alone writes JSON but should not be treated as a request
+for browser HTML. Use `--interactive-artifacts` or `--audit-all` for local
+interactive pages, and opt into W&B HTML uploads separately with
+`wandb.log_interactive_artifacts` plus a positive `wandb.html_artifact_limit`.
 
 Metric and visualization provenance can be audited with:
 

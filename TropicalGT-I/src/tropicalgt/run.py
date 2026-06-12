@@ -286,6 +286,29 @@ def setup_wandb(cfg: dict[str, Any], run_name: str):
     return run
 
 
+def _wandb_log_interactive_artifacts_enabled(cfg: dict[str, Any]) -> bool:
+    wandb_cfg = cfg.get("wandb", {}) if isinstance(cfg.get("wandb", {}), dict) else {}
+    if "log_interactive_artifacts" in wandb_cfg:
+        return bool(wandb_cfg.get("log_interactive_artifacts", False))
+    return bool(cfg.get("wandb_log_interactive_artifacts", False))
+
+
+def _wandb_html_artifact_limit(cfg: dict[str, Any]) -> int:
+    wandb_cfg = cfg.get("wandb", {}) if isinstance(cfg.get("wandb", {}), dict) else {}
+    if "html_artifact_limit" in wandb_cfg:
+        return max(0, int(wandb_cfg.get("html_artifact_limit", 0) or 0))
+    return max(0, int(cfg.get("wandb_html_artifact_limit", 0) or 0))
+
+
+def _interactive_viz_require_complete_steps(cfg: dict[str, Any], *keys: str) -> bool:
+    for key in keys:
+        if key in cfg:
+            return bool(cfg.get(key))
+    if "require_complete_reasoning_steps" in cfg:
+        return bool(cfg.get("require_complete_reasoning_steps"))
+    return True
+
+
 def configure_wandb_metrics(run: Any) -> None:
     """Register prioritized metric namespaces for the W&B UI."""
 
@@ -421,9 +444,18 @@ def train(config_path: str | Path, resume_from: str | Path | None = None, max_st
     memory_records_added = 0
     periodic_artifacts: list[dict[str, Any]] = []
     validation_every = int(cfg.get("validation_every_steps", cfg.get("eval_every_steps", 0)) or 0)
-    visualization_every = int(cfg.get("visualization_every_steps", validation_every) or 0)
+    periodic_interactive_artifacts_enabled = bool(cfg.get("periodic_interactive_artifacts_enabled", False))
+    visualization_every = (
+        int(cfg.get("visualization_every_steps", validation_every) or 0)
+        if periodic_interactive_artifacts_enabled
+        else 0
+    )
     periodic_eval_limit = int(cfg.get("periodic_eval_details_limit", cfg.get("eval_details_limit", 4)) or 0)
-    periodic_viz_limit = int(cfg.get("periodic_viz_limit", cfg.get("viz_limit", 8)) or 0)
+    periodic_viz_limit = (
+        int(cfg.get("periodic_viz_limit", cfg.get("viz_limit", 8)) or 0)
+        if periodic_interactive_artifacts_enabled
+        else 0
+    )
     periodic_audit_level = str(cfg.get("periodic_audit_level", cfg.get("audit_level", "none")))
     periodic_ph_backend = str(cfg.get("periodic_ph_backend", ph_backend))
     periodic_audit_max_simplices = int(cfg.get("periodic_audit_max_simplices", audit_max_simplices))
@@ -625,7 +657,8 @@ def train(config_path: str | Path, resume_from: str | Path | None = None, max_st
                 metrics_last.update(periodic_metrics)
                 history[-1].update(periodic_metrics)
                 if wb:
-                    wb.log(organize_wandb_metrics(metrics_last), step=step)
+                    periodic_wandb_metrics = {"step": step, **periodic_metrics}
+                    wb.log(organize_wandb_metrics(periodic_wandb_metrics), step=step)
                     _log_wandb_html_artifacts(
                         wb,
                         periodic_report.get("visualizations", {}),
@@ -654,72 +687,80 @@ def train(config_path: str | Path, resume_from: str | Path | None = None, max_st
         ar_seed=seed,
         meet_in_middle=cfg.get("meet_in_middle"),
     )
-    metrics_last.update({f"eval_{k}": v for k, v in eval_report.items() if isinstance(v, (int, float))})
+    final_eval_metrics = {f"eval_{k}": v for k, v in eval_report.items() if isinstance(v, (int, float))}
+    metrics_last.update(final_eval_metrics)
     if wb:
-        wb.log(organize_wandb_metrics(metrics_last), step=step)
-    vis_paths = write_reasoning_visualizations(
-        model,
-        val_ds,
-        tokenizer,
-        seq_len,
-        device,
-        out_dir,
-        limit=int(cfg.get("viz_limit", 8)),
-        audit_level=audit_level if bool(cfg.get("viz_topological_algebra", False)) else "none",
-        ph_backend=ph_backend,
-        audit_max_simplices=audit_max_simplices,
-    )
-    vis_paths.update(write_metric_visualizations(history, out_dir))
-    vis_paths.update(write_graphcg_training_visualizations(model, out_dir))
-    if bool(cfg.get("viz_got_scaling", False)) and len(val_ds) > 0:
-        audit_seed_record = _select_got_audit_records(
-            val_ds,
-            count=1,
-            pool=int(cfg.get("viz_got_record_pool", cfg.get("viz_limit", 8)) or 1),
-            seed=seed + step,
-        )[0][1]
-        scaling = run_inference_scaling(
+        wb.log(organize_wandb_metrics({"step": step, **final_eval_metrics}), step=step)
+    vis_paths: dict[str, str] = {}
+    if bool(cfg.get("final_interactive_artifacts_enabled", False)):
+        vis_paths = write_reasoning_visualizations(
             model,
-            audit_seed_record,
+            val_ds,
             tokenizer,
             seq_len,
             device,
-            depth=int(cfg.get("viz_scale_depth", 3)),
-            width=int(cfg.get("viz_scale_width", 4)),
-            branch_factor=int(cfg.get("viz_scale_branch_factor", 3)),
-            trace_limit=int(cfg.get("viz_trace_limit", 24)),
-            audit_level=audit_level,
+            out_dir,
+            limit=int(cfg.get("viz_limit", 8)),
+            audit_level=audit_level if bool(cfg.get("viz_topological_algebra", False)) else "none",
             ph_backend=ph_backend,
             audit_max_simplices=audit_max_simplices,
-            allow_stop=bool(cfg.get("viz_scale_allow_stop", False)),
-            diverse_actions=bool(cfg.get("viz_scale_diverse_actions", True)),
-            stochastic_actions=bool(cfg.get("viz_scale_stochastic_actions", False)),
-            sampling_temperature=float(cfg.get("viz_scale_sampling_temperature", 1.0)),
-            sampling_exploration=float(cfg.get("viz_scale_sampling_exploration", 0.0)),
-            sampling_seed=int(cfg.get("viz_scale_sampling_seed", seed + step)),
         )
-        if memory_bank is not None:
-            records = memory_records_from_scaling_report(
-                scaling,
-                source=f"train:{run_name}:step{step}",
-                min_score=cfg.get("memory_min_score"),
-                max_records=int(cfg.get("memory_records_per_audit", 8)),
+        vis_paths.update(write_metric_visualizations(history, out_dir))
+        vis_paths.update(write_graphcg_training_visualizations(model, out_dir))
+        if bool(cfg.get("viz_got_scaling", False)) and len(val_ds) > 0:
+            audit_seed_record = _select_got_audit_records(
+                val_ds,
+                count=1,
+                pool=int(cfg.get("viz_got_record_pool", cfg.get("viz_limit", 8)) or 1),
+                seed=seed + step,
+            )[0][1]
+            scaling = run_inference_scaling(
+                model,
+                audit_seed_record,
+                tokenizer,
+                seq_len,
+                device,
+                depth=int(cfg.get("viz_scale_depth", 3)),
+                width=int(cfg.get("viz_scale_width", 4)),
+                branch_factor=int(cfg.get("viz_scale_branch_factor", 3)),
+                trace_limit=int(cfg.get("viz_trace_limit", 24)),
+                audit_level=audit_level,
+                ph_backend=ph_backend,
+                audit_max_simplices=audit_max_simplices,
+                allow_stop=bool(cfg.get("viz_scale_allow_stop", False)),
+                diverse_actions=bool(cfg.get("viz_scale_diverse_actions", True)),
+                stochastic_actions=bool(cfg.get("viz_scale_stochastic_actions", False)),
+                sampling_temperature=float(cfg.get("viz_scale_sampling_temperature", 1.0)),
+                sampling_exploration=float(cfg.get("viz_scale_sampling_exploration", 0.0)),
+                sampling_seed=int(cfg.get("viz_scale_sampling_seed", seed + step)),
+                require_complete_reasoning_steps=_interactive_viz_require_complete_steps(
+                    cfg,
+                    "viz_require_complete_reasoning_steps",
+                    "interactive_artifacts_require_complete_reasoning_steps",
+                ),
             )
-            memory_bank.extend(records)
-            memory_bank.save()
-            memory_records_added += len(records)
-            metrics_last["analogical_memory_records_added"] = float(memory_records_added)
-            metrics_last["analogical_memory_bank_size"] = float(len(memory_bank.records))
-        vis_paths.update(
-            {
-                f"train_{key}": value
-                for key, value in write_inference_audit_artifacts(
-                    {"inference_scaling": scaling, "topological_algebra": scaling.get("best", {}).get("topological_algebra")},
-                    out_dir / "train_got_audit",
-                    render_html=True,
-                ).items()
-            }
-        )
+            if memory_bank is not None:
+                records = memory_records_from_scaling_report(
+                    scaling,
+                    source=f"train:{run_name}:step{step}",
+                    min_score=cfg.get("memory_min_score"),
+                    max_records=int(cfg.get("memory_records_per_audit", 8)),
+                )
+                memory_bank.extend(records)
+                memory_bank.save()
+                memory_records_added += len(records)
+                metrics_last["analogical_memory_records_added"] = float(memory_records_added)
+                metrics_last["analogical_memory_bank_size"] = float(len(memory_bank.records))
+            vis_paths.update(
+                {
+                    f"train_{key}": value
+                    for key, value in write_inference_audit_artifacts(
+                        {"inference_scaling": scaling, "topological_algebra": scaling.get("best", {}).get("topological_algebra")},
+                        out_dir / "train_got_audit",
+                        render_html=True,
+                    ).items()
+                }
+            )
     report = {
         "checkpoint": str(ckpt_path),
         "latest_checkpoint": str(latest_ckpt_path) if latest_ckpt_path.exists() else "",
@@ -849,6 +890,12 @@ def _run_periodic_validation_round(
                     sampling_temperature=float(cfg.get("periodic_viz_scale_sampling_temperature", cfg.get("viz_scale_sampling_temperature", 1.0))),
                     sampling_exploration=float(cfg.get("periodic_viz_scale_sampling_exploration", cfg.get("viz_scale_sampling_exploration", 0.0))),
                     sampling_seed=int(cfg.get("periodic_viz_scale_sampling_seed", seed + step + example_idx)),
+                    require_complete_reasoning_steps=_interactive_viz_require_complete_steps(
+                        cfg,
+                        "periodic_viz_require_complete_reasoning_steps",
+                        "viz_require_complete_reasoning_steps",
+                        "interactive_artifacts_require_complete_reasoning_steps",
+                    ),
                 )
                 audit_result: dict[str, Any] = {
                     "inference_scaling": scaling,
@@ -972,7 +1019,11 @@ def _log_wandb_html_artifacts(
     prefix: str,
     step: int | None = None,
 ) -> None:
-    html_limit = int(cfg.get("wandb_html_artifact_limit", 5))
+    if not _wandb_log_interactive_artifacts_enabled(cfg):
+        return
+    html_limit = _wandb_html_artifact_limit(cfg)
+    if html_limit <= 0:
+        return
     uploaded_html = 0
     payload: dict[str, Any] = {}
     for key, path in _wandb_html_items(vis_paths):

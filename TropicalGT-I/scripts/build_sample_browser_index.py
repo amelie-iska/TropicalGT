@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Build a sample-first browser index for TropicalGT-I interactive audits.
 
-The periodic audit renderer writes one directory per sampled row/input. This
+The periodic audit renderer writes one directory per model-evaluated row/input. This
 script keeps that structure visible in the browser: choose the sample first,
 then inspect that sample's GoT trajectory, topology, memory, GraphCG, and
 tropical support artifacts.
@@ -13,6 +13,7 @@ import argparse
 import html
 import json
 import math
+import os
 from pathlib import Path
 from statistics import mean, pstdev
 from typing import Any, NamedTuple
@@ -39,6 +40,7 @@ PRIMARY_ARTIFACTS: tuple[ArtifactSpec, ...] = (
     ArtifactSpec("Analogical many-map overview", "analogical_memory_retrieval.html", "many"),
     ArtifactSpec("Analogical top-k index", "analogical_memory_topk_index.html", "top-k"),
     ArtifactSpec("Persistence barcode", "trajectory_persistence/persistence_barcode.html", "bars"),
+    ArtifactSpec("2-parameter F2[x,y] bifiltration", "trajectory_persistence/two_parameter_bifiltration.html", "2-param"),
     ArtifactSpec("Persistence Betti/free-resolution", "trajectory_persistence/persistence_module_betti.html", "betti"),
     ArtifactSpec("Persistence vector representations", "trajectory_persistence/persistence_representations.html", "vector"),
     ArtifactSpec("Persistence landscapes", "trajectory_persistence/persistence_landscapes.html", "land"),
@@ -81,12 +83,11 @@ def _fmt(value: float | None, digits: int = 5) -> str:
 
 
 def _sample_dirs(root: Path) -> list[Path]:
-    dirs = []
+    if not root.exists():
+        return []
+    dirs = sorted({path.parent for path in root.rglob("inference_scaling_tree.json")})
     if (root / "inference_scaling_tree.json").exists():
-        dirs.append(root)
-    for child in sorted(root.iterdir() if root.exists() else []):
-        if child.is_dir() and (child / "inference_scaling_tree.json").exists():
-            dirs.append(child)
+        dirs = [root] + [path for path in dirs if path != root]
     return dirs
 
 
@@ -102,6 +103,10 @@ def _sample_label(root: Path, sample_dir: Path, index: int) -> str:
 
 def _relative_src(root: Path, sample_dir: Path, target: Path) -> str:
     return target.relative_to(root).as_posix() if sample_dir != root else target.relative_to(sample_dir).as_posix()
+
+
+def _relative_between(base: Path, target: Path) -> str:
+    return os.path.relpath(target, start=base).replace(os.sep, "/")
 
 
 def _artifact_row(root: Path, sample_dir: Path, target: Path, label: str, tag: str) -> dict[str, str]:
@@ -135,14 +140,23 @@ def _artifact_rows(root: Path, sample_dir: Path) -> list[dict[str, str]]:
 
     step_dir = sample_dir / "reasoning_step_complex_maps"
     if step_dir.exists():
-        for target in sorted(step_dir.glob("reasoning_step_*.html")):
-            row = _artifact_row(
-                root,
-                sample_dir,
-                target,
-                _step_label(target),
-                "tree" if target.stem.endswith("_simplex_tree") else "step",
-            )
+        complex_targets = sorted(
+            target
+            for target in step_dir.glob("reasoning_step_*.html")
+            if not target.stem.endswith("_simplex_tree")
+        )
+        tree_targets = sorted(step_dir.glob("reasoning_step_*_simplex_tree.html"))
+        if complex_targets:
+            rollup = step_dir / "complexes_catalog.html"
+            _write_step_rollup(rollup, complex_targets, "All reasoning step complexes")
+            row = _artifact_row(root, sample_dir, rollup, "All reasoning step complexes", "steps")
+            if row["src"] not in seen:
+                rows.append(row)
+                seen.add(row["src"])
+        if tree_targets:
+            rollup = step_dir / "simplex_trees_catalog.html"
+            _write_step_rollup(rollup, tree_targets, "All reasoning step simplex trees")
+            row = _artifact_row(root, sample_dir, rollup, "All reasoning step simplex trees", "trees")
             if row["src"] not in seen:
                 rows.append(row)
                 seen.add(row["src"])
@@ -157,6 +171,201 @@ def _artifact_rows(root: Path, sample_dir: Path) -> list[dict[str, str]]:
             rows.append(row)
             seen.add(row["src"])
     return rows
+
+
+def _write_step_rollup(path: Path, targets: list[Path], title: str) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    first = targets[0].name if targets else ""
+    buttons = []
+    for target in targets:
+        label = _step_label(target)
+        href = target.name
+        buttons.append(
+            f'<button class="artifact" data-src="{html.escape(href, quote=True)}" '
+            f'data-label="{html.escape(label, quote=True)}">{html.escape(label)}</button>'
+        )
+    path.write_text(
+        f"""<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{html.escape(title)}</title>
+  <style>
+    :root {{ color-scheme: dark; --bg:#070b12; --panel:#0d1728; --ink:#eaf2ff; --muted:#a9bfdf; --accent:#5eead4; --edge:rgba(130,170,220,.28); }}
+    * {{ box-sizing: border-box; }}
+    body {{ margin:0; min-height:100vh; background:#070b12; color:var(--ink); font-family:Inter,ui-sans-serif,system-ui,sans-serif; }}
+    .shell {{ display:grid; grid-template-columns:minmax(300px,390px) minmax(560px,1fr); min-height:100vh; }}
+    aside {{ padding:18px; border-right:1px solid var(--edge); background:#0d1728; overflow:auto; }}
+    main {{ min-width:0; display:grid; grid-template-rows:auto 1fr; }}
+    h1 {{ margin:0 0 8px; font-size:22px; letter-spacing:0; }}
+    p {{ margin:0 0 14px; color:var(--muted); line-height:1.45; font-size:13px; }}
+    .artifact-list {{ display:grid; gap:8px; }}
+    button.artifact {{ width:100%; text-align:left; border:1px solid rgba(130,170,220,.28); border-radius:6px; background:#10203a; color:var(--ink); padding:10px 11px; font:inherit; cursor:pointer; }}
+    button.artifact:hover, button.artifact.active {{ border-color:rgba(94,234,212,.78); background:#143657; }}
+    .topbar {{ padding:13px 16px; border-bottom:1px solid var(--edge); display:flex; justify-content:space-between; gap:12px; align-items:center; background:#070b12; }}
+    #title {{ margin:0; font-size:15px; color:#dbeafe; }}
+    a.open {{ color:var(--accent); text-decoration:none; border:1px solid rgba(94,234,212,.45); border-radius:6px; padding:7px 9px; }}
+    iframe {{ width:100%; height:100%; min-height:820px; border:0; background:#05070d; }}
+    @media (max-width:960px) {{ .shell {{ grid-template-columns:1fr; }} aside {{ border-right:0; border-bottom:1px solid var(--edge); }} iframe {{ min-height:760px; }} }}
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <aside>
+      <h1>{html.escape(title)}</h1>
+      <p>Single-page rollup for the generated per-step interactive artifacts. Each row opens the exact original page in the inspection frame.</p>
+      <div class="artifact-list">{''.join(buttons)}</div>
+    </aside>
+    <main>
+      <div class="topbar"><h2 id="title">{html.escape(_step_label(targets[0]) if targets else title)}</h2><a id="open" class="open" href="{html.escape(first, quote=True)}">open full page</a></div>
+      <iframe id="frame" src="{html.escape(first, quote=True)}" title="{html.escape(title, quote=True)}"></iframe>
+    </main>
+  </div>
+  <script>
+    const buttons = Array.from(document.querySelectorAll("button.artifact"));
+    const frame = document.getElementById("frame");
+    const title = document.getElementById("title");
+    const open = document.getElementById("open");
+    function setPanel(button) {{
+      const src = button.dataset.src;
+      buttons.forEach((candidate) => candidate.classList.toggle("active", candidate === button));
+      frame.src = src;
+      title.textContent = button.dataset.label || button.textContent.trim();
+      open.href = src;
+    }}
+    buttons.forEach((button) => button.addEventListener("click", () => setPanel(button)));
+    if (buttons.length) setPanel(buttons[0]);
+  </script>
+</body>
+</html>
+""",
+        encoding="utf-8",
+    )
+
+
+def _artifact_family(path: Path) -> str:
+    parts = set(path.parts)
+    name = path.name
+    if "reasoning_step_complex_maps" in parts:
+        return "reasoning steps"
+    if name.startswith("analogical_memory"):
+        return "analogical memory"
+    if "trajectory_persistence" in parts or name.startswith("persistence_"):
+        return "persistence"
+    if name.startswith("got_"):
+        return "graph-of-thought"
+    if name.startswith("graphcg_"):
+        return "GraphCG"
+    if name.startswith("tropical_"):
+        return "tropical support"
+    if name.endswith(".json"):
+        return "payload"
+    return "other"
+
+
+def discover_interactive_artifacts(root: Path, samples: list[dict[str, Any]]) -> list[dict[str, str]]:
+    artifacts: list[dict[str, str]] = []
+    seen: set[str] = set()
+    for sample in samples:
+        sample_dir = root if sample["dir"] == "." else root / str(sample["dir"])
+        for target in sorted(sample_dir.rglob("*")):
+            if not target.is_file() or target.suffix.lower() not in {".html", ".json"}:
+                continue
+            rel = target.relative_to(root).as_posix()
+            if rel in seen:
+                continue
+            seen.add(rel)
+            artifacts.append(
+                {
+                    "sample": str(sample["label"]),
+                    "family": _artifact_family(target.relative_to(sample_dir)),
+                    "label": target.stem.replace("_", " "),
+                    "src": rel,
+                    "extension": target.suffix.lower().lstrip("."),
+                    "tag": "html" if target.suffix.lower() == ".html" else "payload",
+                    "exists": "yes",
+                    "source": "generated audit artifact",
+                }
+            )
+    return artifacts
+
+
+def _write_interactive_catalog(root: Path, output: Path, artifacts: list[dict[str, str]], title: str) -> None:
+    rows = "\n".join(
+        "<tr>"
+        f"<td>{html.escape(row['sample'])}</td>"
+        f"<td>{html.escape(row['family'])}</td>"
+        f"<td>{html.escape(row['label'])}</td>"
+        f"<td><a href='{html.escape(row['src'], quote=True)}'>{html.escape(row['src'])}</a></td>"
+        f"<td>{html.escape(row['extension'])}</td>"
+        f"<td>{html.escape(row['tag'])}</td>"
+        "</tr>"
+        for row in artifacts
+    ) or "<tr><td colspan='6'>No generated artifacts found.</td></tr>"
+    output.write_text(
+        f"""<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{html.escape(title)} Artifact Catalog</title>
+  <style>
+    :root {{ color-scheme: dark; --bg:#070b12; --panel:#0d1728; --ink:#eaf2ff; --muted:#a9bfdf; --accent:#5eead4; --edge:rgba(130,170,220,.28); }}
+    body {{ margin:0; background:#070b12; color:var(--ink); font-family:Inter,ui-sans-serif,system-ui,sans-serif; }}
+    main {{ max-width:1280px; margin:0 auto; padding:28px 22px 42px; }}
+    h1 {{ margin:0 0 8px; font-size:26px; letter-spacing:0; }}
+    p {{ color:var(--muted); line-height:1.45; }}
+    .controls {{ display:flex; gap:10px; flex-wrap:wrap; margin:16px 0; }}
+    input, select {{ background:#0d1728; color:var(--ink); border:1px solid var(--edge); border-radius:6px; padding:9px 10px; }}
+    table {{ width:100%; border-collapse:collapse; background:#0d1728; border:1px solid var(--edge); }}
+    th, td {{ padding:9px 10px; border-bottom:1px solid rgba(130,170,220,.18); text-align:left; vertical-align:top; font-size:13px; }}
+    th {{ color:#99f6e4; position:sticky; top:0; background:#0d1728; }}
+    a {{ color:#7dd3fc; text-decoration:none; overflow-wrap:anywhere; }}
+    a:hover {{ text-decoration:underline; }}
+  </style>
+</head>
+<body>
+  <main>
+    <h1>{html.escape(title)} Complete Interactive Artifact Catalog</h1>
+    <p>One searchable catalog for every generated HTML page and JSON payload in this browser bundle. Paths are relative to <code>{html.escape(str(root))}</code>.</p>
+    <div class="controls">
+      <input id="search" type="search" placeholder="Search paths, samples, or families">
+      <select id="family"><option value="">All families</option></select>
+    </div>
+    <table id="catalog">
+      <thead><tr><th>sample</th><th>family</th><th>label</th><th>relative path</th><th>ext</th><th>tag</th></tr></thead>
+      <tbody>{rows}</tbody>
+    </table>
+  </main>
+  <script>
+    const search = document.getElementById("search");
+    const family = document.getElementById("family");
+    const rows = Array.from(document.querySelectorAll("#catalog tbody tr"));
+    const families = Array.from(new Set(rows.map((row) => row.children[1]?.textContent || "").filter(Boolean))).sort();
+    for (const value of families) {{
+      const option = document.createElement("option");
+      option.value = value;
+      option.textContent = value;
+      family.appendChild(option);
+    }}
+    function applyFilters() {{
+      const needle = search.value.toLowerCase();
+      const selected = family.value;
+      for (const row of rows) {{
+        const text = row.textContent.toLowerCase();
+        const rowFamily = row.children[1]?.textContent || "";
+        row.style.display = (!needle || text.includes(needle)) && (!selected || rowFamily === selected) ? "" : "none";
+      }}
+    }}
+    search.addEventListener("input", applyFilters);
+    family.addEventListener("change", applyFilters);
+  </script>
+</body>
+</html>
+""",
+        encoding="utf-8",
+    )
 
 
 def _sample_summary(root: Path, sample_dir: Path, index: int) -> dict[str, Any]:
@@ -231,6 +440,10 @@ def build_index(root: Path, output: Path, title: str) -> None:
     samples = [_sample_summary(root, sample_dir, idx) for idx, sample_dir in enumerate(_sample_dirs(root))]
     if not samples:
         raise SystemExit(f"no sample audit directories found under {root}")
+    catalog_path = output.parent / "interactive_visualization_catalog.html"
+    artifacts = discover_interactive_artifacts(root, samples)
+    _write_interactive_catalog(root, catalog_path, artifacts, title)
+    catalog_href = _relative_between(output.parent, catalog_path)
     first_artifact = samples[0]["artifacts"][0] if samples[0]["artifacts"] else {"src": "", "label": "No artifacts"}
     cards = []
     for sample in samples:
@@ -292,6 +505,8 @@ def build_index(root: Path, output: Path, title: str) -> None:
     main {{ min-width:0; min-height:100vh; display:grid; grid-template-rows:auto minmax(900px,1fr); }}
     h1 {{ margin:0 0 8px; font-size:24px; line-height:1.12; letter-spacing:0; }}
     .summary {{ color:var(--muted); font-size:13px; line-height:1.45; margin:0 0 16px; }}
+    .catalog-link {{ display:flex; align-items:center; justify-content:space-between; gap:12px; color:#071018; background:var(--accent); text-decoration:none; border-radius:6px; padding:10px 12px; font-weight:800; margin:0 0 16px; box-shadow:0 14px 30px rgba(94,234,212,.16); }}
+    .catalog-link code {{ color:#071018; font-size:10px; white-space:nowrap; }}
     .sample {{ border:1px solid rgba(130,170,220,.22); border-radius:8px; background:rgba(16,31,54,.48); padding:12px; margin:0 0 14px; }}
     .sample.active {{ border-color:rgba(94,234,212,.82); box-shadow:0 0 0 1px rgba(94,234,212,.18) inset; }}
     .sample-head {{ display:flex; justify-content:space-between; gap:10px; align-items:start; }}
@@ -333,7 +548,8 @@ def build_index(root: Path, output: Path, title: str) -> None:
   <div class="shell">
     <aside>
       <h1>{html.escape(title)}</h1>
-      <p class="summary">Sample-first audit. Each card is one model-sampled row/input with its own generated graph-of-thought reasoning trajectory and per-sample topology, memory, GraphCG, and tropical-support artifacts.</p>
+      <p class="summary">Sample-first audit. Each card is one model-evaluated row/input with its own generated graph-of-thought reasoning trajectory and per-sample topology, memory, GraphCG, and tropical-support artifacts.</p>
+      <a class="catalog-link" href="{html.escape(catalog_href, quote=True)}"><span>open complete artifact catalog</span><code>{len(artifacts)} artifacts</code></a>
       {''.join(cards)}
     </aside>
     <main>

@@ -17,9 +17,11 @@ The main optimization metric remains byte-level BPB for the OpenAI Parameter-Gol
 
 The graph structural byte budget is derived from the actual TokenGT graph tuple: masks determine live graph tokens, node counts determine endpoint-id width, and edge endpoint ids are charged when supplied.
 
-All training records are graph structured. The moved TropicalGT reasoning shards carry graph JSON and also receive deterministic sequential text path graphs. The OpenAI Parameter-Golf FineWeb stream is loaded from `external/oai-parameter-golf/data/datasets/fineweb10B_sp1024` and decoded with `external/oai-parameter-golf/data/tokenizers/fineweb_1024_bpe.model`; `train_full_dataset_active.json` keeps the older `external/parameter-golf` checkout as a compatibility fallback. Every sampled token window becomes a causal sequential DAG before TokenGT tokenization. Graphs with causal DAG structure are decoded autoregressively in topological order. Cyclic or explicitly non-causal graphs use deterministic seeded random autoregressive order.
+All training records are graph structured. The moved TropicalGT reasoning shards carry graph JSON and also receive deterministic sequential text path graphs. The OpenAI Parameter-Golf FineWeb stream is loaded from `external/oai-parameter-golf/data/datasets/fineweb10B_sp1024` and decoded with `external/oai-parameter-golf/data/tokenizers/fineweb_1024_bpe.model`; `train_full_dataset_active.json` keeps the older `external/parameter-golf` checkout as a compatibility fallback. Every selected token window becomes a causal sequential DAG before TokenGT tokenization. Graphs with causal DAG structure are decoded autoregressively in topological order. Cyclic or explicitly non-causal graphs use deterministic seeded random autoregressive order.
 
-The active full-dataset run uses `configs/train_full_dataset_active.json`. It requires both the moved Hugging Face reasoning shards and the full OpenAI Parameter-Golf SP1024 cache, and its startup data-budget gate requires more than `10,000,000,000` configured training token slots. The active shape is `seq_len: 1024`, `batch_size: 4`, `checkpoint_every: 1000`, `validation_every_steps: 500`, `visualization_every_steps: 10000`, and `max_steps: 2500000`, which schedules `10,240,000,000` sequence-token slots. Its budget report currently covers `117` HF train parquet shards plus `195` OAI train shards for `24,198,796,288` available train token slots.
+The current fresh step-0 full-dataset Parameter-Golf BPB repair run uses `configs/train_full_dataset_pg_bpb_step0_full24b_b44.json`. It requires both the moved Hugging Face reasoning shards and the full OpenAI Parameter-Golf SP1024 cache. The active shape is `seq_len: 1024`, `batch_size: 44`, `max_steps: 537083`, for `24,198,811,648` configured token slots against `24,198,796,288` audited available train token slots. This is the current path for BPB optimization and should use roughly 18-20GB VRAM on an RTX 4090 while leaving headroom for implementation tests and browser/inference probes.
+
+The older full-dataset run path uses `configs/train_full_dataset_active.json`. It also requires both real data sources, but its shape is `seq_len: 1024`, `batch_size: 4`, `checkpoint_every: 1000`, `validation_every_steps: 500`, `visualization_every_steps: 10000`, and `max_steps: 2500000`, which schedules `10,240,000,000` sequence-token slots. Treat it as historical unless explicitly relaunched.
 
 The older `configs/train.json` remains a cap-sized review configuration unless its budget audit is explicitly refreshed.
 
@@ -33,6 +35,11 @@ W&B metrics are logged in priority-ordered namespaces so the dashboard opens aro
 - `05_graphcg`: full-rank GraphCG diagnostics and direction spectra.
 - `06_graph_data`: graph-token counts, causal/random graph AR rates, and OAI source rate.
 - `07_algebra_topology`, `08_memory`, `09_meet_in_middle`, `10_system`, and `11_optimization`: topology/algebra, analogical memory, optional bidirectional decoding, throughput/VRAM, and optimizer/sampler metrics.
+
+Interactive browser artifacts are local optional outputs by default. Keep W&B
+focused on losses, BPB metrics, objectives, regularizers, throughput, and
+diagnostics unless `wandb.log_interactive_artifacts: true` and a positive
+`wandb.html_artifact_limit` are explicitly configured.
 
 The online project has been cleaned so only the latest useful smoke run remains (`pzpw99m7`). Local `wandb/` directories are disposable smoke artifacts and can be removed after syncing useful runs.
 
@@ -100,11 +107,11 @@ The active full-dataset config validates every `500` steps and renders heavier b
 - `metrics/training_metrics.html`: live dark-mode metric traces up to the current step.
 - `periodic_validation_artifacts.json`: manifest of every artifact path for that step.
 
-The rolling manifest is `TropicalGT-I/outputs/train_full_dataset_active/periodic/manifest.jsonl`. W&B logs the scalar validation metrics at the same step and uploads the first configured HTML artifacts under `periodic_eval/step_XXXXXXXX/...`.
+The rolling manifest is `TropicalGT-I/outputs/train_full_dataset_active/periodic/manifest.jsonl`. W&B logs scalar validation metrics at the same step. Periodic HTML remains local unless W&B interactive artifact upload is separately enabled with `wandb.log_interactive_artifacts: true` and a positive `wandb.html_artifact_limit`.
 
 The visualization renderer is intentionally audit-oriented rather than decorative. Graph-of-thought trajectories are rendered from model `graph_state` embeddings and graph-of-thought candidate records. In the NLL landscape, every rendered trajectory marker and every edge endpoint uses the displayed surface z-value (plot.z equal to plot.z_surface); the raw centered/scaled NLL remains in the payload for audit, but markers are projected onto the single displayed NLL mesh so they visibly touch it. Microstep interpolation markers and global surrogate NLL surfaces are disabled; unavailable model outputs write explicit `available: false` diagnostics instead of substitute geometry. Filtered simplicial objects are rendered as dark SVG/Plotly side-panel views with a scalar filtration-radius slider and multiparameter persistence data retained in the JSON payload. GraphCG direction pages preserve the per-candidate projection-basis certificate from `graphcg_projection`, including basis source counts and off-diagonal cosine diagnostics, so the heatmap cannot erase whether the directions came from the full-rank QR basis. Long causal text-path complexes wrap into lanes for legibility.
 
-The full GoT audit bundle now separates Euclidean embedding-radius and model-probability filtrations. The primary trajectory complex is `got_full_trajectory_complex.html`; its simplex-tree inclusion poset is `got_full_trajectory_simplex_tree_3d.html`. The Jensen-Shannon probability complex is `got_full_trajectory_complex_jensen_shannon.html`; its simplex tree is `got_full_trajectory_simplex_tree_3d_jensen_shannon.html`. Each sampled reasoning state also receives both `reasoning_step_###.html` and `reasoning_step_###_simplex_tree.html`. All radius sliders start at the disjoint 0-simplex cloud and grow min-to-max by true filtration threshold.
+The full GoT audit bundle now separates Euclidean embedding-radius and model-probability filtrations. The primary trajectory complex is `got_full_trajectory_complex.html`; its simplex-tree inclusion poset is `got_full_trajectory_simplex_tree_3d.html`. The Jensen-Shannon probability complex is `got_full_trajectory_complex_jensen_shannon.html`; its simplex tree is `got_full_trajectory_simplex_tree_3d_jensen_shannon.html`. Each observed model-evaluated reasoning state also receives both `reasoning_step_###.html` and `reasoning_step_###_simplex_tree.html`. All radius sliders start at the disjoint 0-simplex cloud and grow min-to-max by true filtration threshold.
 
 For browser review, generate the sample-first dashboard for any periodic audit directory:
 
@@ -115,7 +122,7 @@ TropicalGT-I/outputs/train_full_dataset_active/periodic/step_XXXXXXXX/got_audit 
 --output TropicalGT-I/outputs/train_full_dataset_active/periodic/step_XXXXXXXX/got_audit/codex_browser_index.html
 ```
 
-That index makes each sampled row/input the top-level unit, with links below it for that sample's GoT trajectory, NLL landscape, embedding map, full radius complex, full simplex tree, Jensen-Shannon probability complex, probability simplex tree, every reasoning-step complex and simplex tree, persistence/vectorized topology, per-rank analogical probability correspondences with filtered-complex certificates, GraphCG directions, tropical-support audit, raw sample index, and generated inference dashboard. For fresh multi-sample inference review, `run_multi_inference_audits.py --memory-save --memory-retrieve-top-k N` defaults to a clean bundle-local memory bank under `browser_memory/reasoning_memory.jsonl`, so later samples retrieve earlier sample trajectories instead of stale training-bank records unless `--memory-bank` is explicitly supplied. The validator checks those per-sample buttons, relative targets, NLL surface contact fields, GraphCG projection-basis proof, and analogical pair-page links. Pages with selected simplicial objects keep the static SVG preview open and promote it automatically if WebGL is unavailable, while top-level non-growth `persistence_landscapes.html` pages redirect to `trajectory_persistence/persistence_landscapes.html` so reviewers do not land on a misleading blank duplicate.
+That index makes each inference row/input the top-level unit, with links below it for that sample's GoT trajectory, NLL landscape, embedding map, full radius complex, full simplex tree, Jensen-Shannon probability complex, probability simplex tree, every reasoning-step complex and simplex tree, persistence/vectorized topology, per-rank analogical probability correspondences with filtered-complex certificates, GraphCG directions, tropical-support audit, raw sample index, and generated inference dashboard. For fresh multi-sample inference review, `run_multi_inference_audits.py --memory-save --memory-retrieve-top-k N` defaults to a clean bundle-local memory bank under `browser_memory/reasoning_memory.jsonl`, so later samples retrieve earlier sample trajectories instead of stale training-bank records unless `--memory-bank` is explicitly supplied. The validator checks those per-sample buttons, relative targets, NLL surface contact fields, GraphCG projection-basis proof, and analogical pair-page links. Pages with selected simplicial objects keep the static SVG preview open and promote it automatically if WebGL is unavailable, while top-level non-growth `persistence_landscapes.html` pages redirect to `trajectory_persistence/persistence_landscapes.html` so reviewers do not land on a misleading blank duplicate.
 
 Validate the generated interactive audit bundle with:
 
@@ -134,7 +141,7 @@ Run `TropicalGT-I/scripts/audit_metric_provenance.py --fail-on-uncovered` to ref
 
 When reviewing early runs, treat tropical active-support collapse as a first-priority diagnostic. A heatmap where most graph tokens select the graph/root token is not a rendering failure; it means the model is using a very low-entropy tropical support pattern. Compare that against BPB, graph-BPB, graph-sideinfo BPB, and graph-conditioned BPB before increasing auxiliary weights.
 
-Full inference audits can optionally emit the same family of graph-of-thought PCA trajectories, tropical support heatmaps, persistence barcodes, multiparameter algebra/free-resolution JSON, derived signatures, GraphCG direction plots, and analogical memory retrieval artifacts. The trajectory HTML is dark-mode; hovering over a reasoning node renders the node's filtered simplicial object in a cursor-following hover card and in the persistent side panel, and the 3D NLL view uses exact sampled NLL anchors plus a surface-contact projection contract so trajectory points and edge endpoints touch the rendered NLL landscape (plot.z equal to plot.z_surface). Analogical-memory retrieval is rendered as per-rank 3D probability-matched correspondences between query and memory `trajectory_probability_filtered_simplicial_object` complexes. The companion `analogical_simplicial_maps.json` reports `model_probability_jensen_shannon_assignment` vertex assignments, relative `pair_page` links, Jensen-Shannon and assignment-cost summaries, filtration distortion, edge/2-simplex preservation, finite filtered-complex certificate status, GUDHI SimplexTree provenance, persistent-homology similarity, free-resolution similarity, and derived-signature similarity. Legitimate unavailable states are explicit, such as `missing_model_probability_query_complex`, `missing_model_probability_codomain_complex`, or `no_non_self_model_memory`. Use `--audit-all` for the complete optional bundle:
+Full inference audits can optionally emit the same family of graph-of-thought PCA trajectories, tropical support heatmaps, persistence barcodes, multiparameter algebra/free-resolution JSON, derived signatures, GraphCG direction plots, and analogical memory retrieval artifacts. The trajectory HTML is dark-mode; hovering over a reasoning node renders the node's filtered simplicial object in a cursor-following hover card and in the persistent side panel, and the 3D NLL view uses observed model-evaluated NLL anchors plus a surface-contact projection contract so trajectory points and edge endpoints touch the rendered NLL landscape (plot.z equal to plot.z_surface). Analogical-memory retrieval is rendered as per-rank 3D probability-matched correspondences between query and memory `trajectory_probability_filtered_simplicial_object` complexes. The companion `analogical_simplicial_maps.json` reports `model_probability_jensen_shannon_assignment` vertex assignments, relative `pair_page` links, Jensen-Shannon and assignment-cost summaries, filtration distortion, edge/2-simplex preservation, finite filtered-complex certificate status, GUDHI SimplexTree provenance, persistent-homology similarity, free-resolution similarity, and derived-signature similarity. Legitimate unavailable states are explicit, such as `missing_model_probability_query_complex`, `missing_model_probability_codomain_complex`, or `no_non_self_model_memory`. Use `--audit-all` for the complete optional bundle:
 
 ```bash
 PYTHONPATH=TropicalGT-I/src \
@@ -151,6 +158,36 @@ TropicalGT-I/scripts/infer_tropicalgt_i.py \
 --audit-output-dir TropicalGT-I/outputs/train_full_dataset_active/inference_full_audit \
 --output TropicalGT-I/outputs/train_full_dataset_active/inference_full_audit.json
 ```
+
+For deeper/wider acceptance browser review, use the multi-run full preset with
+a stable checkpoint snapshot or latest checkpoint. The preset enforces minimum
+depth `5`, width `8`, branch factor `4`, trace limit `8192`, topology budget
+`8192`, and memory retrieval top-k `8`. Browser audit commands also pass
+`--require-complete-reasoning-steps`, so rendered trajectories fail closed
+unless every candidate has model NLL, graph-state embedding, action
+probabilities, complete graph-token trace, Jensen-Shannon probability complex,
+Euclidean graph-token embedding complex, GraphCG directions, and a directed GoT
+parent edge. Add `--no-scale-stochastic-actions` for deterministic branch
+expansion from model action probabilities:
+
+```bash
+PYTHONPATH=TropicalGT-I/src:TropicalGT-I/scripts \
+python TropicalGT-I/scripts/run_multi_inference_audits.py \
+--config TropicalGT-I/configs/train_full_dataset_pg_bpb_step0_full24b_b44.json \
+--checkpoint TropicalGT-I/checkpoints/tropicalgt_i_pg_bpb_step0_full24b_b44.latest.pt \
+--output-root TropicalGT-I/outputs/multi_sample_browser/full_audit_deepwide \
+--samples 1 \
+--audit-preset full \
+--no-scale-stochastic-actions \
+--memory-bank TropicalGT-I/outputs/multi_sample_browser/latest/browser_memory/reasoning_memory.jsonl \
+--memory-retrieve-top-k 8 \
+--title "TropicalGT-I Full Deep/Wide Model-Derived Reasoning Audit"
+```
+
+`--audit-output-dir` alone is JSON output, not an implicit request for browser
+HTML. Use `--interactive-artifacts` or `--audit-all` for local interactive
+pages, and opt into W&B HTML upload separately with
+`wandb.log_interactive_artifacts` plus a positive `wandb.html_artifact_limit`.
 
 Standalone evaluation can also render the validation visualizations:
 

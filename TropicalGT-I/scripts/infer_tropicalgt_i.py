@@ -36,6 +36,29 @@ def _current_scaling_record_ids(result: dict) -> set[str]:
     return {str(row.get("record_id")) for row in rows if isinstance(row, dict) and row.get("record_id") is not None}
 
 
+def _resolve_render_html(
+    *,
+    audit_all: bool,
+    audit_output_dir: str,
+    audit_render_html: bool,
+    no_audit_render_html: bool,
+    interactive_artifacts: bool,
+) -> bool:
+    del audit_output_dir
+    if no_audit_render_html:
+        return False
+    return bool(audit_all or audit_render_html or interactive_artifacts)
+
+
+def _resolve_require_complete_reasoning_steps(
+    *,
+    audit_all: bool,
+    render_html: bool,
+    require_complete_reasoning_steps: bool,
+) -> bool:
+    return bool(require_complete_reasoning_steps or (audit_all and render_html))
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Run TropicalGT-I inference")
     parser.add_argument("--config", default=str(ROOT / "configs" / "smoke.json"))
@@ -57,9 +80,19 @@ def main() -> None:
     parser.add_argument("--audit-render-html", action="store_true")
     parser.add_argument("--no-audit-render-html", action="store_true")
     parser.add_argument(
+        "--interactive-artifacts",
+        action="store_true",
+        help="Render optional local interactive audit HTML pages. JSON audit output can be written without this flag.",
+    )
+    parser.add_argument(
         "--audit-all",
         action="store_true",
         help="Emit full optional inference artifacts: GoT PCA, NLL surfaces, tropical support, GraphCG, analogical memory, free-resolution/algebra JSON, derived signatures, persistence plots, and dashboard HTML.",
+    )
+    parser.add_argument(
+        "--require-complete-reasoning-steps",
+        action="store_true",
+        help="Fail inference scaling if any browserable reasoning step lacks real model NLL, embeddings, probability vectors, trace tokens, GraphCG data, or directed GoT parent edge.",
     )
     parser.add_argument("--memory-bank", default="", help="JSONL analogical reasoning memory bank to query or update")
     parser.add_argument("--memory-save", action="store_true", help="Append inference-scaling candidates to the memory bank")
@@ -82,7 +115,18 @@ def main() -> None:
         args.memory_bank = str(cfg.get("memory_bank_path", ""))
     if args.audit_all and args.memory_retrieve_top_k <= 0:
         args.memory_retrieve_top_k = int(cfg.get("inference_memory_retrieve_top_k", cfg.get("periodic_memory_retrieve_top_k", 5)))
-    render_html = (args.audit_render_html or args.audit_all or bool(args.audit_output_dir)) and not args.no_audit_render_html
+    render_html = _resolve_render_html(
+        audit_all=bool(args.audit_all),
+        audit_output_dir=args.audit_output_dir,
+        audit_render_html=bool(args.audit_render_html),
+        no_audit_render_html=bool(args.no_audit_render_html),
+        interactive_artifacts=bool(args.interactive_artifacts),
+    )
+    require_complete_reasoning_steps = _resolve_require_complete_reasoning_steps(
+        audit_all=bool(args.audit_all),
+        render_html=bool(render_html),
+        require_complete_reasoning_steps=bool(args.require_complete_reasoning_steps),
+    )
     device = torch.device("cuda" if torch.cuda.is_available() and cfg.get("device", "auto") != "cpu" else "cpu")
     model, _ = load_checkpoint(args.checkpoint, device)
     rec = GraphRecord.from_mapping(
@@ -143,10 +187,12 @@ def main() -> None:
             "audit_all": bool(args.audit_all),
             "audit_level": args.audit_level,
             "render_html": bool(render_html),
+            "interactive_artifacts": bool(args.interactive_artifacts),
             "inference_scaling_enabled": bool(scale_depth > 0),
             "memory_bank": args.memory_bank,
             "memory_retrieve_top_k": int(args.memory_retrieve_top_k),
             "artifacts_dir": args.audit_output_dir,
+            "require_complete_reasoning_steps": bool(require_complete_reasoning_steps),
         },
         "support": out["support"].detach().cpu().tolist(),
         "margin_mean": float(out["margin_mean"].detach().cpu()),
@@ -200,6 +246,7 @@ def main() -> None:
             sampling_temperature=scale_temperature,
             sampling_exploration=scale_exploration,
             sampling_seed=scale_seed,
+            require_complete_reasoning_steps=require_complete_reasoning_steps,
         )
     if args.memory_bank:
         bank = AnalogicalMemoryBank(args.memory_bank, max_records=args.memory_max_records)

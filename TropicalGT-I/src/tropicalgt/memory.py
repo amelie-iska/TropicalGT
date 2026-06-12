@@ -316,11 +316,72 @@ def _compact_topological_algebra(obj: Any) -> dict[str, Any]:
         "free_resolution_summary",
         "derived_equivalence_signature",
         "derived_signature",
+        "chain_complex",
+        "persistence",
+        "persistence_representations",
+        "multiparameter_persistence",
         "status",
         "available",
         "reason",
     }
-    return {key: value for key, value in obj.items() if key in keep}
+    out = {key: value for key, value in obj.items() if key in keep}
+    if isinstance(obj.get("commutative_algebra"), dict):
+        out["commutative_algebra"] = _compact_commutative_algebra(obj["commutative_algebra"])
+    return out
+
+
+def _compact_commutative_algebra(ca: dict[str, Any]) -> dict[str, Any]:
+    out: dict[str, Any] = {}
+    for key in ("two_parameter_free_resolution", "multiparameter_free_resolution_proxy", "taylor_resolution_upper_bound"):
+        value = ca.get(key)
+        if isinstance(value, dict):
+            out[key] = _compact_free_resolution(value)
+    for key in ("hochster_betti", "stanley_reisner"):
+        value = ca.get(key)
+        if isinstance(value, dict):
+            out[key] = {k: value.get(k) for k in ("available", "truncated", "total_betti", "num_generators", "minimal_nonfaces") if k in value}
+    return out
+
+
+def _compact_free_resolution(value: dict[str, Any]) -> dict[str, Any]:
+    out: dict[str, Any] = {
+        "ring": value.get("ring"),
+        "method": value.get("method"),
+        "field": value.get("field"),
+        "free_chain_modules": value.get("free_chain_modules", []),
+        "monomial_labeled_boundary_entry_counts": value.get("monomial_labeled_boundary_entry_counts", {}),
+        "minimal_free_resolution": value.get("minimal_free_resolution", {}),
+    }
+    det = value.get("determinantal_ideals") if isinstance(value.get("determinantal_ideals"), dict) else {}
+    fit = value.get("fitting_ideals") if isinstance(value.get("fitting_ideals"), dict) else {}
+    be = value.get("buchsbaum_eisenbud") if isinstance(value.get("buchsbaum_eisenbud"), dict) else {}
+    out["determinantal_ideal_summary"] = {
+        "available": det.get("available", False),
+        "map_count": len(det.get("maps", {})) if isinstance(det.get("maps"), dict) else 0,
+        "nonzero_sampled_generators": sum(
+            int(size.get("nonzero_generator_count_in_checked_minors", 0) or 0)
+            for mp in (det.get("maps", {}) or {}).values()
+            if isinstance(mp, dict)
+            for size in mp.get("determinantal_ideals_by_minor_size", [])
+            if isinstance(size, dict)
+        ) if isinstance(det.get("maps"), dict) else 0,
+    }
+    out["fitting_ideal_summary"] = {
+        "available": fit.get("available", False),
+        "map_count": len(fit.get("maps", {})) if isinstance(fit.get("maps"), dict) else 0,
+        "bounded_invariant_count": sum(
+            len(mp.get("fitting_invariants", []))
+            for mp in (fit.get("maps", {}) or {}).values()
+            if isinstance(mp, dict)
+        ) if isinstance(fit.get("maps"), dict) else 0,
+    }
+    out["buchsbaum_eisenbud_summary"] = {
+        "available": be.get("available", False),
+        "composition_zero_checks": len(be.get("composition_zero_checks", [])) if isinstance(be.get("composition_zero_checks"), list) else 0,
+        "exact_chain_modules": sum(1 for row in be.get("rank_exactness_checks", []) if isinstance(row, dict) and row.get("exact_at_chain_module_over_F2_incidence")) if isinstance(be.get("rank_exactness_checks"), list) else 0,
+        "multiplier_certificate_available": bool((be.get("buchsbaum_eisenbud_multipliers") or {}).get("available")) if isinstance(be.get("buchsbaum_eisenbud_multipliers"), dict) else False,
+    }
+    return out
 
 
 def query_signature_from_report(result: dict[str, Any]) -> tuple[list[float], list[float]]:
@@ -354,9 +415,45 @@ def signature_vector(topology: dict[str, Any], length: int = 32) -> list[float]:
     )
     rank_samples = mp.get("rank_invariant_samples", []) if isinstance(mp, dict) else []
     values.extend(float(row.get("h0_rank", 0.0)) for row in rank_samples[: length])
+    values.extend(_commutative_algebra_signature_values(topology)[: length])
     if len(values) < length:
         values.extend([0.0] * (length - len(values)))
     return values[:length]
+
+
+
+def _commutative_algebra_signature_values(topology: dict[str, Any]) -> list[float]:
+    ca = topology.get("commutative_algebra", {}) if isinstance(topology, dict) else {}
+    values: list[float] = []
+    for key in ("two_parameter_free_resolution", "multiparameter_free_resolution_proxy"):
+        fr = ca.get(key, {}) if isinstance(ca.get(key), dict) else {}
+        for row in fr.get("free_chain_modules", []) if isinstance(fr.get("free_chain_modules"), list) else []:
+            if isinstance(row, dict):
+                values.append(float(row.get("rank", row.get("rank_upper_bound", 0.0)) or 0.0))
+        det_summary = fr.get("determinantal_ideal_summary", {}) if isinstance(fr.get("determinantal_ideal_summary"), dict) else {}
+        fit_summary = fr.get("fitting_ideal_summary", {}) if isinstance(fr.get("fitting_ideal_summary"), dict) else {}
+        be_summary = fr.get("buchsbaum_eisenbud_summary", {}) if isinstance(fr.get("buchsbaum_eisenbud_summary"), dict) else {}
+        if not det_summary and isinstance(fr.get("determinantal_ideals"), dict):
+            maps = fr["determinantal_ideals"].get("maps", {}) if isinstance(fr["determinantal_ideals"].get("maps"), dict) else {}
+            det_summary = {"map_count": len(maps)}
+        if not fit_summary and isinstance(fr.get("fitting_ideals"), dict):
+            maps = fr["fitting_ideals"].get("maps", {}) if isinstance(fr["fitting_ideals"].get("maps"), dict) else {}
+            fit_summary = {"map_count": len(maps)}
+        if not be_summary and isinstance(fr.get("buchsbaum_eisenbud"), dict):
+            be = fr["buchsbaum_eisenbud"]
+            be_summary = {
+                "composition_zero_checks": len(be.get("composition_zero_checks", [])) if isinstance(be.get("composition_zero_checks"), list) else 0,
+                "exact_chain_modules": sum(1 for row in be.get("rank_exactness_checks", []) if isinstance(row, dict) and row.get("exact_at_chain_module_over_F2_incidence")) if isinstance(be.get("rank_exactness_checks"), list) else 0,
+            }
+        values.extend([
+            float(det_summary.get("map_count", 0.0) or 0.0),
+            float(det_summary.get("nonzero_sampled_generators", 0.0) or 0.0),
+            float(fit_summary.get("map_count", 0.0) or 0.0),
+            float(fit_summary.get("bounded_invariant_count", 0.0) or 0.0),
+            float(be_summary.get("composition_zero_checks", 0.0) or 0.0),
+            float(be_summary.get("exact_chain_modules", 0.0) or 0.0),
+        ])
+    return values
 
 
 def _memory_id(record_id: object, embedding: list[float], signature: list[float]) -> str:

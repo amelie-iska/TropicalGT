@@ -15,7 +15,7 @@ import numpy as np
 
 REQUIRED_HTML = {
     "embedding_map": ("got_embedding_map_3d.html", ("Graph-of-thought embedding-space trajectory map", "actual graph_state PCA")),
-    "trajectory_nll": ("got_trajectory_pca_3d.html", ("Graph-of-thought branching trajectory", "model-evaluated NLL landscape")),
+    "trajectory_nll": ("got_trajectory_pca_3d.html", ("Graph-of-thought branching trajectory", "observed NLL anchors")),
     "full_complex": ("got_full_trajectory_complex.html", ("Full graph-of-thought trajectory filtered simplicial complex", "play filtration", "filtration backend=")),
     "full_simplex_tree": ("got_full_trajectory_simplex_tree_3d.html", ("Full graph-of-thought trajectory GUDHI simplex tree", "simplex-tree inclusion")),
     "probability_complex": ("got_full_trajectory_complex_jensen_shannon.html", ("probability filtered simplicial complex", "Jensen-Shannon")),
@@ -218,7 +218,7 @@ def _validate_file_set(row_dir: Path, errors: list[str]) -> dict[str, str]:
                 collapse_audit = "active-support collapse diagnostic" in html and "Collapse metrics" in html
                 _assert(support_audit or collapse_audit, errors, f"{rel} is not the interpretable support audit view")
             if key == "graphcg":
-                _assert("Readable top-direction heatmap" in html, errors, f"{rel} does not use the readable GraphCG top-direction audit layout")
+                _assert(("Readable top-direction heatmap" in html) or ("GraphCG full-rank direction audit" in html and "heatmap shows all" in html), errors, f"{rel} does not use the readable GraphCG full-rank audit layout")
             if key == "trajectory_nll":
                 _assert("selected-complex-graph" in html and "plotly_click" in html, errors, f"{rel} does not click-select an interactive reasoning-step complex")
                 _assert("open interactive reasoning-step complex page" in html, errors, f"{rel} does not expose per-step complex page links")
@@ -391,12 +391,14 @@ def validate_row(row_dir: Path, *, min_candidates: int = 8, min_depth: int = 2, 
     )
     _assert(_finite_float(surface.get("raw_nll_range"), -1.0) >= 0.0, errors, "NLL surface payload is missing raw_nll_range")
     _assert(surface.get("exact_anchor_layer") is True, errors, "NLL surface is missing exact anchor layer metadata")
-    _assert(surface.get("actual_landscape_layer") is True, errors, "NLL surface is missing actual sampled landscape metadata")
+    dense_field = surface.get("dense_model_evaluated_field") is True
+    sparse_anchor = surface.get("sparse_observed_anchor_layer") is True and surface.get("actual_landscape_layer") is False
+    _assert(dense_field or sparse_anchor, errors, "NLL surface is neither a genuine dense model field nor a truthful sparse observed-anchor mesh")
     surface_kind = surface.get("surface_kind")
     _assert(
-        surface_kind in {"sample_supported_local_idw_surface", "exact_delaunay_nll_mesh", "sparse_exact_triangular_nll_mesh"},
+        surface_kind in {"sample_supported_local_idw_surface", "sparse_observed_state_nll_anchor_mesh", "sparse_exact_triangular_nll_mesh"},
         errors,
-        "NLL surface is neither a sample-supported local field nor an exact point-anchored mesh",
+        "NLL surface is neither a sample-supported local field nor a sparse point-anchored mesh",
     )
     local_sheet = surface.get("local_interpolating_sheet", {})
     surrogate = surface.get("surrogate_landscape_layer", {})
@@ -532,7 +534,7 @@ def validate_row(row_dir: Path, *, min_candidates: int = 8, min_depth: int = 2, 
             if not analogical_path.exists() and (row_dir / "analogical_memory_retrieval.html").exists():
                 analogical_path = row_dir / "analogical_memory_retrieval.html"
             analogical_html = _read_text(analogical_path) if analogical_path.exists() else ""
-            preserved_marker = "preserved 1-simplex map" in analogical_html or "preserve displayed 1-simplices" in analogical_html
+            preserved_marker = "preserved 1-simplex" in analogical_html or "preserve displayed 1-simplices" in analogical_html
             _assert("vertex-only correspondences" in analogical_html and preserved_marker, errors, "analogical map HTML does not distinguish preserved simplices from vertex-only correspondences")
 
     steps = [row for row in manifest.get("steps", []) if isinstance(row, dict)]

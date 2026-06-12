@@ -10,6 +10,7 @@ from tropicalgt.scaling import apply_reasoning_action
 from tropicalgt.simplicial import build_embedding_radius_simplicial_object, build_filtered_simplicial_object
 from tropicalgt.tokenizer import TokenGTTokenizer
 from tropicalgt.visualization import (
+    _attach_graph_token_direction_overlay,
     _gudhi_canonical_complex,
     _has_real_probability_filtration,
     _simplicial_object_svg,
@@ -47,6 +48,7 @@ def test_visualization_payload_contains_filtered_objects(tmp_path: Path):
         "embedding_filtered_simplicial_objects",
         "nll_surface",
         "model_io",
+        "reasoning_visualization_diagnostics",
     }
     assert len(payload["filtered_simplicial_objects"]) == 2
     assert payload["filtered_simplicial_objects"][0]["summary"]["filtration_model"] == "model_tropical_support_probability_jensen_shannon_vietoris_rips_2_skeleton"
@@ -78,6 +80,10 @@ def test_visualization_payload_contains_filtered_objects(tmp_path: Path):
     assert 'color-scheme: dark' in html
     assert "plotly_hover" in html
     assert "renderHoverCard" in html
+    assert 'aria-label="interactive selected filtered simplicial complex"' in html
+    assert '<details class="static-preview">' in html
+    assert "Static SVG fallback preview" in html
+    assert '<details class="static-preview" open>' not in html
     assert "<svg" in html
     assert "pca-radius-filtered-complex" in html
     assert "3D PCA radius-filtered simplicial complex" in html
@@ -86,6 +92,26 @@ def test_visualization_payload_contains_filtered_objects(tmp_path: Path):
     assert "zero-simplex" in html
     assert "filtration-layer" in html
     assert "sample-supported" in html or "Smoothed NLL surface" in html or "Interpolating NLL surface" in html
+
+
+def test_reasoning_visualization_does_not_duplicate_single_state(tmp_path: Path):
+    ds = FixtureGraphDataset(1)
+    tok = TokenGTTokenizer(feature_dim=48)
+    model = TropicalGTModel(TropicalGTConfig(dim=32, hidden_dim=32, graph_feature_dim=48))
+    paths = write_reasoning_visualizations(model, ds, tok, seq_len=32, device=torch.device("cpu"), output_dir=tmp_path, limit=1)
+    payload = json.loads(Path(paths["payloads"]).read_text(encoding="utf-8"))
+
+    assert len(payload["points"]) == 1
+    assert len(payload["filtered_simplicial_objects"]) == 1
+    assert len(payload["embedding_filtered_simplicial_objects"]) == 1
+    diagnostics = payload["reasoning_visualization_diagnostics"]
+    assert diagnostics["source_state_count"] == 1
+    assert diagnostics["contrived_duplicate_for_pca"] is False
+    assert diagnostics["single_state_degenerate_pca"] is True
+    assert "no synthetic duplicate points" in diagnostics["pca_point_policy"]
+
+    html = Path(paths["pca_nll"]).read_text(encoding="utf-8")
+    assert "single-state degenerate PCA" in html
 
 
 def test_missing_model_probabilities_and_embeddings_are_unavailable_diagnostics():
@@ -270,6 +296,69 @@ def test_simplicial_object_svg_uses_3d_pca_radius_filtration():
     assert "radius filtration" in html
 
 
+def test_graph_token_direction_overlay_uses_model_trace_edges():
+    obj = {
+        "summary": {"num_vertices": 4, "num_edges": 0, "num_two_simplices": 0},
+        "thresholds": [0.0],
+        "simplices": [
+            {"simplex": ["0:graph:graph"], "dimension": 0, "filtration": 0.0, "token_index": 0, "token_kind": "graph"},
+            {
+                "simplex": ["1:node:problem"],
+                "dimension": 0,
+                "filtration": 0.0,
+                "token_index": 1,
+                "token_kind": "node",
+                "node_id": "problem-0",
+            },
+            {
+                "simplex": ["2:node:answer"],
+                "dimension": 0,
+                "filtration": 0.0,
+                "token_index": 2,
+                "token_kind": "node",
+                "node_id": "answer-1",
+            },
+            {
+                "simplex": ["3:edge:problem-0->answer-1"],
+                "dimension": 0,
+                "filtration": 0.0,
+                "token_index": 3,
+                "token_kind": "edge",
+                "source": "problem-0",
+                "target": "answer-1",
+            },
+        ],
+    }
+    row = {
+        "graph_token_trace": {
+            "tokens": [
+                {"index": 0, "kind": "graph", "label": "graph"},
+                {"index": 1, "kind": "node", "node_id": "problem-0", "label": "problem"},
+                {"index": 2, "kind": "node", "node_id": "answer-1", "label": "answer"},
+                {
+                    "index": 3,
+                    "kind": "edge",
+                    "edge_type": "supports_answer",
+                    "label": "problem-0->answer-1",
+                    "source": "problem-0",
+                    "target": "answer-1",
+                    "margin": 0.42,
+                },
+            ]
+        }
+    }
+    overlay = _attach_graph_token_direction_overlay(obj, row)["graph_token_direction_overlay"]
+    assert overlay["source"] == "graph_token_trace_directed_edges"
+    assert overlay["edge_count"] == 2
+    assert overlay["edges"][0]["source"] == "1:node:problem"
+    assert overlay["edges"][0]["target"] == "3:edge:problem-0->answer-1"
+    assert overlay["edges"][0]["role"] == "source-node-to-edge-token"
+    assert overlay["edges"][1]["source"] == "3:edge:problem-0->answer-1"
+    assert overlay["edges"][1]["target"] == "2:node:answer"
+    assert overlay["edges"][1]["role"] == "edge-token-to-target-node"
+    assert overlay["edges"][0]["margin"] == 0.42
+
+
 def test_got_trajectory_visualization_renders_simplicial_panel_and_nll_surface(tmp_path: Path):
     record = FixtureGraphDataset(1)[0]
     obj = build_filtered_simplicial_object(record)
@@ -294,6 +383,7 @@ def test_got_trajectory_visualization_renders_simplicial_panel_and_nll_surface(t
     step_index_html = Path(paths["got_reasoning_step_complex_index"]).read_text(encoding="utf-8")
     step_manifest = json.loads(Path(paths["got_reasoning_step_complex_manifest"]).read_text(encoding="utf-8"))
     payload = json.loads(Path(paths["got_payloads"]).read_text(encoding="utf-8"))
+    full_complex_payload = json.loads(Path(paths["got_full_trajectory_complex_payload"]).read_text(encoding="utf-8"))
     assert "simplicial-object-panel" in html
     assert "hover-simplicial-card" in html
     assert 'aria-label="hovered filtered simplicial object"' in html
@@ -301,10 +391,12 @@ def test_got_trajectory_visualization_renders_simplicial_panel_and_nll_surface(t
     assert "filtration-layer" in html
     assert payload["nll_surface"]["available"] is True
     assert payload["nll_surface"]["touches_points"] is True
-    assert payload["nll_surface"]["actual_landscape_layer"] is True
-    assert payload["nll_surface"]["surface_kind"] in {"sample_supported_local_idw_surface", "sparse_exact_triangular_nll_mesh", "exact_delaunay_nll_mesh"}
+    assert payload["nll_surface"].get("actual_landscape_layer") is False
+    assert payload["nll_surface"].get("sparse_observed_anchor_layer") is True
+    assert payload["nll_surface"].get("dense_model_evaluated_field") is False
+    assert payload["nll_surface"]["surface_kind"] in {"sparse_exact_triangular_nll_mesh", "sparse_observed_state_nll_anchor_mesh"}
     assert payload["nll_surface"]["z_axis"] == "projected_nll_fitness_energy"
-    assert payload["nll_surface"]["provenance"] == "computed only from sampled model GoT state embeddings and their measured raw NLL values"
+    assert payload["nll_surface"]["provenance"] == "computed only from observed model-evaluated GoT state embeddings and their measured raw NLL values"
     assert payload["nll_surface"]["surface_contact_contract"].startswith("every rendered GoT state marker")
     assert payload["nll_surface"]["trajectory_point_surface_residual_max"] == 0.0
     projected_by_id = payload["nll_surface"]["surface_projected_z_by_record_id"]
@@ -337,8 +429,12 @@ def test_got_trajectory_visualization_renders_simplicial_panel_and_nll_surface(t
     assert "reasoning microstep" not in html
     assert "projected surface z=%{z:.4f}" in html
     assert "centered scaled NLL=%{z:.4f}" not in html
-    assert payload["nll_surface"]["z_axis_label"].startswith("projected surface z; raw centered NLL")
+    assert payload["nll_surface"]["z_axis_label"].startswith("observed-state NLL anchor z; raw centered NLL")
     assert "open interactive reasoning-step complex page" in html
+    assert 'aria-label="interactive selected filtered simplicial complex"' in html
+    assert '<details class="static-preview">' in html
+    assert "Static SVG fallback preview" in html
+    assert '<details class="static-preview" open>' not in html
     assert "reasoning_step_complex_maps/reasoning_step_000.html" in html
     assert payload["nodes"][1]["input_text"] == "input"
     assert payload["nodes"][1]["decoded_argmax"] == "output"
@@ -348,6 +444,17 @@ def test_got_trajectory_visualization_renders_simplicial_panel_and_nll_surface(t
     assert "Graph-of-thought embedding-space trajectory map" in embedding_map_html
     assert "actual graph_state PCA" in embedding_map_html
     assert "distance corr" in embedding_map_html
+    overlay = full_complex_payload["filtered_simplicial_object"]["trajectory_overlay"]
+    assert overlay["source"] == "graph_of_thought_parent_edges"
+    assert overlay["semantic_note"].startswith("Radius topology is induced")
+    assert len(overlay["edges"]) == 3
+    assert {edge["target"] for edge in overlay["edges"]} == {
+        child_record.record_id,
+        sibling_record.record_id,
+        leaf_record.record_id,
+    }
+    assert "GoT parent-child trajectory edges" in full_complex_html
+    assert "radius/simplicial edges induced from the same embeddings" in full_complex_html
     assert "Full graph-of-thought trajectory filtered simplicial complex" in full_complex_html
     assert "Filtration radius" in full_complex_html
     assert "play filtration" in full_complex_html
@@ -359,6 +466,7 @@ def test_got_trajectory_visualization_renders_simplicial_panel_and_nll_surface(t
     first_step_html = first_step.read_text(encoding="utf-8")
     assert "Filtration radius" in first_step_html
     assert "play filtration" in first_step_html
+    assert "directed GoT graph-token edges" in first_step_html
 
 
 
@@ -474,6 +582,29 @@ def test_tropical_support_heatmap_layout_keeps_legend_out_of_margin(tmp_path: Pa
     assert '"x":1.11' in compact
 
 
+def test_tropical_support_high_collapse_uses_compact_diagnostic(tmp_path: Path):
+    tokens = []
+    for idx in range(7):
+        tokens.append(
+            {
+                "index": idx,
+                "text": f"token-{idx}",
+                "kind": "node" if idx < 5 else "edge",
+                "node_type": "problem" if idx < 5 else "edge",
+                "active_support_index": 0 if idx < 5 else 6,
+                "margin": 20.0 if idx < 5 else 0.02,
+            }
+        )
+    paths = write_tropical_support_heatmap({"graph_token_trace": {"tokens": tokens}}, tmp_path)
+    html = Path(paths["tropical_support_heatmap"]).read_text(encoding="utf-8")
+    payload = json.loads(Path(paths["tropical_support_payload"]).read_text(encoding="utf-8"))
+    assert payload["metrics"]["layout_mode"] == "collapse_diagnostic"
+    assert payload["metrics"]["top_support_collapse_rate"] > 0.7
+    assert payload["metrics"]["raw_token_labels_truncated"] is True
+    assert "Tropical active-support collapse diagnostic" in html
+    assert "top support captures" in html
+
+
 def test_plotly_dark_html_promotes_static_preview_for_webgl_failures(tmp_path: Path):
     obj = {
         "record_id": "panel",
@@ -530,7 +661,10 @@ def test_graphcg_visualization_preserves_projection_basis_certificate(tmp_path: 
     assert cert["all_candidates_have_all_direction_cosines"] is True
     assert cert["direction_count"] == 4
     assert cert["max_abs_offdiag_cosine_max"] > 0.0
+    assert payload["visible_direction_tick_label_limit"] == 8
+    assert payload["exact_direction_labels_available_in_hover_and_payload"] is True
     assert "basis=effective_full_rank_qr" in html
+    assert "visible ticks bounded" in html
 
 
 def test_analogical_memory_visualization_renders_simplicial_maps(tmp_path: Path):
@@ -595,9 +729,9 @@ def test_analogical_memory_visualization_renders_simplicial_maps(tmp_path: Path)
     assert "persistent homology similarity" in html
     assert "free-resolution similarity" in html
     assert "vertex-only correspondences" in html
-    assert "preserved 1-simplex map" in html
+    assert "preserved 1-simplex correspondence" in html
     assert "certificate diagnostic" in html
-    assert "preserved 1-simplex maps" in html
+    assert "preserved 1-simplex correspondences" in html
     assert "vertex-only correspondences (legend only)" in html
     compact = html.replace(" ", "")
     assert '"domain":{"x":[0.0,0.68],"y":[0.24,0.98]}' in compact

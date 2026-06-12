@@ -24,6 +24,16 @@ sys.path.insert(0, str(ROOT / "scripts"))
 from build_sample_browser_index import build_index
 
 
+FULL_AUDIT_MINIMUMS = {
+    "scale_depth": 7,
+    "scale_width": 12,
+    "scale_branch_factor": 5,
+    "trace_limit": 8192,
+    "audit_max_simplices": 8192,
+    "memory_retrieve_top_k": 8,
+}
+
+
 DEFAULT_PROMPTS = (
     "Question: add 2 and 3\nAnswer:",
     "Question: if a path has vertices A B C, how many directed edges connect consecutive vertices?\nAnswer:",
@@ -61,6 +71,8 @@ def _command(args: argparse.Namespace, prompt: str, sample_dir: Path, index: int
         "--prompt",
         prompt,
         "--audit-all",
+        "--interactive-artifacts",
+        "--require-complete-reasoning-steps",
         "--audit-output-dir",
         str(sample_dir),
         "--output",
@@ -73,6 +85,8 @@ def _command(args: argparse.Namespace, prompt: str, sample_dir: Path, index: int
         str(args.scale_branch_factor),
         "--scale-sampling-seed",
         str(int(args.seed) + index),
+        "--trace-limit",
+        str(args.trace_limit),
         "--audit-max-simplices",
         str(args.audit_max_simplices),
     ]
@@ -126,6 +140,22 @@ def _configure_default_memory_bank(args: argparse.Namespace, output_root: Path) 
         args.memory_bank = str(output_root / "browser_memory" / "reasoning_memory.jsonl")
 
 
+def _apply_audit_preset(args: argparse.Namespace) -> None:
+    preset = str(getattr(args, "audit_preset", "smoke") or "smoke").lower()
+    if preset != "full":
+        return
+    for name, minimum in FULL_AUDIT_MINIMUMS.items():
+        current = getattr(args, name)
+        if int(current) < int(minimum):
+            setattr(args, name, int(minimum))
+    if args.scale_stochastic_actions is None:
+        args.scale_stochastic_actions = True
+    title = str(getattr(args, "title", "") or "").strip()
+    if not title or title == "TropicalGT-I Multi-Run Sample Audit":
+        args.title = "TropicalGT-I Full Deep/Wide Model-Derived Reasoning Audit"
+    setattr(args, "require_complete_reasoning_steps", True)
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--config", type=Path, default=ROOT / "configs" / "train.json")
@@ -134,14 +164,16 @@ def main() -> int:
     parser.add_argument("--samples", type=int, default=3)
     parser.add_argument("--prompt", action="append", help="Prompt for one inference sample. May be repeated.")
     parser.add_argument("--prompt-file", default="", help="Text prompts separated by a line containing --- or a JSON list.")
+    parser.add_argument("--audit-preset", "--preset", dest="audit_preset", default="smoke", choices=["smoke", "full"], help="Use 'full' for deeper/wider model-derived reasoning trajectories and larger trace/topology budgets.")
     parser.add_argument("--scale-depth", type=int, default=3)
     parser.add_argument("--scale-width", type=int, default=4)
     parser.add_argument("--scale-branch-factor", type=int, default=3)
-    parser.add_argument("--scale-stochastic-actions", dest="scale_stochastic_actions", action="store_true", default=True)
+    parser.add_argument("--scale-stochastic-actions", dest="scale_stochastic_actions", action="store_true", default=None)
     parser.add_argument("--no-scale-stochastic-actions", dest="scale_stochastic_actions", action="store_false")
     parser.add_argument("--scale-sampling-temperature", type=float, default=2.0)
     parser.add_argument("--scale-sampling-exploration", type=float, default=0.35)
     parser.add_argument("--seed", type=int, default=1729)
+    parser.add_argument("--trace-limit", type=int, default=64)
     parser.add_argument("--audit-max-simplices", type=int, default=1024)
     parser.add_argument("--audit-ph-backend", default="auto", choices=["auto", "gudhi", "ripser", "none"])
     parser.add_argument("--memory-bank", default="")
@@ -151,6 +183,7 @@ def main() -> int:
     parser.add_argument("--skip-existing", action="store_true")
     parser.add_argument("--title", default="TropicalGT-I Multi-Run Sample Audit")
     args = parser.parse_args()
+    _apply_audit_preset(args)
 
     output_root = args.output_root.resolve()
     if output_root.exists() and not args.skip_existing:

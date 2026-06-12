@@ -46,6 +46,11 @@ def main() -> None:
     parser.add_argument("--require-cuda", action="store_true")
     parser.add_argument("--require-checkpoint", action="store_true")
     parser.add_argument("--render-visualizations", action="store_true")
+    parser.add_argument(
+        "--allow-incomplete-reasoning-visualizations",
+        action="store_true",
+        help="Allow rendered GoT readiness artifacts even when model-derived reasoning-step completeness checks fail.",
+    )
     parser.add_argument("--output", default="")
     parser.add_argument("--markdown", default="")
     args = parser.parse_args()
@@ -68,6 +73,7 @@ def main() -> None:
         require_cuda=args.require_cuda,
         require_checkpoint=args.require_checkpoint,
         render_visualizations=args.render_visualizations,
+        require_complete_reasoning_steps=not args.allow_incomplete_reasoning_visualizations,
     )
     output = Path(args.output) if args.output else Path(report["output_dir"]) / "readiness_audit.json"
     markdown = Path(args.markdown) if args.markdown else output.with_suffix(".md")
@@ -97,9 +103,10 @@ def build_readiness_report(
     check_ablation_tools: bool = False,
     check_wandb_key: bool = False,
     train_dry_run: bool = False,
-    require_cuda: bool,
-    require_checkpoint: bool,
-    render_visualizations: bool,
+    require_cuda: bool = False,
+    require_checkpoint: bool = False,
+    render_visualizations: bool = False,
+    require_complete_reasoning_steps: bool = True,
 ) -> dict[str, Any]:
     cfg = load_config(config_path)
     out_dir = Path(cfg.get("output_dir", ROOT / "outputs" / "gpu_smoke"))
@@ -411,6 +418,7 @@ def add_checkpoint_sections(
         audit_level=audit_level,
         ph_backend=audit_ph_backend,
         audit_max_simplices=audit_max_simplices,
+        require_complete_reasoning_steps=bool(render_visualizations and require_complete_reasoning_steps),
     ) if scale_depth > 0 else {"enabled": False}
     compression = batch_bpb_metrics(out_cpu["nll"], y, graph_batch, [rec], float(cfg.get("graph_bpb_side_weight", 1.0)))
     report["inference"] = {

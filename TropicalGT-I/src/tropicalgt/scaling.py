@@ -2,13 +2,14 @@ from __future__ import annotations
 
 from copy import deepcopy
 import hashlib
+import math
 from typing import Any
 
 import torch
 import torch.nn.functional as F
 
 from .data import encode_bytes
-from .algebra import compute_topological_algebra_report
+from .algebra import compute_level_radius_bifiltration_report, compute_topological_algebra_report
 from .diagnostics import ACTION_NAMES, graph_token_trace, per_record_nll, record_diagnostics
 from .records import GraphRecord, GraphTokenBatch, graph_decoding_order
 from .simplicial import build_reasoning_trajectory_complex
@@ -110,6 +111,7 @@ def run_inference_scaling(
     sampling_temperature: float = 1.0,
     sampling_exploration: float = 0.0,
     sampling_seed: int | None = None,
+    require_complete_reasoning_steps: bool = False,
 ) -> dict[str, Any]:
     depth = max(int(depth), 0)
     width = max(int(width), 1)
@@ -171,6 +173,13 @@ def run_inference_scaling(
         frontier = next_frontier or frontier
     best = max(evaluated, key=lambda row: row["score"])
     public_candidates = [_public_candidate(row) for row in evaluated]
+    reasoning_step_audit = _reasoning_step_audit(public_candidates, require_complete=bool(require_complete_reasoning_steps))
+    if require_complete_reasoning_steps and reasoning_step_audit["incomplete_candidate_count"] > 0:
+        preview = reasoning_step_audit["incomplete_candidates"][:6]
+        raise ValueError(
+            "Full reasoning audit requires complete model-derived reasoning steps; "
+            f"incomplete={reasoning_step_audit['incomplete_candidate_count']} preview={preview}"
+        )
     trajectory_complex = build_reasoning_trajectory_complex(public_candidates)
     trajectory_probability_complex = build_reasoning_trajectory_complex(public_candidates, metric="jensen_shannon")
     trajectory_algebra = (
@@ -218,6 +227,12 @@ def run_inference_scaling(
                     ),
                 }
             )
+    trajectory_level_radius_bifiltration = compute_level_radius_bifiltration_report(
+        trajectory_growth,
+        object_key="probability_filtered_simplicial_object" if trajectory_probability_algebra is not None else "filtered_simplicial_object",
+        max_simplices=audit_max_simplices,
+    ) if trajectory_growth else {"available": False, "reason": "trajectory growth unavailable"}
+
     return {
         "enabled": depth > 0,
         "depth": depth,
@@ -229,6 +244,8 @@ def run_inference_scaling(
         "sampling_temperature": float(sampling_temperature),
         "sampling_exploration": float(sampling_exploration),
         "sampling_seed": sampling_seed,
+        "require_complete_reasoning_steps": bool(require_complete_reasoning_steps),
+        "reasoning_step_audit": reasoning_step_audit,
         "evaluated_candidates": len(evaluated),
         "levels": levels,
         "best": _public_candidate(best),
@@ -238,6 +255,7 @@ def run_inference_scaling(
         "trajectory_topological_algebra": trajectory_algebra,
         "trajectory_probability_topological_algebra": trajectory_probability_algebra,
         "trajectory_growth": trajectory_growth,
+        "trajectory_level_radius_bifiltration": trajectory_level_radius_bifiltration,
     }
 
 
@@ -329,6 +347,7 @@ def _candidate_shell(record: GraphRecord, path: list[str], parent: str | None, l
 
 
 def _public_candidate(row: dict[str, Any]) -> dict[str, Any]:
+    completeness = _reasoning_step_completeness(row)
     return {
         "record_id": row["record_id"],
         "path": row.get("path", []),
@@ -336,6 +355,7 @@ def _public_candidate(row: dict[str, Any]) -> dict[str, Any]:
         "level": row.get("level"),
         "score": row["score"],
         "nll": row["nll"],
+        "token_count": row.get("token_count"),
         "graph_tokens": row["graph_tokens"],
         "node_tokens": row["node_tokens"],
         "edge_tokens": row["edge_tokens"],
@@ -358,7 +378,242 @@ def _public_candidate(row: dict[str, Any]) -> dict[str, Any]:
         "embedding_filtered_simplicial_object": row.get("embedding_filtered_simplicial_object"),
         "embedding_filtered_simplicial_object_source": row.get("embedding_filtered_simplicial_object_source"),
         "topological_algebra": row.get("record_diagnostics", {}).get("topological_algebra"),
+        "reasoning_step_structure": _reasoning_step_structure(row),
+        "reasoning_step_complete": bool(completeness["complete"]),
+        "reasoning_step_completeness": completeness,
+        "reasoning_step_model_data": _reasoning_step_model_data(row),
     }
+
+
+def _reasoning_step_model_data(row: dict[str, Any]) -> dict[str, Any]:
+    trace = row.get("graph_token_trace") or {}
+    graph_summary = row.get("graph_json_summary") or {}
+    return {
+        "source": "TropicalGTModel.forward+record_diagnostics",
+        "directionality": {
+            "parent": row.get("parent"),
+            "level": row.get("level"),
+            "path": list(row.get("path") or []),
+        },
+        "sequence_budget": {
+            "target_tokens": int(row.get("token_count") or 0),
+            "graph_tokens": int(row.get("graph_tokens") or 0),
+            "node_tokens": int(row.get("node_tokens") or 0),
+            "edge_tokens": int(row.get("edge_tokens") or 0),
+        },
+        "trace_budget": {
+            "graph_token_count": int(trace.get("graph_token_count") or 0) if isinstance(trace, dict) else 0,
+            "emitted_trace_tokens": _trace_token_count(trace),
+            "truncated": bool(trace.get("truncated")) if isinstance(trace, dict) else True,
+        },
+        "graph_json": {
+            "node_count": int(graph_summary.get("node_count") or 0),
+            "edge_count": int(graph_summary.get("edge_count") or 0),
+        },
+        "embedding_source": row.get("embedding_source"),
+        "action_probability_source": row.get("action_probability_source"),
+        "probability_complex_source": row.get("probability_filtered_simplicial_object_source"),
+        "embedding_complex_source": row.get("embedding_filtered_simplicial_object_source"),
+        "probability_distance": _complex_metric(row.get("probability_filtered_simplicial_object")),
+        "embedding_distance": _complex_metric(row.get("embedding_filtered_simplicial_object")),
+        "graphcg_basis": (row.get("graphcg_projection") or {}).get("basis") if isinstance(row.get("graphcg_projection"), dict) else None,
+    }
+
+
+def _reasoning_step_completeness(row: dict[str, Any]) -> dict[str, Any]:
+    trace = row.get("graph_token_trace") or {}
+    trace_tokens = _trace_token_count(trace)
+    trace_total = int(trace.get("graph_token_count") or 0) if isinstance(trace, dict) else 0
+    trace_truncated = bool(trace.get("truncated")) if isinstance(trace, dict) else True
+    checks = {
+        "sequence_model_output": _is_finite_number(row.get("nll")) and int(row.get("token_count") or 0) > 0 and bool(str(row.get("decoded_argmax", ""))),
+        "graph_state_embedding": isinstance(row.get("embedding"), list) and len(row.get("embedding") or []) > 0 and row.get("embedding_source") == "TropicalGTModel.graph_state",
+        "action_distribution": _probability_vector_is_valid(row.get("action_probability_vector")),
+        "graph_token_trace_complete": trace_total > 0 and trace_tokens >= trace_total and not trace_truncated,
+        "probability_complex_js": _complex_is_available(
+            row.get("probability_filtered_simplicial_object"),
+            required_metric="jensen_shannon",
+            required_source="model_tropical_support_probabilities",
+        ),
+        "embedding_complex_euclidean": _complex_is_available(
+            row.get("embedding_filtered_simplicial_object"),
+            required_metric="euclidean",
+            required_source="TropicalGTModel.graph_token_embeddings",
+        ),
+        "graphcg_all_directions": _graphcg_projection_complete(row.get("graphcg_projection")),
+        "directed_graph_context": int(row.get("graph_tokens") or 0) > 0 and int(row.get("node_tokens") or 0) + int(row.get("edge_tokens") or 0) > 0,
+        "directed_trajectory_edge": _has_directed_trajectory_edge(row),
+        "complete_reasoning_step_structure": _has_complete_reasoning_step_structure(row),
+    }
+    missing = [name for name, ok in checks.items() if not ok]
+    return {
+        "complete": not missing,
+        "checks": checks,
+        "missing": missing,
+        "policy": "complete_reasoning_step_requires_model_sequence_output_graph_state_action_probs_graph_token_trace_probability_js_complex_embedding_complex_graphcg_projection_directed_parent_edge_and_complete_microstep_chain",
+    }
+
+
+def _reasoning_step_audit(candidates: list[dict[str, Any]], require_complete: bool = False) -> dict[str, Any]:
+    rows = [row for row in candidates if isinstance(row, dict)]
+    incomplete = []
+    missing_counts: dict[str, int] = {}
+    for row in rows:
+        completeness = row.get("reasoning_step_completeness") if isinstance(row, dict) else None
+        if not isinstance(completeness, dict):
+            missing = ["reasoning_step_completeness"]
+        else:
+            missing = [str(item) for item in completeness.get("missing", [])]
+        if missing:
+            for item in missing:
+                missing_counts[item] = missing_counts.get(item, 0) + 1
+            incomplete.append(
+                {
+                    "record_id": row.get("record_id"),
+                    "level": row.get("level"),
+                    "parent": row.get("parent"),
+                    "path": row.get("path", []),
+                    "missing": missing,
+                }
+            )
+    return {
+        "policy": "browserable_full_audit_requires_each_reasoning_step_to_have_real_model_nll_graph_state_action_distribution_graph_token_trace_probability_js_complex_embedding_complex_graphcg_directed_parent_edge_and_complete_microstep_chain",
+        "require_complete": bool(require_complete),
+        "candidate_count": len(rows),
+        "complete_candidate_count": len(rows) - len(incomplete),
+        "incomplete_candidate_count": len(incomplete),
+        "missing_counts": dict(sorted(missing_counts.items())),
+        "incomplete_candidates": incomplete,
+    }
+
+
+def _trace_token_count(trace: Any) -> int:
+    if not isinstance(trace, dict):
+        return 0
+    tokens = trace.get("tokens")
+    return len(tokens) if isinstance(tokens, list) else 0
+
+
+def _reasoning_step_structure(row: dict[str, Any]) -> dict[str, Any]:
+    level = int(row.get("level") or 0)
+    path = row.get("path") if isinstance(row.get("path"), list) else []
+    record = row.get("record")
+    metadata = getattr(record, "metadata", {}) if record is not None else {}
+    if not isinstance(metadata, dict):
+        metadata = {}
+    graph_json = getattr(record, "graph_json", None) if record is not None else None
+    graph = graph_json if isinstance(graph_json, dict) else {}
+    nodes = graph.get("nodes", []) if isinstance(graph.get("nodes", []), list) else []
+    edges = graph.get("edges", []) if isinstance(graph.get("edges", []), list) else []
+    microsteps = metadata.get("reasoning_microsteps")
+    microstep_rows = microsteps if isinstance(microsteps, list) else []
+    microstep_count = int(metadata.get("reasoning_microstep_count") or len(microstep_rows))
+    action = str(metadata.get("scaling_action") or (path[-1] if path else "seed"))
+    graph_microstep_nodes = [
+        node for node in nodes if isinstance(node, dict) and str(node.get("reasoning_step_id", "")).strip()
+    ]
+    edge_types = {str(edge.get("type", "")) for edge in edges if isinstance(edge, dict)}
+    return {
+        "kind": "seed" if level <= 0 else "model_evaluated_action_step",
+        "level": level,
+        "parent": row.get("parent"),
+        "path": path,
+        "action": action,
+        "microstep_count": microstep_count,
+        "metadata_microsteps": len(microstep_rows),
+        "graph_microstep_nodes": len(graph_microstep_nodes),
+        "has_starts_microstep_edge": "starts_microstep" in edge_types,
+        "has_next_microstep_edge": "next_microstep" in edge_types,
+        "source": "GraphRecord.metadata.reasoning_microsteps+GraphRecord.graph_json",
+    }
+
+
+def _has_complete_reasoning_step_structure(row: dict[str, Any]) -> bool:
+    structure = _reasoning_step_structure(row)
+    level = int(structure.get("level") or 0)
+    if level <= 0:
+        return row.get("parent") in (None, "") and not (row.get("path") or [])
+    if not (isinstance(row.get("parent"), str) and row.get("parent")):
+        return False
+    path = row.get("path")
+    if not isinstance(path, list) or len(path) < level:
+        return False
+    action = str(structure.get("action") or "")
+    if action not in ACTION_NAMES or action == "seed":
+        return False
+    microstep_count = int(structure.get("microstep_count") or 0)
+    return (
+        microstep_count >= 3
+        and int(structure.get("metadata_microsteps") or 0) >= microstep_count
+        and int(structure.get("graph_microstep_nodes") or 0) >= microstep_count
+        and bool(structure.get("has_starts_microstep_edge"))
+        and bool(structure.get("has_next_microstep_edge"))
+    )
+
+
+def _complex_metric(obj: Any) -> str | None:
+    if not isinstance(obj, dict):
+        return None
+    summary = obj.get("summary")
+    if not isinstance(summary, dict):
+        return None
+    metric = summary.get("embedding_metric")
+    return str(metric) if metric is not None else None
+
+
+def _complex_is_available(obj: Any, required_metric: str, required_source: str) -> bool:
+    if not isinstance(obj, dict) or not obj.get("available"):
+        return False
+    summary = obj.get("summary")
+    if not isinstance(summary, dict):
+        return False
+    if str(summary.get("embedding_metric")) != required_metric:
+        return False
+    source_blob = " ".join(
+        str(value)
+        for value in (
+            summary.get("embedding_source"),
+            summary.get("filtration_model"),
+            summary.get("probability_transform"),
+        )
+    )
+    if required_source not in source_blob:
+        return False
+    return int(summary.get("num_vertices") or 0) > 0 and isinstance(obj.get("simplices"), list) and len(obj.get("simplices") or []) > 0
+
+
+def _probability_vector_is_valid(values: Any) -> bool:
+    if not isinstance(values, list) or not values:
+        return False
+    total = 0.0
+    for value in values:
+        if not _is_finite_number(value) or float(value) < -1e-8:
+            return False
+        total += float(value)
+    return abs(total - 1.0) <= 1e-3
+
+
+def _graphcg_projection_complete(projection: Any) -> bool:
+    if not isinstance(projection, dict):
+        return False
+    cosines = projection.get("all_direction_cosines")
+    return isinstance(cosines, list) and len(cosines) > 0 and all(_is_finite_number(value) for value in cosines)
+
+
+def _has_directed_trajectory_edge(row: dict[str, Any]) -> bool:
+    level = int(row.get("level") or 0)
+    if level <= 0:
+        return row.get("parent") in (None, "")
+    parent = row.get("parent")
+    path = row.get("path")
+    return isinstance(parent, str) and bool(parent) and isinstance(path, list) and len(path) >= level
+
+
+def _is_finite_number(value: Any) -> bool:
+    try:
+        return math.isfinite(float(value))
+    except (TypeError, ValueError):
+        return False
 
 
 def _compact_candidates(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
