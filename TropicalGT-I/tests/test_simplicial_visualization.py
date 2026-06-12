@@ -1,6 +1,7 @@
 import json
 from pathlib import Path
 
+import plotly.graph_objects as go
 import torch
 
 from tropicalgt.data import FixtureGraphDataset
@@ -9,9 +10,13 @@ from tropicalgt.scaling import apply_reasoning_action
 from tropicalgt.simplicial import build_embedding_radius_simplicial_object, build_filtered_simplicial_object
 from tropicalgt.tokenizer import TokenGTTokenizer
 from tropicalgt.visualization import (
+    _gudhi_canonical_complex,
+    _has_real_probability_filtration,
     _simplicial_object_svg,
     _simplicial_map_between_complexes,
+    _simplicial_panel_items,
     write_analogical_memory_visualization,
+    write_graphcg_trajectory_visualization,
     write_got_trajectory_visualization,
     write_persistence_visualizations,
     write_reasoning_visualizations,
@@ -107,6 +112,32 @@ def test_missing_model_probabilities_and_embeddings_are_unavailable_diagnostics(
     assert missing_embeddings["simplices"] == []
 
 
+def test_real_probability_filtration_requires_vertex_probability_vectors():
+    labelled_but_empty = {
+        "available": True,
+        "summary": {
+            "filtration_model": "model_candidate_probability_jensen_shannon_vietoris_rips_2_skeleton",
+            "num_edges": 1,
+        },
+        "simplices": [
+            {"simplex": ["q0"], "dimension": 0, "filtration": 0.0},
+            {"simplex": ["q1"], "dimension": 0, "filtration": 0.0},
+            {"simplex": ["q0", "q1"], "dimension": 1, "filtration": 0.25},
+        ],
+    }
+    with_probabilities = {
+        **labelled_but_empty,
+        "simplices": [
+            {"simplex": ["q0"], "dimension": 0, "filtration": 0.0, "probability": [0.7, 0.3]},
+            {"simplex": ["q1"], "dimension": 0, "filtration": 0.0, "probability": [0.2, 0.8]},
+            {"simplex": ["q0", "q1"], "dimension": 1, "filtration": 0.25},
+        ],
+    }
+
+    assert _has_real_probability_filtration(labelled_but_empty) is False
+    assert _has_real_probability_filtration(with_probabilities) is True
+
+
 def test_analogical_simplicial_map_uses_model_probability_vectors():
     query = {
         "available": True,
@@ -134,6 +165,62 @@ def test_analogical_simplicial_map_uses_model_probability_vectors():
     assert report["jensen_shannon_distance_summary"]["count"] == 2
     assert report["assignment_cost_summary"]["count"] == 2
     assert report["preserved_edge_pairs"]
+
+
+def test_analogical_simplicial_map_preserves_plain_probability_after_gudhi_canonicalization():
+    query = {
+        "available": True,
+        "summary": {"filtration_model": "model_candidate_probability_jensen_shannon_vietoris_rips_2_skeleton"},
+        "simplices": [
+            {
+                "simplex": ["inference"],
+                "dimension": 0,
+                "filtration": 0.0,
+                "probability": [0.62, 0.37, 0.01],
+                "probability_source": "TropicalGTModel.gfn(graph_state).softmax_action_probability_vector",
+            },
+            {
+                "simplex": ["inference|expand0"],
+                "dimension": 0,
+                "filtration": 0.0,
+                "probability": [0.22, 0.73, 0.05],
+                "probability_source": "TropicalGTModel.gfn(graph_state).softmax_action_probability_vector",
+            },
+            {"simplex": ["inference", "inference|expand0"], "dimension": 1, "filtration": 0.2},
+        ],
+    }
+    memory = {
+        "available": True,
+        "summary": {"filtration_model": "model_candidate_probability_jensen_shannon_vietoris_rips_2_skeleton"},
+        "simplices": [
+            {
+                "simplex": ["memory"],
+                "dimension": 0,
+                "filtration": 0.0,
+                "probability": [0.61, 0.38, 0.01],
+                "probability_source": "TropicalGTModel.gfn(graph_state).softmax_action_probability_vector",
+            },
+            {
+                "simplex": ["memory|expand0"],
+                "dimension": 0,
+                "filtration": 0.0,
+                "probability": [0.21, 0.74, 0.05],
+                "probability_source": "TropicalGTModel.gfn(graph_state).softmax_action_probability_vector",
+            },
+            {"simplex": ["memory", "memory|expand0"], "dimension": 1, "filtration": 0.2},
+        ],
+    }
+
+    report = _simplicial_map_between_complexes(
+        _gudhi_canonical_complex(query),
+        _gudhi_canonical_complex(memory),
+    )
+
+    assert report["map_source"] == "model_probability_jensen_shannon_assignment"
+    assert report["jensen_shannon_distance_summary"]["count"] == 2
+    assert report["assignment_cost_summary"]["count"] == 2
+    assert report["vertex_map"][0]["query_probability_source"] == "TropicalGTModel.gfn(graph_state).softmax_action_probability_vector"
+    assert report["simplicial_map_certificate"]["source"] == "finite_filtered_complex_check"
 
 
 def test_visualization_payload_contains_topology_when_audited(tmp_path: Path):
@@ -362,7 +449,88 @@ def test_non_growth_persistence_landscape_is_explicitly_unavailable(tmp_path: Pa
     paths = write_persistence_visualizations(topo, tmp_path)
     assert "persistence_landscapes" in paths
     landscape_html = Path(paths["persistence_landscapes"]).read_text(encoding="utf-8")
-    assert "Persistence landscapes require trajectory growth rows" in landscape_html
+    assert "redirect to trajectory-growth artifact" in landscape_html
+    assert "Open trajectory growth persistence landscapes" in landscape_html
+    assert "trajectory_persistence/persistence_landscapes.html" in landscape_html
+
+
+def test_tropical_support_heatmap_layout_keeps_legend_out_of_margin(tmp_path: Path):
+    result = {
+        "graph_token_trace": {
+            "tokens": [
+                {"index": 0, "text": "graph", "kind": "graph", "node_type": "graph", "active_support_index": 0, "margin": 12.0},
+                {"index": 1, "text": "problem", "kind": "node", "node_type": "problem", "active_support_index": 0, "margin": 11.5},
+                {"index": 2, "text": "answer", "kind": "node", "node_type": "answer", "active_support_index": 2, "margin": 0.4},
+                {"index": 3, "text": "edge", "kind": "edge", "active_support_index": 3, "margin": 0.2},
+            ]
+        }
+    }
+    paths = write_tropical_support_heatmap(result, tmp_path)
+    html = Path(paths["tropical_support_heatmap"]).read_text(encoding="utf-8")
+    assert "Tropical active-support audit" in html
+    compact = html.replace(" ", "")
+    assert '"showlegend":false' in compact
+    assert '"r":190' in compact
+    assert '"x":1.11' in compact
+
+
+def test_plotly_dark_html_promotes_static_preview_for_webgl_failures(tmp_path: Path):
+    obj = {
+        "record_id": "panel",
+        "summary": {"num_vertices": 1, "num_edges": 0, "num_two_simplices": 0},
+        "simplices": [{"simplex": ["panel"], "dimension": 0, "filtration": 0.0, "embedding": [0.0, 0.0, 0.0]}],
+    }
+    fig = go.Figure(
+        data=[
+            go.Scatter3d(
+                x=[0.0],
+                y=[0.0],
+                z=[0.0],
+                mode="markers",
+                customdata=[0],
+            )
+        ]
+    )
+    from tropicalgt.visualization import _write_plotly_dark_html  # local import keeps public imports tidy
+
+    path = tmp_path / "webgl_fallback.html"
+    _write_plotly_dark_html(path, fig, "WebGL fallback test", _simplicial_panel_items([obj], ["panel hover"]))
+    html = path.read_text(encoding="utf-8")
+    assert 'class="static-preview" open' in html
+    assert "WebGL unavailable: static complex preview shown" in html
+    assert "same serialized simplicial object payload" in html
+
+
+def test_graphcg_visualization_preserves_projection_basis_certificate(tmp_path: Path):
+    scaling_report = {
+        "candidates": [
+            {
+                "record_id": f"node-{idx}",
+                "path": ["expand", str(idx)],
+                "level": idx,
+                "nll": 1.0 + 0.1 * idx,
+                "score": 0.2 * idx,
+                "graphcg_projection": {
+                    "basis": "effective_full_rank_qr",
+                    "mean_abs_offdiag_cosine": 0.01 + 0.001 * idx,
+                    "max_abs_offdiag_cosine": 0.03 + 0.001 * idx,
+                    "all_direction_cosines": [0.4 + 0.01 * idx, -0.2, 0.1, 0.05],
+                },
+            }
+            for idx in range(3)
+        ]
+    }
+    paths = write_graphcg_trajectory_visualization(scaling_report, tmp_path)
+    payload = json.loads(Path(paths["graphcg_direction_cosines_payload"]).read_text(encoding="utf-8"))
+    html = Path(paths["graphcg_direction_cosines"]).read_text(encoding="utf-8")
+    cert = payload["projection_basis_certificate"]
+    assert cert["source"] == "candidate.graphcg_projection"
+    assert cert["projection_basis"] == "effective_full_rank_qr"
+    assert cert["basis_source_counts"] == {"effective_full_rank_qr": 3}
+    assert cert["all_candidates_have_all_direction_cosines"] is True
+    assert cert["direction_count"] == 4
+    assert cert["max_abs_offdiag_cosine_max"] > 0.0
+    assert "basis=effective_full_rank_qr" in html
 
 
 def test_analogical_memory_visualization_renders_simplicial_maps(tmp_path: Path):
@@ -421,13 +589,19 @@ def test_analogical_memory_visualization_renders_simplicial_maps(tmp_path: Path)
     )
     html = Path(paths["analogical_memory_retrieval_html"]).read_text(encoding="utf-8")
     maps = json.loads(Path(paths["analogical_simplicial_maps"]).read_text(encoding="utf-8"))
-    assert "Analogical reasoning memory retrieval as simplicial maps" in html
+    assert "Analogical probability-matched correspondence" in html
+    assert "filtered-complex certificate from model-probability Jensen-Shannon assignment" in html
     assert "model_probability_jensen_shannon_assignment" in html
     assert "persistent homology similarity" in html
     assert "free-resolution similarity" in html
     assert "vertex-only correspondences" in html
     assert "preserved 1-simplex map" in html
-    assert "map diagnostic" in html
+    assert "certificate diagnostic" in html
+    assert "preserved 1-simplex maps" in html
+    assert "vertex-only correspondences (legend only)" in html
+    compact = html.replace(" ", "")
+    assert '"domain":{"x":[0.0,0.68],"y":[0.24,0.98]}' in compact
+    assert '"domain":{"x":[0.7,0.995],"y":[0.36,0.96]}' in compact
     assert "simplicial-object-panel" in html
     assert '<input id="filtration-slider"' in html
     assert '<div class="filtration-controls"' in html
@@ -436,11 +610,14 @@ def test_analogical_memory_visualization_renders_simplicial_maps(tmp_path: Path)
     assert "analogical_memory_map_02_html" in paths
     index_html = Path(paths["analogical_memory_topk_index_html"]).read_text(encoding="utf-8")
     rank2_html = Path(paths["analogical_memory_map_02_html"]).read_text(encoding="utf-8")
-    assert "top-k retrieval as separate filtered simplicial maps" in index_html
+    assert "Analogical top-k probability correspondences" in index_html
+    assert "Edge, face, and filtration preservation can fail" in index_html
     assert "rank 2" in rank2_html
     assert '<input id="filtration-slider"' in rank2_html
     assert len(maps["maps"]) == 2
     assert maps["maps"][1]["pair_page"].endswith("analogical_memory_map_02.html")
+    assert not Path(maps["maps"][0]["pair_page"]).is_absolute()
+    assert not Path(maps["maps"][1]["pair_page"]).is_absolute()
     assert maps["maps"][0]["edge_preservation_rate"] >= 0.0
     assert maps["maps"][0]["map_source"] == "model_probability_jensen_shannon_assignment"
     assert maps["maps"][0]["query_complex_source"] == "trajectory_probability_filtered_simplicial_object"

@@ -178,7 +178,7 @@ def _row(root: Path, name: str) -> Path:
             "codomain_complex_source": "trajectory_probability_filtered_simplicial_object",
             "map_source": "model_probability_jensen_shannon_assignment",
             "is_identity_self_map": False,
-            "pair_page": str(row / "analogical_memory_retrieval.html"),
+            "pair_page": "analogical_memory_retrieval.html",
             "jensen_shannon_distance_mean": 0.12,
             "assignment_cost_mean": 0.17,
             "jensen_shannon_distance_summary": {"count": 2, "min": 0.1, "max": 0.14, "mean": 0.12, "std": 0.02},
@@ -199,7 +199,7 @@ def _row(root: Path, name: str) -> Path:
             "codomain_complex_source": "trajectory_probability_filtered_simplicial_object",
             "map_source": "model_probability_jensen_shannon_assignment",
             "is_identity_self_map": False,
-            "pair_page": str(row / "analogical_memory_map_02.html"),
+            "pair_page": "analogical_memory_map_02.html",
             "jensen_shannon_distance_mean": 0.23,
             "assignment_cost_mean": 0.27,
             "jensen_shannon_distance_summary": {"count": 2, "min": 0.2, "max": 0.26, "mean": 0.23, "std": 0.03},
@@ -248,6 +248,20 @@ def _row(root: Path, name: str) -> Path:
                 "active_rank_nonzero_mean_abs": 8,
                 "candidate_effective_direction_count": [4.0, 4.0, 4.0, 4.0],
                 "direction_activity_sorted": [0.2 for _ in range(8)],
+                "projection_basis_certificate": {
+                    "source": "candidate.graphcg_projection",
+                    "available": True,
+                    "projection_basis": "effective_full_rank_qr",
+                    "basis_sources": ["effective_full_rank_qr"],
+                    "basis_source_counts": {"effective_full_rank_qr": 4},
+                    "candidate_count": 4,
+                    "direction_count": 8,
+                    "all_candidates_have_all_direction_cosines": True,
+                    "mean_abs_offdiag_cosine_values": [0.01, 0.01, 0.01, 0.01],
+                    "max_abs_offdiag_cosine_values": [0.02, 0.02, 0.02, 0.02],
+                    "mean_abs_offdiag_cosine_max": 0.01,
+                    "max_abs_offdiag_cosine_max": 0.02,
+                },
                 "interpretation": "Heatmap colors encode absolute cosine activity; signed cosine values are preserved in hover.",
             }
         ),
@@ -269,9 +283,9 @@ def _row(root: Path, name: str) -> Path:
         "reasoning_step_complex_maps/index.html": _html("Reasoning step filtered simplicial complex maps", "table"),
         "tropical_support_heatmap.html": _html("Tropical active support", "Plotly.newPlot observed supports only top-support collapse rate"),
         "graphcg_direction_cosines.html": _html("GraphCG full-rank direction audit", "Plotly.newPlot Readable top-direction heatmap"),
-        "analogical_memory_topk_index.html": "<!doctype html><title>Analogical top-k retrieval</title><body>Analogical top-k retrieval <a href='analogical_memory_retrieval.html'>rank 1</a> <a href='analogical_memory_map_02.html'>rank 2</a></body>",
-        "analogical_memory_retrieval.html": _html("Analogical simplicial map trajectory-complex map", "Plotly.newPlot slider filters domain and codomain sliders binary filtered-complex map vertex-only correspondences preserved 1-simplex map simplicial-object-plot selected-complex-graph plotly_click"),
-        "analogical_memory_map_02.html": _html("Analogical simplicial map trajectory-complex map", "Plotly.newPlot slider filters domain and codomain sliders binary filtered-complex map vertex-only correspondences preserved 1-simplex map simplicial-object-plot selected-complex-graph plotly_click"),
+        "analogical_memory_topk_index.html": "<!doctype html><title>Analogical top-k probability correspondences</title><body>Analogical top-k probability correspondences <a href='analogical_memory_retrieval.html'>rank 1</a> <a href='analogical_memory_map_02.html'>rank 2</a></body>",
+        "analogical_memory_retrieval.html": _html("Analogical probability-matched correspondence filtered-complex certificate", "Plotly.newPlot query trajectory complex retrieved memory complex slider filters domain and codomain sliders vertex-only correspondences preserved 1-simplex map simplicial-object-plot selected-complex-graph plotly_click"),
+        "analogical_memory_map_02.html": _html("Analogical probability-matched correspondence filtered-complex certificate", "Plotly.newPlot query trajectory complex retrieved memory complex slider filters domain and codomain sliders vertex-only correspondences preserved 1-simplex map simplicial-object-plot selected-complex-graph plotly_click"),
         "trajectory_persistence/persistence_barcode.html": _html("Trajectory persistence barcode", "Plotly.newPlot simplicial-object-plot selected-complex-graph plotly_click"),
         "trajectory_persistence/persistence_module_betti.html": _html("Trajectory persistence Betti", "Plotly.newPlot 2D matrix decorative 3D simplicial-object-plot selected-complex-graph plotly_click"),
         "trajectory_persistence/persistence_representations.html": _html("Trajectory GUDHI persistence vectorization", "Plotly.newPlot Fast train/eval features"),
@@ -347,6 +361,76 @@ def test_validate_audit_root_accepts_three_interactive_rows(tmp_path: Path):
     assert report["rows_checked"] == 3
     assert report["validation_metrics"]["bpb"] == 1.5
     assert all(row["step_complex_maps"] == 4 for row in report["row_reports"])
+
+
+def test_validate_audit_root_rejects_absolute_analogical_pair_pages(tmp_path: Path):
+    validator = _load_validator()
+    audit = tmp_path / "step_00000001" / "got_audit"
+    row = _row(audit, ".")
+    maps_path = row / "analogical_simplicial_maps.json"
+    payload = json.loads(maps_path.read_text(encoding="utf-8"))
+    payload["maps"][0]["pair_page"] = str(row / "analogical_memory_retrieval.html")
+    maps_path.write_text(json.dumps(payload), encoding="utf-8")
+    _write(audit / "codex_browser_index.html", _codex_browser_html(_browser_samples(audit, ["."])))
+    report = validator.validate_audit_root(audit, min_rows=1, min_candidates=4, min_depth=2)
+    assert not report["ok"]
+    assert any("relative pair_page links" in err for err in report["errors"])
+
+
+def test_validate_audit_root_rejects_analogical_probability_js_provenance_gaps(tmp_path: Path):
+    validator = _load_validator()
+    cases = [
+        (
+            "wrong_query_source",
+            lambda row: row.__setitem__("query_complex_source", "trajectory_embedding_filtered_simplicial_object"),
+            "query trajectory-level model-probability complexes",
+        ),
+        (
+            "wrong_codomain_source",
+            lambda row: row.__setitem__("codomain_complex_source", "trajectory_embedding_filtered_simplicial_object"),
+            "codomain trajectory-level model-probability complexes",
+        ),
+        (
+            "wrong_map_source",
+            lambda row: row.__setitem__("map_source", "embedding_nearest_neighbor_assignment"),
+            "derived from model probability vectors",
+        ),
+        (
+            "missing_js_summary",
+            lambda row: row.pop("jensen_shannon_distance_summary"),
+            "missing Jensen-Shannon distance summaries",
+        ),
+        (
+            "missing_domain_simplex_tree_provenance",
+            lambda row: row.__setitem__("domain_simplex_tree", {"backend": "networkx"}),
+            "missing domain GUDHI SimplexTree provenance",
+        ),
+    ]
+    for case_name, mutate, expected in cases:
+        audit = tmp_path / case_name / "got_audit"
+        row = _row(audit, ".")
+        maps_path = row / "analogical_simplicial_maps.json"
+        payload = json.loads(maps_path.read_text(encoding="utf-8"))
+        mutate(payload["maps"][0])
+        maps_path.write_text(json.dumps(payload), encoding="utf-8")
+        _write(audit / "codex_browser_index.html", _codex_browser_html(_browser_samples(audit, ["."])))
+        report = validator.validate_audit_root(audit, min_rows=1, min_candidates=4, min_depth=2)
+        assert not report["ok"], case_name
+        assert any(expected in err for err in report["errors"]), (case_name, report["errors"])
+
+
+def test_validate_audit_root_rejects_missing_graphcg_basis_certificate(tmp_path: Path):
+    validator = _load_validator()
+    audit = tmp_path / "step_00000001" / "got_audit"
+    row = _row(audit, ".")
+    payload_path = row / "graphcg_direction_cosines_payload.json"
+    payload = json.loads(payload_path.read_text(encoding="utf-8"))
+    payload.pop("projection_basis_certificate")
+    payload_path.write_text(json.dumps(payload), encoding="utf-8")
+    _write(audit / "codex_browser_index.html", _codex_browser_html(_browser_samples(audit, ["."])))
+    report = validator.validate_audit_root(audit, min_rows=1, min_candidates=4, min_depth=2)
+    assert not report["ok"]
+    assert any("projection-basis certificate" in err for err in report["errors"])
 
 
 def test_codex_browser_index_requires_artifact_button_for_each_payload_item(tmp_path: Path):

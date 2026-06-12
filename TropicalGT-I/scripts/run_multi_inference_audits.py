@@ -112,6 +112,18 @@ def _clean_output_root(output_root: Path) -> None:
                 shutil.rmtree(child)
         elif child.name in {"manifest.json", "browser_index.html", "codex_browser_index.html"}:
             child.unlink()
+        elif child.name == "browser_memory":
+            if child.is_symlink() or child.is_file():
+                child.unlink()
+            elif child.is_dir():
+                shutil.rmtree(child)
+
+
+def _configure_default_memory_bank(args: argparse.Namespace, output_root: Path) -> None:
+    if args.memory_bank or args.no_memory_retrieve:
+        return
+    if args.memory_save or int(args.memory_retrieve_top_k) > 0:
+        args.memory_bank = str(output_root / "browser_memory" / "reasoning_memory.jsonl")
 
 
 def main() -> int:
@@ -144,6 +156,7 @@ def main() -> int:
     if output_root.exists() and not args.skip_existing:
         _clean_output_root(output_root)
     output_root.mkdir(parents=True, exist_ok=True)
+    _configure_default_memory_bank(args, output_root)
     prompts = _read_prompts(args)
     manifest: list[dict[str, Any]] = []
     for index, prompt in enumerate(prompts):

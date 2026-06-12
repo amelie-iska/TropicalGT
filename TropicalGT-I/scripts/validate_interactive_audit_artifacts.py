@@ -23,8 +23,8 @@ REQUIRED_HTML = {
     "step_complex_index": ("reasoning_step_complex_maps/index.html", ("Reasoning step filtered simplicial complex maps",)),
     "tropical_support": ("tropical_support_heatmap.html", ("Tropical", "support")),
     "graphcg": ("graphcg_direction_cosines.html", ("GraphCG", "full-rank direction audit")),
-    "analogical_index": ("analogical_memory_topk_index.html", ("Analogical top-k retrieval",)),
-    "analogical_map": ("analogical_memory_map_02.html", ("Analogical", "simplicial", "binary filtered-complex map")),
+    "analogical_index": ("analogical_memory_topk_index.html", ("Analogical top-k probability correspondences",)),
+    "analogical_map": ("analogical_memory_map_02.html", ("Analogical", "probability-matched correspondence", "filtered-complex certificate")),
     "trajectory_barcode": ("trajectory_persistence/persistence_barcode.html", ("Trajectory", "barcode")),
     "trajectory_betti": ("trajectory_persistence/persistence_module_betti.html", ("Trajectory", "Betti", "2D matrix", "decorative 3D")),
     "trajectory_representations": ("trajectory_persistence/persistence_representations.html", ("Trajectory", "GUDHI persistence vectorization", "Fast train", "eval features")),
@@ -211,8 +211,8 @@ def _validate_file_set(row_dir: Path, errors: list[str]) -> dict[str, str]:
                 _assert("model input" in html and "model output" in html, errors, f"{rel} does not expose model input/output in hover payload")
                 _assert("play filtration min-to-max" in html, errors, f"{rel} does not use the flipped min-to-max filtration control")
             if key == "analogical_map":
-                _assert("trajectory-complex map" in html, errors, f"{rel} is not mapping trajectory complexes")
-                _assert("slider filters domain" in html and "sliders" in html, errors, f"{rel} is missing Plotly filtration slider for the simplicial map")
+                _assert("query trajectory complex" in html and "retrieved memory complex" in html, errors, f"{rel} is not comparing trajectory complexes")
+                _assert("slider filters domain" in html and "sliders" in html, errors, f"{rel} is missing Plotly filtration slider for the correspondence certificate")
             if key == "tropical_support":
                 support_audit = "observed supports only" in html and "top-support collapse rate" in html
                 collapse_audit = "active-support collapse diagnostic" in html and "Collapse metrics" in html
@@ -444,6 +444,15 @@ def validate_row(row_dir: Path, *, min_candidates: int = 8, min_depth: int = 2, 
         _assert(len(graphcg_payload.get("candidate_effective_direction_count", [])) >= len(candidates), errors, "GraphCG payload is missing candidate effective-direction counts")
         _assert(len(graphcg_payload.get("direction_activity_sorted", [])) == matrix_width, errors, "GraphCG payload is missing full direction activity spectrum")
         _assert(graphcg_payload.get("interpretation"), errors, "GraphCG payload is missing heatmap interpretation")
+        basis_certificate = graphcg_payload.get("projection_basis_certificate", {})
+        _assert(isinstance(basis_certificate, dict), errors, "GraphCG payload is missing projection-basis certificate")
+        if isinstance(basis_certificate, dict):
+            _assert(basis_certificate.get("source") == "candidate.graphcg_projection", errors, "GraphCG projection-basis certificate has wrong source")
+            _assert(basis_certificate.get("available") is True, errors, "GraphCG projection-basis certificate is unavailable")
+            _assert(bool(basis_certificate.get("basis_sources")), errors, "GraphCG projection-basis certificate has no basis sources")
+            _assert(int(_finite_float(basis_certificate.get("candidate_count"), 0.0)) >= len(candidates), errors, "GraphCG projection-basis certificate does not cover candidates")
+            _assert(int(_finite_float(basis_certificate.get("direction_count"), 0.0)) == matrix_width, errors, "GraphCG projection-basis direction count does not match matrix width")
+            _assert(basis_certificate.get("all_candidates_have_all_direction_cosines") is True, errors, "GraphCG projection-basis certificate is missing full direction cosines")
 
     _assert(len(embedded_nodes) == len(nodes), errors, "embedding map payload node count differs from trajectory payload")
     _assert(embedding_payload.get("coordinate_source", "").startswith("PCA of model graph_state embeddings"), errors, "embedding map payload has wrong coordinate source")
@@ -496,10 +505,12 @@ def validate_row(row_dir: Path, *, min_candidates: int = 8, min_depth: int = 2, 
             _assert(all(isinstance(row.get("codomain_simplex_tree"), dict) and row["codomain_simplex_tree"].get("backend") == "gudhi.SimplexTree" for row in maps if isinstance(row, dict)), errors, "analogical maps are missing codomain GUDHI SimplexTree provenance")
             pair_pages = [str(row.get("pair_page", "")).strip() for row in maps if isinstance(row, dict)]
             _assert(len(pair_pages) == len(maps) and all(pair_pages), errors, "analogical maps are missing per-rank pair_page links")
+            absolute_pair_pages = [Path(pair_page) for pair_page in pair_pages if Path(pair_page).is_absolute()]
+            _assert(not absolute_pair_pages, errors, f"analogical maps must use relative pair_page links, found absolute paths: {[path.name for path in absolute_pair_pages[:8]]}")
             missing_pair_files = []
             for pair_page in pair_pages:
                 pair_path = Path(pair_page)
-                candidates_for_page = [pair_path if pair_path.is_absolute() else row_dir / pair_path, row_dir / pair_path.name]
+                candidates_for_page = [row_dir / pair_path, row_dir / pair_path.name]
                 if not any(path.exists() for path in candidates_for_page):
                     missing_pair_files.append(pair_path.name)
             _assert(not missing_pair_files, errors, f"analogical maps reference missing pair pages: {missing_pair_files[:8]}")

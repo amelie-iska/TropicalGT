@@ -897,7 +897,13 @@ def _has_real_probability_filtration(obj: object) -> bool:
     }
     if summary.get("filtration_model") not in allowed_models:
         return False
-    return int(summary.get("num_edges", 0) or 0) > 0
+    if int(summary.get("num_edges", 0) or 0) <= 0:
+        return False
+    return any(
+        _probability_feature_vector(simplex) is not None
+        for simplex in obj.get("simplices", [])
+        if isinstance(simplex, dict) and int(simplex.get("dimension", -1)) == 0
+    )
 
 
 def _unavailable_complex(reason: str, *, source: str = "model_probability_jensen_shannon") -> dict[str, object]:
@@ -1164,7 +1170,7 @@ def _write_simplex_tree_3d_map(path: Path, obj: dict[str, object], title: str, s
                 color=node_dim,
                 colorscale=[[0, "#5eead4"], [0.5, "#60a5fa"], [1.0, "#facc15"]],
                 showscale=True,
-                colorbar=dict(title="simplex dim"),
+                colorbar=dict(title="dim", x=1.04, y=0.74, len=0.42, thickness=14),
                 line=dict(color="#e8eef8", width=0.8),
             ),
             hovertext=node_hover,
@@ -1191,7 +1197,8 @@ def _write_simplex_tree_3d_map(path: Path, obj: dict[str, object], title: str, s
             aspectratio=dict(x=1.45, y=0.75, z=1.0),
             camera=dict(eye=dict(x=1.45, y=-1.75, z=1.15)),
         ),
-        margin=dict(t=112, l=0, r=0, b=0),
+        legend=dict(orientation="h", x=0.02, y=1.03, xanchor="left", yanchor="bottom", font=dict(size=10)),
+        margin=dict(t=118, l=0, r=96, b=24),
     )
     _write_plotly_dark_html(path, fig, title)
 
@@ -1906,6 +1913,7 @@ def write_tropical_support_heatmap(result: dict[str, object], output_dir: str | 
                 ],
                 hovertemplate="%{customdata}<extra></extra>",
                 name="margin profile",
+                showlegend=False,
             ),
             row=1,
             col=2,
@@ -1975,7 +1983,7 @@ def write_tropical_support_heatmap(result: dict[str, object], output_dir: str | 
             x=support_labels,
             y=query_labels,
             colorscale="Cividis",
-            colorbar=dict(title="margin", x=1.02),
+            colorbar=dict(title="margin", x=1.11, y=0.84, len=0.38, thickness=14),
             customdata=hover_grid,
             hovertemplate="%{customdata}<extra></extra>",
             zmin=0.0,
@@ -1994,6 +2002,7 @@ def write_tropical_support_heatmap(result: dict[str, object], output_dir: str | 
             hovertext=[f"support={html.escape(label)}<br>count={int(c)}<br>mean margin={m:.4f}" for label, c, m in zip(support_labels, counts.tolist(), mean_margins)],
             hoverinfo="text",
             name="support frequency",
+            showlegend=False,
         ),
         row=2,
         col=1,
@@ -2030,8 +2039,9 @@ def write_tropical_support_heatmap(result: dict[str, object], output_dir: str | 
             f"entropy={support_entropy:.3f} bits, top-support collapse rate={collapse_rate:.3f}; "
             "uniform blocks mean active-support collapse or nearly constant margins</sup>"
         ),
-        height=max(980, min(1600, 640 + 12 * n)),
-        margin=dict(t=136, l=96, r=72, b=92),
+        height=max(1040, min(1660, 700 + 12 * n)),
+        margin=dict(t=150, l=112, r=190, b=124),
+        showlegend=False,
     )
     if collapse_rate >= 0.95:
         fig.add_annotation(
@@ -2050,12 +2060,12 @@ def write_tropical_support_heatmap(result: dict[str, object], output_dir: str | 
             bordercolor="rgba(251,191,36,0.45)",
             borderwidth=1,
         )
-    fig.update_xaxes(title_text="active support token", tickangle=55, row=1, col=1)
-    fig.update_yaxes(title_text="query token", row=1, col=1)
-    fig.update_xaxes(title_text="support token", tickangle=35, row=2, col=1)
-    fig.update_yaxes(title_text="query count", row=2, col=1)
-    fig.update_xaxes(title_text="graph-token index", row=3, col=1)
-    fig.update_yaxes(title_text="active-support margin", row=3, col=1)
+    fig.update_xaxes(title_text="active support token", tickangle=38, automargin=True, row=1, col=1)
+    fig.update_yaxes(title_text="query token", automargin=True, row=1, col=1)
+    fig.update_xaxes(title_text="support token", tickangle=28, automargin=True, row=2, col=1)
+    fig.update_yaxes(title_text="query count", automargin=True, row=2, col=1)
+    fig.update_xaxes(title_text="graph-token index", automargin=True, row=3, col=1)
+    fig.update_yaxes(title_text="active-support margin", automargin=True, row=3, col=1)
     _write_plotly_dark_html(path, fig, "Tropical active-support heatmap")
     return {"tropical_support_heatmap": str(path), "tropical_support_payload": str(payload_path)}
 
@@ -2180,9 +2190,12 @@ def write_persistence_visualizations(
     fig2.update_layout(template="plotly_dark", title="Persistence module Betti rank profile (step functions)", xaxis_title="filtration", yaxis_title="Betti rank")
     _write_plotly_dark_html(module_path, fig2, "Persistence module Betti rank profile")
     _write_single_persistence_representations(representations_path, topology, title_prefix=title_prefix)
-    _write_dark_empty(
+    _write_dark_redirect(
         landscapes_path,
-        "Persistence landscapes require trajectory growth rows; no non-growth landscape plot is rendered.",
+        "Open trajectory growth persistence landscapes",
+        "A standalone non-growth topology record does not contain trajectory-growth landscape rows. This audit bundle writes the real GUDHI lambda_k(t) landscape functions under the trajectory_persistence page.",
+        "trajectory_persistence/persistence_landscapes.html",
+        "Open trajectory_persistence/persistence_landscapes.html",
     )
     return {
         "persistence_barcode": str(barcode),
@@ -2366,7 +2379,7 @@ def _write_growth_persistence_module(path: Path, topology: dict[str, object], gr
         dims = sorted({int(cell["dim"]) for cell in betti_cells})
         thresholds = sorted({round(float(cell["threshold"]), 6) for cell in betti_cells})
         x_labels = [f"H{dim}@{threshold:.3g}" for dim in dims for threshold in thresholds]
-        tick_step = max(1, int(math.ceil(len(x_labels) / 18)))
+        tick_step = max(1, int(math.ceil(len(x_labels) / 10)))
         betti_tickvals = x_labels[::tick_step]
         betti_ticktext = x_labels[::tick_step]
         z = np.zeros((len(levels), len(x_labels)), dtype=float)
@@ -2394,7 +2407,7 @@ def _write_growth_persistence_module(path: Path, topology: dict[str, object], gr
     if free_cells:
         x = [f"L{cell['level']} F{cell['degree']}" for cell in free_cells]
         y = [float(cell["rank"]) for cell in free_cells]
-        tick_step = max(1, int(math.ceil(len(x) / 22)))
+        tick_step = max(1, int(math.ceil(len(x) / 12)))
         free_tickvals = x[::tick_step]
         free_ticktext = x[::tick_step]
         fig.add_trace(
@@ -2417,10 +2430,12 @@ def _write_growth_persistence_module(path: Path, topology: dict[str, object], gr
             f"{title_prefix}multiparameter persistence and free-resolution growth"
             "<br><sup>2D matrix/bar view replaces decorative 3D spikes; hover opens the corresponding filtered complex panel</sup>"
         ),
+        height=940,
+        margin=dict(t=132, l=88, r=116, b=168),
     )
-    fig.update_xaxes(title_text="homology dimension / filtration", tickangle=45, tickmode="array", tickvals=betti_tickvals, ticktext=betti_ticktext, row=1, col=1)
-    fig.update_yaxes(title_text="trajectory growth level", row=1, col=1)
-    fig.update_xaxes(title_text="level and free module", tickangle=45, tickmode="array", tickvals=free_tickvals, ticktext=free_ticktext, row=1, col=2)
+    fig.update_xaxes(title_text="homology dimension / filtration", tickangle=32, tickmode="array", tickvals=betti_tickvals, ticktext=betti_ticktext, tickfont=dict(size=9), automargin=True, row=1, col=1)
+    fig.update_yaxes(title_text="trajectory growth level", automargin=True, row=1, col=1)
+    fig.update_xaxes(title_text="level and free module", tickangle=32, tickmode="array", tickvals=free_tickvals, ticktext=free_ticktext, tickfont=dict(size=9), automargin=True, row=1, col=2)
     fig.update_yaxes(title_text="free rank", row=1, col=2)
     _write_plotly_dark_html(
         path,
@@ -2786,7 +2801,7 @@ def _write_growth_persistence_landscapes(path: Path, topology: dict[str, object]
                             "filtration t=%{x:.4g}<br>"
                             "landscape value=%{z:.5g}<extra></extra>"
                         ),
-                        showlegend=trace_count < 14,
+                        showlegend=False,
                     ),
                     row=1,
                     col=1,
@@ -2805,7 +2820,7 @@ def _write_growth_persistence_landscapes(path: Path, topology: dict[str, object]
                     [0.78, "#bef264"],
                     [1.0, "#facc15"],
                 ],
-                colorbar=dict(title=f"H{heatmap_dim if heatmap_dim is not None else '?'} lambda_1(t)", x=1.0),
+                colorbar=dict(title=f"H{heatmap_dim if heatmap_dim is not None else '?'} lambda_1(t)", x=1.02, y=0.70, len=0.46, thickness=14),
                 hovertemplate="level/dim=%{y}<br>filtration t=%{x:.4g}<br>lambda_1(t)=%{z:.5g}<extra></extra>",
                 name="lambda_1 heatmap",
             ),
@@ -2829,13 +2844,17 @@ def _write_growth_persistence_landscapes(path: Path, topology: dict[str, object]
             "Use the vectorized curves for fast retrieval/reward diagnostics and the hover panel for the corresponding complex.</sup>"
         ),
         scene=dict(
+            domain=dict(x=[0.0, 0.56], y=[0.16, 0.98]),
             xaxis_title="filtration t",
             yaxis_title="trajectory growth level",
             zaxis_title="actual landscape value",
-            aspectmode="cube",
+            aspectmode="manual",
+            aspectratio=dict(x=1.15, y=0.78, z=0.86),
             camera=dict(eye=dict(x=1.55, y=-1.75, z=1.18)),
         ),
-        legend=dict(orientation="h", y=-0.18),
+        showlegend=False,
+        height=980,
+        margin=dict(t=132, l=72, r=118, b=96),
     )
     _write_plotly_dark_html(
         path,
@@ -3143,6 +3162,9 @@ def write_graphcg_trajectory_visualization(scaling_report: dict[str, object], ou
     payload_path = output_dir / "graphcg_direction_cosines_payload.json"
     candidates = [row for row in scaling_report.get("candidates", []) if isinstance(row, dict)]
     matrices = []
+    basis_sources: list[str] = []
+    mean_abs_offdiag_cosines: list[float] = []
+    max_abs_offdiag_cosines: list[float] = []
     labels = []
     compact_labels = []
     hover_rows = []
@@ -3150,6 +3172,17 @@ def write_graphcg_trajectory_visualization(scaling_report: dict[str, object], ou
         proj = row.get("graphcg_projection")
         if isinstance(proj, dict) and proj.get("all_direction_cosines") is not None:
             matrices.append([float(v) for v in proj["all_direction_cosines"]])
+            basis_sources.append(str(proj.get("basis") or "unknown"))
+            for target, key in (
+                (mean_abs_offdiag_cosines, "mean_abs_offdiag_cosine"),
+                (max_abs_offdiag_cosines, "max_abs_offdiag_cosine"),
+            ):
+                try:
+                    value = float(proj.get(key))
+                except (TypeError, ValueError):
+                    continue
+                if math.isfinite(value):
+                    target.append(value)
             labels.append(_candidate_axis_label(row, idx, long=True))
             compact_labels.append(_candidate_axis_label(row, idx))
             hover_rows.append(
@@ -3194,6 +3227,22 @@ def write_graphcg_trajectory_visualization(scaling_report: dict[str, object], ou
     sorted_order = np.argsort(mean_abs)[::-1]
     sorted_activity = mean_abs[sorted_order]
     sorted_signed = signed_mean[sorted_order]
+    basis_source_counts = {basis: int(basis_sources.count(basis)) for basis in sorted(set(basis_sources))}
+    projection_basis = sorted(set(basis_sources))[0] if len(set(basis_sources)) == 1 else "mixed"
+    basis_certificate = {
+        "source": "candidate.graphcg_projection",
+        "available": bool(basis_sources),
+        "projection_basis": projection_basis,
+        "basis_sources": sorted(set(basis_sources)),
+        "basis_source_counts": basis_source_counts,
+        "candidate_count": int(len(basis_sources)),
+        "direction_count": int(direction_count),
+        "all_candidates_have_all_direction_cosines": bool(len(matrices) == len(basis_sources) and all(len(row) == direction_count for row in matrices)),
+        "mean_abs_offdiag_cosine_values": [float(v) for v in mean_abs_offdiag_cosines],
+        "max_abs_offdiag_cosine_values": [float(v) for v in max_abs_offdiag_cosines],
+        "mean_abs_offdiag_cosine_max": float(max(mean_abs_offdiag_cosines)) if mean_abs_offdiag_cosines else None,
+        "max_abs_offdiag_cosine_max": float(max(max_abs_offdiag_cosines)) if max_abs_offdiag_cosines else None,
+    }
     payload_path.write_text(
         json.dumps(
             {
@@ -3217,6 +3266,9 @@ def write_graphcg_trajectory_visualization(scaling_report: dict[str, object], ou
                 "direction_activity_sorted": [float(v) for v in sorted_activity.tolist()],
                 "direction_signed_mean_sorted": [float(v) for v in sorted_signed.tolist()],
                 "activity_threshold_p90": active_floor,
+                "projection_basis_certificate": basis_certificate,
+                "graphcg_basis_sources": sorted(set(basis_sources)),
+                "graphcg_basis_source_counts": basis_source_counts,
                 "interpretation": "GraphCG directions are full-rank: the heatmap intentionally shows the highest-activity subset for readability, while the spectrum and candidate effective-direction counts summarize every embedding direction.",
             },
             indent=2,
@@ -3316,7 +3368,7 @@ def write_graphcg_trajectory_visualization(scaling_report: dict[str, object], ou
         template="plotly_dark",
         title=(
             "GraphCG full-rank direction audit"
-            f"<br><sup>top heatmap shows {display_count}/{direction_count} directions for readability; spectrum/effective counts audit all directions; active nonzero rank={active_rank}</sup>"
+            f"<br><sup>basis={html.escape(projection_basis)}; top heatmap shows {display_count}/{direction_count} directions for readability; spectrum/effective counts audit all directions; active nonzero rank={active_rank}</sup>"
         ),
         margin=dict(t=132, l=92, r=68, b=92),
         height=1280,
@@ -3417,11 +3469,11 @@ def write_analogical_memory_visualization(
         _write_plotly_dark_html(
             pair_path,
             fig,
-            f"Analogical simplicial map retrieval rank {idx + 1}",
+            f"Analogical probability correspondence rank {idx + 1}",
             panel_items,
             show_filtration_slider=True,
         )
-        map_report["pair_page"] = str(pair_path)
+        map_report["pair_page"] = pair_path.name
         map_reports.append(map_report)
         pair_pages.append(
             {
@@ -3553,7 +3605,7 @@ def _analogical_pair_figure(
                 {
                     "active": 0,
                     "currentvalue": {"prefix": "domain/codomain filtration <= ", "font": {"color": "#dbeafe"}},
-                    "pad": {"t": 42},
+                    "pad": {"t": 58},
                     "steps": steps,
                 }
             ],
@@ -3579,17 +3631,20 @@ def _analogical_pair_figure(
     fig.update_layout(
         template="plotly_dark",
         title=(
-            f"Analogical reasoning memory retrieval as simplicial maps: rank {idx + 1} "
-            "trajectory-complex map from query domain to retrieved codomain"
-            "<br><sup>binary filtered-complex map; gold lines preserve displayed 1-simplices, rose lines are vertex-only correspondences; slider filters domain, codomain, and visible map edges</sup>"
+            f"Analogical probability-matched correspondence: rank {idx + 1}"
+            "<br><sup>query trajectory complex to retrieved memory complex</sup>"
+            "<br><sup>filtered-complex certificate from model-probability Jensen-Shannon assignment; gold=preserved 1-simplices, rose=vertex-only; slider filters domain/codomain/certificate edges</sup>"
         ),
+        height=960,
+        margin=dict(t=154, l=24, r=24, b=152),
         scene=dict(
-            xaxis=dict(title="domain / codomain embedding slabs", range=[-0.78, slab + 0.78]),
-            yaxis=dict(title="PCoA/MDS-2", range=[-1.25, 1.25]),
-            zaxis=dict(title="PCoA/MDS-3", range=[-1.25, 1.25]),
-            camera=dict(eye=dict(x=1.45, y=1.25, z=0.85), center=dict(x=0.02, y=0.0, z=0.0)),
+            domain=dict(x=[0.0, 0.68], y=[0.24, 0.98]),
+            xaxis=dict(title="domain / codomain embedding slabs", range=[-1.05, slab + 1.05]),
+            yaxis=dict(title="PCoA/MDS-2", range=[-1.35, 1.35]),
+            zaxis=dict(title="PCoA/MDS-3", range=[-1.35, 1.35]),
+            camera=dict(eye=dict(x=2.05, y=1.55, z=1.05), center=dict(x=0.08, y=0.0, z=0.0)),
         ),
-        legend=dict(itemsizing="constant"),
+        legend=dict(itemsizing="constant", x=0.70, y=0.98, xanchor="left", yanchor="top"),
     )
     if not bool(sim_map.get("is_simplicial_on_displayed_skeleton")):
         fig.add_annotation(
@@ -3618,8 +3673,9 @@ def _analogical_quality_table_trace(
     sim_map: dict[str, object],
     idx: int,
 ) -> go.Table:
-    status = "filtered simplicial map" if bool(sim_map.get("is_filtered_simplicial_map")) else "not a filtered simplicial map"
+    status = "filtered simplicial-map certificate passed" if bool(sim_map.get("is_filtered_simplicial_map")) else "filtered simplicial-map certificate failed"
     derived = sim_map.get("derived_invariant_comparison", {}) if isinstance(sim_map.get("derived_invariant_comparison"), dict) else {}
+    source_label = str(sim_map.get("map_source", "unknown")).replace("model_probability_jensen_shannon_assignment", "prob-JS assignment")
     rows = [
         ("rank", str(idx + 1)),
         ("memory", _short_label(str(row.get("memory_id", idx)), 24)),
@@ -3627,19 +3683,19 @@ def _analogical_quality_table_trace(
         ("PH similarity", f"{float(sim.get('persistent_homology_similarity', 0.0)):.4f}"),
         ("free-res similarity", f"{float(sim.get('free_resolution_similarity', 0.0)):.4f}"),
         ("derived similarity", f"{float(sim.get('derived_signature_similarity', 0.0)):.4f}"),
-        ("map source", str(sim_map.get("map_source", "unknown"))),
+        ("map source", source_label),
         ("JS mean/max", f"{_fmt_optional(sim_map.get('jensen_shannon_distance_mean'))}/{_fmt_optional(sim_map.get('jensen_shannon_distance_max'))}"),
-        ("assignment cost mean/max", f"{_fmt_optional(sim_map.get('assignment_cost_mean'))}/{_fmt_optional(sim_map.get('assignment_cost_max'))}"),
-        ("filtration distortion max", _fmt_optional(sim_map.get("max_positive_filtration_distortion"))),
+        ("assign cost mean/max", f"{_fmt_optional(sim_map.get('assignment_cost_mean'))}/{_fmt_optional(sim_map.get('assignment_cost_max'))}"),
+        ("filt distortion max", _fmt_optional(sim_map.get("max_positive_filtration_distortion"))),
         ("edge preservation", f"{int(sim_map.get('preserved_edges', 0))}/{int(sim_map.get('checked_edges', 0))} = {float(sim_map.get('edge_preservation_rate', 0.0)):.3f}"),
-        ("2-simplex preservation", f"{int(sim_map.get('preserved_two_simplices', 0))}/{int(sim_map.get('checked_two_simplices', 0))} = {float(sim_map.get('two_simplex_preservation_rate', 0.0)):.3f}"),
-        ("finite invariant match", str(derived.get("finite_invariants_match", "n/a"))),
+        ("face preservation", f"{int(sim_map.get('preserved_two_simplices', 0))}/{int(sim_map.get('checked_two_simplices', 0))} = {float(sim_map.get('two_simplex_preservation_rate', 0.0)):.3f}"),
+        ("finite match", str(derived.get("finite_invariants_match", "n/a"))),
         ("display status", status),
     ]
     return go.Table(
-        domain=dict(x=[0.70, 0.995], y=[0.02, 0.34]),
+        domain=dict(x=[0.70, 0.995], y=[0.36, 0.96]),
         header=dict(
-            values=["map diagnostic", "value"],
+            values=["certificate diagnostic", "value"],
             fill_color="#111827",
             font=dict(color="#e8eef8", size=11),
             align="left",
@@ -3649,9 +3705,9 @@ def _analogical_quality_table_trace(
             fill_color=[["#0f172a"] * len(rows), ["#0b1220"] * len(rows)],
             font=dict(color="#dbeafe", size=10),
             align="left",
-            height=24,
+            height=22,
         ),
-        name="simplicial map diagnostics",
+        name="filtered-complex certificate diagnostics",
     )
 
 
@@ -3813,9 +3869,9 @@ def _complex_vertex_hover(label: str, vertex_row: dict[str, object], prefix: str
     return f"<b>{html.escape(prefix)}</b><br>" + _vertex_readable_summary({**vertex_row, "simplex": [label]}, include_output=True)
 
 
-def _salient_complex_text_labels(labels: list[str], vertex_by_label: dict[str, dict[str, object]], max_labels: int = 12) -> list[str]:
+def _salient_complex_text_labels(labels: list[str], vertex_by_label: dict[str, dict[str, object]], max_labels: int = 8) -> list[str]:
     if len(labels) <= max_labels:
-        return [_short_label(label, 14) for label in labels]
+        return [_short_label(label, 10) for label in labels]
     scored: list[tuple[float, int, str]] = []
     for idx, label in enumerate(labels):
         row = vertex_by_label.get(label, {})
@@ -3830,7 +3886,7 @@ def _salient_complex_text_labels(labels: list[str], vertex_by_label: dict[str, d
             score += 0.75
         scored.append((score, idx, label))
     keep = {idx for _, idx, _ in sorted(scored, reverse=True)[:max_labels]}
-    return [_short_label(label, 14) if idx in keep else "" for idx, label in enumerate(labels)]
+    return [_short_label(label, 10) if idx in keep else "" for idx, label in enumerate(labels)]
 
 
 def _simplicial_map_traces(
@@ -3905,7 +3961,7 @@ def _simplicial_map_traces(
             z=traces_by_kind["preserved"]["z"],
             mode="lines",
             line=dict(color="rgba(250,204,21,0.76)", width=4),
-            name=f"preserved 1-simplex map to {row.get('memory_id')}",
+            name="preserved 1-simplex maps",
             hovertext=traces_by_kind["preserved"]["hover"],
             hoverinfo="text",
             customdata=[panel_idx if value is not None else None for value in traces_by_kind["preserved"]["x"]],
@@ -3916,7 +3972,7 @@ def _simplicial_map_traces(
             z=traces_by_kind["vertex_only"]["z"],
             mode="lines",
             line=dict(color="rgba(251,113,133,0.16)", width=1.2),
-            name=f"vertex-only correspondences to {row.get('memory_id')} (legend only)",
+            name="vertex-only correspondences (legend only)",
             hovertext=traces_by_kind["vertex_only"]["hover"],
             hoverinfo="text",
             customdata=[panel_idx if value is not None else None for value in traces_by_kind["vertex_only"]["x"]],
@@ -3947,7 +4003,7 @@ def _write_analogical_topk_index(path: Path, pair_pages: list[dict[str, object]]
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Analogical top-k simplicial maps</title>
+	  <title>Analogical top-k probability correspondences</title>
   <style>
     :root {{ color-scheme: dark; }}
     body {{ margin: 0; background: #090b12; color: #e8eef8; font-family: Inter, ui-sans-serif, system-ui, sans-serif; }}
@@ -3963,10 +4019,10 @@ def _write_analogical_topk_index(path: Path, pair_pages: list[dict[str, object]]
 </head>
 <body>
   <main>
-    <h1>Analogical top-k retrieval as separate filtered simplicial maps</h1>
-    <p>Each row opens one binary map from the query filtered simplicial complex to exactly one retrieved memory complex. Top-k remains available without overlaying several codomains into a single map.</p>
-    <table>
-      <thead><tr><th>rank</th><th>binary map</th><th>retrieval</th><th>PH</th><th>free res.</th><th>derived</th><th>edge map</th></tr></thead>
+	    <h1>Analogical top-k probability correspondences</h1>
+	    <p>Each row opens one query-to-memory vertex assignment with a finite filtered-complex certificate. Edge, face, and filtration preservation can fail and are reported on the rank page.</p>
+	    <table>
+	      <thead><tr><th>rank</th><th>correspondence</th><th>retrieval</th><th>PH</th><th>free res.</th><th>derived</th><th>edge certificate</th></tr></thead>
       <tbody>{body}</tbody>
     </table>
   </main>
@@ -5256,10 +5312,10 @@ def _write_plotly_dark_html(path: Path, fig: go.Figure, title: str, panel_items:
       <div class="summary" id="simplicial-summary">{initial["summary"]}</div>
       {controls_html}
       <div class="simplicial-object-plot" id="simplicial-plot" aria-label="interactive selected filtered simplicial complex"></div>
-      <details class="static-preview">
-        <summary>Static SVG preview</summary>
-        <div class="simplicial-object-panel" id="simplicial-svg">{initial["svg"]}</div>
-      </details>
+      <details class="static-preview" open>
+	        <summary>Static SVG preview from the same filtered-complex payload</summary>
+	        <div class="simplicial-object-panel" id="simplicial-svg">{initial["svg"]}</div>
+	      </details>
     </aside>"""
         if has_panel
         else ""
@@ -5371,18 +5427,38 @@ def _write_plotly_dark_html(path: Path, fig: go.Figure, title: str, panel_items:
       overflow: hidden;
       box-shadow: inset 0 0 0 1px rgba(255,255,255,0.03), 0 18px 36px rgba(0,0,0,0.24);
     }}
-    .static-preview {{
-      border: 1px solid rgba(148, 163, 184, 0.16);
-      border-radius: 8px;
-      background: rgba(7, 10, 18, 0.46);
-      padding: 8px;
-    }}
-    .static-preview summary {{
-      cursor: pointer;
-      color: #99f6e4;
-      font-size: 11px;
-      margin-bottom: 8px;
-    }}
+	    .static-preview {{
+	      border: 1px solid rgba(148, 163, 184, 0.16);
+	      border-radius: 8px;
+	      background: rgba(7, 10, 18, 0.46);
+	      padding: 8px;
+	    }}
+	    .static-preview summary {{
+	      cursor: pointer;
+	      color: #99f6e4;
+	      font-size: 11px;
+	      margin-bottom: 8px;
+	    }}
+	    .webgl-fallback {{
+	      margin: 16px;
+	      padding: 14px;
+	      border: 1px solid rgba(251, 191, 36, 0.35);
+	      border-radius: 8px;
+	      background: rgba(30, 41, 59, 0.94);
+	      color: var(--ink);
+	    }}
+	    .webgl-fallback h2 {{
+	      margin: 0 0 6px;
+	      font-size: 14px;
+	      line-height: 1.25;
+	    }}
+	    .webgl-fallback p {{
+	      margin: 0 0 10px;
+	      color: var(--muted);
+	      font-size: 12px;
+	      line-height: 1.45;
+	    }}
+	    .webgl-fallback .simplicial-object-panel {{ margin-top: 8px; }}
     .hover-simplicial-card {{
       position: fixed;
       z-index: 40;
@@ -5597,12 +5673,35 @@ def _write_plotly_dark_html(path: Path, fig: go.Figure, title: str, panel_items:
       }});
       return traces;
     }}
-    function renderPanelComplex(item) {{
-      if (!panelPlot || typeof Plotly === "undefined") return;
-      const plot = (item && item.plot) || {{}};
-      if (!Array.isArray(plot.vertices) || !plot.vertices.length) {{
-        panelPlot.innerHTML = "<div style='padding:16px;color:#99a8bd'>No selected filtered simplicial complex vertices available.</div>";
-        return;
+	    function webglUnsupportedText(root) {{
+	      const text = root && root.textContent ? root.textContent : "";
+	      return text.includes("WebGL is not supported") || text.includes("webgl is not supported");
+	    }}
+	    function staticFallbackMarkup(item, reason) {{
+	      const svg = item && item.svg ? item.svg : "<div class='simplicial-object-panel'>No static filtered-complex SVG preview is available for this selected object.</div>";
+	      const title = item && item.title ? item.title : "selected filtered simplicial object";
+	      return `<div class="webgl-fallback"><h2>Static filtered-complex preview</h2><p>${{reason}} This preview is generated from the same serialized simplicial object payload as the interactive 3D panel.</p><div class="summary">${{title}}</div><div class="simplicial-object-panel">${{svg}}</div></div>`;
+	    }}
+	    function renderPanelStaticFallback(item, reason) {{
+	      if (!panelPlot) return;
+	      panelPlot.innerHTML = staticFallbackMarkup(item, reason);
+	    }}
+	    function promoteMainStaticFallback() {{
+	      const chartEl = document.getElementById("chart");
+	      if (!chartEl || !simplicialPanels.length || chartEl.querySelector(".webgl-fallback.main-fallback")) return;
+	      if (!webglUnsupportedText(chartEl)) return;
+	      const item = simplicialPanels[activePanelIndex] || simplicialPanels[initialPanelIndex] || simplicialPanels[0];
+	      const fallback = document.createElement("div");
+	      fallback.className = "webgl-fallback main-fallback";
+	      fallback.innerHTML = `<h2>WebGL unavailable: static complex preview shown</h2><p>The browser could not create a WebGL context for the 3D Plotly view. The data were still loaded; the static preview below comes from the selected real filtered-complex payload.</p>${{staticFallbackMarkup(item, "Interactive WebGL rendering is unavailable in this browser context.")}}`;
+	      chartEl.prepend(fallback);
+	    }}
+	    function renderPanelComplex(item) {{
+	      if (!panelPlot || typeof Plotly === "undefined") return;
+	      const plot = (item && item.plot) || {{}};
+	      if (!Array.isArray(plot.vertices) || !plot.vertices.length) {{
+	        panelPlot.innerHTML = "<div style='padding:16px;color:#99a8bd'>No selected filtered simplicial complex vertices available.</div>";
+	        return;
       }}
       panelPlot.innerHTML = "<div id='selected-complex-graph' style='width:100%;height:100%;'></div>";
       const selectedGraph = panelPlot.querySelector("#selected-complex-graph");
@@ -5625,13 +5724,20 @@ def _write_plotly_dark_html(path: Path, fig: go.Figure, title: str, panel_items:
         }},
         legend: {{orientation: "h", y: -0.05}},
         showlegend: true
-      }};
-      try {{
-        Plotly.newPlot(selectedGraph, buildPanelTraces(item), layout, {{displaylogo: false, responsive: false}});
-      }} catch (err) {{
-        panelPlot.innerHTML = `<div style='padding:16px;color:#fb7185'>Could not render selected complex: ${{err && err.message ? err.message : err}}</div>`;
-      }}
-    }}
+	      }};
+	      try {{
+	        const rendered = Plotly.newPlot(selectedGraph, buildPanelTraces(item), layout, {{displaylogo: false, responsive: false}});
+	        Promise.resolve(rendered).then(() => {{
+	          window.setTimeout(() => {{
+	            if (webglUnsupportedText(selectedGraph)) renderPanelStaticFallback(item, "Interactive WebGL rendering is unavailable in this browser context.");
+	          }}, 120);
+	        }}).catch((err) => {{
+	          renderPanelStaticFallback(item, `Could not render the interactive 3D panel: ${{err && err.message ? err.message : err}}.`);
+	        }});
+	      }} catch (err) {{
+	        renderPanelStaticFallback(item, `Could not render the interactive 3D panel: ${{err && err.message ? err.message : err}}.`);
+	      }}
+	    }}
     function positionHoverCard(pointerEvent) {{
       if (!hoverCard || !pointerEvent) return;
       const margin = 14;
@@ -5705,9 +5811,11 @@ def _write_plotly_dark_html(path: Path, fig: go.Figure, title: str, panel_items:
       plot.on("plotly_unhover", hideHoverCard);
       plot.on("plotly_relayout", hideHoverCard);
     }}
-    window.setTimeout(forceConfiguredPlotlyFrame, 150);
-    window.setTimeout(forceConfiguredPlotlyFrame, 650);
-  </script>
+	    window.setTimeout(forceConfiguredPlotlyFrame, 150);
+	    window.setTimeout(forceConfiguredPlotlyFrame, 650);
+	    window.setTimeout(promoteMainStaticFallback, 900);
+	    window.setTimeout(promoteMainStaticFallback, 1800);
+	  </script>
 </body>
 </html>
 """,
@@ -5716,11 +5824,34 @@ def _write_plotly_dark_html(path: Path, fig: go.Figure, title: str, panel_items:
 
 
 def _write_dark_empty(path: Path, message: str) -> None:
+    escaped = html.escape(message)
     path.write_text(
         "<!doctype html><html><head><meta charset='utf-8'><meta name='viewport' content='width=device-width, initial-scale=1'>"
         "<style>:root{color-scheme:dark;background:#090b12;color:#e8eef8}"
-        "body{margin:0;background:#090b12;color:#e8eef8;font-family:Inter,ui-sans-serif,system-ui;padding:24px}</style>"
-        f"</head><body><p>{html.escape(message)}</p></body></html>",
+        "body{margin:0;min-height:100vh;background:#090b12;color:#e8eef8;font-family:Inter,ui-sans-serif,system-ui;display:grid;place-items:start center;padding:48px 24px}"
+        ".diagnostic{max-width:780px;border:1px solid rgba(148,163,184,.28);background:#0f172a;padding:24px 26px;border-radius:8px;box-shadow:0 20px 60px rgba(0,0,0,.24)}"
+        ".eyebrow{margin:0 0 8px;color:#93c5fd;font-size:12px;text-transform:uppercase;letter-spacing:.08em}"
+        "h1{margin:0 0 12px;font-size:22px;line-height:1.25}.body{margin:0;color:#cbd5e1;line-height:1.55}</style>"
+        f"</head><body><main class='diagnostic'><p class='eyebrow'>explicit unavailable diagnostic</p><h1>No standalone plot rendered</h1><p class='body'>{escaped}</p></main></body></html>",
+        encoding="utf-8",
+    )
+
+
+def _write_dark_redirect(path: Path, title: str, message: str, target: str, label: str) -> None:
+    escaped_title = html.escape(title)
+    escaped_message = html.escape(message)
+    escaped_target = html.escape(target, quote=True)
+    escaped_label = html.escape(label)
+    path.write_text(
+        "<!doctype html><html><head><meta charset='utf-8'><meta name='viewport' content='width=device-width, initial-scale=1'>"
+        f"<meta http-equiv='refresh' content='0; url={escaped_target}'>"
+        "<style>:root{color-scheme:dark;background:#090b12;color:#e8eef8}"
+        "body{margin:0;min-height:100vh;background:#090b12;color:#e8eef8;font-family:Inter,ui-sans-serif,system-ui;display:grid;place-items:start center;padding:48px 24px}"
+        ".diagnostic{max-width:780px;border:1px solid rgba(148,163,184,.28);background:#0f172a;padding:24px 26px;border-radius:8px;box-shadow:0 20px 60px rgba(0,0,0,.24)}"
+        ".eyebrow{margin:0 0 8px;color:#93c5fd;font-size:12px;text-transform:uppercase;letter-spacing:.08em}"
+        "h1{margin:0 0 12px;font-size:22px;line-height:1.25}.body{margin:0 0 16px;color:#cbd5e1;line-height:1.55}"
+        "a{color:#7dd3fc;text-decoration:none;border-bottom:1px solid rgba(125,211,252,.45)}</style>"
+        f"</head><body><main class='diagnostic'><p class='eyebrow'>redirect to trajectory-growth artifact</p><h1>{escaped_title}</h1><p class='body'>{escaped_message}</p><a href='{escaped_target}'>{escaped_label}</a></main></body></html>",
         encoding="utf-8",
     )
 
