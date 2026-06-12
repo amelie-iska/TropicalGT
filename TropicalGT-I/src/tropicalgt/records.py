@@ -34,7 +34,9 @@ class GraphRecord:
         else:
             metadata["graph_json_fallback"] = False
         graph_obj, sequence_added = attach_sequential_text_graph(graph_obj, text=text, question=question, answer=answer)
+        graph_obj, causal_report = normalize_graph_causal_structure(graph_obj)
         metadata["graph_json_sequentialized"] = sequence_added
+        metadata.update(causal_report)
         metadata.update(graph_decoding_order(graph_obj, seed=0, record_id=rid))
         if "dataset" in row:
             metadata["dataset"] = _string(row.get("dataset"))
@@ -51,7 +53,7 @@ class GraphRecord:
             f"<br><b>graph</b>: {_clip(json.dumps(graph, ensure_ascii=False), 900)}"
         )
 
-    def autoregressive_text(self, seed: int = 0, max_node_chars: int = 4096) -> str:
+    def autoregressive_text(self, seed: int = 0, max_node_chars: int = 4096, direction: str = "forward") -> str:
         """Flatten node payloads in the graph-aware autoregressive order."""
 
         graph = self.graph_json or {}
@@ -60,9 +62,12 @@ class GraphRecord:
             return self.text
         node_by_id = {str(node.get("id", idx)): node for idx, node in enumerate(nodes)}
         metadata = self.metadata if isinstance(self.metadata, dict) else {}
-        order = metadata.get("decoding_node_order")
+        reverse = str(direction).lower() in {"reverse", "backward", "right_to_left", "rtl"}
+        order_key = "decoding_reverse_node_order" if reverse else "decoding_node_order"
+        order = metadata.get(order_key)
         if not isinstance(order, list):
-            order = graph_decoding_order(graph, seed=seed, record_id=self.record_id)["decoding_node_order"]
+            order_report = graph_decoding_order(graph, seed=seed, record_id=self.record_id)
+            order = order_report["decoding_reverse_node_order" if reverse else "decoding_node_order"]
         parts: list[str] = []
         for node_id in order:
             node = node_by_id.get(str(node_id))
@@ -111,10 +116,10 @@ def conservative_graph(question: str = "", reasoning: str = "", answer: str = ""
     steps = [s.strip() for s in reasoning.replace("\r", "\n").split("\n") if s.strip()]
     for step in steps[:24]:
         sid = add("reasoning_step", step)
-        edges.append({"source": prev, "target": sid, "type": "depends_on"})
+        edges.append({"source": prev, "target": sid, "type": "depends_on", "directed": True, "causal": True})
         prev = sid
     ans = add("answer", answer or "")
-    edges.append({"source": prev, "target": ans, "type": "supports_answer"})
+    edges.append({"source": prev, "target": ans, "type": "supports_answer", "directed": True, "causal": True})
     return {"nodes": nodes, "edges": edges}
 
 
@@ -150,10 +155,102 @@ def attach_sequential_text_graph(
     for idx, chunk in enumerate(chunks):
         node_id = f"{prefix}_{idx:03d}"
         nodes.append({"id": node_id, "type": "sequence_chunk", "text": chunk, "position": idx})
-        edges.append({"source": previous, "target": node_id, "type": "next_text_chunk" if previous != root_id else "starts_text"})
+        edges.append({
+            "source": previous,
+            "target": node_id,
+            "type": "next_text_chunk" if previous != root_id else "starts_text",
+            "directed": True,
+            "causal": True,
+        })
         previous = node_id
 
     return {**graph_obj, "nodes": nodes, "edges": edges}, True
+
+
+CAUSAL_EDGE_TYPES = {
+    "depends_on",
+    "supports_answer",
+    "starts_text",
+    "next_text_chunk",
+    "precedes",
+    "causes",
+    "causal",
+    "entails",
+    "derives",
+    "implies",
+    "leads_to",
+    "parent_of",
+    "step_to",
+    "then",
+    "before",
+    "after",
+    "control_flow",
+    "data_flow",
+}
+
+NONCAUSAL_EDGE_TYPES = {
+    "undirected",
+    "noncausal",
+    "cooccurs",
+    "co_occurs",
+    "similar",
+    "related",
+    "adjacent",
+    "sibling",
+    "contrastive_pair",
+    "correlates",
+    "analogy",
+    "retrieves",
+    "memory_match",
+    "nearest_neighbor",
+    "same_as",
+}
+
+
+def normalize_graph_causal_structure(graph: dict[str, Any] | None) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Annotate dataset graph edges with explicit causal/noncausal semantics."""
+
+    graph_obj = graph if isinstance(graph, dict) else {"nodes": [], "edges": []}
+    nodes = list(graph_obj.get("nodes", []))
+    edges: list[dict[str, Any]] = []
+    inferred_causal = 0
+    explicit_causal = 0
+    explicit_noncausal = 0
+    unknown = 0
+    for raw_edge in list(graph_obj.get("edges", [])):
+        if not isinstance(raw_edge, dict):
+            continue
+        edge = dict(raw_edge)
+        kind = _edge_kind(edge)
+        if edge.get("causal") is True or edge.get("directed") is True:
+            edge["causal"] = bool(edge.get("causal", True))
+            edge["directed"] = bool(edge.get("directed", True))
+            explicit_causal += int(edge["causal"])
+            explicit_noncausal += int(not edge["causal"])
+        elif edge.get("causal") is False or edge.get("directed") is False or kind in NONCAUSAL_EDGE_TYPES:
+            edge["causal"] = False
+            edge["directed"] = False
+            explicit_noncausal += 1
+        elif kind in CAUSAL_EDGE_TYPES or _edge_has_temporal_positions(edge):
+            edge["causal"] = True
+            edge["directed"] = True
+            edge["causal_inferred_from"] = kind or "temporal_position"
+            inferred_causal += 1
+        else:
+            edge.setdefault("causal", False)
+            edge.setdefault("directed", False)
+            unknown += 1
+        edges.append(edge)
+    causal_edges = sum(1 for edge in edges if edge.get("causal") is True)
+    report = {
+        "causal_edge_count": int(causal_edges),
+        "noncausal_edge_count": int(sum(1 for edge in edges if edge.get("causal") is False)),
+        "causal_edge_inferred_count": int(inferred_causal),
+        "causal_edge_explicit_count": int(explicit_causal),
+        "causal_edge_unknown_count": int(unknown),
+        "graph_has_explicit_causal_structure": bool(causal_edges > 0),
+    }
+    return {**graph_obj, "nodes": nodes, "edges": edges}, report
 
 
 def graph_decoding_order(graph: dict[str, Any], seed: int = 0, record_id: str = "") -> dict[str, Any]:
@@ -166,8 +263,10 @@ def graph_decoding_order(graph: dict[str, Any], seed: int = 0, record_id: str = 
     if not node_ids:
         return {
             "decoding_order_kind": "empty_graph",
+            "decoding_reverse_order_kind": "empty_graph",
             "decoding_is_dag": True,
             "decoding_node_order": [],
+            "decoding_reverse_node_order": [],
             "decoding_random_seed": int(seed),
         }
 
@@ -188,8 +287,10 @@ def graph_decoding_order(graph: dict[str, Any], seed: int = 0, record_id: str = 
         if is_dag:
             return {
                 "decoding_order_kind": "causal_dag",
+                "decoding_reverse_order_kind": "reverse_causal_dag",
                 "decoding_is_dag": True,
                 "decoding_node_order": order,
+                "decoding_reverse_node_order": list(reversed(order)),
                 "decoding_random_seed": int(seed),
             }
 
@@ -198,8 +299,10 @@ def graph_decoding_order(graph: dict[str, Any], seed: int = 0, record_id: str = 
     rng.shuffle(order)
     return {
         "decoding_order_kind": "random_autoregressive",
+        "decoding_reverse_order_kind": "reverse_random_autoregressive",
         "decoding_is_dag": False,
         "decoding_node_order": order,
+        "decoding_reverse_node_order": list(reversed(order)),
         "decoding_random_seed": int(seed),
     }
 
@@ -219,18 +322,16 @@ def _parse_graph(value: Any) -> dict[str, Any] | None:
 def _edge_is_noncausal(edge: dict[str, Any]) -> bool:
     if edge.get("directed") is False or edge.get("causal") is False:
         return True
-    kind = _string(edge.get("type") or edge.get("relation") or "").lower()
-    return kind in {
-        "undirected",
-        "noncausal",
-        "cooccurs",
-        "co_occurs",
-        "similar",
-        "related",
-        "adjacent",
-        "sibling",
-        "contrastive_pair",
-    }
+    return _edge_kind(edge) in NONCAUSAL_EDGE_TYPES
+
+
+def _edge_kind(edge: dict[str, Any]) -> str:
+    return _string(edge.get("type") or edge.get("relation") or edge.get("label") or "").strip().lower()
+
+
+def _edge_has_temporal_positions(edge: dict[str, Any]) -> bool:
+    temporal_keys = ("position", "step", "time", "source_position", "target_position", "src_position", "dst_position")
+    return any(key in edge for key in temporal_keys)
 
 
 def _topological_order(node_ids: list[str], edges: list[tuple[str, str]]) -> tuple[list[str], bool]:

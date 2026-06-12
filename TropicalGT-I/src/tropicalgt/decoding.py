@@ -29,6 +29,10 @@ class MeetInMiddleConfig:
     max_records: int = 0
     reverse_model_path: str = ""
     mode: str = "shared_weight_reverse_pass"
+    agreement_kind: str = "total_variation"
+    max_meet_points: int = 8
+    ngram_size: int = 4
+    verification_window: int = 4
 
 
 def meet_in_middle_config(raw: dict[str, Any] | None) -> MeetInMiddleConfig:
@@ -41,6 +45,10 @@ def meet_in_middle_config(raw: dict[str, Any] | None) -> MeetInMiddleConfig:
         max_records=max(int(raw.get("max_records", 0)), 0),
         reverse_model_path=str(raw.get("reverse_model_path", "") or ""),
         mode=str(raw.get("mode", "shared_weight_reverse_pass") or "shared_weight_reverse_pass"),
+        agreement_kind=str(raw.get("agreement_kind", "total_variation") or "total_variation"),
+        max_meet_points=max(int(raw.get("max_meet_points", raw.get("num_meet_points", 8))), 0),
+        ngram_size=max(int(raw.get("ngram_size", 4)), 1),
+        verification_window=max(int(raw.get("verification_window", 4)), 1),
     )
 
 
@@ -50,7 +58,7 @@ def encode_record_bytes_reverse(
     graph_autoregressive: bool = False,
     seed: int = 0,
 ) -> tuple[torch.Tensor, torch.Tensor]:
-    text = record.autoregressive_text(seed=seed) if graph_autoregressive else record.text
+    text = record.autoregressive_text(seed=seed, direction="forward") if graph_autoregressive else record.text
     ids = [b + 1 for b in text.encode("utf-8", "ignore")]
     ids.reverse()
     return encode_byte_ids(ids, seq_len)
@@ -118,7 +126,7 @@ def meet_in_middle_batch(
             seq_len=seq_len,
             graph_autoregressive=graph_autoregressive,
             seed=seed,
-            split_ratio=cfg.split_ratio,
+            config=cfg,
         )
         agreement_loss = agreement["agreement_loss"]
         loss = cfg.agreement_weight * agreement_loss + cfg.reverse_nll_weight * reverse_nll
@@ -129,9 +137,17 @@ def meet_in_middle_batch(
         "mim_split_ratio": float(cfg.split_ratio),
         "mim_agreement_weight": float(cfg.agreement_weight),
         "mim_reverse_nll_weight": float(cfg.reverse_nll_weight),
+        "mim_max_meet_points": float(cfg.max_meet_points),
+        "mim_ngram_size": float(cfg.ngram_size),
+        "mim_verification_window": float(cfg.verification_window),
         "mim_reverse_nll": _float_detached(reverse_nll),
         "mim_agreement_loss": _float_detached(agreement_loss),
         "mim_join_token_match_rate": agreement["match_rate"],
+        "mim_selected_meet_points_mean": agreement["selected_meet_points_mean"],
+        "mim_candidate_meet_count_mean": agreement["candidate_meet_count_mean"],
+        "mim_verified_meet_count_mean": agreement["verified_meet_count_mean"],
+        "mim_ngram_candidate_rate": agreement["ngram_candidate_rate"],
+        "mim_truth_verification_rate": agreement["truth_verification_rate"],
         "mim_true_meet_logprob_mean": agreement["true_logprob_mean"],
         "mim_candidate_count": float(len(selected_records)),
         "mim_loss": _float_detached(loss),
@@ -157,53 +173,87 @@ def _agreement_terms(
     seq_len: int,
     graph_autoregressive: bool,
     seed: int,
-    split_ratio: float,
+    config: MeetInMiddleConfig,
 ) -> dict[str, Any]:
     rows: list[dict[str, Any]] = []
     losses: list[torch.Tensor] = []
     true_log_probs: list[torch.Tensor] = []
     matches = 0
     valid = 0
+    selected_counts: list[int] = []
+    candidate_counts: list[int] = []
+    verified_counts: list[int] = []
     for batch_idx, record in enumerate(records):
-        text = record.autoregressive_text(seed=seed) if graph_autoregressive else record.text
+        text = record.autoregressive_text(seed=seed, direction="forward") if graph_autoregressive else record.text
         ids = [b + 1 for b in text.encode("utf-8", "ignore")]
         n = min(len(ids), seq_len + 1)
         if n < 3:
             continue
-        meet_index = min(max(int(round((n - 1) * float(split_ratio))), 1), n - 2)
-        f_pos = meet_index - 1
-        r_token_index = n - 1 - meet_index
-        r_pos = r_token_index - 1
-        if r_pos < 0 or f_pos < 0 or r_pos >= reverse_logits.shape[1]:
-            continue
-        true_token = int(ids[meet_index])
-        rev_dist = reverse_logits[batch_idx, r_pos].float()
-        rev_log_probs = F.log_softmax(rev_dist, dim=-1)
-        rev_pred = int(rev_dist.argmax().detach().cpu())
-        fwd_pred = None
-        if forward_logits is not None and f_pos < forward_logits.shape[1]:
-            fwd_dist = forward_logits[batch_idx, f_pos].float()
-            fwd_log_probs = F.log_softmax(fwd_dist, dim=-1)
-            fwd_pred = int(fwd_dist.argmax().detach().cpu())
-            losses.append(_symmetric_kl(fwd_log_probs, rev_log_probs))
-            true_log_probs.append(0.5 * (fwd_log_probs[true_token] + rev_log_probs[true_token]))
-            if fwd_pred == rev_pred:
-                matches += 1
-        else:
-            true_log_probs.append(rev_log_probs[true_token])
-        valid += 1
+        meet_indices = _selected_meet_indices(n, config.split_ratio, config.max_meet_points)
+        selected_counts.append(len(meet_indices))
+        fwd_argmax_by_index: dict[int, int] = {}
+        rev_argmax_by_index: dict[int, int] = {}
+        point_rows = []
+        for meet_index in meet_indices:
+            f_pos = meet_index - 1
+            r_pos = n - 2 - meet_index
+            if r_pos < 0 or f_pos < 0 or r_pos >= reverse_logits.shape[1]:
+                continue
+            true_token = int(ids[meet_index])
+            rev_dist = reverse_logits[batch_idx, r_pos].float()
+            rev_log_probs = F.log_softmax(rev_dist, dim=-1)
+            rev_pred = int(rev_dist.argmax().detach().cpu())
+            rev_argmax_by_index[meet_index] = rev_pred
+            fwd_pred = None
+            agreement_value = None
+            if forward_logits is not None and f_pos < forward_logits.shape[1]:
+                fwd_dist = forward_logits[batch_idx, f_pos].float()
+                fwd_log_probs = F.log_softmax(fwd_dist, dim=-1)
+                fwd_pred = int(fwd_dist.argmax().detach().cpu())
+                fwd_argmax_by_index[meet_index] = fwd_pred
+                loss_i = _distribution_agreement(fwd_log_probs, rev_log_probs, config.agreement_kind)
+                losses.append(loss_i)
+                agreement_value = _float_detached(loss_i)
+                true_log_probs.append(0.5 * (fwd_log_probs[true_token] + rev_log_probs[true_token]))
+                if fwd_pred == rev_pred:
+                    matches += 1
+            else:
+                true_log_probs.append(rev_log_probs[true_token])
+            valid += 1
+            point_rows.append(
+                {
+                    "meet_index": int(meet_index),
+                    "forward_position": int(f_pos),
+                    "reverse_position": int(r_pos),
+                    "true_token": int(true_token),
+                    "true_byte": int(true_token - 1),
+                    "forward_argmax": fwd_pred,
+                    "reverse_argmax": rev_pred,
+                    "argmax_match": bool(fwd_pred == rev_pred) if fwd_pred is not None else False,
+                    "agreement": agreement_value,
+                }
+            )
+        candidate_count, verified_count = _ngram_verification_counts(
+            ids[:n],
+            fwd_argmax_by_index,
+            rev_argmax_by_index,
+            ngram_size=config.ngram_size,
+            verification_window=config.verification_window,
+        )
+        candidate_counts.append(candidate_count)
+        verified_counts.append(verified_count)
         rows.append(
             {
                 "record_id": record.record_id,
-                "meet_index": int(meet_index),
-                "forward_position": int(f_pos),
-                "reverse_position": int(r_pos),
-                "true_token": int(true_token),
-                "true_byte": int(true_token - 1),
-                "forward_argmax": fwd_pred,
-                "reverse_argmax": rev_pred,
-                "argmax_match": bool(fwd_pred == rev_pred) if fwd_pred is not None else False,
-                "context_mode": "graph_random_order" if (record.metadata or {}).get("decoding_order_kind") == "random_autoregressive" else str((record.metadata or {}).get("decoding_order_kind", "")),
+                "context_mode": str((record.metadata or {}).get("decoding_order_kind", "")),
+                "reverse_context_mode": str((record.metadata or {}).get("decoding_reverse_order_kind", "")),
+                "graph_autoregressive": bool(graph_autoregressive),
+                "selected_meet_points": len(point_rows),
+                "candidate_meet_count": int(candidate_count),
+                "verified_meet_count": int(verified_count),
+                "ngram_size": int(config.ngram_size),
+                "verification_window": int(config.verification_window),
+                "meet_points": point_rows,
             }
         )
     if losses:
@@ -218,8 +268,68 @@ def _agreement_terms(
         "agreement_loss": agreement_loss,
         "match_rate": float(matches / max(valid, 1)),
         "true_logprob_mean": true_logprob_mean,
+        "selected_meet_points_mean": float(sum(selected_counts) / max(len(selected_counts), 1)),
+        "candidate_meet_count_mean": float(sum(candidate_counts) / max(len(candidate_counts), 1)),
+        "verified_meet_count_mean": float(sum(verified_counts) / max(len(verified_counts), 1)),
+        "ngram_candidate_rate": float(sum(candidate_counts) / max(sum(selected_counts), 1)),
+        "truth_verification_rate": float(sum(verified_counts) / max(sum(selected_counts), 1)),
         "records": rows,
     }
+
+
+def _selected_meet_indices(n: int, split_ratio: float, max_meet_points: int) -> list[int]:
+    candidates = list(range(1, max(n - 1, 1)))
+    if not candidates:
+        return []
+    center = min(max(int(round((n - 1) * float(split_ratio))), 1), n - 2)
+    if max_meet_points <= 0 or max_meet_points >= len(candidates):
+        selected = candidates
+    else:
+        if max_meet_points == 1:
+            selected = [center]
+        else:
+            grid = torch.linspace(0, len(candidates) - 1, steps=max_meet_points).round().to(torch.long).tolist()
+            selected = [candidates[int(idx)] for idx in grid]
+            selected.append(center)
+    return sorted(set(int(idx) for idx in selected if 1 <= int(idx) <= n - 2))
+
+
+def _distribution_agreement(left_log_probs: torch.Tensor, right_log_probs: torch.Tensor, kind: str) -> torch.Tensor:
+    normalized = str(kind).lower().replace("-", "_")
+    if normalized in {"tv", "total_variation", "total_variation_distance"}:
+        return 0.5 * (left_log_probs.exp() - right_log_probs.exp()).abs().sum()
+    if normalized in {"symmetric_kl", "skl", "kl"}:
+        return _symmetric_kl(left_log_probs, right_log_probs)
+    raise ValueError(f"Unsupported meet-in-the-middle agreement_kind={kind!r}")
+
+
+def _ngram_verification_counts(
+    ids: list[int],
+    forward_argmax: dict[int, int],
+    reverse_argmax: dict[int, int],
+    ngram_size: int,
+    verification_window: int,
+) -> tuple[int, int]:
+    if not ids:
+        return 0, 0
+    ngram_size = max(int(ngram_size), 1)
+    verification_window = max(int(verification_window), ngram_size)
+    candidate_count = 0
+    verified_count = 0
+    max_start = max(len(ids) - ngram_size, 0)
+    for start in range(1, max_start + 1):
+        ngram_positions = list(range(start, start + ngram_size))
+        if not all(pos in forward_argmax and pos in reverse_argmax for pos in ngram_positions):
+            continue
+        if all(forward_argmax[pos] == reverse_argmax[pos] for pos in ngram_positions):
+            candidate_count += 1
+            verify_positions = list(range(start, min(start + verification_window, len(ids) - 1)))
+            if verify_positions and all(
+                forward_argmax.get(pos) == reverse_argmax.get(pos) == int(ids[pos])
+                for pos in verify_positions
+            ):
+                verified_count += 1
+    return candidate_count, verified_count
 
 
 def _symmetric_kl(left_log_probs: torch.Tensor, right_log_probs: torch.Tensor) -> torch.Tensor:

@@ -24,6 +24,7 @@ class AnalogicalMemoryRecord:
     trajectory_edges: list[dict[str, Any]]
     trajectory_paths: list[list[str]]
     filtered_simplicial_object: dict[str, Any]
+    probability_filtered_simplicial_object: dict[str, Any]
     topological_algebra: dict[str, Any]
     derived_signature: dict[str, Any]
     metadata: dict[str, Any]
@@ -80,7 +81,9 @@ class AnalogicalMemoryBank:
         for line in self.path.read_text(encoding="utf-8").splitlines():
             if not line.strip():
                 continue
-            loaded.append(AnalogicalMemoryRecord(**json.loads(line)))
+            row = json.loads(line)
+            row.setdefault("probability_filtered_simplicial_object", {})
+            loaded.append(AnalogicalMemoryRecord(**row))
         self.records = loaded[-self.max_records :]
 
     def retrieve(
@@ -92,23 +95,31 @@ class AnalogicalMemoryBank:
         signature_weight: float = 0.35,
         score_weight: float = 0.10,
         diversity_weight: float = 0.18,
+        exclude_record_ids: set[str] | None = None,
+        exclude_memory_ids: set[str] | None = None,
     ) -> list[dict[str, Any]]:
         if not self.records:
             return []
+        exclude_record_ids = {str(value) for value in (exclude_record_ids or set())}
+        exclude_memory_ids = {str(value) for value in (exclude_memory_ids or set())}
         query_embedding = _normalize(np.asarray(embedding, dtype=float))
         query_signature = _normalize(np.asarray(signature_vector, dtype=float))
         rows = []
         for record in self.records:
+            if record.record_id in exclude_record_ids or record.memory_id in exclude_memory_ids:
+                continue
             emb_sim = _cosine(query_embedding, _normalize(np.asarray(record.embedding, dtype=float)))
             sig_sim = _cosine(query_signature, _normalize(np.asarray(record.signature_vector, dtype=float)))
             quality = float(record.score) - 0.05 * float(record.nll)
             retrieval_score = embedding_weight * emb_sim + signature_weight * sig_sim + score_weight * quality
             family = _record_family(record.record_id)
             signature_hash = _signature_hash(record.signature_vector)
+            trajectory_source = str(record.metadata.get("source", record.record_id)) if isinstance(record.metadata, dict) else record.record_id
             rows.append(
                 {
                     "memory_id": record.memory_id,
                     "record_id": record.record_id,
+                    "trajectory_source": trajectory_source,
                     "record_family": family,
                     "signature_hash": signature_hash,
                     "retrieval_score": float(retrieval_score),
@@ -123,12 +134,15 @@ class AnalogicalMemoryBank:
                     "trajectory_embeddings": record.trajectory_embeddings,
                     "filtered_summary": record.filtered_simplicial_object.get("summary", {}),
                     "filtered_simplicial_object": record.filtered_simplicial_object,
+                    "probability_filtered_simplicial_object": record.probability_filtered_simplicial_object,
+                    "probability_filtered_summary": record.probability_filtered_simplicial_object.get("summary", {}),
                     "topological_algebra": record.topological_algebra,
                     "signature_vector": record.signature_vector,
                     "derived_signature": record.derived_signature,
                     "metadata": record.metadata,
                 }
             )
+        rows = _best_per_trajectory_source(rows)
         return _diverse_top_k(rows, top_k=max(int(top_k), 0), diversity_weight=float(diversity_weight))
 
 
@@ -155,13 +169,16 @@ def memory_records_from_scaling_report(
     ]
     trajectory_paths = [list(row.get("path", [])) for row in candidates]
     trajectory_complex = scaling_report.get("trajectory_filtered_simplicial_object", {})
+    trajectory_probability_complex = scaling_report.get("trajectory_probability_filtered_simplicial_object", {})
     trajectory_algebra = scaling_report.get("trajectory_topological_algebra", {})
+    trajectory_probability_algebra = scaling_report.get("trajectory_probability_topological_algebra", {})
     for row in sorted(candidates, key=lambda item: float(item.get("score", 0.0)), reverse=True)[:max_records]:
         score = float(row.get("score", 0.0))
         if min_score is not None and score < min_score:
             continue
         topology = row.get("topological_algebra") or trajectory_algebra or {}
         row_complex = row.get("filtered_simplicial_object", {})
+        row_probability_complex = row.get("probability_filtered_simplicial_object", {})
         embedding = [float(v) for v in row.get("embedding", [])]
         signature = signature_vector(topology)
         memory_id = _memory_id(row.get("record_id", ""), embedding, signature)
@@ -177,6 +194,7 @@ def memory_records_from_scaling_report(
                 trajectory_edges=trajectory_edges,
                 trajectory_paths=trajectory_paths,
                 filtered_simplicial_object=row_complex or trajectory_complex,
+                probability_filtered_simplicial_object=row_probability_complex or trajectory_probability_complex,
                 topological_algebra=topology or trajectory_algebra,
                 derived_signature=(topology or trajectory_algebra).get("derived_equivalence_signature", {}),
                 metadata={
@@ -185,7 +203,10 @@ def memory_records_from_scaling_report(
                     "path": row.get("path", []),
                     "graphcg_projection": row.get("graphcg_projection"),
                     "trajectory_filtered_simplicial_object": trajectory_complex,
+                    "trajectory_probability_filtered_simplicial_object": trajectory_probability_complex,
+                    "trajectory_probability_topological_algebra": trajectory_probability_algebra,
                     "trajectory_summary": trajectory_complex.get("summary", {}) if isinstance(trajectory_complex, dict) else {},
+                    "trajectory_probability_summary": trajectory_probability_complex.get("summary", {}) if isinstance(trajectory_probability_complex, dict) else {},
                 },
             )
         )
@@ -265,6 +286,24 @@ def _diverse_top_k(rows: list[dict[str, Any]], top_k: int, diversity_weight: flo
         selected_families.add(str(row.get("record_family", "")))
         selected_signatures.add(str(row.get("signature_hash", "")))
     return selected
+
+
+def _best_per_trajectory_source(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Collapse candidate-level memories that carry the same trajectory complex.
+
+    Analogical maps are trajectory-complex maps. Storing one memory record per
+    candidate is useful for retrieval scores, but rendering top-k maps from the
+    same trajectory produces duplicate complexes. Keep the best-scoring record
+    per trajectory source before the top-k/diversity pass.
+    """
+
+    best: dict[str, dict[str, Any]] = {}
+    for row in rows:
+        key = str(row.get("trajectory_source") or row.get("record_id") or row.get("memory_id"))
+        current = best.get(key)
+        if current is None or float(row.get("retrieval_score", 0.0)) > float(current.get("retrieval_score", 0.0)):
+            best[key] = row
+    return list(best.values())
 
 
 def _record_family(record_id: object) -> str:

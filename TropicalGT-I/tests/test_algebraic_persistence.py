@@ -42,9 +42,9 @@ def test_ripser_backend_is_selected_when_requested():
 
 def test_reasoning_trajectory_complex_grows_by_level():
     candidates = [
-        {"record_id": "root", "level": 0, "score": 0.0, "nll": 1.0, "path": [], "parent": None},
-        {"record_id": "a", "level": 1, "score": 0.1, "nll": 0.9, "path": ["expand"], "parent": "root"},
-        {"record_id": "b", "level": 2, "score": 0.2, "nll": 0.8, "path": ["expand", "verify"], "parent": "a"},
+        {"record_id": "root", "level": 0, "score": 0.0, "nll": 1.0, "path": [], "parent": None, "embedding": [0.0, 0.0, 0.0]},
+        {"record_id": "a", "level": 1, "score": 0.1, "nll": 0.9, "path": ["expand"], "parent": "root", "embedding": [1.0, 0.0, 0.0]},
+        {"record_id": "b", "level": 2, "score": 0.2, "nll": 0.8, "path": ["expand", "verify"], "parent": "a", "embedding": [0.0, 1.0, 0.0]},
     ]
     level_one = build_reasoning_trajectory_complex(candidates, up_to_level=1)
     full = build_reasoning_trajectory_complex(candidates)

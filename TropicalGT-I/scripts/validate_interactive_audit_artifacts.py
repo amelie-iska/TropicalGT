@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import html
 import json
 import math
 import re
@@ -16,6 +17,9 @@ REQUIRED_HTML = {
     "embedding_map": ("got_embedding_map_3d.html", ("Graph-of-thought embedding-space trajectory map", "actual graph_state PCA")),
     "trajectory_nll": ("got_trajectory_pca_3d.html", ("Graph-of-thought branching trajectory", "centered NLL")),
     "full_complex": ("got_full_trajectory_complex.html", ("Full graph-of-thought trajectory filtered simplicial complex", "play filtration", "filtration backend=")),
+    "full_simplex_tree": ("got_full_trajectory_simplex_tree_3d.html", ("Full graph-of-thought trajectory GUDHI simplex tree", "simplex-tree inclusion")),
+    "probability_complex": ("got_full_trajectory_complex_jensen_shannon.html", ("probability filtered simplicial complex", "Jensen-Shannon")),
+    "probability_simplex_tree": ("got_full_trajectory_simplex_tree_3d_jensen_shannon.html", ("probability", "SimplexTree", "Jensen-Shannon")),
     "step_complex_index": ("reasoning_step_complex_maps/index.html", ("Reasoning step filtered simplicial complex maps",)),
     "tropical_support": ("tropical_support_heatmap.html", ("Tropical", "support")),
     "graphcg": ("graphcg_direction_cosines.html", ("GraphCG", "full-rank direction audit")),
@@ -99,6 +103,76 @@ def _html_has_plotly(html: str) -> bool:
     return "Plotly.newPlot" in html or "plotly" in html.lower()
 
 
+def _ignored_ref(ref: str) -> bool:
+    ref = html.unescape(str(ref)).strip()
+    return not ref or ref.startswith(("#", "http://", "https://", "file://", "data:", "mailto:", "javascript:"))
+
+
+def _relative_target(row_dir: Path, ref: str) -> Path | None:
+    ref = html.unescape(str(ref)).strip()
+    if _ignored_ref(ref):
+        return None
+    clean = ref.split("#", 1)[0].split("?", 1)[0]
+    if not clean:
+        return None
+    return (row_dir / clean).resolve()
+
+
+def _attr_values(markup: str, attr: str) -> list[str]:
+    pattern = rf"""\b{re.escape(attr)}\s*=\s*([\"'])(.*?)\1"""
+    return [html.unescape(value) for _, value in re.findall(pattern, markup, flags=re.IGNORECASE | re.DOTALL)]
+
+
+def _tag_attrs(tag: str) -> dict[str, str]:
+    return {
+        name.lower(): html.unescape(value)
+        for name, _, value in re.findall(r"""([:\w-]+)\s*=\s*([\"'])(.*?)\2""", tag, flags=re.IGNORECASE | re.DOTALL)
+    }
+
+
+def _tags(markup: str, name: str) -> list[str]:
+    return re.findall(rf"""<{re.escape(name)}\b[^>]*>""", markup, flags=re.IGNORECASE | re.DOTALL)
+
+
+def _has_class(attrs: dict[str, str], class_name: str) -> bool:
+    return class_name in str(attrs.get("class", "")).split()
+
+
+def _artifact_button_refs(row_dir: Path, markup: str, file_name: str, errors: list[str]) -> list[tuple[str, str]]:
+    refs: list[tuple[str, str]] = []
+    broken: list[str] = []
+    for tag in _tags(markup, "button"):
+        attrs = _tag_attrs(tag)
+        if not _has_class(attrs, "artifact"):
+            continue
+        sample = str(attrs.get("data-sample", "")).strip()
+        src = str(attrs.get("data-src", "")).strip()
+        _assert(sample != "", errors, f"{file_name} artifact button missing data-sample")
+        _assert(bool(src), errors, f"{file_name} artifact button missing data-src")
+        target = _relative_target(row_dir, src) if src else None
+        if target is not None and not target.exists():
+            broken.append(src)
+        if sample != "" and src:
+            refs.append((sample, src))
+    _assert(not broken, errors, f"{file_name} has broken artifact button targets: {broken[:8]}")
+    return refs
+
+
+def _sample_payloads(markup: str, file_name: str, errors: list[str]) -> list[dict[str, Any]]:
+    values = _attr_values(markup, "data-samples")
+    if not values:
+        return []
+    try:
+        payload = json.loads(values[0])
+    except json.JSONDecodeError as exc:
+        errors.append(f"{file_name} has invalid data-samples payload: {exc}")
+        return []
+    if not isinstance(payload, list):
+        errors.append(f"{file_name} data-samples payload is not a list")
+        return []
+    return [row for row in payload if isinstance(row, dict)]
+
+
 def _validate_file_set(row_dir: Path, errors: list[str]) -> dict[str, str]:
     files: dict[str, str] = {}
     for key, rel in REQUIRED_JSON.items():
@@ -107,6 +181,18 @@ def _validate_file_set(row_dir: Path, errors: list[str]) -> dict[str, str]:
         files[key] = str(path)
     for key, (rel, needles) in REQUIRED_HTML.items():
         path = row_dir / rel
+        if key == "analogical_map" and not path.exists() and (row_dir / "analogical_memory_retrieval.html").exists():
+            path = row_dir / "analogical_memory_retrieval.html"
+        if key in {"analogical_index", "analogical_map"} and not path.exists():
+            maps_path = row_dir / "analogical_simplicial_maps.json"
+            if maps_path.exists():
+                try:
+                    map_payload = _read_json(maps_path)
+                except ArtifactValidationError:
+                    map_payload = {}
+                if map_payload.get("available") is False and map_payload.get("reason") in {"missing_model_probability_query_complex", "no_non_self_model_memory"}:
+                    files[key] = str(path)
+                    continue
         _assert(path.exists(), errors, f"missing html {rel}")
         files[key] = str(path)
         if path.exists():
@@ -141,16 +227,17 @@ def _validate_html_index(row_dir: Path, file_name: str, errors: list[str]) -> di
     if not index.exists():
         return {"available": False}
     html = _read_text(index)
-    refs = re.findall(r"""(?:href|src)=["']([^"']+)["']""", html)
+    refs = _attr_values(html, "href") + _attr_values(html, "src")
     broken = []
     for ref in refs:
-        if ref.startswith(("#", "http://", "https://", "file://", "data:")):
+        target = _relative_target(row_dir, ref)
+        if target is None:
             continue
-        target = (row_dir / ref).resolve()
         if not target.exists():
             broken.append(ref)
     _assert(not broken, errors, f"{file_name} has broken relative refs: {broken[:8]}")
-    return {"available": True, "relative_refs": len([r for r in refs if not r.startswith(("#", "http://", "https://", "file://", "data:"))]), "broken_refs": broken}
+    return {"available": True, "relative_refs": len([r for r in refs if not _ignored_ref(r)]), "broken_refs": broken}
+
 
 
 def _validate_browser_index(row_dir: Path, errors: list[str]) -> dict[str, Any]:
@@ -160,11 +247,31 @@ def _validate_browser_index(row_dir: Path, errors: list[str]) -> dict[str, Any]:
 def _validate_codex_browser_index(row_dir: Path, errors: list[str]) -> dict[str, Any]:
     result = _validate_html_index(row_dir, "codex_browser_index.html", errors)
     if result.get("available"):
-        html = _read_text(row_dir / "codex_browser_index.html")
-        _assert("Sample-first audit" in html, errors, "codex_browser_index.html is not sample-first")
-        _assert("section class=\"sample\"" in html, errors, "codex_browser_index.html has no sample cards")
-        _assert("button class=\"artifact\"" in html, errors, "codex_browser_index.html has no per-sample artifact buttons")
+        markup = _read_text(row_dir / "codex_browser_index.html")
+        _assert("Sample-first audit" in markup, errors, "codex_browser_index.html is not sample-first")
+        sample_sections = [_tag_attrs(tag) for tag in _tags(markup, "section") if _has_class(_tag_attrs(tag), "sample")]
+        _assert(bool(sample_sections), errors, "codex_browser_index.html has no sample cards")
+        button_refs = _artifact_button_refs(row_dir, markup, "codex_browser_index.html", errors)
+        _assert(bool(button_refs), errors, "codex_browser_index.html has no per-sample artifact buttons")
+        samples = _sample_payloads(markup, "codex_browser_index.html", errors)
+        if samples:
+            sample_ids = {str(attrs.get("data-sample", "")).strip() for attrs in sample_sections}
+            open_links = [_tag_attrs(tag).get("href", "") for tag in _tags(markup, "a") if _has_class(_tag_attrs(tag), "open-sample")]
+            _assert(len(sample_sections) >= len(samples), errors, "codex_browser_index.html does not render one sample card per data-samples row")
+            _assert(len(open_links) >= len(samples), errors, "codex_browser_index.html does not expose one open-sample link per data-samples row")
+            button_set = set(button_refs)
+            for sample in samples:
+                sample_index = str(sample.get("index", "")).strip()
+                _assert(sample_index in sample_ids, errors, f"codex_browser_index.html missing sample card for data-samples row {sample_index}")
+                artifacts = [row for row in sample.get("artifacts", []) if isinstance(row, dict)]
+                _assert(bool(artifacts), errors, f"codex_browser_index.html data-samples row {sample_index} has no artifact entries")
+                for artifact in artifacts:
+                    src = str(artifact.get("src", "")).strip()
+                    _assert(bool(src), errors, f"codex_browser_index.html data-samples row {sample_index} has artifact without src")
+                    if src:
+                        _assert((sample_index, src) in button_set, errors, f"codex_browser_index.html missing artifact button for sample {sample_index} src {src}")
     return result
+
 
 
 def validate_row(row_dir: Path, *, min_candidates: int = 8, min_depth: int = 2, nll_residual_tol: float = 1e-6) -> dict[str, Any]:
@@ -257,38 +364,22 @@ def validate_row(row_dir: Path, *, min_candidates: int = 8, min_depth: int = 2, 
         errors,
         "NLL surface is neither a sample-supported local field nor an exact point-anchored mesh",
     )
-    if surface_kind == "exact_delaunay_nll_mesh":
-        footprint = surface.get("support_footprint_layer", {})
-        surrogate = surface.get("surrogate_landscape_layer", {})
-        has_footprint = isinstance(footprint, dict) and footprint.get("available") is True
-        has_surrogate = isinstance(surrogate, dict) and surrogate.get("available") is True
-        _assert(has_footprint or has_surrogate, errors, "Exact NLL mesh is missing an audited support/landscape layer")
-        if has_footprint:
-            _assert(
-                footprint.get("surface_kind") == "projected_local_support_footprint",
-                errors,
-                "Exact NLL mesh footprint is not the projected local support layer",
-            )
-        if has_surrogate:
-            _assert(
-                surrogate.get("surface_kind") == "smooth_projected_nll_fitness_landscape",
-                errors,
-                "NLL surrogate layer is not labeled as the smooth projected NLL/fitness landscape",
-            )
-            _assert(surrogate.get("touches_points") is True, errors, "NLL surrogate layer is not point-anchored")
-            _assert(
-                _finite_float(surrogate.get("max_point_residual"), 999.0) <= nll_residual_tol,
-                errors,
-                "NLL surrogate anchor residual exceeds tolerance",
-            )
-            _assert(
-                _finite_float(surrogate.get("anchor_grid_exact_residual"), 999.0) <= nll_residual_tol,
-                errors,
-                "NLL surrogate rendered grid is not exactly anchored at observed points",
-            )
-            _assert(surrogate.get("landscape_domain_covers_all_points") is True, errors, "NLL surrogate landscape does not cover all trajectory points")
-            _assert("provenance" in surrogate, errors, "NLL surrogate layer is missing provenance")
-    _assert(_finite_float(surface.get("support_radius"), -1.0) > 0.0, errors, "NLL surface payload is missing a positive support_radius")
+    local_sheet = surface.get("local_interpolating_sheet", {})
+    surrogate = surface.get("surrogate_landscape_layer", {})
+    if isinstance(local_sheet, dict) and local_sheet.get("available") is True:
+        _assert(
+            local_sheet.get("surface_kind") == "local_interpolating_nll_sheet",
+            errors,
+            "local NLL sheet is not labeled as a local interpolating NLL sheet",
+        )
+        _assert("provenance" in local_sheet, errors, "local NLL sheet is missing provenance")
+        _assert(_finite_float(local_sheet.get("max_point_residual"), 999.0) <= nll_residual_tol, errors, "local NLL sheet residual exceeds tolerance")
+        _assert(_finite_float(local_sheet.get("support_radius"), -1.0) > 0.0, errors, "local NLL sheet is missing support_radius")
+    if isinstance(surrogate, dict):
+        _assert(surrogate.get("available") is not True, errors, "retired global NLL surrogate layer is enabled")
+    support_radius = surface.get("support_radius")
+    if support_radius is not None:
+        _assert(_finite_float(support_radius, -1.0) > 0.0, errors, "NLL surface payload has non-positive support_radius")
 
     nll_progress = payload.get("nll_progress", {})
     _assert(isinstance(nll_progress, dict), errors, "trajectory payload is missing NLL progress diagnostics")
@@ -330,6 +421,16 @@ def validate_row(row_dir: Path, *, min_candidates: int = 8, min_depth: int = 2, 
     simplex_tree = full_obj.get("simplex_tree", {}) if isinstance(full_obj, dict) and isinstance(full_obj.get("simplex_tree"), dict) else {}
     full_vertices = [row for row in full_obj.get("simplices", []) if isinstance(row, dict) and int(row.get("dimension", -1)) == 0] if isinstance(full_obj, dict) else []
     _assert(simplex_tree.get("backend") == "gudhi.SimplexTree", errors, "full trajectory complex payload is missing GUDHI SimplexTree provenance")
+    prob_obj = full_complex_payload.get("probability_filtered_simplicial_object", {}) if isinstance(full_complex_payload, dict) else {}
+    if isinstance(prob_obj, dict):
+        if prob_obj.get("available") is False:
+            _assert(prob_obj.get("reason") in {"missing_model_probability_vectors", "unavailable_no_embedding_or_probability_radius_edges"}, errors, "probability complex unavailable for an unrecognized reason")
+        else:
+            prob_summary = prob_obj.get("summary", {}) if isinstance(prob_obj.get("summary"), dict) else {}
+            _assert(prob_summary.get("filtration_model") == "model_candidate_probability_jensen_shannon_vietoris_rips_2_skeleton", errors, "probability complex is not a model-probability Jensen-Shannon filtration")
+            _assert(int(prob_summary.get("num_edges", 0) or 0) > 0, errors, "probability complex has no Jensen-Shannon radius edges")
+            prob_tree = prob_obj.get("simplex_tree", {}) if isinstance(prob_obj.get("simplex_tree"), dict) else {}
+            _assert(prob_tree.get("backend") == "gudhi.SimplexTree", errors, "probability complex is missing GUDHI SimplexTree provenance")
     _assert(int(summary.get("num_vertices", 0) or 0) >= len(candidates), errors, "full trajectory complex has fewer vertices than candidates")
     _assert(int(summary.get("num_edges", 0) or 0) >= len(edges), errors, "full trajectory complex has fewer edges than trajectory")
     _assert(sum(1 for row in full_vertices if row.get("embedding")) == len(full_vertices), errors, "full trajectory complex vertices do not all carry embeddings")
@@ -337,19 +438,51 @@ def validate_row(row_dir: Path, *, min_candidates: int = 8, min_depth: int = 2, 
 
     maps_path = row_dir / "analogical_simplicial_maps.json"
     if maps_path.exists():
-        maps = _read_json(maps_path).get("maps", [])
-        _assert(bool(maps), errors, "analogical_simplicial_maps.json contains no maps")
-        _assert(all(row.get("codomain_complex_source") == "trajectory_filtered_simplicial_object" for row in maps if isinstance(row, dict)), errors, "analogical maps are not using trajectory-level memory complexes")
-        _assert(all(isinstance(row.get("domain_simplex_tree"), dict) and row["domain_simplex_tree"].get("backend") == "gudhi.SimplexTree" for row in maps if isinstance(row, dict)), errors, "analogical maps are missing domain GUDHI SimplexTree provenance")
-        _assert(all(isinstance(row.get("codomain_simplex_tree"), dict) and row["codomain_simplex_tree"].get("backend") == "gudhi.SimplexTree" for row in maps if isinstance(row, dict)), errors, "analogical maps are missing codomain GUDHI SimplexTree provenance")
-        _assert(all(_finite_float(row.get("displayed_domain_vertices"), 0.0) > 0 and _finite_float(row.get("displayed_codomain_vertices"), 0.0) > 0 for row in maps if isinstance(row, dict)), errors, "analogical maps are missing displayed vertex counts")
-        _assert(all("is_simplicial_on_displayed_skeleton" in row for row in maps if isinstance(row, dict)), errors, "analogical maps are missing displayed-skeleton simplicial status")
-        _assert(all(isinstance(row.get("preserved_edge_pairs"), list) and isinstance(row.get("failed_edge_pairs"), list) for row in maps if isinstance(row, dict)), errors, "analogical maps are missing preserved/failed edge evidence")
-        _assert(all(isinstance(row.get("preserved_edge_query_vertices"), list) for row in maps if isinstance(row, dict)), errors, "analogical maps are missing preserved-edge vertex sets")
-        edge_rates = {_finite_float(row.get("edge_preservation_rate"), -1.0) for row in maps if isinstance(row, dict)}
-        _assert(len(edge_rates) > 1 or len(maps) <= 1, errors, "analogical map edge-preservation rates are all identical")
-        analogical_html = _read_text(row_dir / REQUIRED_HTML["analogical_map"][0]) if (row_dir / REQUIRED_HTML["analogical_map"][0]).exists() else ""
-        _assert("vertex-only correspondences" in analogical_html and "preserved 1-simplex map" in analogical_html, errors, "analogical map HTML does not distinguish preserved simplices from vertex-only correspondences")
+        map_payload = _read_json(maps_path)
+        maps = map_payload.get("maps", [])
+        if map_payload.get("available") is False:
+            _assert(map_payload.get("reason") in {"missing_model_probability_query_complex", "no_non_self_model_memory"}, errors, "analogical maps are unavailable for an unrecognized reason")
+        else:
+            allowed_sources = {"trajectory_probability_filtered_simplicial_object"}
+            _assert(bool(maps), errors, "analogical_simplicial_maps.json contains no maps")
+            _assert(all(row.get("query_complex_source") in allowed_sources for row in maps if isinstance(row, dict)), errors, "analogical maps are not using query trajectory-level model-probability complexes")
+            _assert(all(row.get("codomain_complex_source") in allowed_sources for row in maps if isinstance(row, dict)), errors, "analogical maps are not using codomain trajectory-level model-probability complexes")
+            _assert(all(not bool(row.get("is_identity_self_map")) for row in maps if isinstance(row, dict)), errors, "analogical maps include identity self-maps")
+            _assert(all(row.get("map_source") == "model_probability_jensen_shannon_assignment" for row in maps if isinstance(row, dict)), errors, "analogical maps are not derived from model probability vectors")
+            _assert(all(isinstance(row.get("jensen_shannon_distance_summary"), dict) and _finite_float(row["jensen_shannon_distance_summary"].get("count"), 0.0) > 0 for row in maps if isinstance(row, dict)), errors, "analogical maps are missing Jensen-Shannon distance summaries")
+            _assert(all(isinstance(row.get("assignment_cost_summary"), dict) and _finite_float(row["assignment_cost_summary"].get("count"), 0.0) > 0 for row in maps if isinstance(row, dict)), errors, "analogical maps are missing assignment-cost summaries")
+            _assert(all(isinstance(row.get("filtration_distortion_summary"), dict) for row in maps if isinstance(row, dict)), errors, "analogical maps are missing filtration-distortion summaries")
+            _assert(all(isinstance(row.get("domain_simplex_tree"), dict) and row["domain_simplex_tree"].get("backend") == "gudhi.SimplexTree" for row in maps if isinstance(row, dict)), errors, "analogical maps are missing domain GUDHI SimplexTree provenance")
+            _assert(all(isinstance(row.get("codomain_simplex_tree"), dict) and row["codomain_simplex_tree"].get("backend") == "gudhi.SimplexTree" for row in maps if isinstance(row, dict)), errors, "analogical maps are missing codomain GUDHI SimplexTree provenance")
+            pair_pages = [str(row.get("pair_page", "")).strip() for row in maps if isinstance(row, dict)]
+            _assert(len(pair_pages) == len(maps) and all(pair_pages), errors, "analogical maps are missing per-rank pair_page links")
+            missing_pair_files = []
+            for pair_page in pair_pages:
+                pair_path = Path(pair_page)
+                candidates_for_page = [pair_path if pair_path.is_absolute() else row_dir / pair_path, row_dir / pair_path.name]
+                if not any(path.exists() for path in candidates_for_page):
+                    missing_pair_files.append(pair_path.name)
+            _assert(not missing_pair_files, errors, f"analogical maps reference missing pair pages: {missing_pair_files[:8]}")
+            analogical_index_path = row_dir / REQUIRED_HTML["analogical_index"][0]
+            if analogical_index_path.exists() and pair_pages:
+                index_html = _read_text(analogical_index_path)
+                link_names = {Path(ref.split("#", 1)[0].split("?", 1)[0]).name for ref in _attr_values(index_html, "href") if not _ignored_ref(ref)}
+                missing_links = sorted({Path(pair_page).name for pair_page in pair_pages} - link_names)
+                _assert(not missing_links, errors, f"analogical_memory_topk_index.html missing map links: {missing_links[:8]}")
+            _assert(all(_finite_float(row.get("displayed_domain_vertices"), 0.0) > 0 and _finite_float(row.get("displayed_codomain_vertices"), 0.0) > 0 for row in maps if isinstance(row, dict)), errors, "analogical maps are missing displayed vertex counts")
+            _assert(all("is_simplicial_on_displayed_skeleton" in row for row in maps if isinstance(row, dict)), errors, "analogical maps are missing displayed-skeleton simplicial status")
+            _assert(all(isinstance(row.get("preserved_edge_pairs"), list) and isinstance(row.get("failed_edge_pairs"), list) for row in maps if isinstance(row, dict)), errors, "analogical maps are missing preserved/failed edge evidence")
+            _assert(all(isinstance(row.get("preserved_edge_query_vertices"), list) for row in maps if isinstance(row, dict)), errors, "analogical maps are missing preserved-edge vertex sets")
+            js_means = {_finite_float(row.get("jensen_shannon_distance_mean"), -1.0) for row in maps if isinstance(row, dict)}
+            assignment_means = {_finite_float(row.get("assignment_cost_mean"), -1.0) for row in maps if isinstance(row, dict)}
+            edge_rates = {_finite_float(row.get("edge_preservation_rate"), -1.0) for row in maps if isinstance(row, dict)}
+            _assert(len(edge_rates) > 1 or len(js_means) > 1 or len(assignment_means) > 1 or len(maps) <= 1, errors, "analogical maps have identical preservation and probability-assignment diagnostics")
+            analogical_path = row_dir / REQUIRED_HTML["analogical_map"][0]
+            if not analogical_path.exists() and (row_dir / "analogical_memory_retrieval.html").exists():
+                analogical_path = row_dir / "analogical_memory_retrieval.html"
+            analogical_html = _read_text(analogical_path) if analogical_path.exists() else ""
+            preserved_marker = "preserved 1-simplex map" in analogical_html or "preserve displayed 1-simplices" in analogical_html
+            _assert("vertex-only correspondences" in analogical_html and preserved_marker, errors, "analogical map HTML does not distinguish preserved simplices from vertex-only correspondences")
 
     steps = [row for row in manifest.get("steps", []) if isinstance(row, dict)]
     _assert(len(steps) == len(candidates), errors, "reasoning-step complex map count does not match candidates")
@@ -361,6 +494,11 @@ def validate_row(row_dir: Path, *, min_candidates: int = 8, min_depth: int = 2, 
         if step_file.exists():
             step_html = _read_text(step_file)
             _assert("Filtration radius" in step_html and "play filtration" in step_html, errors, f"{step_file.name} missing filtration controls")
+        tree_file = row_dir / "reasoning_step_complex_maps" / str(step.get("simplex_tree_file", ""))
+        _assert(tree_file.exists(), errors, f"missing reasoning step simplex tree page {tree_file.name}")
+        if tree_file.exists():
+            tree_html = _read_text(tree_file)
+            _assert("simplex-tree inclusion" in tree_html or "GUDHI simplex tree" in tree_html, errors, f"{tree_file.name} missing simplex-tree inclusion view")
 
     browser_index = _validate_browser_index(row_dir, errors)
     codex_browser_index = _validate_codex_browser_index(row_dir, errors)

@@ -68,7 +68,7 @@ This is not a plotting artifact: the PCA metadata and high distance correlation 
 Implemented after the follow-up browser audit:
 
 - Replaced the flat-looking raw NLL sheet with a two-layer audited NLL/fitness view:
-  - `Smooth projected NLL/fitness landscape`: a dark-mode surrogate over actual model `graph_state` PCA coordinates, using inverse-distance centered NLL plus a local embedding-support energy that is zero at observed states.
+  - Retired in the 2026-06-12 repair pass: the broad smooth projected NLL/fitness surrogate is no longer rendered by default; the current view keeps exact sampled anchors and local interpolation only.
   - `Exact GoT NLL anchor mesh`: exact Delaunay/triangular mesh through the sampled reasoning states with zero residual at anchors.
 - Added `nll_progress` payload diagnostics:
   - per-edge raw NLL deltas,
@@ -122,8 +122,8 @@ Immediate modeling recommendation:
 
 Implemented after the follow-up critique that actual landscapes were missing and the NLL energy surface appeared not to contain all trajectory vertices.
 
-- The 3D GoT NLL page now has three distinct layers:
-  - `Smooth projected NLL/fitness landscape`: a broad visual energy/fitness surrogate over sampled model states plus rendered reasoning microsteps.
+- The 3D GoT NLL page now has audited NLL layers:
+  - Retired in the 2026-06-12 repair pass: the smooth_projected_nll_fitness_landscape entry is recorded as unavailable instead of rendered as a default plot.
   - `Local interpolating NLL sheet`: a sample-supported inverse-distance interpolant through model-state anchors and rendered microstep anchors. Metadata records `max_point_residual`, duplicate-coordinate collapse diagnostics, support radius, and masked fraction.
   - `Actual sampled GoT NLL landscape (exact mesh)`: exact mesh through sampled model GoT states only.
 - The key distinction is now explicit: the exact mesh is scoped to sampled model states, while the local sheet and broad landscape also include rendered microstep vertices so those vertices are not visually floating outside the NLL field.
@@ -296,3 +296,28 @@ Browser check:
 - Codex browser loaded `http://127.0.0.1:8765/codex_browser_index.html`.
 - The page reported `3` sample cards and `39` per-sample artifact buttons.
 - Clicking `Sample 01 / GoT NLL landscape` correctly loaded `example_01/got_trajectory_pca_3d.html` and marked `Sample 01` active.
+
+## 2026-06-12 Repair Pass: Real Filtrations and Browser Validation
+
+- Removed the default smooth projected NLL/fitness surrogate from the GoT NLL
+  landscape. The page now renders sampled model-evaluated GoT NLL anchors and a
+  local interpolating sheet only when those model outputs exist; missing NLLs
+  are emitted as explicit unavailable diagnostics.
+- Split trajectory topology into Euclidean radius and Jensen-Shannon
+  probability complexes, each with a GUDHI simplex-tree inclusion-poset page.
+- Added per-reasoning-step simplex-tree pages next to every reasoning-step
+  filtered complex map.
+- Tightened analogical memory retrieval into model-probability
+  Jensen-Shannon vertex assignments, with filtration distortion,
+  edge/2-simplex preservation, GUDHI provenance, and per-rank `pair_page`
+  links. Vertex-only correspondences are intentionally de-emphasized.
+- Extended the sample-first browser validator to check per-sample artifact
+  buttons, `data-samples` coverage, broken relative targets, analogical map
+  links, and legitimate unavailable states instead of accepting fabricated
+  plots.
+
+## 2026-06-12 Browser Review Note
+
+Served `TropicalGT-I/outputs/train/periodic/step_00008250/got_audit` through a local tunnel at `http://127.0.0.1:8977/codex_browser_index.html`. Browser inspection confirmed the sample-first index, NLL page, embedding map, full radius complex, full radius simplex tree, Jensen-Shannon probability complex, probability simplex tree, reasoning-step simplex tree, trajectory persistence landscapes, GraphCG full-rank direction audit, and tropical support page all load as interactive Plotly pages with the expected controls/markers. The saved step-8250 analogical page was generated before the probability-map repair and remains an older artifact; the repaired `write_analogical_memory_visualization` path is covered by tests and will be used by the restarted training process for subsequent periodic audit bundles.
+
+Training was restarted from `TropicalGT-I/checkpoints/tropicalgt_i_train.latest.pt` after browser artifact replay pressure; current live PID at this note is `734828`, with log pointer `TropicalGT-I/outputs/train/logs/train_resume_latest_20260612_031834.log`.

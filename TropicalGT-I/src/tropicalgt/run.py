@@ -16,12 +16,12 @@ from tqdm.auto import tqdm
 from .algebra import compute_topological_algebra_report, summarize_algebra_reports
 from .data import ChunkShuffleSampler, ParquetGraphDataset, dataset_manifest, encode_record_bytes, make_dataset_from_config
 from .decoding import meet_in_middle_batch, meet_in_middle_config
-from .diagnostics import record_diagnostics
+from .diagnostics import describe_graph_tokens, record_diagnostics
 from .memory import AnalogicalMemoryBank, memory_records_from_scaling_report, query_signature_from_report
 from .metrics import aggregate_bpb_metrics, batch_bpb_metrics, explicit_graph_json_bytes, graph_token_structural_bytes
 from .model import TropicalGTConfig, TropicalGTModel
 from .scaling import run_inference_scaling
-from .simplicial import build_filtered_simplicial_object
+from .simplicial import build_embedding_radius_simplicial_object
 from .tokenizer import TokenGTTokenizer
 from .visualization import write_graphcg_training_visualizations, write_inference_audit_artifacts, write_metric_visualizations, write_reasoning_visualizations
 
@@ -518,15 +518,46 @@ def train(config_path: str | Path, resume_from: str | Path | None = None, max_st
                 float(graph_batch.node_counts.float().sum() / graph_batch.edge_counts.float().sum().clamp_min(1.0))
             )
             if audit_level.lower() != "none" and audit_interval > 0 and step % audit_interval == 0:
-                algebra_reports = [
-                    compute_topological_algebra_report(
-                        build_filtered_simplicial_object(record),
-                        audit_level=audit_level,
-                        ph_backend=ph_backend,
-                        max_simplices=audit_max_simplices,
+                graph_batch_cpu = graph_batch.to("cpu")
+                graph_token_embeddings = out.get("graph_token_embeddings")
+                graph_token_support_probabilities = out.get("graph_token_support_probabilities")
+                embeddings_cpu = graph_token_embeddings.detach().cpu() if torch.is_tensor(graph_token_embeddings) else None
+                probabilities_cpu = (
+                    graph_token_support_probabilities.detach().cpu()
+                    if torch.is_tensor(graph_token_support_probabilities)
+                    else None
+                )
+                algebra_reports = []
+                for record_idx, record in enumerate(_records[:audit_limit]):
+                    graph_token_count = int(graph_batch_cpu.graph_token_counts[record_idx].item())
+                    descriptors = describe_graph_tokens(record, tokenizer)[:graph_token_count]
+                    embeddings = (
+                        embeddings_cpu[record_idx, :graph_token_count]
+                        if embeddings_cpu is not None and embeddings_cpu.ndim >= 3
+                        else []
                     )
-                    for record in _records[:audit_limit]
-                ]
+                    probabilities = (
+                        probabilities_cpu[record_idx, :graph_token_count, :graph_token_count]
+                        if probabilities_cpu is not None and probabilities_cpu.ndim >= 3
+                        else None
+                    )
+                    filtered_object = build_embedding_radius_simplicial_object(
+                        record,
+                        descriptors,
+                        embeddings,
+                        token_probabilities=probabilities,
+                        metric="jensen_shannon",
+                    )
+                    if filtered_object.get("available") is False:
+                        continue
+                    algebra_reports.append(
+                        compute_topological_algebra_report(
+                            filtered_object,
+                            audit_level=audit_level,
+                            ph_backend=ph_backend,
+                            max_simplices=audit_max_simplices,
+                        )
+                    )
                 metrics_last.update(summarize_algebra_reports(algebra_reports))
             if torch.cuda.is_available():
                 metrics_last["gpu_mem_mb"] = torch.cuda.max_memory_allocated() / 1e6
@@ -822,6 +853,12 @@ def _run_periodic_validation_round(
                             query_embedding,
                             query_signature,
                             top_k=int(cfg.get("periodic_memory_retrieve_top_k", 5)),
+                            exclude_record_ids={
+                                str(row.get("record_id", ""))
+                                for row in scaling.get("candidates", [])
+                                if isinstance(row, dict)
+                            },
+                            exclude_memory_ids={record.memory_id for record in records},
                         ),
                     }
                 example_dir = step_dir / "got_audit" if example_idx == 0 else step_dir / "got_audit" / f"example_{example_idx:02d}"
@@ -1131,6 +1168,12 @@ def load_checkpoint(path: str | Path, device: torch.device):
     model = build_model(obj["config"]).to(device)
     model.load_state_dict(obj["model"], strict=False)
     model.eval()
+    # Inference/eval callers only need model/config/metrics metadata. Drop the
+    # optimizer state so full training checkpoints can be audited beside a live
+    # training run without keeping a second optimizer copy resident in memory.
+    obj.pop("optimizer", None)
+    obj.pop("rng_state", None)
+    obj.pop("cuda_rng_state_all", None)
     return model, obj
 
 

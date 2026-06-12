@@ -2,10 +2,10 @@ from __future__ import annotations
 
 from collections import Counter, defaultdict, deque
 from pathlib import Path
-import hashlib
 import html
 import json
 import math
+from itertools import combinations
 
 import numpy as np
 import torch
@@ -15,8 +15,8 @@ from plotly.offline import get_plotlyjs
 from plotly.subplots import make_subplots
 
 from .data import encode_bytes
-from .diagnostics import per_record_nll, record_diagnostics
-from .simplicial import build_filtered_simplicial_object, build_reasoning_trajectory_complex
+from .diagnostics import describe_graph_tokens, per_record_nll, record_diagnostics
+from .simplicial import build_embedding_radius_simplicial_object, build_reasoning_trajectory_complex
 
 
 def collect_states(
@@ -40,7 +40,41 @@ def collect_states(
     predicted_ids = logits_cpu.argmax(dim=-1)
     nll_tensor, _ = per_record_nll(out["logits"].detach().cpu(), torch.stack(ys))
     nll = nll_tensor.numpy()
-    filtered_objects = [build_filtered_simplicial_object(r) for r in records]
+    graph_token_embeddings = out.get("graph_token_embeddings")
+    graph_token_support_probabilities = out.get("graph_token_support_probabilities")
+    graph_token_embeddings_cpu = graph_token_embeddings.detach().cpu() if torch.is_tensor(graph_token_embeddings) else None
+    graph_token_support_probabilities_cpu = (
+        graph_token_support_probabilities.detach().cpu()
+        if torch.is_tensor(graph_token_support_probabilities)
+        else None
+    )
+    filtered_objects = []
+    embedding_filtered_objects = []
+    for idx, record in enumerate(records):
+        graph_token_count = int(graph_batch.graph_token_counts[idx].detach().cpu().item())
+        descriptors = describe_graph_tokens(record, tokenizer)[:graph_token_count]
+        embeddings = (
+            graph_token_embeddings_cpu[idx, :graph_token_count]
+            if graph_token_embeddings_cpu is not None and graph_token_embeddings_cpu.ndim >= 3
+            else []
+        )
+        probabilities = (
+            graph_token_support_probabilities_cpu[idx, :graph_token_count, :graph_token_count]
+            if graph_token_support_probabilities_cpu is not None and graph_token_support_probabilities_cpu.ndim >= 3
+            else None
+        )
+        filtered_objects.append(
+            build_embedding_radius_simplicial_object(
+                record,
+                descriptors,
+                embeddings,
+                token_probabilities=probabilities,
+                metric="jensen_shannon",
+            )
+        )
+        embedding_filtered_objects.append(
+            build_embedding_radius_simplicial_object(record, descriptors, embeddings, metric="euclidean")
+        )
     diagnostics = []
     if (audit_level or "none").lower() != "none":
         diagnostics = record_diagnostics(
@@ -82,7 +116,7 @@ def collect_states(
         }
         for idx, record in enumerate(records)
     ]
-    return states, nll, hover, filtered_objects, diagnostics, io_rows
+    return states, nll, hover, filtered_objects, embedding_filtered_objects, diagnostics, io_rows
 
 
 def write_reasoning_visualizations(
@@ -98,7 +132,7 @@ def write_reasoning_visualizations(
     audit_max_simplices: int = 1024,
 ) -> dict[str, str]:
     output_dir = Path(output_dir); output_dir.mkdir(parents=True, exist_ok=True)
-    states, nll, hover, filtered_objects, diagnostics, io_rows = collect_states(
+    states, nll, hover, filtered_objects, embedding_filtered_objects, diagnostics, io_rows = collect_states(
         model,
         dataset,
         tokenizer,
@@ -114,6 +148,7 @@ def write_reasoning_visualizations(
         nll = np.concatenate([nll, nll])
         hover = hover + hover
         filtered_objects = filtered_objects + filtered_objects
+        embedding_filtered_objects = embedding_filtered_objects + embedding_filtered_objects
     n_components = min(3, states.shape[0], states.shape[1])
     pca = PCA(n_components=n_components).fit_transform(states)
     if pca.shape[1] < 3:
@@ -181,6 +216,7 @@ def write_reasoning_visualizations(
                 "hover": hover,
                 "points": points,
                 "filtered_simplicial_objects": filtered_objects,
+                "embedding_filtered_simplicial_objects": embedding_filtered_objects,
                 "nll_surface": {"embedding_height": surface_meta, "nll_height": surface_nll_meta},
                 "model_io": io_rows,
                 **({"topological_algebra_diagnostics": diagnostics} if diagnostics else {}),
@@ -283,7 +319,10 @@ def write_inference_audit_artifacts(
                     "embedding": best.get("embedding", []) if isinstance(best, dict) else [],
                     "filtered_simplicial_object": scaling.get("trajectory_filtered_simplicial_object")
                     or (best.get("filtered_simplicial_object") if isinstance(best, dict) else {}),
-                    "topological_algebra": scaling.get("trajectory_topological_algebra")
+                    "trajectory_probability_filtered_simplicial_object": scaling.get("trajectory_probability_filtered_simplicial_object")
+                    or (best.get("probability_filtered_simplicial_object") if isinstance(best, dict) else {}),
+                    "topological_algebra": scaling.get("trajectory_probability_topological_algebra")
+                    or scaling.get("trajectory_topological_algebra")
                     or (best.get("topological_algebra") if isinstance(best, dict) else {}),
                 }
             paths.update(write_analogical_memory_visualization(memory, output_dir, query_context=query_context))
@@ -309,7 +348,48 @@ def write_got_trajectory_visualization(scaling_report: dict[str, object], output
     id_to_idx = {rid: idx for idx, rid in enumerate(ids)}
     inferred_levels = _infer_candidate_levels(candidates, ids)
     scores = [float(row.get("score", 0.0)) for row in candidates]
-    nll_values = np.asarray([float(row.get("nll", row.get("score", 0.0)) or 0.0) for row in candidates], dtype=float)
+    nll_rows: list[float] = []
+    missing_nll_ids: list[str] = []
+    for idx, row in enumerate(candidates):
+        try:
+            value = float(row.get("nll"))
+        except (TypeError, ValueError):
+            value = math.nan
+        if not math.isfinite(value):
+            missing_nll_ids.append(ids[idx])
+        nll_rows.append(value)
+    if missing_nll_ids:
+        reason = (
+            "Graph-of-thought NLL outputs unavailable for "
+            f"{len(missing_nll_ids)}/{len(candidates)} sampled states; NLL landscape was not rendered."
+        )
+        missing = set(missing_nll_ids)
+        _write_dark_empty(path, reason)
+        payload_path.write_text(
+            json.dumps(
+                {
+                    "available": False,
+                    "reason": "missing_model_nll_outputs",
+                    "missing_nll_record_ids": missing_nll_ids,
+                    "nodes": [
+                        {
+                            "record_id": ids[idx],
+                            "parent": candidates[idx].get("parent"),
+                            "path": candidates[idx].get("path", []),
+                            "embedding": candidates[idx].get("embedding"),
+                            "nll_available": ids[idx] not in missing,
+                        }
+                        for idx in range(len(candidates))
+                    ],
+                    "edges": [],
+                    "nll_surface": {"available": False, "reason": "missing_model_nll_outputs"},
+                },
+                indent=2,
+            ),
+            encoding="utf-8",
+        )
+        return {"got_trajectory_3d": str(path), "got_payloads": str(payload_path)}
+    nll_values = np.asarray(nll_rows, dtype=float)
     nll_center = float(np.nanmedian(nll_values)) if nll_values.size else 0.0
     nll_plot_scale = _nll_visual_scale(nll_values)
     nll_plot_z = (nll_values - nll_center) * nll_plot_scale
@@ -341,10 +421,6 @@ def write_got_trajectory_visualization(scaling_report: dict[str, object], output
         microstep_nll = nll_center + (microstep_z / nll_plot_scale)
     else:
         microstep_nll = np.asarray([], dtype=float)
-    landscape_x = np.concatenate([pca[:, 0], microstep_x]) if microstep_x.size else pca[:, 0]
-    landscape_y = np.concatenate([pca[:, 1], microstep_y]) if microstep_y.size else pca[:, 1]
-    landscape_z = np.concatenate([nll_plot_z, microstep_z]) if microstep_z.size else nll_plot_z
-    landscape_nll = np.concatenate([nll_values, microstep_nll]) if microstep_nll.size else nll_values
     fig = go.Figure()
     nll_surface, nll_surface_meta = _nll_triangulated_surface_trace(
         pca[:, 0],
@@ -358,61 +434,32 @@ def write_got_trajectory_visualization(scaling_report: dict[str, object], output
             "z_axis": "projected_nll_fitness_energy",
             "z_axis_center_raw_nll": nll_center,
             "z_axis_scale": nll_plot_scale,
-            "z_axis_label": f"centered NLL x {nll_plot_scale:g} plus local support energy",
+            "z_axis_label": f"centered raw NLL x {nll_plot_scale:g}",
             "raw_nll_range": float(np.nanmax(nll_values) - np.nanmin(nll_values)) if nll_values.size else 0.0,
             "exact_anchor_scope": "sampled model GoT states only",
             "actual_landscape_scope": "piecewise-linear interpolation through sampled model GoT states with no synthetic z-values",
-            "smooth_landscape_anchor_scope": "sampled model GoT states plus rendered reasoning microstep vertices",
-            "smooth_landscape_model_state_anchor_count": int(len(candidates)),
-            "smooth_landscape_microstep_anchor_count": int(microstep_z.size),
+            "local_interpolation_anchor_scope": "sampled model GoT states only",
+            "model_state_anchor_count": int(len(candidates)),
+            "rendered_microsteps_are_nll_surface_anchors": False,
         }
     )
-    landscape_trace, landscape_meta = _nll_surrogate_landscape_trace(
-        landscape_x,
-        landscape_y,
-        landscape_z,
-        landscape_nll,
-        name="Smooth projected NLL/fitness landscape",
-    )
     local_sheet_trace, local_sheet_meta = _nll_local_interpolating_sheet_trace(
-        landscape_x,
-        landscape_y,
-        landscape_z,
-        landscape_nll,
-        name="Local interpolating NLL sheet",
+        pca[:, 0],
+        pca[:, 1],
+        nll_plot_z,
+        nll_values,
+        name="Local interpolation through model-evaluated GoT states",
     )
-    if landscape_trace is not None:
-        fig.add_trace(landscape_trace)
-        nll_surface_meta["surrogate_landscape_layer"] = landscape_meta
     if local_sheet_trace is not None:
         fig.add_trace(local_sheet_trace)
-        nll_surface_meta["local_interpolating_sheet"] = local_sheet_meta
+    nll_surface_meta["local_interpolating_sheet"] = local_sheet_meta
+    nll_surface_meta["surrogate_landscape_layer"] = {
+        "available": False,
+        "reason": "disabled_by_default_not_model_evaluated",
+    }
     if nll_surface is not None:
         fig.add_trace(nll_surface)
     fig.add_trace(_nll_anchor_trace(pca[:, 0], pca[:, 1], nll_plot_z, nll_values, name="NLL surface anchors"))
-    if microstep_z.size:
-        fig.add_trace(
-            go.Scatter3d(
-                x=microstep_x,
-                y=microstep_y,
-                z=microstep_z,
-                mode="markers",
-                marker=dict(
-                    size=4,
-                    color=microstep_nll if microstep_nll.size else microstep_z,
-                    colorscale="Tealgrn",
-                    showscale=False,
-                    symbol="square",
-                    line=dict(width=1.4, color="#f8fafc"),
-                ),
-                hovertext=[
-                    str(entry["hover"]) + "<br><b>NLL surface role</b>: interpolated microstep anchor"
-                    for entry in microstep_entries
-                ],
-                hoverinfo="text",
-                name="microstep NLL anchors",
-            )
-        )
     for idx, row in enumerate(candidates):
         parent = row.get("parent")
         if isinstance(parent, str) and parent in id_to_idx:
@@ -450,7 +497,7 @@ def write_got_trajectory_visualization(scaling_report: dict[str, object], output
                 x=[float(entry["x"]) for entry in microstep_entries],
                 y=[float(entry["y"]) for entry in microstep_entries],
                 z=[float(entry["z"]) for entry in microstep_entries],
-                mode="markers+text",
+                mode="markers",
                 marker=dict(
                     size=5,
                     color=[float(entry.get("filtration", 0.0)) for entry in microstep_entries],
@@ -481,7 +528,7 @@ def write_got_trajectory_visualization(scaling_report: dict[str, object], output
                 colorbar=dict(title="NLL"),
                 line=dict(width=1.5, color="#e8eef8"),
             ),
-            text=[_state_plot_label(row, idx, int(inferred_levels[idx])) for idx, row in enumerate(candidates)],
+            text=_sparse_got_state_labels(candidates, ids, inferred_levels, nll_values),
             textposition="top center",
             hovertext=[
                 text
@@ -496,7 +543,7 @@ def write_got_trajectory_visualization(scaling_report: dict[str, object], output
     )
     fig.update_layout(
         template="plotly_dark",
-        title="Graph-of-thought branching trajectory with actual and smoothed NLL landscapes",
+        title="Graph-of-thought branching trajectory with model-evaluated NLL landscape",
         scene=dict(
             xaxis_title="PC1",
             yaxis_title="PC2",
@@ -532,7 +579,7 @@ def write_got_trajectory_visualization(scaling_report: dict[str, object], output
             text=(
                 "NLL field diagnostic: raw range="
                 f"{raw_nll_range:.6g}; z-axis shows centered NLL scaled by {nll_plot_scale:.1f}.<br>"
-                "Visible layers: exact sampled NLL landscape through model-evaluated GoT states, plus a smoothed projected surrogate around it."
+                "Visible layers: sampled GoT-state anchors plus local interpolation grounded only in model-evaluated NLL points."
             ),
             x=0,
             y=0.985,
@@ -773,12 +820,57 @@ def _write_full_trajectory_complex_map(scaling_report: dict[str, object], output
     if not isinstance(obj, dict):
         return {}
     obj = _gudhi_canonical_complex(obj)
+    probability_obj = scaling_report.get("trajectory_probability_filtered_simplicial_object")
+    if candidates and not isinstance(probability_obj, dict):
+        probability_obj = build_reasoning_trajectory_complex(candidates, metric="jensen_shannon")
+    probability_available = _has_real_probability_filtration(probability_obj)
+    probability_obj = _gudhi_canonical_complex(probability_obj) if probability_available and isinstance(probability_obj, dict) else None
     path = output_dir / "got_full_trajectory_complex.html"
+    tree_path = output_dir / "got_full_trajectory_simplex_tree_3d.html"
+    probability_path = output_dir / "got_full_trajectory_complex_jensen_shannon.html"
+    probability_tree_path = output_dir / "got_full_trajectory_simplex_tree_3d_jensen_shannon.html"
     payload_path = output_dir / "got_full_trajectory_complex_payload.json"
     title = "Full graph-of-thought trajectory filtered simplicial complex"
     _write_complex_slider_map(path, obj, title=title, subtitle="Full trajectory complex; slider filters simplices by scalar radius/filtration.")
-    payload_path.write_text(json.dumps({"filtered_simplicial_object": obj}, indent=2), encoding="utf-8")
-    return {"got_full_trajectory_complex": str(path), "got_full_trajectory_complex_payload": str(payload_path)}
+    _write_simplex_tree_3d_map(
+        tree_path,
+        obj,
+        title="Full graph-of-thought trajectory GUDHI simplex tree",
+        subtitle="3D inclusion/Hasse diagram of the canonical SimplexTree; hover reveals simplex, filtration, and source metadata.",
+    )
+    result = {
+        "got_full_trajectory_complex": str(path),
+        "got_full_trajectory_simplex_tree_3d": str(tree_path),
+        "got_full_trajectory_complex_payload": str(payload_path),
+    }
+    payload = {"filtered_simplicial_object": obj}
+    if isinstance(probability_obj, dict):
+        _write_complex_slider_map(
+            probability_path,
+            probability_obj,
+            title="Full graph-of-thought trajectory probability filtered simplicial complex",
+            subtitle="Vietoris-Rips complex using Jensen-Shannon distance on model candidate probability vectors.",
+        )
+        _write_simplex_tree_3d_map(
+            probability_tree_path,
+            probability_obj,
+            title="Full graph-of-thought trajectory probability SimplexTree",
+            subtitle="Canonical SimplexTree for the Jensen-Shannon probability filtration.",
+        )
+        payload["probability_filtered_simplicial_object"] = probability_obj
+    else:
+        unavailable = _unavailable_complex("missing_model_probability_vectors")
+        message = (
+            "Full graph-of-thought trajectory probability filtered simplicial complex unavailable: "
+            "model candidate probability vectors were not present, so no Jensen-Shannon radius complex or simplex tree was rendered."
+        )
+        _write_dark_empty(probability_path, message)
+        _write_dark_empty(probability_tree_path, message)
+        payload["probability_filtered_simplicial_object"] = unavailable
+    result["got_full_trajectory_complex_jensen_shannon"] = str(probability_path)
+    result["got_full_trajectory_simplex_tree_3d_jensen_shannon"] = str(probability_tree_path)
+    payload_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+    return result
 
 
 def _complex_has_model_io(obj: dict[str, object]) -> bool:
@@ -788,6 +880,36 @@ def _complex_has_model_io(obj: dict[str, object]) -> bool:
         if simplex.get("input_text") or simplex.get("decoded_argmax") or simplex.get("target_text"):
             return True
     return False
+
+
+def _has_real_probability_filtration(obj: object) -> bool:
+    if not isinstance(obj, dict) or obj.get("available") is False:
+        return False
+    summary = obj.get("summary", {}) if isinstance(obj.get("summary"), dict) else {}
+    allowed_models = {
+        "model_candidate_probability_jensen_shannon_vietoris_rips_2_skeleton",
+        "model_tropical_support_probability_jensen_shannon_vietoris_rips_2_skeleton",
+    }
+    if summary.get("filtration_model") not in allowed_models:
+        return False
+    return int(summary.get("num_edges", 0) or 0) > 0
+
+
+def _unavailable_complex(reason: str, *, source: str = "model_probability_jensen_shannon") -> dict[str, object]:
+    return {
+        "available": False,
+        "reason": reason,
+        "source": source,
+        "summary": {
+            "num_vertices": 0,
+            "num_edges": 0,
+            "num_two_simplices": 0,
+            "num_thresholds": 0,
+            "filtration_model": "unavailable_model_probability_jensen_shannon",
+        },
+        "thresholds": [],
+        "simplices": [],
+    }
 
 
 def _write_reasoning_step_complex_maps(candidates: list[dict[str, object]], output_dir: Path) -> dict[str, str]:
@@ -802,10 +924,18 @@ def _write_reasoning_step_complex_maps(candidates: list[dict[str, object]], outp
         record_id = str(row.get("record_id", f"step-{idx}"))
         file_name = f"reasoning_step_{idx:03d}.html"
         path = directory / file_name
+        tree_file_name = f"reasoning_step_{idx:03d}_simplex_tree.html"
+        tree_path = directory / tree_file_name
         _write_complex_slider_map(
             path,
             obj,
             title=f"Reasoning step filtered simplicial complex map: q{idx}",
+            subtitle=f"record_id={record_id}; level={row.get('level')}; path={row.get('path', [])}",
+        )
+        _write_simplex_tree_3d_map(
+            tree_path,
+            obj,
+            title=f"Reasoning step GUDHI simplex tree: q{idx}",
             subtitle=f"record_id={record_id}; level={row.get('level')}; path={row.get('path', [])}",
         )
         rows.append(
@@ -815,6 +945,7 @@ def _write_reasoning_step_complex_maps(candidates: list[dict[str, object]], outp
                 "level": int(row.get("level", 0) or 0),
                 "path": row.get("path", []),
                 "file": file_name,
+                "simplex_tree_file": tree_file_name,
                 "summary": obj_summary.get("summary", {}),
                 "simplex_tree": obj_summary.get("simplex_tree", {}),
             }
@@ -850,7 +981,7 @@ def _write_complex_slider_map(path: Path, obj: dict[str, object], title: str, su
             panel_objects.append(_gudhi_canonical_complex(local_obj))
             panel_hovers.append(_vertex_readable_summary(vertex, include_output=True))
     thresholds = _display_thresholds(obj)
-    initial = thresholds[-1] if thresholds else float("inf")
+    initial = thresholds[0] if thresholds else float("inf")
     base_traces = _complex_slider_traces(obj, coords3, threshold=initial, panel_index_by_label=panel_index_by_label)
     fig = go.Figure(data=base_traces)
     frames = []
@@ -873,7 +1004,7 @@ def _write_complex_slider_map(path: Path, obj: dict[str, object], title: str, su
             }
             for frame in frames
         ]
-        active_frame = max(0, len(steps) - 1)
+        active_frame = 0
         fig.update_layout(
             sliders=[
                 {
@@ -929,6 +1060,153 @@ def _write_complex_slider_map(path: Path, obj: dict[str, object], title: str, su
         _simplicial_panel_items(panel_objects, panel_hovers),
         show_filtration_slider=True,
     )
+
+
+def _write_simplex_tree_3d_map(path: Path, obj: dict[str, object], title: str, subtitle: str = "") -> None:
+    obj = _gudhi_canonical_complex(obj)
+    simplices = [row for row in obj.get("simplices", []) if isinstance(row, dict) and row.get("simplex")]
+    if not simplices:
+        _write_dark_empty(path, f"{title}: no simplices available.")
+        return
+    max_nodes = 1600
+    truncated = len(simplices) > max_nodes
+    if truncated:
+        simplices = sorted(
+            simplices,
+            key=lambda row: (
+                int(row.get("dimension", 99)),
+                float(row.get("filtration", 0.0) or 0.0),
+                _simplex_key(row.get("simplex", [])),
+            ),
+        )[:max_nodes]
+    simplex_rows: dict[tuple[str, ...], dict[str, object]] = {
+        tuple(sorted(str(vertex) for vertex in (row.get("simplex") or []))): row for row in simplices
+    }
+    by_dim: dict[int, list[tuple[str, ...]]] = defaultdict(list)
+    for key, row in simplex_rows.items():
+        by_dim[int(row.get("dimension", len(key) - 1))].append(key)
+    positions: dict[tuple[str, ...], tuple[float, float, float]] = {}
+    for dim, keys in by_dim.items():
+        ordered = sorted(keys, key=lambda key: (float(simplex_rows[key].get("filtration", 0.0) or 0.0), _simplex_key(key)))
+        denom = max(len(ordered) - 1, 1)
+        for idx, key in enumerate(ordered):
+            filt = float(simplex_rows[key].get("filtration", 0.0) or 0.0)
+            positions[key] = (filt, float(dim), float(idx / denom))
+    edge_x: list[float | None] = []
+    edge_y: list[float | None] = []
+    edge_z: list[float | None] = []
+    edge_hover: list[str | None] = []
+    for key, row in simplex_rows.items():
+        if len(key) <= 1:
+            continue
+        for face in combinations(key, len(key) - 1):
+            face_key = tuple(sorted(face))
+            if face_key not in positions:
+                continue
+            ax, ay, az = positions[face_key]
+            bx, by, bz = positions[key]
+            label = (
+                f"<b>simplex-tree inclusion</b><br>"
+                f"face={html.escape(_simplex_key(face_key))}<br>"
+                f"coface={html.escape(_simplex_key(key))}<br>"
+                f"coface filtration={float(row.get('filtration', 0.0) or 0.0):.6g}"
+            )
+            edge_x.extend([ax, bx, None])
+            edge_y.extend([ay, by, None])
+            edge_z.extend([az, bz, None])
+            edge_hover.extend([label, label, None])
+    node_keys = list(simplex_rows)
+    node_x = [positions[key][0] for key in node_keys]
+    node_y = [positions[key][1] for key in node_keys]
+    node_z = [positions[key][2] for key in node_keys]
+    node_dim = [int(simplex_rows[key].get("dimension", len(key) - 1)) for key in node_keys]
+    node_hover = []
+    for key in node_keys:
+        row = simplex_rows[key]
+        node_hover.append(
+            f"<b>{html.escape(_simplex_key(key))}</b>"
+            f"<br>dimension={int(row.get('dimension', len(key) - 1))}"
+            f"<br>filtration={float(row.get('filtration', 0.0) or 0.0):.6g}"
+            f"<br>type={html.escape(str(row.get('type', 'simplex')))}"
+            f"<br>source={html.escape(str(row.get('filtration_source', 'gudhi.SimplexTree')))}"
+            + (f"<br>embedding distance={float(row.get('embedding_distance')):.6g}" if isinstance(row.get("embedding_distance"), (int, float)) else "")
+            + (f"<br>reasoning transition={bool(row.get('reasoning_transition'))}" if row.get("reasoning_transition") is not None else "")
+            + (f"<br>{_vertex_readable_summary(row, include_output=True)}" if int(row.get("dimension", -1)) == 0 else "")
+        )
+    fig = go.Figure()
+    link_count = len(edge_x) // 3
+    fig.add_trace(
+        go.Scatter3d(
+            x=edge_x,
+            y=edge_y,
+            z=edge_z,
+            mode="lines",
+            line=dict(width=1.0, color="rgba(125,211,252,0.18)"),
+            hovertext=edge_hover,
+            hoverinfo="text",
+            name=f"face-to-coface links ({link_count})",
+            visible="legendonly" if link_count > 360 else True,
+        )
+    )
+    fig.add_trace(
+        go.Scatter3d(
+            x=node_x,
+            y=node_y,
+            z=node_z,
+            mode="markers",
+            marker=dict(
+                size=[9 if dim == 0 else 7 if dim == 1 else 5 for dim in node_dim],
+                color=node_dim,
+                colorscale=[[0, "#5eead4"], [0.5, "#60a5fa"], [1.0, "#facc15"]],
+                showscale=True,
+                colorbar=dict(title="simplex dim"),
+                line=dict(color="#e8eef8", width=0.8),
+            ),
+            hovertext=node_hover,
+            hoverinfo="text",
+            name="simplices",
+        )
+    )
+    summary = obj.get("summary", {}) if isinstance(obj.get("summary"), dict) else {}
+    tree = obj.get("simplex_tree", {}) if isinstance(obj.get("simplex_tree"), dict) else {}
+    fig.update_layout(
+        template="plotly_dark",
+        title=(
+            f"{title}<br><sup>{html.escape(subtitle)} | backend={html.escape(str(tree.get('backend', 'json')))} "
+            f"| displayed={len(node_keys)}/{int(tree.get('num_simplices', len(simplex_rows)) or len(simplex_rows))} "
+            f"| V={summary.get('num_vertices', 0)}, E={summary.get('num_edges', 0)}, T={summary.get('num_two_simplices', 0)}"
+            + (" | truncated for browser performance" if truncated else "")
+            + "</sup>"
+        ),
+        scene=dict(
+            xaxis_title="filtration value",
+            yaxis_title="simplex dimension",
+            zaxis_title="simplex-tree sibling order",
+            aspectmode="manual",
+            aspectratio=dict(x=1.45, y=0.75, z=1.0),
+            camera=dict(eye=dict(x=1.45, y=-1.75, z=1.15)),
+        ),
+        margin=dict(t=112, l=0, r=0, b=0),
+    )
+    _write_plotly_dark_html(path, fig, title)
+
+
+def _simplex_key(simplex: object) -> str:
+    if isinstance(simplex, tuple):
+        return "{" + ",".join(str(vertex) for vertex in simplex) + "}"
+    if isinstance(simplex, list):
+        return "{" + ",".join(str(vertex) for vertex in simplex) + "}"
+    return "{" + str(simplex) + "}"
+
+
+def _is_radius_filtration_complex(obj: dict[str, object]) -> bool:
+    if not isinstance(obj, dict):
+        return False
+    summary = obj.get("summary", {}) if isinstance(obj.get("summary"), dict) else {}
+    model = str(summary.get("filtration_model", "")).lower()
+    if "unavailable" in model or "non_radius" in model:
+        return False
+    return bool(summary.get("radius_filtration")) or "vietoris_rips" in model or "radius" in model
 
 
 def _gudhi_canonical_complex(obj: dict[str, object]) -> dict[str, object]:
@@ -996,7 +1274,7 @@ def _gudhi_canonical_complex(obj: dict[str, object]) -> dict[str, object]:
     except Exception as exc:
         serialized_obj = dict(obj)
         serialized_obj["simplex_tree"] = {
-            "backend": "json-fallback",
+            "backend": "unavailable_gudhi_simplex_tree",
             "available": False,
             "error": f"{type(exc).__name__}: {exc}",
         }
@@ -1009,7 +1287,13 @@ def _complex_slider_traces(
     threshold: float,
     panel_index_by_label: dict[str, int] | None = None,
 ) -> list[go.Scatter3d | go.Mesh3d]:
-    vertices = [s for s in obj.get("simplices", []) if isinstance(s, dict) and int(s.get("dimension", -1)) == 0 and float(s.get("filtration", 0.0) or 0.0) <= threshold + 1e-12]
+    radius_vertices_enter_at_zero = _is_radius_filtration_complex(obj)
+    vertices = [
+        s for s in obj.get("simplices", [])
+        if isinstance(s, dict)
+        and int(s.get("dimension", -1)) == 0
+        and (radius_vertices_enter_at_zero or float(s.get("filtration", 0.0) or 0.0) <= threshold + 1e-12)
+    ]
     visible = {str((row.get("simplex") or [""])[0]) for row in vertices}
     edges = [
         s for s in obj.get("simplices", [])
@@ -1053,14 +1337,14 @@ def _complex_slider_traces(
     for label in vertex_labels:
         vertex_row = vertex_by_label.get(label, {})
         vertex_hover.append(_vertex_readable_summary(vertex_row, include_output=True))
-    show_text = len(vertex_labels) <= 36
+    show_text = len(vertex_labels) <= 18
     traces: list[go.Scatter3d | go.Mesh3d] = [
         go.Scatter3d(
             x=edge_x,
             y=edge_y,
             z=edge_z,
             mode="lines",
-            line=dict(width=4, color="rgba(125,211,252,0.66)"),
+            line=dict(width=2.2, color="rgba(125,211,252,0.42)"),
             hovertext=edge_hover,
             hoverinfo="text",
             name="1-simplices",
@@ -1119,8 +1403,8 @@ def _complex_slider_traces(
             i=tri_i,
             j=tri_j,
             k=tri_k,
-            color="rgba(94,234,212,0.22)",
-            opacity=0.36,
+            color="rgba(94,234,212,0.14)",
+            opacity=0.18,
             name="2-simplices",
             hoverinfo="skip",
             showscale=False,
@@ -1177,12 +1461,13 @@ def _write_reasoning_step_complex_index(path: Path, rows: list[dict[str, object]
         "<tr>"
         f"<td>{int(row['index'])}</td>"
         f"<td><a href='{html.escape(str(row['file']))}'>{html.escape(str(row['record_id']))}</a></td>"
+        f"<td><a href='{html.escape(str(row.get('simplex_tree_file', '')))}'>simplex tree</a></td>"
         f"<td>{int(row.get('level', 0))}</td>"
         f"<td>{html.escape(_json_clip(row.get('path', []), 96))}</td>"
         f"<td>{html.escape(_json_clip(row.get('summary', {}), 140))}</td>"
         "</tr>"
         for row in rows
-    ) or "<tr><td colspan='5'>No reasoning-step complexes were generated.</td></tr>"
+    ) or "<tr><td colspan='6'>No reasoning-step complexes were generated.</td></tr>"
     path.write_text(
         f"""<!doctype html>
 <html>
@@ -1207,7 +1492,7 @@ def _write_reasoning_step_complex_index(path: Path, rows: list[dict[str, object]
     <h1>Reasoning step filtered simplicial complex maps</h1>
     <p>Each row opens a separate 3D PCoA/MDS radius-filtered complex for one sampled graph-of-thought state.  These are deliberately separate from the embedding-space trajectory map.</p>
     <table>
-      <thead><tr><th>index</th><th>complex map</th><th>level</th><th>path</th><th>summary</th></tr></thead>
+      <thead><tr><th>index</th><th>complex map</th><th>simplex tree</th><th>level</th><th>path</th><th>summary</th></tr></thead>
       <tbody>{body}</tbody>
     </table>
   </main>
@@ -1326,6 +1611,47 @@ def _state_plot_label(row: dict[str, object], idx: int, level: int) -> str:
     if level <= 0:
         return "q0"
     return f"q{idx}"
+
+
+def _sparse_got_state_labels(
+    candidates: list[dict[str, object]],
+    ids: list[str],
+    inferred_levels: list[int],
+    nll_values: np.ndarray,
+    max_labels: int = 12,
+) -> list[str]:
+    if not candidates:
+        return []
+    children: dict[str, int] = defaultdict(int)
+    for row in candidates:
+        parent = row.get("parent")
+        if isinstance(parent, str):
+            children[parent] += 1
+    keep: set[int] = set()
+    for idx, row in enumerate(candidates):
+        level = int(inferred_levels[idx]) if idx < len(inferred_levels) else int(row.get("level", 0) or 0)
+        if level <= 0 or children.get(ids[idx], 0) > 1:
+            keep.add(idx)
+    leaves = [idx for idx, rid in enumerate(ids) if children.get(rid, 0) == 0]
+    finite_order = [idx for idx in range(len(candidates)) if idx < len(nll_values) and math.isfinite(float(nll_values[idx]))]
+    if finite_order:
+        keep.add(min(finite_order, key=lambda idx: float(nll_values[idx])))
+    for idx in sorted(leaves, key=lambda idx: float(nll_values[idx]) if idx < len(nll_values) and math.isfinite(float(nll_values[idx])) else math.inf)[:4]:
+        keep.add(idx)
+    if len(keep) < min(max_labels, len(candidates)):
+        stride = max(1, int(math.ceil(len(candidates) / max(1, max_labels))))
+        keep.update(range(0, len(candidates), stride))
+    if len(keep) > max_labels:
+        priority = sorted(
+            keep,
+            key=lambda idx: (
+                0 if int(inferred_levels[idx]) <= 0 else 1,
+                float(nll_values[idx]) if idx < len(nll_values) and math.isfinite(float(nll_values[idx])) else math.inf,
+                idx,
+            ),
+        )[:max_labels]
+        keep = set(priority)
+    return [_state_plot_label(candidates[idx], idx, int(inferred_levels[idx])) if idx in keep else "" for idx in range(len(candidates))]
 
 
 def _local_filtered_subcomplex(obj: dict[str, object], focus_label: str) -> dict[str, object]:
@@ -1585,7 +1911,8 @@ def write_tropical_support_heatmap(result: dict[str, object], output_dir: str | 
                 f"<br><sup>all visible query tokens choose {html.escape(support_labels[0] if support_labels else 'one support')}; "
                 "the line plot shows per-token margin variation rather than hiding it inside a uniform heatmap block</sup>"
             ),
-            margin=dict(t=126, l=88, r=40, b=96),
+            margin=dict(t=126, l=88, r=48, b=96),
+            height=max(960, min(1420, 620 + 10 * n)),
         )
         fig.update_xaxes(title_text="active support token", tickangle=45, row=1, col=1)
         fig.update_yaxes(title_text="query token", row=1, col=1)
@@ -1595,13 +1922,20 @@ def write_tropical_support_heatmap(result: dict[str, object], output_dir: str | 
         fig.update_yaxes(title_text="token count", row=2, col=1)
         _write_plotly_dark_html(path, fig, "Tropical active-support collapse diagnostic")
         return {"tropical_support_heatmap": str(path), "tropical_support_payload": str(payload_path)}
+    row_numbers = list(range(n))
+    token_kinds = [str(token.get("kind", "?")) for token in tokens]
+    token_margins = [float(value) for value in margin_values.tolist()]
     fig = make_subplots(
-        rows=1,
-        cols=2,
-        specs=[[{"type": "heatmap"}, {"type": "bar"}]],
-        column_widths=[0.68, 0.32],
-        horizontal_spacing=0.08,
-        subplot_titles=("Observed active-support margins", "Support frequency and mean margin"),
+        rows=3,
+        cols=1,
+        specs=[[{"type": "heatmap"}], [{"type": "bar"}], [{"type": "scatter"}]],
+        row_heights=[0.48, 0.24, 0.28],
+        vertical_spacing=0.09,
+        subplot_titles=(
+            "Observed active-support margins",
+            "Support frequency and mean margin",
+            "Margin profile by graph-token order",
+        ),
     )
     fig.add_trace(
         go.Heatmap(
@@ -1609,7 +1943,7 @@ def write_tropical_support_heatmap(result: dict[str, object], output_dir: str | 
             x=support_labels,
             y=query_labels,
             colorscale="Cividis",
-            colorbar=dict(title="margin", x=0.64),
+            colorbar=dict(title="margin", x=1.02),
             customdata=hover_grid,
             hovertemplate="%{customdata}<extra></extra>",
             zmin=0.0,
@@ -1629,8 +1963,32 @@ def write_tropical_support_heatmap(result: dict[str, object], output_dir: str | 
             hoverinfo="text",
             name="support frequency",
         ),
-        row=1,
-        col=2,
+        row=2,
+        col=1,
+    )
+    fig.add_trace(
+        go.Scatter(
+            x=row_numbers,
+            y=token_margins,
+            mode="lines+markers",
+            line=dict(color="#5eead4", width=2),
+            marker=dict(
+                size=7,
+                color=token_margins,
+                colorscale="Cividis",
+                cmin=0.0,
+                cmax=max(float(np.nanmax(margin_values)), 1.0) if margin_values.size and np.isfinite(margin_values).any() else 1.0,
+                line=dict(color="#e8eef8", width=0.7),
+            ),
+            customdata=[
+                f"token={html.escape(query_labels[i])}<br>kind={html.escape(token_kinds[i])}<br>margin={float(token_margins[i]):.5f}<br>active support={html.escape(support_flow_edges[i]['support_label'])}"
+                for i in range(n)
+            ],
+            hovertemplate="%{customdata}<extra></extra>",
+            name="margin profile",
+        ),
+        row=3,
+        col=1,
     )
     fig.update_layout(
         template="plotly_dark",
@@ -1640,6 +1998,8 @@ def write_tropical_support_heatmap(result: dict[str, object], output_dir: str | 
             f"entropy={support_entropy:.3f} bits, top-support collapse rate={collapse_rate:.3f}; "
             "uniform blocks mean active-support collapse or nearly constant margins</sup>"
         ),
+        height=max(980, min(1600, 640 + 12 * n)),
+        margin=dict(t=136, l=96, r=72, b=92),
     )
     if collapse_rate >= 0.95:
         fig.add_annotation(
@@ -1648,7 +2008,7 @@ def write_tropical_support_heatmap(result: dict[str, object], output_dir: str | 
                 "uniform color is a model-trace diagnostic, not a heatmap rendering failure"
             ),
             x=0.02,
-            y=1.11,
+            y=1.08,
             xref="paper",
             yref="paper",
             showarrow=False,
@@ -1658,11 +2018,12 @@ def write_tropical_support_heatmap(result: dict[str, object], output_dir: str | 
             bordercolor="rgba(251,191,36,0.45)",
             borderwidth=1,
         )
-        fig.update_layout(margin=dict(t=138))
     fig.update_xaxes(title_text="active support token", tickangle=55, row=1, col=1)
     fig.update_yaxes(title_text="query token", row=1, col=1)
-    fig.update_xaxes(title_text="support token", tickangle=55, row=1, col=2)
-    fig.update_yaxes(title_text="query count", row=1, col=2)
+    fig.update_xaxes(title_text="support token", tickangle=35, row=2, col=1)
+    fig.update_yaxes(title_text="query count", row=2, col=1)
+    fig.update_xaxes(title_text="graph-token index", row=3, col=1)
+    fig.update_yaxes(title_text="active-support margin", row=3, col=1)
     _write_plotly_dark_html(path, fig, "Tropical active-support heatmap")
     return {"tropical_support_heatmap": str(path), "tropical_support_payload": str(payload_path)}
 
@@ -2659,6 +3020,11 @@ def _vertex_readable_summary(vertex_row: dict[str, object], include_output: bool
         bits.append(f"NLL={float(vertex_row.get('nll', 0.0) or 0.0):.4f}")
     if vertex_row.get("score") is not None:
         bits.append(f"score={float(vertex_row.get('score', 0.0) or 0.0):.4f}")
+    probability = vertex_row.get("probability")
+    if isinstance(probability, list) and probability:
+        preview = ", ".join(f"{float(v):.3g}" for v in probability[:8] if isinstance(v, (int, float)))
+        bits.append(f"probability source={html.escape(str(vertex_row.get('probability_source', 'unknown')))}")
+        bits.append(f"probability preview=[{preview}{', ...' if len(probability) > 8 else ''}]")
     if vertex_row.get("path"):
         bits.append(f"GoT path={html.escape(_json_clip(vertex_row.get('path'), 180))}")
     local_obj = vertex_row.get("filtered_simplicial_object")
@@ -2821,13 +3187,11 @@ def write_graphcg_trajectory_visualization(scaling_report: dict[str, object], ou
         encoding="utf-8",
     )
     fig = make_subplots(
-        rows=2,
-        cols=2,
-        specs=[[{"type": "heatmap"}, {"type": "scatter"}], [{"type": "scatter"}, {"type": "scatter"}]],
-        column_widths=[0.64, 0.36],
-        row_heights=[0.62, 0.38],
-        horizontal_spacing=0.10,
-        vertical_spacing=0.16,
+        rows=4,
+        cols=1,
+        specs=[[{"type": "heatmap"}], [{"type": "scatter"}], [{"type": "scatter"}], [{"type": "scatter"}]],
+        row_heights=[0.40, 0.20, 0.20, 0.20],
+        vertical_spacing=0.075,
         subplot_titles=(
             "Readable top-direction heatmap",
             "Full-rank activity spectrum",
@@ -2861,8 +3225,8 @@ def write_graphcg_trajectory_visualization(scaling_report: dict[str, object], ou
             hovertemplate="rank=%{x}<br>mean |cos|=%{y:.5f}<extra></extra>",
             name="full-rank spectrum",
         ),
-        row=1,
-        col=2,
+        row=2,
+        col=1,
     )
     fig.add_trace(
         go.Scatter(
@@ -2873,7 +3237,7 @@ def write_graphcg_trajectory_visualization(scaling_report: dict[str, object], ou
                 size=np.clip(4.0 + 8.0 * candidate_peak_abs / max(float(np.max(candidate_peak_abs)), 1e-12), 4.0, 12.0),
                 color=candidate_effective_dirs,
                 colorscale="Turbo",
-                colorbar=dict(title="effective dirs", x=0.60, y=0.20, len=0.35),
+                colorbar=dict(title="effective dirs", x=1.02, y=0.34, len=0.16),
                 line=dict(color="#e8eef8", width=0.8),
             ),
             line=dict(color="#5eead4", width=2),
@@ -2888,7 +3252,7 @@ def write_graphcg_trajectory_visualization(scaling_report: dict[str, object], ou
             hovertemplate="%{customdata}<extra></extra>",
             name="candidate activity",
         ),
-        row=2,
+        row=3,
         col=1,
     )
     fig.add_trace(
@@ -2908,8 +3272,8 @@ def write_graphcg_trajectory_visualization(scaling_report: dict[str, object], ou
             hovertemplate="direction=%{customdata}<br>mean |cos|=%{x:.5f}<br>signed mean=%{y:.5f}<extra></extra>",
             name="direction signed bias",
         ),
-        row=2,
-        col=2,
+        row=4,
+        col=1,
     )
     fig.update_layout(
         template="plotly_dark",
@@ -2917,8 +3281,8 @@ def write_graphcg_trajectory_visualization(scaling_report: dict[str, object], ou
             "GraphCG full-rank direction audit"
             f"<br><sup>top heatmap shows {display_count}/{direction_count} directions for readability; spectrum/effective counts audit all directions; active nonzero rank={active_rank}</sup>"
         ),
-        margin=dict(t=122, l=80, r=48, b=86),
-        height=920,
+        margin=dict(t=132, l=92, r=68, b=92),
+        height=1280,
     )
     x_labels = [f"d{int(idx)}" for idx in top_idx]
     x_step = max(1, int(math.ceil(len(x_labels) / 12)))
@@ -2927,12 +3291,12 @@ def write_graphcg_trajectory_visualization(scaling_report: dict[str, object], ou
     y_tickvals = [label for pos, label in enumerate(compact_labels) if pos % y_step == 0 or pos == len(compact_labels) - 1]
     fig.update_xaxes(title_text="GraphCG direction", tickangle=0, tickmode="array", tickvals=x_tickvals, ticktext=x_tickvals, row=1, col=1)
     fig.update_yaxes(title_text="GoT state index (hover for path)", tickmode="array", tickvals=y_tickvals, ticktext=y_tickvals, row=1, col=1, tickfont=dict(size=9))
-    fig.update_xaxes(title_text="direction rank by activity", row=1, col=2)
-    fig.update_yaxes(title_text="mean absolute cosine", row=1, col=2)
-    fig.update_xaxes(title_text="GoT candidate index", row=2, col=1)
-    fig.update_yaxes(title_text="candidate mean |cos|", row=2, col=1)
-    fig.update_xaxes(title_text="direction mean |cos|", row=2, col=2)
-    fig.update_yaxes(title_text="direction signed mean", row=2, col=2)
+    fig.update_xaxes(title_text="direction rank by activity", row=2, col=1)
+    fig.update_yaxes(title_text="mean absolute cosine", row=2, col=1)
+    fig.update_xaxes(title_text="GoT candidate index", row=3, col=1)
+    fig.update_yaxes(title_text="candidate mean |cos|", row=3, col=1)
+    fig.update_xaxes(title_text="direction mean |cos|", row=4, col=1)
+    fig.update_yaxes(title_text="direction signed mean", row=4, col=1)
     _write_plotly_dark_html(path, fig, "GraphCG direction cosines along GoT candidates")
     return {"graphcg_direction_cosines": str(path), "graphcg_direction_cosines_payload": str(payload_path)}
 
@@ -2947,24 +3311,53 @@ def write_analogical_memory_visualization(
     map_path = output_dir / "analogical_simplicial_maps.json"
     rows = [row for row in memory.get("retrieved", []) if isinstance(row, dict)]
     if not rows:
-        _write_dark_empty(path, "No analogical memories retrieved.")
-        map_path.write_text(json.dumps({"query": {}, "maps": []}, indent=2), encoding="utf-8")
+        reason = "No non-self model-probability analogical memories retrieved; no simplicial map is rendered."
+        _write_dark_empty(path, reason)
+        map_path.write_text(
+            json.dumps(
+                {
+                    "available": False,
+                    "reason": "no_non_self_model_memory",
+                    "maps": [],
+                },
+                indent=2,
+            ),
+            encoding="utf-8",
+        )
         return {"analogical_memory_retrieval_html": str(path), "analogical_simplicial_maps": str(map_path)}
     bank_records = _load_memory_bank_records(memory.get("bank_path", ""))
     enriched = [_enrich_memory_row(row, bank_records) for row in rows]
     query = query_context if isinstance(query_context, dict) else {}
-    query_complex = query.get("filtered_simplicial_object") if isinstance(query.get("filtered_simplicial_object"), dict) else {}
+    query_complex_source = ""
+    query_complex: dict[str, object] = {}
+    if _has_real_probability_filtration(query.get("trajectory_probability_filtered_simplicial_object")):
+        query_complex = query["trajectory_probability_filtered_simplicial_object"]
+        query_complex_source = "trajectory_probability_filtered_simplicial_object"
+    elif _has_real_probability_filtration(query.get("probability_filtered_simplicial_object")):
+        query_complex = query["probability_filtered_simplicial_object"]
+        query_complex_source = "probability_filtered_simplicial_object"
     query_topology = query.get("topological_algebra") if isinstance(query.get("topological_algebra"), dict) else {}
-    if not query_complex and enriched:
-        query_complex = enriched[0].get("filtered_simplicial_object", {}) if isinstance(enriched[0].get("filtered_simplicial_object"), dict) else {}
-    if not query_topology and enriched:
-        query_topology = enriched[0].get("topological_algebra", {}) if isinstance(enriched[0].get("topological_algebra"), dict) else {}
+    if not query_complex:
+        reason = "No model probability filtered query trajectory complex was available; analogical maps are not rendered without model probabilities."
+        _write_dark_empty(path, reason)
+        map_path.write_text(
+            json.dumps(
+                {
+                    "available": False,
+                    "reason": "missing_model_probability_query_complex",
+                    "maps": [],
+                },
+                indent=2,
+            ),
+            encoding="utf-8",
+        )
+        return {"analogical_memory_retrieval_html": str(path), "analogical_simplicial_maps": str(map_path)}
 
     pair_pages: list[dict[str, object]] = []
     map_reports: list[dict[str, object]] = []
     for idx, row in enumerate(enriched):
         pair_path = path if idx == 0 else output_dir / f"analogical_memory_map_{idx + 1:02d}.html"
-        fig, panel_items, map_report = _analogical_pair_figure(row, idx, query_complex, query_topology)
+        fig, panel_items, map_report = _analogical_pair_figure(row, idx, query_complex, query_topology, query_complex_source)
         _write_plotly_dark_html(
             pair_path,
             fig,
@@ -2990,6 +3383,7 @@ def write_analogical_memory_visualization(
         json.dumps(
             {
                 "query_summary": query_complex.get("summary", {}) if isinstance(query_complex, dict) else {},
+                "query_complex_source": query_complex_source,
                 "query_derived_signature": query_topology.get("derived_equivalence_signature", {}) if isinstance(query_topology, dict) else {},
                 "maps": map_reports,
             },
@@ -3012,6 +3406,7 @@ def _analogical_pair_figure(
     idx: int,
     query_complex: dict[str, object],
     query_topology: dict[str, object],
+    query_complex_source: str,
 ) -> tuple[go.Figure, list[dict[str, object]], dict[str, object]]:
     panel_items: list[dict[str, object]] = []
     query_complex = _gudhi_canonical_complex(query_complex)
@@ -3025,16 +3420,27 @@ def _analogical_pair_figure(
     panel_items.extend(_simplicial_panel_items([query_complex], [query_hover]))
     panel_idx = 1
     slab = 2.4
-    mem_complex = (
-        row.get("trajectory_filtered_simplicial_object")
-        if isinstance(row.get("trajectory_filtered_simplicial_object"), dict)
-        else row.get("filtered_simplicial_object", {})
+    mem_complex_source = ""
+    if _has_real_probability_filtration(row.get("trajectory_probability_filtered_simplicial_object")):
+        mem_complex = row.get("trajectory_probability_filtered_simplicial_object")
+        mem_complex_source = "trajectory_probability_filtered_simplicial_object"
+    elif _has_real_probability_filtration(row.get("probability_filtered_simplicial_object")):
+        mem_complex = row.get("probability_filtered_simplicial_object")
+        mem_complex_source = "probability_filtered_simplicial_object"
+    else:
+        mem_complex = _unavailable_complex("missing_model_probability_codomain_complex")
+        mem_complex_source = "unavailable_missing_model_probability_codomain_complex"
+    mem_complex = _gudhi_canonical_complex(mem_complex if isinstance(mem_complex, dict) and mem_complex.get("available") is not False else mem_complex)
+    mem_topology = (
+        row.get("trajectory_probability_topological_algebra")
+        if isinstance(row.get("trajectory_probability_topological_algebra"), dict)
+        else (row.get("topological_algebra", {}) if isinstance(row.get("topological_algebra"), dict) else {})
     )
-    mem_complex = _gudhi_canonical_complex(mem_complex if isinstance(mem_complex, dict) else {})
-    mem_topology = row.get("topological_algebra", {}) if isinstance(row.get("topological_algebra"), dict) else {}
     mem_layout = _complex_3d_layout(mem_complex, slab=slab)
     sim = _topological_similarity_summary(query_topology, mem_topology, row)
     sim_map = _simplicial_map_between_complexes(query_complex, mem_complex)
+    derived_comparison = _derived_invariant_comparison(query_topology, mem_topology)
+    sim_map["derived_invariant_comparison"] = derived_comparison
     map_report = {
         "memory_id": row.get("memory_id"),
         "record_id": row.get("record_id"),
@@ -3043,9 +3449,11 @@ def _analogical_pair_figure(
         "codomain_complex_summary": mem_complex.get("summary", {}) if isinstance(mem_complex, dict) else {},
         "domain_simplex_tree": query_complex.get("simplex_tree", {}) if isinstance(query_complex, dict) else {},
         "codomain_simplex_tree": mem_complex.get("simplex_tree", {}) if isinstance(mem_complex, dict) else {},
-        "codomain_complex_source": "trajectory_filtered_simplicial_object" if isinstance(row.get("trajectory_filtered_simplicial_object"), dict) else "filtered_simplicial_object",
+        "query_complex_source": query_complex_source,
+        "codomain_complex_source": mem_complex_source,
         **sim,
         **sim_map,
+        "derived_invariant_comparison": derived_comparison,
     }
     panel_hover = (
         f"<b>codomain memory {idx + 1}</b>: {html.escape(str(row.get('memory_id', idx)))}"
@@ -3053,6 +3461,7 @@ def _analogical_pair_figure(
         f"<br>persistent homology similarity={sim['persistent_homology_similarity']:.4f}"
         f"<br>free-resolution similarity={sim['free_resolution_similarity']:.4f}"
         f"<br>derived signature similarity={sim['derived_signature_similarity']:.4f}"
+        f"<br>finite derived invariants match={derived_comparison['finite_invariants_match']}"
         f"<br>simplicial edge preservation={sim_map['edge_preservation_rate']:.4f}"
         f"<br>{_summary_line(mem_complex)}"
         f"<br>{_derived_signature_line(mem_topology)}"
@@ -3061,12 +3470,12 @@ def _analogical_pair_figure(
     panel_items.extend(_simplicial_panel_items([mem_complex], [panel_hover]))
 
     thresholds = _combined_display_thresholds(query_complex, mem_complex)
-    initial = thresholds[-1] if thresholds else 1.0
+    initial = thresholds[0] if thresholds else 0.0
     data = _analogical_pair_traces(query_complex, query_layout, mem_complex, mem_layout, sim_map, row, sim, idx, panel_idx, initial)
     fig = go.Figure(data=data)
     quality_table = _analogical_quality_table_trace(row, sim, sim_map, idx)
     frames = []
-    frame_thresholds = list(reversed(thresholds))
+    frame_thresholds = list(thresholds)
     for threshold in frame_thresholds:
         frames.append(
             go.Frame(
@@ -3155,7 +3564,8 @@ def _analogical_quality_table_trace(
     sim_map: dict[str, object],
     idx: int,
 ) -> go.Table:
-    status = "simplicial" if bool(sim_map.get("is_simplicial_on_displayed_skeleton")) else "vertex map only"
+    status = "filtered simplicial map" if bool(sim_map.get("is_filtered_simplicial_map")) else "not a filtered simplicial map"
+    derived = sim_map.get("derived_invariant_comparison", {}) if isinstance(sim_map.get("derived_invariant_comparison"), dict) else {}
     rows = [
         ("rank", str(idx + 1)),
         ("memory", _short_label(str(row.get("memory_id", idx)), 24)),
@@ -3163,8 +3573,13 @@ def _analogical_quality_table_trace(
         ("PH similarity", f"{float(sim.get('persistent_homology_similarity', 0.0)):.4f}"),
         ("free-res similarity", f"{float(sim.get('free_resolution_similarity', 0.0)):.4f}"),
         ("derived similarity", f"{float(sim.get('derived_signature_similarity', 0.0)):.4f}"),
+        ("map source", str(sim_map.get("map_source", "unknown"))),
+        ("JS mean/max", f"{_fmt_optional(sim_map.get('jensen_shannon_distance_mean'))}/{_fmt_optional(sim_map.get('jensen_shannon_distance_max'))}"),
+        ("assignment cost mean/max", f"{_fmt_optional(sim_map.get('assignment_cost_mean'))}/{_fmt_optional(sim_map.get('assignment_cost_max'))}"),
+        ("filtration distortion max", _fmt_optional(sim_map.get("max_positive_filtration_distortion"))),
         ("edge preservation", f"{int(sim_map.get('preserved_edges', 0))}/{int(sim_map.get('checked_edges', 0))} = {float(sim_map.get('edge_preservation_rate', 0.0)):.3f}"),
         ("2-simplex preservation", f"{int(sim_map.get('preserved_two_simplices', 0))}/{int(sim_map.get('checked_two_simplices', 0))} = {float(sim_map.get('two_simplex_preservation_rate', 0.0)):.3f}"),
+        ("finite invariant match", str(derived.get("finite_invariants_match", "n/a"))),
         ("display status", status),
     ]
     return go.Table(
@@ -3410,6 +3825,10 @@ def _simplicial_map_traces(
             f"<b>simplicial map candidate</b>"
             f"<br>{html.escape(q)} -> {html.escape(m)}"
             f"<br>vertex score={float(mapping.get('score', 0.0)):.4f}"
+            f"<br>map source={html.escape(str(mapping.get('map_source', sim_map.get('map_source', 'unknown'))))}"
+            f"<br>JS distance={float(mapping.get('jensen_shannon_distance', 0.0)):.5f}"
+            f"<br>assignment cost={float(mapping.get('assignment_cost', mapping.get('jensen_shannon_distance', 0.0))):.5f}"
+            f"<br>max filtration distortion={_fmt_optional(sim_map.get('max_positive_filtration_distortion'))}"
             f"<br>line class={'preserves at least one displayed 1-simplex' if q in preserved_query_vertices else 'vertex-only correspondence'}"
             f"<br>edge preservation={float(sim_map.get('edge_preservation_rate', 0.0)):.4f}"
             f"<br>2-simplex preservation={float(sim_map.get('two_simplex_preservation_rate', 0.0)):.4f}"
@@ -3442,11 +3861,12 @@ def _simplicial_map_traces(
             y=traces_by_kind["vertex_only"]["y"],
             z=traces_by_kind["vertex_only"]["z"],
             mode="lines",
-            line=dict(color="rgba(251,113,133,0.34)", width=2),
-            name=f"vertex-only correspondences to {row.get('memory_id')}",
+            line=dict(color="rgba(251,113,133,0.16)", width=1.2),
+            name=f"vertex-only correspondences to {row.get('memory_id')} (legend only)",
             hovertext=traces_by_kind["vertex_only"]["hover"],
             hoverinfo="text",
             customdata=[panel_idx if value is not None else None for value in traces_by_kind["vertex_only"]["x"]],
+            visible="legendonly",
         ),
     ]
 
@@ -3529,6 +3949,17 @@ def _enrich_memory_row(row: dict[str, object], bank_records: dict[str, dict[str,
     if isinstance(trajectory_complex, dict):
         enriched["trajectory_filtered_simplicial_object"] = trajectory_complex
         enriched.setdefault("trajectory_summary", trajectory_complex.get("summary", {}))
+    trajectory_probability_complex = metadata.get("trajectory_probability_filtered_simplicial_object") if isinstance(metadata, dict) else None
+    if isinstance(trajectory_probability_complex, dict):
+        enriched["trajectory_probability_filtered_simplicial_object"] = trajectory_probability_complex
+        enriched.setdefault("trajectory_probability_summary", trajectory_probability_complex.get("summary", {}))
+    trajectory_probability_topology = metadata.get("trajectory_probability_topological_algebra") if isinstance(metadata, dict) else None
+    if isinstance(trajectory_probability_topology, dict):
+        enriched["trajectory_probability_topological_algebra"] = trajectory_probability_topology
+    if not isinstance(enriched.get("probability_filtered_simplicial_object"), dict) and isinstance(bank_row.get("probability_filtered_simplicial_object"), dict):
+        enriched["probability_filtered_simplicial_object"] = bank_row["probability_filtered_simplicial_object"]
+    if not isinstance(enriched.get("trajectory_probability_filtered_simplicial_object"), dict) and isinstance(bank_row.get("trajectory_probability_filtered_simplicial_object"), dict):
+        enriched["trajectory_probability_filtered_simplicial_object"] = bank_row["trajectory_probability_filtered_simplicial_object"]
     if not isinstance(enriched.get("filtered_simplicial_object"), dict) and isinstance(bank_row.get("filtered_simplicial_object"), dict):
         enriched["filtered_simplicial_object"] = bank_row["filtered_simplicial_object"]
     if not isinstance(enriched.get("topological_algebra"), dict) and isinstance(bank_row.get("topological_algebra"), dict):
@@ -3683,95 +4114,295 @@ def _topological_similarity_summary(query_topology: dict[str, object], memory_to
     }
 
 
+def _derived_invariant_comparison(query_topology: dict[str, object], memory_topology: dict[str, object], tol: float = 1e-8) -> dict[str, object]:
+    q_sig = query_topology.get("derived_equivalence_signature", {}) if isinstance(query_topology, dict) else {}
+    m_sig = memory_topology.get("derived_equivalence_signature", {}) if isinstance(memory_topology, dict) else {}
+    q_betti = [float(v) for v in q_sig.get("betti_vector", [])] if isinstance(q_sig.get("betti_vector", []), list) else []
+    m_betti = [float(v) for v in m_sig.get("betti_vector", [])] if isinstance(m_sig.get("betti_vector", []), list) else []
+    q_signature = _signature_numeric_vector(query_topology, length=48)
+    m_signature = _signature_numeric_vector(memory_topology, length=48)
+    q_free = _free_rank_vector(query_topology, length=32)
+    m_free = _free_rank_vector(memory_topology, length=32)
+    q_ph = _persistence_numeric_vector(query_topology, length=32)
+    m_ph = _persistence_numeric_vector(memory_topology, length=32)
+
+    def close_vec(a: np.ndarray, b: np.ndarray) -> bool:
+        return bool(a.shape == b.shape and np.allclose(a, b, atol=tol, rtol=0.0))
+
+    betti_match = q_betti == m_betti
+    signature_match = close_vec(q_signature, m_signature)
+    free_rank_match = close_vec(q_free, m_free)
+    persistence_match = close_vec(q_ph, m_ph)
+    finite_match = bool(betti_match and signature_match and free_rank_match and persistence_match)
+    return {
+        "comparison_kind": "finite_derived_invariant_signature_comparison",
+        "field": "F2",
+        "tolerance": float(tol),
+        "finite_invariants_match": finite_match,
+        "betti_vector_match": bool(betti_match),
+        "derived_signature_vector_match": bool(signature_match),
+        "free_chain_rank_vector_match": bool(free_rank_match),
+        "persistence_summary_vector_match": bool(persistence_match),
+        "query_betti_vector": q_betti,
+        "memory_betti_vector": m_betti,
+        "signature_l2_distance": float(np.linalg.norm(q_signature - m_signature)),
+        "free_rank_l2_distance": float(np.linalg.norm(q_free - m_free)),
+        "persistence_l2_distance": float(np.linalg.norm(q_ph - m_ph)),
+    }
+
+
 def _simplicial_map_between_complexes(query_obj: dict[str, object], memory_obj: dict[str, object], max_vertices: int = 54) -> dict[str, object]:
     query_vertices = _complex_vertex_records(query_obj)[:max_vertices]
     memory_vertices = _complex_vertex_records(memory_obj)[:max_vertices]
     if not query_vertices or not memory_vertices:
-        return {
-            "vertex_map": [],
-            "displayed_domain_vertices": len(query_vertices),
-            "displayed_codomain_vertices": len(memory_vertices),
-            "edge_preservation_rate": 0.0,
-            "two_simplex_preservation_rate": 0.0,
-            "is_simplicial_on_displayed_skeleton": False,
-        }
-    used: set[str] = set()
-    vertex_map = []
-    for q in query_vertices:
-        scored = sorted(
-            ((_vertex_match_score(q, m), m) for m in memory_vertices),
-            key=lambda item: item[0],
-            reverse=True,
-        )
-        chosen = None
-        for score, candidate in scored:
-            if candidate["label"] not in used:
-                chosen = (score, candidate)
-                break
-        if chosen is None:
-            chosen = scored[0]
-        score, m = chosen
-        used.add(m["label"])
-        vertex_map.append({"query_vertex": q["label"], "memory_vertex": m["label"], "score": float(score)})
+        return _empty_simplicial_map_report(query_vertices, memory_vertices, "empty_domain_or_codomain")
+
+    q_probs = [_probability_feature_vector(row) for row in query_vertices]
+    m_probs = [_probability_feature_vector(row) for row in memory_vertices]
+    if not any(vec is not None for vec in q_probs) or not any(vec is not None for vec in m_probs):
+        report = _empty_simplicial_map_report(query_vertices, memory_vertices, "unavailable_no_model_probability_vectors")
+        report["map_source"] = "none"
+        report["map_requires"] = "model probability vectors on 0-simplices"
+        return report
+
+    vertex_map = _probability_induced_vertex_assignment(query_vertices, memory_vertices, q_probs, m_probs)
     mapping = {row["query_vertex"]: row["memory_vertex"] for row in vertex_map}
-    memory_edges = {frozenset(pair) for pair in _complex_edge_pairs(memory_obj)}
-    query_edges = _complex_edge_pairs(query_obj)
-    preserved_edges = 0
-    checked_edges = 0
-    preserved_edge_pairs: list[dict[str, object]] = []
-    failed_edge_pairs: list[dict[str, object]] = []
-    preserved_edge_query_vertices: set[str] = set()
-    preserved_edge_memory_vertices: set[str] = set()
-    for a, b in query_edges:
-        if a not in mapping or b not in mapping:
-            continue
-        checked_edges += 1
-        ma, mb = mapping[a], mapping[b]
-        if ma == mb or frozenset((ma, mb)) in memory_edges:
-            preserved_edges += 1
-            preserved_edge_query_vertices.update([a, b])
-            preserved_edge_memory_vertices.update([ma, mb])
-            if len(preserved_edge_pairs) < 64:
-                preserved_edge_pairs.append({"query_edge": [a, b], "memory_edge": [ma, mb]})
-        elif len(failed_edge_pairs) < 64:
-            failed_edge_pairs.append({"query_edge": [a, b], "memory_edge": [ma, mb]})
-    memory_triangles = {frozenset(simplex) for simplex in _complex_simplices(memory_obj, 2)}
-    query_triangles = _complex_simplices(query_obj, 2)
-    preserved_triangles = 0
-    checked_triangles = 0
-    preserved_two_simplex_faces: list[dict[str, object]] = []
-    failed_two_simplex_faces: list[dict[str, object]] = []
-    for simplex in query_triangles:
-        if any(v not in mapping for v in simplex):
-            continue
-        checked_triangles += 1
-        mapped = frozenset(mapping[v] for v in simplex)
-        if len(mapped) <= 2 or mapped in memory_triangles:
-            preserved_triangles += 1
-            if len(preserved_two_simplex_faces) < 64:
-                preserved_two_simplex_faces.append({"query_simplex": list(simplex), "memory_simplex": sorted(mapped)})
-        elif len(failed_two_simplex_faces) < 64:
-            failed_two_simplex_faces.append({"query_simplex": list(simplex), "memory_simplex": sorted(mapped)})
+    q_filtration = _simplex_filtration_lookup(query_obj)
+    m_filtration = _simplex_filtration_lookup(memory_obj)
+    edge_report = _check_filtered_simplicial_dimension(
+        query_obj,
+        memory_obj,
+        mapping,
+        q_filtration,
+        m_filtration,
+        dimension=1,
+    )
+    face_report = _check_filtered_simplicial_dimension(
+        query_obj,
+        memory_obj,
+        mapping,
+        q_filtration,
+        m_filtration,
+        dimension=2,
+    )
+    checked_edges = int(edge_report["checked"])
+    preserved_edges = int(edge_report["preserved"])
+    checked_faces = int(face_report["checked"])
+    preserved_faces = int(face_report["preserved"])
     edge_rate = preserved_edges / checked_edges if checked_edges else 1.0
-    triangle_rate = preserved_triangles / checked_triangles if checked_triangles else 1.0
+    face_rate = preserved_faces / checked_faces if checked_faces else 1.0
+    is_map = bool(edge_rate >= 0.999 and face_rate >= 0.999 and len(mapping) == len(query_vertices))
+    js_values = [float(row.get("jensen_shannon_distance", 0.0)) for row in vertex_map if row.get("jensen_shannon_distance") is not None]
+    assignment_costs = [float(row.get("assignment_cost", 0.0)) for row in vertex_map if row.get("assignment_cost") is not None]
+    edge_distortion = _numeric_summary(edge_report["positive_distortions"])
+    face_distortion = _numeric_summary(face_report["positive_distortions"])
+    all_distortion_values = list(edge_report["positive_distortions"]) + list(face_report["positive_distortions"])
+    all_distortion = _numeric_summary(all_distortion_values)
+    is_identity_self_map = bool(
+        len(query_vertices) == len(memory_vertices)
+        and len(vertex_map) == len(query_vertices)
+        and all(str(row.get("query_vertex")) == str(row.get("memory_vertex")) for row in vertex_map)
+        and all(float(row.get("jensen_shannon_distance", 1.0) or 0.0) <= 1e-12 for row in vertex_map)
+    )
     return {
         "vertex_map": vertex_map,
         "displayed_domain_vertices": len(query_vertices),
         "displayed_codomain_vertices": len(memory_vertices),
+        "map_source": "model_probability_jensen_shannon_assignment",
+        "probability_alignment": "zero_pad_to_common_token_index_feature_space_then_renormalize",
+        "is_identity_self_map": is_identity_self_map,
+        "jensen_shannon_distance_summary": _numeric_summary(js_values),
+        "assignment_cost_summary": _numeric_summary(assignment_costs),
+        "jensen_shannon_distance_mean": _numeric_summary(js_values).get("mean"),
+        "jensen_shannon_distance_max": _numeric_summary(js_values).get("max"),
+        "assignment_cost_mean": _numeric_summary(assignment_costs).get("mean"),
+        "assignment_cost_max": _numeric_summary(assignment_costs).get("max"),
+        "edge_filtration_distortion_summary": edge_distortion,
+        "two_simplex_filtration_distortion_summary": face_distortion,
+        "filtration_distortion_summary": all_distortion,
+        "max_positive_filtration_distortion": all_distortion.get("max"),
         "checked_edges": checked_edges,
         "preserved_edges": preserved_edges,
         "edge_preservation_rate": float(edge_rate),
-        "preserved_edge_pairs": preserved_edge_pairs,
-        "failed_edge_pairs": failed_edge_pairs,
-        "preserved_edge_query_vertices": sorted(preserved_edge_query_vertices),
-        "preserved_edge_memory_vertices": sorted(preserved_edge_memory_vertices),
-        "checked_two_simplices": checked_triangles,
-        "preserved_two_simplices": preserved_triangles,
-        "two_simplex_preservation_rate": float(triangle_rate),
-        "preserved_two_simplex_faces": preserved_two_simplex_faces,
-        "failed_two_simplex_faces": failed_two_simplex_faces,
-        "is_simplicial_on_displayed_skeleton": bool(edge_rate >= 0.999 and triangle_rate >= 0.999),
+        "preserved_edge_pairs": edge_report["preserved_pairs"],
+        "failed_edge_pairs": edge_report["failed_pairs"],
+        "preserved_edge_query_vertices": sorted(edge_report["preserved_query_vertices"]),
+        "preserved_edge_memory_vertices": sorted(edge_report["preserved_memory_vertices"]),
+        "checked_two_simplices": checked_faces,
+        "preserved_two_simplices": preserved_faces,
+        "two_simplex_preservation_rate": float(face_rate),
+        "preserved_two_simplex_faces": face_report["preserved_pairs"],
+        "failed_two_simplex_faces": face_report["failed_pairs"],
+        "is_filtered_simplicial_map": is_map,
+        "is_simplicial_on_displayed_skeleton": is_map,
+        "simplicial_map_certificate": {
+            "source": "finite_filtered_complex_check",
+            "rule": "for every displayed simplex sigma, filtration_L(f(sigma)) <= filtration_K(sigma)",
+            "domain_vertices_mapped": len(mapping),
+            "domain_vertices_total": len(query_vertices),
+            "edge_failures": checked_edges - preserved_edges,
+            "two_simplex_failures": checked_faces - preserved_faces,
+            "max_positive_filtration_distortion": all_distortion.get("max"),
+            "identity_self_map": is_identity_self_map,
+        },
     }
+
+
+def _empty_simplicial_map_report(query_vertices: list[dict[str, object]], memory_vertices: list[dict[str, object]], reason: str) -> dict[str, object]:
+    return {
+        "vertex_map": [],
+        "displayed_domain_vertices": len(query_vertices),
+        "displayed_codomain_vertices": len(memory_vertices),
+        "checked_edges": 0,
+        "preserved_edges": 0,
+        "edge_preservation_rate": 0.0,
+        "checked_two_simplices": 0,
+        "preserved_two_simplices": 0,
+        "two_simplex_preservation_rate": 0.0,
+        "is_filtered_simplicial_map": False,
+        "is_simplicial_on_displayed_skeleton": False,
+        "simplicial_map_failure_reason": reason,
+        "map_source": "none",
+    }
+
+
+def _probability_induced_vertex_assignment(
+    query_vertices: list[dict[str, object]],
+    memory_vertices: list[dict[str, object]],
+    q_probs: list[list[float] | None],
+    m_probs: list[list[float] | None],
+) -> list[dict[str, object]]:
+    costs = np.full((len(query_vertices), len(memory_vertices)), 1e6, dtype=float)
+    js_costs = np.full((len(query_vertices), len(memory_vertices)), math.inf, dtype=float)
+    for qi, q in enumerate(query_vertices):
+        for mi, m in enumerate(memory_vertices):
+            dist = _padded_jensen_shannon(q_probs[qi], m_probs[mi])
+            if dist is None:
+                continue
+            js_costs[qi, mi] = float(dist)
+            type_penalty = 0.05 if q.get("type") != m.get("type") else 0.0
+            level_penalty = 0.0
+            if q.get("level") is not None and m.get("level") is not None:
+                level_penalty = 0.01 * abs(float(q.get("level", 0.0) or 0.0) - float(m.get("level", 0.0) or 0.0))
+            costs[qi, mi] = float(dist + type_penalty + level_penalty)
+    pairs: list[tuple[int, int]] = []
+    try:
+        from scipy.optimize import linear_sum_assignment  # type: ignore
+
+        row_ind, col_ind = linear_sum_assignment(costs)
+        pairs = [(int(r), int(c)) for r, c in zip(row_ind, col_ind) if math.isfinite(float(costs[int(r), int(c)])) and costs[int(r), int(c)] < 1e5]
+    except Exception:
+        used: set[int] = set()
+        for qi in range(len(query_vertices)):
+            order = np.argsort(costs[qi])
+            for mi in order.tolist():
+                if mi not in used and math.isfinite(float(costs[qi, mi])) and costs[qi, mi] < 1e5:
+                    pairs.append((qi, int(mi)))
+                    used.add(int(mi))
+                    break
+    rows = []
+    for qi, mi in pairs:
+        cost = float(costs[qi, mi])
+        js_distance = float(js_costs[qi, mi])
+        rows.append(
+            {
+                "query_vertex": str(query_vertices[qi]["label"]),
+                "memory_vertex": str(memory_vertices[mi]["label"]),
+                "score": float(1.0 / (1.0 + cost)),
+                "assignment_cost": cost,
+                "jensen_shannon_distance": js_distance,
+                "map_source": "model_probability_jensen_shannon_assignment",
+                "query_probability_source": query_vertices[qi].get("probability_source"),
+                "memory_probability_source": memory_vertices[mi].get("probability_source"),
+            }
+        )
+    return rows
+
+
+def _check_filtered_simplicial_dimension(
+    query_obj: dict[str, object],
+    memory_obj: dict[str, object],
+    mapping: dict[str, str],
+    q_filtration: dict[tuple[str, ...], float],
+    m_filtration: dict[tuple[str, ...], float],
+    dimension: int,
+) -> dict[str, object]:
+    checked = 0
+    preserved = 0
+    preserved_pairs: list[dict[str, object]] = []
+    failed_pairs: list[dict[str, object]] = []
+    preserved_query_vertices: set[str] = set()
+    preserved_memory_vertices: set[str] = set()
+    positive_distortions: list[float] = []
+    signed_distortions: list[float] = []
+    missing_codomain_simplices = 0
+    for simplex in _complex_simplices(query_obj, dimension):
+        if any(vertex not in mapping for vertex in simplex):
+            continue
+        checked += 1
+        image = tuple(sorted(set(mapping[vertex] for vertex in simplex)))
+        domain_key = tuple(sorted(simplex))
+        domain_filtration = float(q_filtration.get(domain_key, 0.0))
+        codomain_filtration = float(m_filtration.get(image, 0.0 if len(image) <= 1 else math.inf))
+        exists = len(image) <= 1 or image in m_filtration
+        filtration_ok = exists and codomain_filtration <= domain_filtration + 1e-9
+        signed_distortion = codomain_filtration - domain_filtration if math.isfinite(codomain_filtration) else math.inf
+        if exists and math.isfinite(signed_distortion):
+            signed_distortions.append(float(signed_distortion))
+            positive_distortions.append(float(max(0.0, signed_distortion)))
+        elif not exists:
+            missing_codomain_simplices += 1
+        payload = {
+            "query_simplex" if dimension == 2 else "query_edge": list(simplex),
+            "memory_simplex" if dimension == 2 else "memory_edge": list(image),
+            "domain_filtration": domain_filtration,
+            "codomain_filtration": None if not math.isfinite(codomain_filtration) else codomain_filtration,
+            "signed_filtration_distortion": None if not math.isfinite(signed_distortion) else signed_distortion,
+            "positive_filtration_distortion": None if not math.isfinite(signed_distortion) else max(0.0, signed_distortion),
+        }
+        if filtration_ok:
+            preserved += 1
+            preserved_query_vertices.update(simplex)
+            preserved_memory_vertices.update(image)
+            if len(preserved_pairs) < 64:
+                preserved_pairs.append(payload)
+        elif len(failed_pairs) < 64:
+            reason = "missing_codomain_simplex" if not exists else "filtration_not_preserved"
+            failed_pairs.append({**payload, "failure_reason": reason})
+    return {
+        "checked": checked,
+        "preserved": preserved,
+        "preserved_pairs": preserved_pairs,
+        "failed_pairs": failed_pairs,
+        "preserved_query_vertices": preserved_query_vertices,
+        "preserved_memory_vertices": preserved_memory_vertices,
+        "positive_distortions": positive_distortions,
+        "signed_distortions": signed_distortions,
+        "missing_codomain_simplices": missing_codomain_simplices,
+    }
+
+
+def _numeric_summary(values: list[float]) -> dict[str, object]:
+    finite = np.asarray([float(value) for value in values if math.isfinite(float(value))], dtype=float)
+    if finite.size == 0:
+        return {"count": 0, "min": None, "max": None, "mean": None, "std": None}
+    return {
+        "count": int(finite.size),
+        "min": float(np.min(finite)),
+        "max": float(np.max(finite)),
+        "mean": float(np.mean(finite)),
+        "std": float(np.std(finite)),
+    }
+
+
+def _fmt_optional(value: object, digits: int = 4) -> str:
+    try:
+        val = float(value)
+    except (TypeError, ValueError):
+        return "n/a"
+    if not math.isfinite(val):
+        return "n/a"
+    return f"{val:.{digits}g}"
 
 
 def _complex_vertex_records(obj: dict[str, object]) -> list[dict[str, object]]:
@@ -3788,6 +4419,8 @@ def _complex_vertex_records(obj: dict[str, object]) -> list[dict[str, object]]:
                 "text": str(simplex.get("text", "")),
                 "filtration": float(simplex.get("filtration", 0.0) or 0.0),
                 "embedding": simplex.get("embedding", []),
+                "probability": simplex.get("probability", []),
+                "probability_source": simplex.get("probability_source"),
                 "score": simplex.get("score"),
                 "nll": simplex.get("nll"),
                 "level": simplex.get("level"),
@@ -3820,6 +4453,21 @@ def _edge_filtration(obj: dict[str, object], pair: tuple[str, str]) -> float:
     return 1.0
 
 
+def _simplex_filtration_lookup(obj: dict[str, object]) -> dict[tuple[str, ...], float]:
+    out: dict[tuple[str, ...], float] = {}
+    for simplex in obj.get("simplices", []) if isinstance(obj, dict) else []:
+        if not isinstance(simplex, dict):
+            continue
+        raw = simplex.get("simplex", [])
+        if not isinstance(raw, list) or not raw:
+            continue
+        key = tuple(sorted(str(v) for v in raw))
+        filt = float(simplex.get("filtration", 0.0) or 0.0)
+        if key not in out or filt < out[key]:
+            out[key] = filt
+    return out
+
+
 def _complex_edge_pairs(obj: dict[str, object]) -> list[tuple[str, str]]:
     return [tuple(simplex[:2]) for simplex in _complex_simplices(obj, 1) if len(simplex) >= 2]
 
@@ -3841,6 +4489,48 @@ def _simplex_label(simplex: dict[str, object], default_label: str) -> str:
     if isinstance(raw, list) and raw:
         return str(raw[0])
     return default_label
+
+
+def _probability_feature_vector(row: dict[str, object]) -> list[float] | None:
+    raw = row.get("probability")
+    if isinstance(raw, list) and raw:
+        vals = []
+        for item in raw:
+            try:
+                value = float(item)
+            except (TypeError, ValueError):
+                return None
+            if not math.isfinite(value):
+                return None
+            vals.append(max(value, 0.0))
+        total = sum(vals)
+        if total <= 0.0:
+            return None
+        return [float(v / total) for v in vals]
+    return None
+
+
+def _padded_jensen_shannon(a: list[float] | None, b: list[float] | None) -> float | None:
+    if not a or not b:
+        return None
+    n = max(len(a), len(b))
+    pa = np.zeros(n, dtype=float)
+    pb = np.zeros(n, dtype=float)
+    pa[: len(a)] = np.asarray(a, dtype=float)
+    pb[: len(b)] = np.asarray(b, dtype=float)
+    pa = np.maximum(pa, 0.0)
+    pb = np.maximum(pb, 0.0)
+    sa = float(pa.sum())
+    sb = float(pb.sum())
+    if sa <= 0.0 or sb <= 0.0:
+        return None
+    pa = pa / sa
+    pb = pb / sb
+    mix = 0.5 * (pa + pb)
+    eps = 1e-12
+    kl_a = float(np.sum(np.where(pa > 0.0, pa * np.log(pa / np.maximum(mix, eps)), 0.0)))
+    kl_b = float(np.sum(np.where(pb > 0.0, pb * np.log(pb / np.maximum(mix, eps)), 0.0)))
+    return float(math.sqrt(max(0.0, 0.5 * (kl_a + kl_b))))
 
 
 def _vertex_match_score(query: dict[str, object], memory: dict[str, object]) -> float:
@@ -4488,7 +5178,7 @@ def _write_plotly_dark_html(path: Path, fig: go.Figure, title: str, panel_items:
       {controls_html}
       <div class="simplicial-object-plot" id="simplicial-plot" aria-label="interactive selected filtered simplicial complex"></div>
       <details class="static-preview">
-        <summary>Static SVG fallback</summary>
+        <summary>Static SVG preview</summary>
         <div class="simplicial-object-panel" id="simplicial-svg">{initial["svg"]}</div>
       </details>
     </aside>"""
@@ -4700,11 +5390,11 @@ def _write_plotly_dark_html(path: Path, fig: go.Figure, title: str, panel_items:
       filtrationSlider.min = hasRange ? String(min) : "0";
       filtrationSlider.max = hasRange ? String(max) : "1";
       filtrationSlider.step = hasRange ? String(Math.max((max - min) / 200, 0.000001)) : "0.001";
-      filtrationSlider.value = hasRange ? String(max) : "1";
+      filtrationSlider.value = hasRange ? String(min) : "0";
       filtrationSlider.disabled = !hasRange;
-      filtrationHint.textContent = item.multiparameter_hint || "Shows simplices with scalar filtration at or below the selected radius. Multiparameter summaries remain in the JSON payload.";
-      applyFiltrationThreshold(root, hasRange ? max : Infinity);
-      filtrationValue.textContent = hasRange ? max.toFixed(3) : "all";
+      filtrationHint.textContent = item.multiparameter_hint || "Left is the disjoint 0-simplex cloud; moving right adds exactly the simplices whose scalar filtration is at or below the selected radius. Multiparameter summaries remain in the JSON payload.";
+      applyFiltrationThreshold(root, hasRange ? min : Infinity);
+      filtrationValue.textContent = hasRange ? min.toFixed(3) : "all";
     }}
     function applyFiltrationThreshold(root, threshold) {{
       if (!root) return;
@@ -4755,7 +5445,7 @@ def _write_plotly_dark_html(path: Path, fig: go.Figure, title: str, panel_items:
         edgeHover.push(hover, hover, null);
       }});
       const shownVertices = vertices.filter((v) => visible.has(String(v.label)));
-      const showLabels = shownVertices.length <= 42;
+      const showLabels = shownVertices.length <= 18;
       const traces = [
         {{
           type: "scatter3d",
@@ -4763,7 +5453,7 @@ def _write_plotly_dark_html(path: Path, fig: go.Figure, title: str, panel_items:
           x: edgeX,
           y: edgeY,
           z: edgeZ,
-          line: {{color: "rgba(125,211,252,0.70)", width: 4}},
+          line: {{color: "rgba(125,211,252,0.42)", width: 2.2}},
           hovertext: edgeHover,
           hoverinfo: "text",
           name: "1-simplices"
@@ -4798,8 +5488,8 @@ def _write_plotly_dark_html(path: Path, fig: go.Figure, title: str, panel_items:
           i: triI,
           j: triJ,
           k: triK,
-          color: "rgba(94,234,212,0.28)",
-          opacity: 0.34,
+          color: "rgba(94,234,212,0.14)",
+          opacity: 0.18,
           name: "2-simplices",
           hoverinfo: "skip",
           showscale: false
@@ -4894,7 +5584,8 @@ def _write_plotly_dark_html(path: Path, fig: go.Figure, title: str, panel_items:
       const sliders = (plot.layout && plot.layout.sliders) || [];
       const slider = sliders.length ? sliders[0] : null;
       if (!slider || !Array.isArray(slider.steps) || !slider.steps.length) return;
-      const active = Math.max(0, slider.steps.length - 1);
+      const layoutActive = Number(slider.active);
+      const active = Number.isInteger(layoutActive) ? Math.max(0, Math.min(slider.steps.length - 1, layoutActive)) : 0;
       const step = slider.steps[Math.max(0, Math.min(slider.steps.length - 1, active))];
       const args = step && Array.isArray(step.args) ? step.args : null;
       const frameName = args && Array.isArray(args[0]) ? args[0][0] : null;
@@ -5022,11 +5713,12 @@ def _simplicial_plot_payload(obj: dict[str, object], max_vertices: int = 220) ->
     coords3, _projected, layout_kind = _simplicial_pca3_radius_layout(labels, vertices, edges, width=760, height=560)
     vertex_by_label = {str((row.get("simplex") or [""])[0]): row for row in vertices}
     threshold_values = _display_thresholds(obj, max_steps=96)
+    radius_vertices_enter_at_zero = _is_radius_filtration_complex(obj)
     payload_vertices: list[dict[str, object]] = []
     for idx, label in enumerate(labels):
         row = vertex_by_label.get(label, {})
         x, y, z = coords3.get(label, (0.0, 0.0, 0.0))
-        filt = float(row.get("filtration", 0.0) or 0.0)
+        filt = 0.0 if radius_vertices_enter_at_zero else float(row.get("filtration", 0.0) or 0.0)
         payload_vertices.append(
             {
                 "label": label,
@@ -5080,6 +5772,7 @@ def _simplicial_plot_payload(obj: dict[str, object], max_vertices: int = 220) ->
         "source_edge_count": sum(1 for row in simplices if isinstance(row, dict) and int(row.get("dimension", -1)) == 1),
         "source_triangle_count": sum(1 for row in simplices if isinstance(row, dict) and int(row.get("dimension", -1)) == 2),
         "truncated_for_interactive_panel": source_label_count > len(payload_vertices),
+        "vertices_enter_at_zero": radius_vertices_enter_at_zero,
     }
 
 
@@ -5090,12 +5783,23 @@ def _simplicial_object_svg(obj: dict[str, object], width: int = 380, height: int
     triangles = [s for s in simplices if isinstance(s, dict) and int(s.get("dimension", -1)) == 2]
     labels = [str((s.get("simplex") or [f"v{idx}"])[0]) for idx, s in enumerate(vertices)]
     if not labels:
-        labels = ["empty"]
+        summary = obj.get("summary", {}) if isinstance(obj, dict) and isinstance(obj.get("summary"), dict) else {}
+        reason = obj.get("reason", "no vertices available") if isinstance(obj, dict) else "no vertices available"
+        return (
+            f"<svg class='pca-radius-filtered-complex unavailable-complex' viewBox='0 0 {width} {height}' role='img' aria-label='filtered simplicial object unavailable'>"
+            "<rect width='100%' height='100%' rx='12' fill='#070a12'/>"
+            "<rect x='8' y='8' width='364' height='222' rx='10' fill='#0f172a' stroke='rgba(251,113,133,0.28)'/>"
+            "<text x='16' y='34' fill='#fecdd3' font-size='12' font-weight='650'>Filtered simplicial object unavailable</text>"
+            f"<text x='16' y='56' fill='#cbd5e1' font-size='9'>{html.escape(str(reason))[:160]}</text>"
+            f"<text x='16' y='74' fill='#94a3b8' font-size='8'>filtration_model={html.escape(str(summary.get('filtration_model', 'unknown')))}</text>"
+            "</svg>"
+        )
     visible_labels = labels[:max_vertices]
     visible = set(visible_labels)
     summary = obj.get("summary", {}) if isinstance(obj, dict) else {}
     thresholds = obj.get("thresholds", []) if isinstance(obj, dict) else []
     coords3, projected, layout_kind = _simplicial_pca3_radius_layout(visible_labels, vertices, edges, width=width, height=height)
+    radius_vertices_enter_at_zero = _is_radius_filtration_complex(obj)
 
     def point(label: str) -> tuple[float, float] | None:
         return projected.get(str(label))
@@ -5123,7 +5827,7 @@ def _simplicial_object_svg(obj: dict[str, object], width: int = 380, height: int
             avg_z = float(np.mean([depth(v) for v in simplex]))
             parts.append(
                 f"<polygon class='two-simplex pca-radius-face' data-filtration='{filt:.8f}' data-pca-z='{avg_z:.6f}' points='{poly}' "
-                f"fill='rgba(94,234,212,0.16)' stroke='rgba(94,234,212,0.46)' stroke-width='1.2'>"
+                f"fill='rgba(94,234,212,0.08)' stroke='rgba(94,234,212,0.20)' stroke-width='0.8'>"
                 f"<title>3D PCA face filtration={filt:.3f} mean_z={avg_z:.3f}</title></polygon>"
             )
     for edge in edges[:160]:
@@ -5139,10 +5843,10 @@ def _simplicial_object_svg(obj: dict[str, object], width: int = 380, height: int
         color = _filtration_color(filt)
         edge_type = html.escape(str(edge.get("type", "edge"))[:30])
         avg_z = 0.5 * (depth(simplex[0]) + depth(simplex[1]))
-        stroke_width = 1.5 + 1.6 * max(0.0, min(1.0, avg_z))
+        stroke_width = 0.9 + 1.0 * max(0.0, min(1.0, avg_z))
         parts.append(
             f"<line class='one-simplex pca-radius-edge' data-filtration='{filt:.8f}' data-pca-z='{avg_z:.6f}' x1='{a[0]:.1f}' y1='{a[1]:.1f}' x2='{b[0]:.1f}' y2='{b[1]:.1f}' "
-            f"stroke='{color}' stroke-width='{stroke_width:.2f}' stroke-opacity='0.82'><title>{edge_type} radius filtration={filt:.3f} mean_z={avg_z:.3f}</title></line>"
+            f"stroke='{color}' stroke-width='{stroke_width:.2f}' stroke-opacity='0.48'><title>{edge_type} radius filtration={filt:.3f} mean_z={avg_z:.3f}</title></line>"
         )
     vertex_by_label = {str((s.get("simplex") or [""])[0]): s for s in vertices}
     radius = 7.2 if len(visible_labels) <= 32 else 5.2
@@ -5152,7 +5856,7 @@ def _simplicial_object_svg(obj: dict[str, object], width: int = 380, height: int
         filt = 0.0
         vertex = vertex_by_label.get(label, {})
         if vertex:
-            filt = float(vertex.get("filtration", 0.0) or 0.0)
+            filt = 0.0 if radius_vertices_enter_at_zero else float(vertex.get("filtration", 0.0) or 0.0)
         color = _filtration_color(filt)
         z = depth(label)
         r = radius * (0.72 + 0.56 * max(0.0, min(1.0, z)))
@@ -5162,7 +5866,7 @@ def _simplicial_object_svg(obj: dict[str, object], width: int = 380, height: int
             f"<circle class='zero-simplex pca-radius-node' data-filtration='{filt:.8f}' data-pca-z='{z:.6f}' cx='{x:.1f}' cy='{y:.1f}' r='{r:.1f}' fill='{color}' stroke='#e8eef8' "
             f"stroke-width='1.2' filter='url(#glow)'><title>{vertex_type} radius filtration={filt:.3f} PCA=({coords3.get(label, (0.0, 0.0, 0.0))[0]:.3f},{coords3.get(label, (0.0, 0.0, 0.0))[1]:.3f},{z:.3f})</title></circle>"
         )
-        if len(visible_labels) <= 48:
+        if len(visible_labels) <= 18:
             parts.append(f"<text x='{x:.1f}' y='{y + 18:.1f}' text-anchor='middle' fill='#dbe7f4' font-size='{font_size}'>{safe}</text>")
     parts.append("<text x='16' y='24' fill='#dbeafe' font-size='11' font-weight='650'>3D PCA radius-filtered simplicial complex</text>")
     parts.append(
@@ -5208,9 +5912,9 @@ def _simplicial_pca3_radius_layout(
     else:
         target_distances = _target_simplicial_distance_matrix(labels, features, edges)
         coords, stats = _classical_mds3(target_distances)
-        if coords.shape != (features.shape[0], 3) or not np.isfinite(coords).all() or float(np.abs(coords).sum()) <= 1e-12:
-            coords, fallback_stats = _feature_pca3_with_jitter(features, labels)
-            stats = {"stress": 1.0, "corr": 0.0, "energy3": float(fallback_stats.get("energy3", 0.0)), "fallback": fallback_stats.get("fallback", "feature_pca3")}
+        if coords.shape != (features.shape[0], 3) or not np.isfinite(coords).all():
+            coords, projection_stats = _feature_pca3_without_synthetic_jitter(features, labels)
+            stats = {"stress": 1.0, "corr": 0.0, "energy3": float(projection_stats.get("energy3", 0.0)), "projection_note": projection_stats.get("projection_note", "feature_pca3")}
     mins = coords.min(axis=0, keepdims=True)
     spans = np.maximum(coords.max(axis=0, keepdims=True) - mins, 1e-8)
     unit = (coords - mins) / spans
@@ -5241,7 +5945,7 @@ def _simplicial_pca3_radius_layout(
         f"stress={float(stats.get('stress', 0.0)):.3f} "
         f"corr={float(stats.get('corr', 0.0)):.3f} "
         f"energy3={float(stats.get('energy3', 0.0)):.3f} "
-        + (f"fallback={stats.get('fallback')} " if stats.get("fallback") else "")
+        + (f"projection_note={stats.get('projection_note')} " if stats.get("projection_note") else "")
         + f"mean_radius={mean_radius:.3f}",
     )
 
@@ -5252,8 +5956,9 @@ def _vertex_metric_feature_matrix(labels: list[str], vertex_by_label: dict[str, 
     for idx, label in enumerate(labels):
         vertex = vertex_by_label.get(label, {})
         vector = _coerce_vertex_vector(vertex)
-        semantic_features = _vertex_pca_feature(label, vertex, idx, len(labels))
-        row = vector + semantic_features
+        if not vector:
+            vector = _vertex_numeric_feature(label, vertex, idx, len(labels))
+        row = vector
         rows.append(row)
         max_len = max(max_len, len(row))
     padded = np.zeros((len(rows), max_len), dtype=float)
@@ -5267,37 +5972,34 @@ def _vertex_metric_feature_matrix(labels: list[str], vertex_by_label: dict[str, 
     return (padded - means) / scale
 
 
-def _feature_pca3_with_jitter(features: np.ndarray, labels: list[str]) -> tuple[np.ndarray, dict[str, object]]:
+def _feature_pca3_without_synthetic_jitter(features: np.ndarray, labels: list[str]) -> tuple[np.ndarray, dict[str, object]]:
     if features.size == 0:
-        features = np.asarray([_hashed_text_feature_vector(label, bins=16) for label in labels], dtype=float)
+        return np.zeros((len(labels), 3), dtype=float), {"projection_note": "unavailable_no_vertex_vectors", "energy3": 0.0}
     values = np.asarray(features, dtype=float)
     if values.ndim != 2 or values.shape[0] != len(labels):
-        values = np.asarray([_hashed_text_feature_vector(label, bins=16) for label in labels], dtype=float)
-    jitter = np.asarray([_hashed_text_feature_vector(f"layout::{label}", bins=min(16, max(values.shape[1], 1))) for label in labels], dtype=float)
-    if jitter.shape[1] < values.shape[1]:
-        jitter = np.pad(jitter, ((0, 0), (0, values.shape[1] - jitter.shape[1])))
-    elif jitter.shape[1] > values.shape[1]:
-        jitter = jitter[:, : values.shape[1]]
-    values = values + 1e-3 * jitter
+        return np.zeros((len(labels), 3), dtype=float), {"projection_note": "unavailable_invalid_vertex_vector_matrix", "energy3": 0.0}
     values = values - np.mean(values, axis=0, keepdims=True)
     try:
         _u, s, vt = np.linalg.svd(values, full_matrices=False)
         coords = values @ vt[: min(3, vt.shape[0])].T
     except np.linalg.LinAlgError:
-        coords = jitter[:, : min(3, jitter.shape[1])]
+        coords = np.zeros((len(labels), 3), dtype=float)
         s = np.asarray([], dtype=float)
     if coords.shape[1] < 3:
         coords = np.pad(coords, ((0, 0), (0, 3 - coords.shape[1])))
     if not np.isfinite(coords).all() or float(np.ptp(coords, axis=0).sum()) <= 1e-12:
-        coords = np.asarray([_hashed_text_feature_vector(f"coords::{label}", bins=3) for label in labels], dtype=float)
+        coords = np.zeros((len(labels), 3), dtype=float)
+        note = "degenerate_vertex_vector_projection"
+    else:
+        note = "feature_pca3_without_synthetic_jitter"
     energy = float(np.sum(s[:3] ** 2) / max(float(np.sum(s ** 2)), 1e-12)) if s.size else 0.0
-    return coords[:, :3], {"fallback": "feature_pca3_from_vertex_embeddings_or_semantic_hash", "energy3": energy}
+    return coords[:, :3], {"projection_note": note, "energy3": energy}
 
 
 def _coerce_vertex_vector(vertex: dict[str, object], max_dims: int = 128) -> list[float]:
     if not isinstance(vertex, dict):
         return []
-    for key in ("embedding", "embedding_vector", "vector", "features", "feature", "coords", "coordinates", "pca"):
+    for key in ("embedding", "probability", "embedding_vector", "vector", "features", "feature", "coords", "coordinates", "pca"):
         value = vertex.get(key)
         if value is None:
             continue
@@ -5413,51 +6115,19 @@ def _classical_mds3(distances: np.ndarray) -> tuple[np.ndarray, dict[str, float]
     return coords[:, :3], {"stress": stress, "corr": corr, "energy3": energy3}
 
 
-def _vertex_pca_feature(label: str, vertex: dict[str, object], idx: int, total: int) -> list[float]:
+def _vertex_numeric_feature(label: str, vertex: dict[str, object], idx: int, total: int) -> list[float]:
     text = str(vertex.get("text", "")) if isinstance(vertex, dict) else ""
-    kind = str(vertex.get("type", "vertex")) if isinstance(vertex, dict) else "vertex"
     filt = float(vertex.get("filtration", 0.0) or 0.0) if isinstance(vertex, dict) else 0.0
     weight = float(vertex.get("weight", 1.0) or 1.0) if isinstance(vertex, dict) else 1.0
     decoded = str(vertex.get("decoded_argmax", "")) if isinstance(vertex, dict) else ""
     input_text = str(vertex.get("input_text", "")) if isinstance(vertex, dict) else ""
-    path = _json_clip(vertex.get("path", []), 256) if isinstance(vertex, dict) else ""
-    semantic = _hashed_text_feature_vector(f"{label}\n{kind}\n{text}\n{decoded}\n{input_text}\n{path}", bins=48)
-    type_digest = hashlib.sha1(kind.encode("utf-8", "ignore")).digest()
-    type_bits = [int(byte) / 255.0 for byte in type_digest[:6]]
     return [
         filt,
         math.log1p(abs(weight)),
         len(text) / 512.0,
         len(decoded) / 2048.0,
         len(input_text) / 4096.0,
-        *type_bits,
-        *semantic,
     ]
-
-
-def _hashed_text_feature_vector(text: str, bins: int = 48) -> list[float]:
-    bins = max(int(bins), 8)
-    vec = np.zeros(bins, dtype=float)
-    clean = " ".join(str(text or "").lower().split())
-    if not clean:
-        return vec.tolist()
-    tokens = clean.split()
-    for token in tokens[:512]:
-        digest = hashlib.blake2b(token.encode("utf-8", "ignore"), digest_size=8).digest()
-        bucket = int.from_bytes(digest[:4], "little") % bins
-        sign = 1.0 if digest[4] % 2 == 0 else -1.0
-        vec[bucket] += sign
-    compact = clean[:2048]
-    for idx in range(max(len(compact) - 2, 0)):
-        tri = compact[idx : idx + 3]
-        digest = hashlib.blake2b(tri.encode("utf-8", "ignore"), digest_size=8).digest()
-        bucket = int.from_bytes(digest[:4], "little") % bins
-        sign = 1.0 if digest[4] % 2 == 0 else -1.0
-        vec[bucket] += 0.25 * sign
-    norm = float(np.linalg.norm(vec))
-    if norm > 1e-12:
-        vec = vec / norm
-    return [float(v) for v in vec]
 
 
 def _edge_pairs_for_labels(edges: list[dict[str, object]], labels: set[str]) -> list[tuple[str, str]]:
@@ -5510,7 +6180,7 @@ def _simplicial_layout(
     for idx, label in enumerate(labels):
         angle = -np.pi / 2 + 2 * np.pi * idx / max(len(labels), 1)
         coords[label] = (cx + radius * np.cos(angle), cy + radius * np.sin(angle))
-    return coords, "circular_fallback"
+    return coords, "radial_layout_no_metric_geometry"
 
 
 def _dag_layer_layout(labels: list[str], edge_pairs: list[tuple[str, str]]) -> tuple[dict[str, tuple[float, float]], str]:
@@ -5787,7 +6457,7 @@ def _nll_local_interpolating_sheet_trace(
             "PC2=%{y:.3f}<br>"
             "centered scaled NLL=%{z:.4f}<br>"
             "local raw NLL=%{surfacecolor:.6f}<br>"
-            "visible support is restricted to neighborhoods of observed states and microsteps<extra></extra>"
+            "visible support is restricted to neighborhoods of model-evaluated GoT states<extra></extra>"
         ),
         contours=dict(z=dict(show=True, color="rgba(219,234,254,0.22)", width=1)),
         lighting=dict(ambient=0.80, diffuse=0.32, specular=0.08, roughness=0.88),
@@ -5802,11 +6472,11 @@ def _nll_local_interpolating_sheet_trace(
         "duplicate_xy_points_removed": int(max(source_count - x.size, 0)),
         "max_point_residual": float(residual),
         "touches_points": bool(float(residual) <= 1e-8),
-        "interpolation": "Sample-supported inverse-distance interpolation through observed GoT state anchors and rendered microstep anchors.",
+        "interpolation": "Sample-supported inverse-distance interpolation through model-evaluated GoT state anchors.",
         "support_policy": support_meta.get("support_policy", "union of local sample neighborhoods"),
         "support_radius": float(support_meta.get("support_radius", 0.0)),
         "masked_fraction": float(support_meta.get("masked_fraction", 0.0)),
-        "provenance": "computed from sampled model GoT state NLL anchors plus deterministic rendered microstep NLL anchors; it is not a dense model forward pass over latent space",
+        "provenance": "computed from sampled model GoT state NLL anchors only; it is not a dense model forward pass over latent space",
     }
     meta.update(
         {
@@ -5817,175 +6487,6 @@ def _nll_local_interpolating_sheet_trace(
         }
     )
     return trace, meta
-
-
-def _nll_surrogate_landscape_trace(
-    x_values: np.ndarray,
-    y_values: np.ndarray,
-    z_values: np.ndarray,
-    nll_values: np.ndarray,
-    name: str,
-) -> tuple[go.BaseTraceType | None, dict[str, object]]:
-    x = np.asarray(x_values, dtype=float).reshape(-1)
-    y = np.asarray(y_values, dtype=float).reshape(-1)
-    z = np.asarray(z_values, dtype=float).reshape(-1)
-    nll = np.asarray(nll_values, dtype=float).reshape(-1)
-    finite = np.isfinite(x) & np.isfinite(y) & np.isfinite(z) & np.isfinite(nll)
-    x = x[finite]
-    y = y[finite]
-    z = z[finite]
-    nll = nll[finite]
-    if x.size < 3 or _xy_rank(x, y) < 2:
-        return None, {"available": False, "reason": "insufficient non-collinear NLL anchors for landscape"}
-    source_count = int(x.size)
-    x, y, z, nll, duplicate_meta = _collapse_duplicate_xy_for_surface(x, y, z, nll)
-    if x.size < 3 or _xy_rank(x, y) < 2:
-        return None, {"available": False, "reason": "duplicate collapse left insufficient landscape anchors"}
-
-    x_span = float(np.ptp(x))
-    y_span = float(np.ptp(y))
-    span = max(x_span, y_span, 1e-9)
-    pad_x = max(x_span * 0.78, span * 0.46, 0.45)
-    pad_y = max(y_span * 0.78, span * 0.46, 0.45)
-    grid_size = 82
-    xi = _axis_with_points(float(x.min() - pad_x), float(x.max() + pad_x), x, grid_size)
-    yi = _axis_with_points(float(y.min() - pad_y), float(y.max() + pad_y), y, grid_size)
-    grid_x, grid_y = np.meshgrid(xi, yi)
-    points = np.column_stack([x, y])
-    grid_points = np.column_stack([grid_x.reshape(-1), grid_y.reshape(-1)])
-    positive = _positive_pairwise_distances(points)
-    if positive.size:
-        sigma = float(max(np.quantile(positive, 0.45), span * 0.14, 1e-6))
-        distance_scale = float(max(np.quantile(positive, 0.72), span * 0.42, 1e-6))
-    else:
-        sigma = float(max(span * 0.25, 1e-6))
-        distance_scale = float(max(span * 0.42, 1e-6))
-    z_idw, min_dist = _local_idw_interpolate(points, z, grid_points, sigma=sigma)
-    nll_idw, _ = _local_idw_interpolate(points, nll, grid_points, sigma=sigma)
-
-    z_range = float(np.nanmax(z) - np.nanmin(z)) if z.size else 0.0
-    barrier_height = float(max(z_range * 0.72, 2.4))
-    local_support_energy = np.clip((min_dist / distance_scale) ** 2, 0.0, 3.5)
-    landscape_flat = z_idw + barrier_height * local_support_energy
-    landscape_z = landscape_flat.reshape(grid_x.shape)
-    nll_grid = nll_idw.reshape(grid_x.shape)
-    distance_grid = min_dist.reshape(grid_x.shape)
-    anchor_grid_meta = _force_landscape_grid_to_anchor_values(
-        grid_x,
-        grid_y,
-        landscape_z,
-        nll_grid,
-        distance_grid,
-        x,
-        y,
-        z,
-        nll,
-    )
-    customdata = np.dstack([nll_grid, distance_grid])
-    z_at_points, _ = _local_idw_interpolate(points, z, points, sigma=sigma)
-    residual = float(np.nanmax(np.abs(z_at_points - z))) if z.size else 0.0
-    trace = go.Surface(
-        x=grid_x,
-        y=grid_y,
-        z=landscape_z,
-        surfacecolor=landscape_z,
-        colorscale=[
-            [0.0, "#0612a8"],
-            [0.22, "#2447d8"],
-            [0.45, "#6578d8"],
-            [0.62, "#a6b4c4"],
-            [0.78, "#d08b52"],
-            [1.0, "#b91c1c"],
-        ],
-        opacity=0.66,
-        showscale=False,
-        name=name,
-        customdata=customdata,
-        hovertemplate=(
-            "smooth projected NLL/fitness landscape<br>"
-            "PC1=%{x:.3f}<br>"
-            "PC2=%{y:.3f}<br>"
-            "energy=%{z:.4f}<br>"
-            "local smoothed raw NLL=%{customdata[0]:.6f}<br>"
-            "distance to nearest GoT state=%{customdata[1]:.4f}<br>"
-            "surrogate term is zero at observed states<extra></extra>"
-        ),
-        contours=dict(z=dict(show=True, color="rgba(224,242,254,0.20)", width=1)),
-        lighting=dict(ambient=0.72, diffuse=0.38, specular=0.10, roughness=0.86),
-        showlegend=True,
-    )
-    meta = {
-        "available": True,
-        "surface_kind": "smooth_projected_nll_fitness_landscape",
-        "source_point_count_before_duplicate_collapse": source_count,
-        "point_count": source_count,
-        "unique_xy_point_count": int(x.size),
-        "duplicate_xy_points_removed": int(max(source_count - x.size, 0)),
-        "touches_points": True,
-        "max_point_residual": residual,
-        "anchor_grid_exact_residual": float(anchor_grid_meta.get("anchor_grid_exact_residual", 0.0)),
-        "anchor_grid_forced": True,
-        "landscape_domain_covers_all_points": bool(anchor_grid_meta.get("landscape_domain_covers_all_points", False)),
-        "anchor_grid_cell_count": int(anchor_grid_meta.get("anchor_grid_cell_count", 0)),
-        "raw_nll_range": float(np.nanmax(nll) - np.nanmin(nll)) if nll.size else 0.0,
-        "grid_shape": [int(grid_x.shape[0]), int(grid_x.shape[1])],
-        "idw_sigma": sigma,
-        "distance_scale": distance_scale,
-        "barrier_height": barrier_height,
-        "surrogate_terms": ["inverse_distance_weighted_centered_scaled_nll", "squared_distance_to_observed_embedding_support"],
-        "support_energy_policy": "adds zero energy at observed PCA states and a smooth embedding-neighborhood penalty away from sampled reasoning states",
-        "provenance": "computed from model graph_state PCA coordinates and sampled raw NLL anchors; not an independently evaluated dense model loss field",
-    }
-    meta.update(
-        {
-            "duplicate_xy_group_count": int(duplicate_meta.get("duplicate_xy_group_count", 0)),
-            "max_duplicate_xy_multiplicity": int(duplicate_meta.get("max_duplicate_xy_multiplicity", 1)),
-        }
-    )
-    return trace, meta
-
-
-def _force_landscape_grid_to_anchor_values(
-    grid_x: np.ndarray,
-    grid_y: np.ndarray,
-    z_grid: np.ndarray,
-    nll_grid: np.ndarray,
-    distance_grid: np.ndarray,
-    x: np.ndarray,
-    y: np.ndarray,
-    z: np.ndarray,
-    nll: np.ndarray,
-) -> dict[str, object]:
-    """Pin nearest grid cells to measured anchor values for honest rendering."""
-    if grid_x.size == 0 or grid_y.size == 0 or x.size == 0:
-        return {
-            "anchor_grid_exact_residual": 0.0,
-            "landscape_domain_covers_all_points": False,
-            "anchor_grid_cell_count": 0,
-        }
-    xi = np.asarray(grid_x[0, :], dtype=float)
-    yi = np.asarray(grid_y[:, 0], dtype=float)
-    cells: set[tuple[int, int]] = set()
-    residuals: list[float] = []
-    for px, py, pz, pnll in zip(x, y, z, nll):
-        col = int(np.argmin(np.abs(xi - float(px))))
-        row = int(np.argmin(np.abs(yi - float(py))))
-        z_grid[row, col] = float(pz)
-        nll_grid[row, col] = float(pnll)
-        distance_grid[row, col] = 0.0
-        cells.add((row, col))
-        residuals.append(abs(float(z_grid[row, col]) - float(pz)))
-    return {
-        "anchor_grid_exact_residual": float(max(residuals) if residuals else 0.0),
-        "landscape_domain_covers_all_points": bool(
-            float(np.nanmin(x)) >= float(np.nanmin(xi))
-            and float(np.nanmax(x)) <= float(np.nanmax(xi))
-            and float(np.nanmin(y)) >= float(np.nanmin(yi))
-            and float(np.nanmax(y)) <= float(np.nanmax(yi))
-        ),
-        "anchor_grid_cell_count": int(len(cells)),
-        "anchor_grid_policy": "nearest grid cells are overwritten with measured GoT-state and microstep NLL anchors before rendering",
-    }
 
 
 def _nll_support_footprint_trace(

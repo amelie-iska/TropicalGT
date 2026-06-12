@@ -15,23 +15,37 @@ import json
 import math
 from pathlib import Path
 from statistics import mean, pstdev
-from typing import Any
+from typing import Any, NamedTuple
 
 
-ARTIFACTS: tuple[tuple[str, str, str], ...] = (
-    ("GoT NLL landscape", "got_trajectory_pca_3d.html", "3D"),
-    ("Embedding map", "got_embedding_map_3d.html", "PCA"),
-    ("Full trajectory complex", "got_full_trajectory_complex.html", "slider"),
-    ("Step complexes", "reasoning_step_complex_maps/index.html", "steps"),
-    ("Persistence barcode", "trajectory_persistence/persistence_barcode.html", "GUDHI"),
-    ("Betti/free-resolution growth", "trajectory_persistence/persistence_module_betti.html", "multi"),
-    ("Vector representations", "trajectory_persistence/persistence_representations.html", "fast"),
-    ("Persistence landscapes", "trajectory_persistence/persistence_landscapes.html", "landscape"),
-    ("Analogical simplicial map", "analogical_memory_retrieval.html", "map"),
-    ("Analogical top-k index", "analogical_memory_topk_index.html", "top-k"),
-    ("GraphCG directions", "graphcg_direction_cosines.html", "rank"),
-    ("Tropical support", "tropical_support_heatmap.html", "support"),
-    ("Generated sample index", "browser_index.html", "raw"),
+class ArtifactSpec(NamedTuple):
+    label: str
+    rel: str
+    tag: str
+
+
+PRIMARY_ARTIFACTS: tuple[ArtifactSpec, ...] = (
+    ArtifactSpec("GoT NLL landscape", "got_trajectory_pca_3d.html", "NLL"),
+    ArtifactSpec("Embedding map", "got_embedding_map_3d.html", "PCA"),
+    ArtifactSpec("Full radius complex", "got_full_trajectory_complex.html", "radius"),
+    ArtifactSpec("Full radius simplex tree", "got_full_trajectory_simplex_tree_3d.html", "tree"),
+    ArtifactSpec("Probability complex", "got_full_trajectory_complex_jensen_shannon.html", "prob"),
+    ArtifactSpec(
+        "Probability simplex tree",
+        "got_full_trajectory_simplex_tree_3d_jensen_shannon.html",
+        "tree",
+    ),
+    ArtifactSpec("Reasoning step index", "reasoning_step_complex_maps/index.html", "steps"),
+    ArtifactSpec("Analogical many-map overview", "analogical_memory_retrieval.html", "many"),
+    ArtifactSpec("Analogical top-k index", "analogical_memory_topk_index.html", "top-k"),
+    ArtifactSpec("Persistence barcode", "trajectory_persistence/persistence_barcode.html", "bars"),
+    ArtifactSpec("Persistence Betti/free-resolution", "trajectory_persistence/persistence_module_betti.html", "betti"),
+    ArtifactSpec("Persistence vector representations", "trajectory_persistence/persistence_representations.html", "vector"),
+    ArtifactSpec("Persistence landscapes", "trajectory_persistence/persistence_landscapes.html", "land"),
+    ArtifactSpec("GraphCG directions", "graphcg_direction_cosines.html", "rank"),
+    ArtifactSpec("Tropical support", "tropical_support_heatmap.html", "support"),
+    ArtifactSpec("Generated sample index", "browser_index.html", "raw"),
+    ArtifactSpec("Generated audit dashboard", "inference_audit.html", "audit"),
 )
 
 
@@ -86,19 +100,62 @@ def _sample_label(root: Path, sample_dir: Path, index: int) -> str:
     return f"Sample {index:02d}: {name}"
 
 
+def _relative_src(root: Path, sample_dir: Path, target: Path) -> str:
+    return target.relative_to(root).as_posix() if sample_dir != root else target.relative_to(sample_dir).as_posix()
+
+
+def _artifact_row(root: Path, sample_dir: Path, target: Path, label: str, tag: str) -> dict[str, str]:
+    return {
+        "label": label,
+        "src": _relative_src(root, sample_dir, target),
+        "tag": tag,
+    }
+
+
+def _step_label(path: Path) -> str:
+    stem = path.stem.replace("_simplex_tree", "")
+    try:
+        number = int(stem.rsplit("_", 1)[1])
+    except Exception:
+        return path.stem.replace("_", " ")
+    suffix = "simplex tree" if path.stem.endswith("_simplex_tree") else "complex"
+    return f"Reasoning step {number:03d} {suffix}"
+
+
 def _artifact_rows(root: Path, sample_dir: Path) -> list[dict[str, str]]:
     rows = []
-    for label, rel, tag in ARTIFACTS:
-        target = sample_dir / rel
+    seen: set[str] = set()
+    for artifact in PRIMARY_ARTIFACTS:
+        target = sample_dir / artifact.rel
         if not target.exists():
             continue
-        rows.append(
-            {
-                "label": label,
-                "src": target.relative_to(root).as_posix() if sample_dir != root else rel,
-                "tag": tag,
-            }
-        )
+        row = _artifact_row(root, sample_dir, target, artifact.label, artifact.tag)
+        rows.append(row)
+        seen.add(row["src"])
+
+    step_dir = sample_dir / "reasoning_step_complex_maps"
+    if step_dir.exists():
+        for target in sorted(step_dir.glob("reasoning_step_*.html")):
+            row = _artifact_row(
+                root,
+                sample_dir,
+                target,
+                _step_label(target),
+                "tree" if target.stem.endswith("_simplex_tree") else "step",
+            )
+            if row["src"] not in seen:
+                rows.append(row)
+                seen.add(row["src"])
+
+    for target in sorted(sample_dir.glob("analogical_memory_map_*.html")):
+        try:
+            number = int(target.stem.rsplit("_", 1)[1])
+        except Exception:
+            number = len([row for row in rows if row["src"].endswith(target.name)]) + 1
+        row = _artifact_row(root, sample_dir, target, f"Analogical top-k map {number:02d}", "map")
+        if row["src"] not in seen:
+            rows.append(row)
+            seen.add(row["src"])
     return rows
 
 
@@ -190,6 +247,7 @@ def build_index(root: Path, output: Path, title: str) -> None:
                 <span>{sample['candidate_count']} states</span>
                 <span>{sample['edge_count']} edges</span>
                 <span>{sample['level_count']} levels</span>
+                <span>{len(sample['artifacts'])} plots</span>
                 <span>NLL min {_fmt(sample['nll_min'])}</span>
                 <span>NLL std {_fmt(sample['nll_std'])}</span>
                 <span>PCA corr {_fmt(sample['pca_corr'], 3)}</span>
@@ -221,9 +279,9 @@ def build_index(root: Path, output: Path, title: str) -> None:
     * {{ box-sizing: border-box; }}
     html, body {{ height: 100%; }}
     body {{ margin:0; background:linear-gradient(135deg,#05070d 0%,#07111f 55%,#0b1322 100%); color:var(--ink); font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; }}
-    .shell {{ display:grid; grid-template-columns:440px minmax(0,1fr); min-height:100vh; }}
+    .shell {{ display:grid; grid-template-columns:minmax(380px,460px) minmax(780px,1fr); min-height:100vh; }}
     aside {{ position:sticky; top:0; height:100vh; overflow:auto; padding:18px; background:linear-gradient(180deg,rgba(13,23,40,.98),rgba(5,7,13,.98)); border-right:1px solid var(--edge); }}
-    main {{ min-width:0; min-height:100vh; display:grid; grid-template-rows:auto minmax(0,1fr); }}
+    main {{ min-width:0; min-height:100vh; display:grid; grid-template-rows:auto minmax(900px,1fr); }}
     h1 {{ margin:0 0 8px; font-size:24px; line-height:1.12; letter-spacing:0; }}
     .summary {{ color:var(--muted); font-size:13px; line-height:1.45; margin:0 0 16px; }}
     .sample {{ border:1px solid rgba(130,170,220,.22); border-radius:8px; background:rgba(16,31,54,.48); padding:12px; margin:0 0 14px; }}
@@ -239,15 +297,28 @@ def build_index(root: Path, output: Path, title: str) -> None:
     dl {{ margin:8px 0 0; display:grid; grid-template-columns:72px minmax(0,1fr); gap:6px 8px; font-size:12px; line-height:1.4; }}
     dt {{ color:var(--gold); }}
     dd {{ margin:0; color:#d8e8ff; overflow-wrap:anywhere; }}
-    .artifact-grid {{ display:grid; grid-template-columns:1fr 1fr; gap:7px; margin-top:9px; }}
+    .artifact-grid {{ display:grid; grid-template-columns:1fr 1fr; gap:7px; margin-top:9px; max-height:360px; overflow:auto; padding-right:2px; }}
     button.artifact {{ display:flex; justify-content:space-between; align-items:center; gap:8px; width:100%; border:1px solid rgba(130,170,220,.24); border-radius:6px; background:rgba(13,35,62,.9); color:var(--ink); padding:8px 9px; font:inherit; font-size:12px; cursor:pointer; text-align:left; }}
     button.artifact:hover, button.artifact.active {{ border-color:rgba(94,234,212,.78); background:rgba(19,52,83,.98); }}
     .tag {{ flex:0 0 auto; color:#071018; background:var(--accent); border-radius:999px; padding:2px 6px; font-size:9px; font-weight:800; }}
     .topbar {{ display:flex; align-items:center; justify-content:space-between; gap:18px; padding:14px 18px; border-bottom:1px solid var(--edge); background:rgba(7,11,18,.86); }}
     #title {{ margin:0; font-size:16px; line-height:1.2; color:#dbeafe; word-break:break-word; }}
     #path {{ color:var(--muted); font-size:12px; margin-top:3px; word-break:break-all; }}
-    iframe {{ width:100%; height:100%; min-height:880px; border:0; background:#05070d; }}
-    @media (max-width:1100px) {{ .shell {{ grid-template-columns:1fr; }} aside {{ position:static; height:auto; }} iframe {{ min-height:760px; }} }}
+    iframe {{ width:100%; height:100%; min-height:900px; border:0; background:#05070d; }}
+    @media (max-width:1200px) {{
+      .shell {{ grid-template-columns:1fr; }}
+      aside {{ position:static; height:auto; border-right:0; border-bottom:1px solid var(--edge); }}
+      main {{ min-height:920px; grid-template-rows:auto minmax(820px,1fr); }}
+      iframe {{ min-height:820px; }}
+    }}
+    @media (max-width:720px) {{
+      aside {{ padding:12px; }}
+      .topbar {{ align-items:flex-start; flex-direction:column; gap:10px; padding:12px; }}
+      .artifact-grid {{ grid-template-columns:1fr; max-height:440px; }}
+      dl {{ grid-template-columns:1fr; }}
+      main {{ min-height:820px; grid-template-rows:auto minmax(720px,1fr); }}
+      iframe {{ min-height:720px; }}
+    }}
   </style>
 </head>
 <body data-samples="{payload}">

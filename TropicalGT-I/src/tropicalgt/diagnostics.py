@@ -8,7 +8,7 @@ import torch.nn.functional as F
 from .attention import tropical_support_entropy
 from .algebra import compute_topological_algebra_report
 from .records import GraphRecord, GraphTokenBatch
-from .simplicial import build_filtered_simplicial_object
+from .simplicial import build_embedding_radius_simplicial_object
 from .tokenizer import TokenGTTokenizer
 
 ACTION_NAMES = ["expand", "merge", "refine", "stop", "retrieve", "verify", "compress", "reject"]
@@ -76,16 +76,6 @@ def describe_graph_tokens(record: GraphRecord, tokenizer: TokenGTTokenizer) -> l
             }
         )
         edge_count += 1
-    if not tokens:
-        tokens.append(
-            {
-                "index": 0,
-                "kind": "graph",
-                "label": "fallback_graph",
-                "endpoint_ids": [-1, -1],
-                "text": record.text[:256],
-            }
-        )
     return tokens
 
 
@@ -220,16 +210,46 @@ def record_diagnostics(
     if target_ids is not None:
         nll, token_counts = per_record_nll(out["logits"].detach().cpu(), target_ids.detach().cpu())
     traces = graph_token_trace(records, graph_batch, support, margin, tokenizer, max_tokens=max_trace_tokens)
+    graph_token_embeddings = out.get("graph_token_embeddings")
+    graph_token_support_probabilities = out.get("graph_token_support_probabilities")
+    if torch.is_tensor(graph_token_embeddings):
+        graph_token_embeddings = graph_token_embeddings.detach().cpu()
+    if torch.is_tensor(graph_token_support_probabilities):
+        graph_token_support_probabilities = graph_token_support_probabilities.detach().cpu()
     rows = []
     limit = len(records) if max_records is None else min(max_records, len(records))
     for idx in range(limit):
         mask = graph_batch.attention_mask[idx].detach().cpu()
-        filtered_object = build_filtered_simplicial_object(records[idx])
+        graph_token_count = int(graph_batch.graph_token_counts[idx].item())
+        descriptors = describe_graph_tokens(records[idx], tokenizer)[:graph_token_count]
+        embeddings = (
+            graph_token_embeddings[idx, :graph_token_count]
+            if torch.is_tensor(graph_token_embeddings) and graph_token_embeddings.ndim >= 3
+            else []
+        )
+        probabilities = (
+            graph_token_support_probabilities[idx, :graph_token_count, :graph_token_count]
+            if torch.is_tensor(graph_token_support_probabilities) and graph_token_support_probabilities.ndim >= 3
+            else None
+        )
+        filtered_object = build_embedding_radius_simplicial_object(
+            records[idx],
+            descriptors,
+            embeddings,
+            token_probabilities=probabilities,
+            metric="jensen_shannon",
+        )
+        embedding_filtered_object = build_embedding_radius_simplicial_object(
+            records[idx],
+            descriptors,
+            embeddings,
+            metric="euclidean",
+        )
         row = {
             "record_id": records[idx].record_id,
             "nll": float(nll[idx]) if nll is not None else None,
             "token_count": int(token_counts[idx]) if token_counts is not None else None,
-            "graph_tokens": int(graph_batch.graph_token_counts[idx].item()),
+            "graph_tokens": graph_token_count,
             "node_tokens": int(graph_batch.node_counts[idx].item()),
             "edge_tokens": int(graph_batch.edge_counts[idx].item()),
             "graph_json_fallback": bool((records[idx].metadata or {}).get("graph_json_fallback", False)),
@@ -237,6 +257,8 @@ def record_diagnostics(
             "tropical": tropical_record_summary(support[idx : idx + 1], margin[idx : idx + 1], mask[None, :]),
             "graph_token_trace": traces[idx],
             "filtered_simplicial_object": filtered_object,
+            "probability_filtered_simplicial_object": filtered_object,
+            "embedding_filtered_simplicial_object": embedding_filtered_object,
         }
         if (audit_level or "none").lower() != "none":
             row["topological_algebra"] = compute_topological_algebra_report(

@@ -11,7 +11,7 @@ from .data import encode_bytes
 from .algebra import compute_topological_algebra_report
 from .diagnostics import ACTION_NAMES, graph_token_trace, per_record_nll, record_diagnostics
 from .records import GraphRecord, GraphTokenBatch, graph_decoding_order
-from .simplicial import build_filtered_simplicial_object, build_reasoning_trajectory_complex
+from .simplicial import build_reasoning_trajectory_complex
 from .tokenizer import TokenGTTokenizer
 
 
@@ -172,9 +172,20 @@ def run_inference_scaling(
     best = max(evaluated, key=lambda row: row["score"])
     public_candidates = [_public_candidate(row) for row in evaluated]
     trajectory_complex = build_reasoning_trajectory_complex(public_candidates)
+    trajectory_probability_complex = build_reasoning_trajectory_complex(public_candidates, metric="jensen_shannon")
     trajectory_algebra = (
         compute_topological_algebra_report(
             trajectory_complex,
+            audit_level=audit_level,
+            ph_backend=ph_backend,
+            max_simplices=audit_max_simplices,
+        )
+        if (audit_level or "none").lower() != "none"
+        else None
+    )
+    trajectory_probability_algebra = (
+        compute_topological_algebra_report(
+            trajectory_probability_complex,
             audit_level=audit_level,
             ph_backend=ph_backend,
             max_simplices=audit_max_simplices,
@@ -187,12 +198,20 @@ def run_inference_scaling(
         max_level = max((int(row.get("level", 0) or 0) for row in public_candidates), default=0)
         for level in range(max_level + 1):
             level_complex = build_reasoning_trajectory_complex(public_candidates, up_to_level=level)
+            level_probability_complex = build_reasoning_trajectory_complex(public_candidates, up_to_level=level, metric="jensen_shannon")
             trajectory_growth.append(
                 {
                     "level": level,
                     "filtered_simplicial_object": level_complex,
+                    "probability_filtered_simplicial_object": level_probability_complex,
                     "topological_algebra": compute_topological_algebra_report(
                         level_complex,
+                        audit_level=audit_level,
+                        ph_backend=ph_backend,
+                        max_simplices=audit_max_simplices,
+                    ),
+                    "probability_topological_algebra": compute_topological_algebra_report(
+                        level_probability_complex,
                         audit_level=audit_level,
                         ph_backend=ph_backend,
                         max_simplices=audit_max_simplices,
@@ -215,7 +234,9 @@ def run_inference_scaling(
         "best": _public_candidate(best),
         "candidates": public_candidates,
         "trajectory_filtered_simplicial_object": trajectory_complex,
+        "trajectory_probability_filtered_simplicial_object": trajectory_probability_complex,
         "trajectory_topological_algebra": trajectory_algebra,
+        "trajectory_probability_topological_algebra": trajectory_probability_algebra,
         "trajectory_growth": trajectory_growth,
     }
 
@@ -254,6 +275,18 @@ def score_records(
         action_bonus = action_probs[0]["probability"] if action_probs else 0.0
         graph_tokens = int(graph_batch_cpu.graph_token_counts[idx].item())
         score = -float(nll[idx]) + 0.05 * margin_mean + 0.02 * action_bonus - 0.0005 * graph_tokens
+        diagnostics = record_diagnostics(
+            [record],
+            _slice_graph_batch(graph_batch_cpu, idx),
+            {k: v[idx : idx + 1] if torch.is_tensor(v) and v.ndim > 0 else v for k, v in out_cpu.items()},
+            tokenizer,
+            target_ids=torch.stack([ys[idx]]),
+            max_records=1,
+            max_trace_tokens=trace_limit,
+            audit_level=audit_level,
+            ph_backend=ph_backend,
+            audit_max_simplices=audit_max_simplices,
+        )[0]
         rows.append(
             {
                 "record": record,
@@ -270,22 +303,14 @@ def score_records(
                 "edge_tokens": int(graph_batch_cpu.edge_counts[idx].item()),
                 "margin_mean": margin_mean,
                 "gflownet_action_probs": action_probs,
+                "action_probability_vector": [float(row.get("probability", 0.0)) for row in action_probs],
                 "embedding": [float(v) for v in out_cpu["graph_state"][idx].tolist()],
                 "graphcg_projection": graphcg_projection[idx],
                 "graph_token_trace": traces[idx],
-                "filtered_simplicial_object": build_filtered_simplicial_object(record),
-                "record_diagnostics": record_diagnostics(
-                    [record],
-                    _slice_graph_batch(graph_batch_cpu, idx),
-                    {k: v[idx : idx + 1] if torch.is_tensor(v) and v.ndim > 0 else v for k, v in out_cpu.items()},
-                    tokenizer,
-                    target_ids=torch.stack([ys[idx]]),
-                    max_records=1,
-                    max_trace_tokens=trace_limit,
-                    audit_level=audit_level,
-                    ph_backend=ph_backend,
-                    audit_max_simplices=audit_max_simplices,
-                )[0],
+                "filtered_simplicial_object": diagnostics.get("filtered_simplicial_object", {}),
+                "probability_filtered_simplicial_object": diagnostics.get("filtered_simplicial_object", {}),
+                "embedding_filtered_simplicial_object": diagnostics.get("embedding_filtered_simplicial_object", {}),
+                "record_diagnostics": diagnostics,
             }
         )
     return rows
@@ -308,6 +333,7 @@ def _public_candidate(row: dict[str, Any]) -> dict[str, Any]:
         "edge_tokens": row["edge_tokens"],
         "margin_mean": row["margin_mean"],
         "gflownet_action_probs": row["gflownet_action_probs"],
+        "action_probability_vector": row.get("action_probability_vector"),
         "embedding": row.get("embedding"),
         "input_text": row.get("input_text", ""),
         "target_text": row.get("target_text", ""),
@@ -316,6 +342,8 @@ def _public_candidate(row: dict[str, Any]) -> dict[str, Any]:
         "graphcg_projection": row.get("graphcg_projection"),
         "graph_token_trace": row["graph_token_trace"],
         "filtered_simplicial_object": row["filtered_simplicial_object"],
+        "probability_filtered_simplicial_object": row.get("probability_filtered_simplicial_object"),
+        "embedding_filtered_simplicial_object": row.get("embedding_filtered_simplicial_object"),
         "topological_algebra": row.get("record_diagnostics", {}).get("topological_algebra"),
     }
 
@@ -369,8 +397,7 @@ def _select_branch_actions(
         repeat_penalty = 0.035 * float(path_counts.get(action, 0))
         candidates.append({**row, "audit_selection_score": prob - repeat_penalty})
     if not candidates:
-        fallback = next((row for row in action_probs if str(row.get("action", "")) != "stop"), None)
-        return [fallback or {"action": "expand", "probability": 1.0, "audit_selection_score": 1.0}]
+        return []
     ranked = sorted(candidates, key=lambda item: float(item.get("audit_selection_score", 0.0)), reverse=True)
     if stochastic:
         return _sample_branch_actions(

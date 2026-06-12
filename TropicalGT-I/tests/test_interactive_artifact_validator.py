@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import html
 import importlib.util
 import json
 import subprocess
@@ -117,18 +118,77 @@ def _row(root: Path, name: str) -> Path:
                         {"simplex": ["root", "b"], "dimension": 1},
                         {"simplex": ["a", "c"], "dimension": 1},
                     ],
+                },
+                "probability_filtered_simplicial_object": {
+                    "available": True,
+                    "summary": {
+                        "num_vertices": 4,
+                        "num_edges": 3,
+                        "num_two_simplices": 0,
+                        "filtration_model": "model_candidate_probability_jensen_shannon_vietoris_rips_2_skeleton",
+                    },
+                    "simplex_tree": {"backend": "gudhi.SimplexTree", "dimension": 1, "num_simplices": 7},
+                    "simplices": [
+                        {"simplex": ["root"], "dimension": 0, "model_probability_vector": [0.7, 0.2, 0.1]},
+                        {"simplex": ["a"], "dimension": 0, "model_probability_vector": [0.2, 0.7, 0.1]},
+                        {"simplex": ["b"], "dimension": 0, "model_probability_vector": [0.2, 0.1, 0.7]},
+                        {"simplex": ["c"], "dimension": 0, "model_probability_vector": [0.4, 0.4, 0.2]},
+                        {"simplex": ["root", "a"], "dimension": 1},
+                        {"simplex": ["root", "b"], "dimension": 1},
+                        {"simplex": ["a", "c"], "dimension": 1},
+                    ],
                 }
             }
         ),
     )
     steps = [
-        {"file": f"reasoning_step_{idx:03d}.html", "summary": {"num_vertices": 1}, "simplex_tree": {"backend": "gudhi.SimplexTree"}}
+        {"file": f"reasoning_step_{idx:03d}.html", "simplex_tree_file": f"reasoning_step_{idx:03d}_simplex_tree.html", "summary": {"num_vertices": 1}, "simplex_tree": {"backend": "gudhi.SimplexTree"}}
         for idx in range(4)
     ]
     _write(row / "reasoning_step_complex_maps/manifest.json", json.dumps({"steps": steps}))
     _write(row / "analogical_simplicial_maps.json", json.dumps({"maps": [
-        {"codomain_complex_source": "trajectory_filtered_simplicial_object", "edge_preservation_rate": 0.25, "domain_simplex_tree": {"backend": "gudhi.SimplexTree"}, "codomain_simplex_tree": {"backend": "gudhi.SimplexTree"}, "displayed_domain_vertices": 2, "displayed_codomain_vertices": 2, "is_simplicial_on_displayed_skeleton": False, "preserved_edge_pairs": [{"query_edge": ["a", "b"], "memory_edge": ["x", "y"]}], "failed_edge_pairs": [{"query_edge": ["b", "c"], "memory_edge": ["y", "z"]}], "preserved_edge_query_vertices": ["a", "b"]},
-        {"codomain_complex_source": "trajectory_filtered_simplicial_object", "edge_preservation_rate": 0.5, "domain_simplex_tree": {"backend": "gudhi.SimplexTree"}, "codomain_simplex_tree": {"backend": "gudhi.SimplexTree"}, "displayed_domain_vertices": 2, "displayed_codomain_vertices": 2, "is_simplicial_on_displayed_skeleton": False, "preserved_edge_pairs": [{"query_edge": ["a", "b"], "memory_edge": ["x", "y"]}], "failed_edge_pairs": [], "preserved_edge_query_vertices": ["a", "b"]},
+        {
+            "query_complex_source": "trajectory_probability_filtered_simplicial_object",
+            "codomain_complex_source": "trajectory_probability_filtered_simplicial_object",
+            "map_source": "model_probability_jensen_shannon_assignment",
+            "is_identity_self_map": False,
+            "pair_page": str(row / "analogical_memory_retrieval.html"),
+            "jensen_shannon_distance_mean": 0.12,
+            "assignment_cost_mean": 0.17,
+            "jensen_shannon_distance_summary": {"count": 2, "min": 0.1, "max": 0.14, "mean": 0.12, "std": 0.02},
+            "assignment_cost_summary": {"count": 2, "min": 0.15, "max": 0.19, "mean": 0.17, "std": 0.02},
+            "filtration_distortion_summary": {"count": 1, "min": 0.0, "max": 0.07, "mean": 0.07, "std": 0.0},
+            "edge_preservation_rate": 0.25,
+            "domain_simplex_tree": {"backend": "gudhi.SimplexTree"},
+            "codomain_simplex_tree": {"backend": "gudhi.SimplexTree"},
+            "displayed_domain_vertices": 2,
+            "displayed_codomain_vertices": 2,
+            "is_simplicial_on_displayed_skeleton": False,
+            "preserved_edge_pairs": [{"query_edge": ["a", "b"], "memory_edge": ["x", "y"]}],
+            "failed_edge_pairs": [{"query_edge": ["b", "c"], "memory_edge": ["y", "z"]}],
+            "preserved_edge_query_vertices": ["a", "b"],
+        },
+        {
+            "query_complex_source": "trajectory_probability_filtered_simplicial_object",
+            "codomain_complex_source": "trajectory_probability_filtered_simplicial_object",
+            "map_source": "model_probability_jensen_shannon_assignment",
+            "is_identity_self_map": False,
+            "pair_page": str(row / "analogical_memory_map_02.html"),
+            "jensen_shannon_distance_mean": 0.23,
+            "assignment_cost_mean": 0.27,
+            "jensen_shannon_distance_summary": {"count": 2, "min": 0.2, "max": 0.26, "mean": 0.23, "std": 0.03},
+            "assignment_cost_summary": {"count": 2, "min": 0.24, "max": 0.3, "mean": 0.27, "std": 0.03},
+            "filtration_distortion_summary": {"count": 1, "min": 0.0, "max": 0.02, "mean": 0.02, "std": 0.0},
+            "edge_preservation_rate": 0.5,
+            "domain_simplex_tree": {"backend": "gudhi.SimplexTree"},
+            "codomain_simplex_tree": {"backend": "gudhi.SimplexTree"},
+            "displayed_domain_vertices": 2,
+            "displayed_codomain_vertices": 2,
+            "is_simplicial_on_displayed_skeleton": False,
+            "preserved_edge_pairs": [{"query_edge": ["a", "b"], "memory_edge": ["x", "y"]}],
+            "failed_edge_pairs": [],
+            "preserved_edge_query_vertices": ["a", "b"],
+        },
     ]}))
     _write(
         row / "tropical_support_payload.json",
@@ -174,10 +234,14 @@ def _row(root: Path, name: str) -> Path:
         ),
         "got_trajectory_pca_3d.html": _html("Graph-of-thought branching trajectory centered NLL"),
         "got_full_trajectory_complex.html": _html("Full graph-of-thought trajectory filtered simplicial complex", "Plotly.newPlot play filtration min-to-max Filtration radius model input model output filtration backend= simplicial-object-plot selected-complex-graph plotly_click"),
+        "got_full_trajectory_simplex_tree_3d.html": _html("Full graph-of-thought trajectory GUDHI simplex tree", "Plotly.newPlot simplex-tree inclusion"),
+        "got_full_trajectory_complex_jensen_shannon.html": _html("Full graph-of-thought trajectory probability filtered simplicial complex", "Plotly.newPlot Jensen-Shannon probability filtered simplicial complex"),
+        "got_full_trajectory_simplex_tree_3d_jensen_shannon.html": _html("Full graph-of-thought trajectory probability SimplexTree", "Plotly.newPlot Jensen-Shannon probability SimplexTree"),
         "reasoning_step_complex_maps/index.html": _html("Reasoning step filtered simplicial complex maps", "table"),
         "tropical_support_heatmap.html": _html("Tropical active support", "Plotly.newPlot observed supports only top-support collapse rate"),
         "graphcg_direction_cosines.html": _html("GraphCG full-rank direction audit", "Plotly.newPlot Readable top-direction heatmap"),
-        "analogical_memory_topk_index.html": _html("Analogical top-k retrieval", "table"),
+        "analogical_memory_topk_index.html": "<!doctype html><title>Analogical top-k retrieval</title><body>Analogical top-k retrieval <a href='analogical_memory_retrieval.html'>rank 1</a> <a href='analogical_memory_map_02.html'>rank 2</a></body>",
+        "analogical_memory_retrieval.html": _html("Analogical simplicial map trajectory-complex map", "Plotly.newPlot slider filters domain and codomain sliders binary filtered-complex map vertex-only correspondences preserved 1-simplex map simplicial-object-plot selected-complex-graph plotly_click"),
         "analogical_memory_map_02.html": _html("Analogical simplicial map trajectory-complex map", "Plotly.newPlot slider filters domain and codomain sliders binary filtered-complex map vertex-only correspondences preserved 1-simplex map simplicial-object-plot selected-complex-graph plotly_click"),
         "trajectory_persistence/persistence_barcode.html": _html("Trajectory persistence barcode", "Plotly.newPlot simplicial-object-plot selected-complex-graph plotly_click"),
         "trajectory_persistence/persistence_module_betti.html": _html("Trajectory persistence Betti", "Plotly.newPlot 2D matrix decorative 3D simplicial-object-plot selected-complex-graph plotly_click"),
@@ -188,7 +252,56 @@ def _row(root: Path, name: str) -> Path:
         _write(row / rel, content)
     for step in steps:
         _write(row / "reasoning_step_complex_maps" / step["file"], _html("Reasoning step filtered simplicial complex map"))
+        _write(row / "reasoning_step_complex_maps" / step["simplex_tree_file"], _html("Reasoning step GUDHI simplex tree", "Plotly.newPlot simplex-tree inclusion"))
     return row
+
+def _browser_samples(audit: Path, sample_names: list[str]) -> list[dict[str, object]]:
+    samples: list[dict[str, object]] = []
+    for idx, name in enumerate(sample_names):
+        sample_dir = audit if name == "." else audit / name
+        sample_dir.mkdir(parents=True, exist_ok=True)
+        _write(sample_dir / "browser_index.html", "<!doctype html><a href='got_trajectory_pca_3d.html'>trajectory</a>")
+        prefix = "" if name == "." else f"{name}/"
+        samples.append(
+            {
+                "index": idx,
+                "label": "root sample" if name == "." else name,
+                "dir": name,
+                "artifacts": [
+                    {"src": f"{prefix}got_trajectory_pca_3d.html", "label": "Trajectory", "tag": "plot"},
+                    {"src": f"{prefix}analogical_memory_topk_index.html", "label": "Analogical top-k", "tag": "index"},
+                ],
+            }
+        )
+    return samples
+
+
+def _codex_browser_html(samples: list[dict[str, object]], *, omit_button_src: str | None = None) -> str:
+    sample_sections = []
+    for sample in samples:
+        idx = str(sample["index"])
+        sample_dir = str(sample["dir"])
+        open_href = "browser_index.html" if sample_dir == "." else f"{sample_dir}/browser_index.html"
+        buttons = []
+        for artifact in sample["artifacts"]:
+            src = str(artifact["src"])
+            if src == omit_button_src:
+                continue
+            label = str(sample["label"]) + " / " + str(artifact["label"])
+            buttons.append(
+                f'<button class="artifact" data-sample="{html.escape(idx, quote=True)}" '
+                f'data-src="{html.escape(src, quote=True)}" '
+                f'data-label="{html.escape(label, quote=True)}">'
+                f'<span>{html.escape(str(artifact["label"]))}</span></button>'
+            )
+        sample_sections.append(
+            f'<section class="sample" data-sample="{html.escape(idx, quote=True)}">'
+            f'<a class="open-sample" href="{html.escape(open_href, quote=True)}">open sample</a>'
+            f'{"".join(buttons)}</section>'
+        )
+    first_src = str(samples[0]["artifacts"][0]["src"])
+    payload = html.escape(json.dumps(samples), quote=True)
+    return f'<!doctype html><body data-samples="{payload}">Sample-first audit {"".join(sample_sections)}<a id="open" href="{html.escape(first_src, quote=True)}">open full page</a><iframe src="{html.escape(first_src, quote=True)}"></iframe></body>'
 
 
 def test_validate_audit_root_accepts_three_interactive_rows(tmp_path: Path):
@@ -197,12 +310,28 @@ def test_validate_audit_root_accepts_three_interactive_rows(tmp_path: Path):
     _row(audit, ".")
     _row(audit, "example_01")
     _row(audit, "example_02")
+    samples = _browser_samples(audit, [".", "example_01", "example_02"])
+    _write(audit / "codex_browser_index.html", _codex_browser_html(samples))
     _write(tmp_path / "step_00000001" / "validation_report.json", json.dumps({"bpb": 1.5, "graph_bpb": 2.5, "invalid_graph_rate": 0.0}))
     report = validator.validate_audit_root(audit, min_rows=3, min_candidates=4, min_depth=2)
     assert report["ok"], report["errors"]
     assert report["rows_checked"] == 3
     assert report["validation_metrics"]["bpb"] == 1.5
     assert all(row["step_complex_maps"] == 4 for row in report["row_reports"])
+
+
+def test_codex_browser_index_requires_artifact_button_for_each_payload_item(tmp_path: Path):
+    validator = _load_validator()
+    audit = tmp_path / "step_00000001" / "got_audit"
+    _row(audit, ".")
+    _row(audit, "example_01")
+    _row(audit, "example_02")
+    samples = _browser_samples(audit, [".", "example_01", "example_02"])
+    missing_src = str(samples[1]["artifacts"][0]["src"])
+    _write(audit / "codex_browser_index.html", _codex_browser_html(samples, omit_button_src=missing_src))
+    report = validator.validate_audit_root(audit, min_rows=3, min_candidates=4, min_depth=2)
+    assert not report["ok"]
+    assert any("missing artifact button" in err and missing_src in err for err in report["errors"])
 
 
 def test_validator_cli_writes_json_and_markdown(tmp_path: Path):

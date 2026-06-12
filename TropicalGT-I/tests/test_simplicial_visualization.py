@@ -6,7 +6,7 @@ import torch
 from tropicalgt.data import FixtureGraphDataset
 from tropicalgt.model import TropicalGTConfig, TropicalGTModel
 from tropicalgt.scaling import apply_reasoning_action
-from tropicalgt.simplicial import build_filtered_simplicial_object
+from tropicalgt.simplicial import build_embedding_radius_simplicial_object, build_filtered_simplicial_object
 from tropicalgt.tokenizer import TokenGTTokenizer
 from tropicalgt.visualization import (
     _simplicial_object_svg,
@@ -33,8 +33,26 @@ def test_visualization_payload_contains_filtered_objects(tmp_path: Path):
     model = TropicalGTModel(TropicalGTConfig(dim=32, hidden_dim=32, graph_feature_dim=48))
     paths = write_reasoning_visualizations(model, ds, tok, seq_len=32, device=torch.device("cpu"), output_dir=tmp_path, limit=2)
     payload = json.loads(Path(paths["payloads"]).read_text(encoding="utf-8"))
-    assert set(payload) == {"hover", "points", "filtered_simplicial_objects", "nll_surface", "model_io"}
+    assert set(payload) == {
+        "hover",
+        "points",
+        "filtered_simplicial_objects",
+        "embedding_filtered_simplicial_objects",
+        "nll_surface",
+        "model_io",
+    }
     assert len(payload["filtered_simplicial_objects"]) == 2
+    assert payload["filtered_simplicial_objects"][0]["summary"]["filtration_model"] == "model_tropical_support_probability_jensen_shannon_vietoris_rips_2_skeleton"
+    assert payload["filtered_simplicial_objects"][0]["summary"]["probability_transform"] == {
+        "kind": "model_supplied",
+        "source": "model_tropical_support_probabilities",
+        "temperature": None,
+    }
+    probability_vertices = [row for row in payload["filtered_simplicial_objects"][0]["simplices"] if row["dimension"] == 0]
+    assert probability_vertices and probability_vertices[0]["probability_source"] == "model_tropical_support_probabilities"
+    assert payload["embedding_filtered_simplicial_objects"][0]["summary"]["filtration_model"] == "model_graph_token_embedding_vietoris_rips_2_skeleton"
+    assert payload["embedding_filtered_simplicial_objects"][0]["summary"]["embedding_source"] == "TropicalGTModel.graph_token_embeddings"
+    assert payload["embedding_filtered_simplicial_objects"][0]["summary"]["probability_transform"] is None
     assert payload["points"][0]["filtered_summary"]["num_vertices"] >= 1
     assert "input_text" in payload["points"][0]
     assert "decoded_argmax" in payload["points"][0]
@@ -61,6 +79,30 @@ def test_visualization_payload_contains_filtered_objects(tmp_path: Path):
     assert "zero-simplex" in html
     assert "filtration-layer" in html
     assert "sample-supported" in html or "Smoothed NLL surface" in html or "Interpolating NLL surface" in html
+
+
+def test_missing_model_probabilities_and_embeddings_are_unavailable_diagnostics():
+    record = FixtureGraphDataset(1)[0]
+    descriptors = [
+        {"index": 0, "kind": "node", "node_id": "a", "text": "alpha"},
+        {"index": 1, "kind": "node", "node_id": "b", "text": "beta"},
+    ]
+    embeddings = [[0.0, 0.0, 0.0], [1.0, 0.2, 0.0]]
+    missing_probabilities = build_embedding_radius_simplicial_object(
+        record,
+        descriptors,
+        embeddings,
+        token_probabilities=None,
+        metric="jensen_shannon",
+    )
+    assert missing_probabilities["available"] is False
+    assert missing_probabilities["summary"]["filtration_model"] == "unavailable_no_model_probabilities"
+    assert missing_probabilities["simplices"] == []
+
+    missing_embeddings = build_embedding_radius_simplicial_object(record, descriptors, [], metric="euclidean")
+    assert missing_embeddings["available"] is False
+    assert missing_embeddings["summary"]["filtration_model"] == "unavailable_no_model_embeddings"
+    assert missing_embeddings["simplices"] == []
 
 
 def test_visualization_payload_contains_topology_when_audited(tmp_path: Path):
@@ -139,20 +181,22 @@ def test_got_trajectory_visualization_renders_simplicial_panel_and_nll_surface(t
     assert 'aria-label="hovered filtered simplicial object"' in html
     assert "<svg" in html
     assert "filtration-layer" in html
-    assert "Smooth projected NLL" in html
-    assert "fitness landscape" in html
-    assert "Actual sampled GoT NLL landscape" in html
-    assert "NLL surface anchors" in html
     assert payload["nll_surface"]["available"] is True
     assert payload["nll_surface"]["touches_points"] is True
     assert payload["nll_surface"]["actual_landscape_layer"] is True
     assert payload["nll_surface"]["surface_kind"] in {"sample_supported_local_idw_surface", "sparse_exact_triangular_nll_mesh", "exact_delaunay_nll_mesh"}
     assert payload["nll_surface"]["z_axis"] == "projected_nll_fitness_energy"
-    assert payload["nll_surface"]["surrogate_landscape_layer"]["surface_kind"] == "smooth_projected_nll_fitness_landscape"
-    assert payload["nll_surface"]["surrogate_landscape_layer"]["point_count"] >= len(scaling["candidates"])
-    assert payload["nll_surface"]["local_interpolating_sheet"]["surface_kind"] == "local_interpolating_nll_sheet"
-    assert payload["nll_surface"]["local_interpolating_sheet"]["point_count"] >= len(scaling["candidates"])
-    assert payload["nll_surface"]["smooth_landscape_microstep_anchor_count"] > 0
+    assert payload["nll_surface"]["provenance"] == "computed only from sampled model GoT state embeddings and their measured raw NLL values"
+    surrogate_layer = payload["nll_surface"].get("surrogate_landscape_layer", {})
+    if surrogate_layer.get("available") is True:
+        assert surrogate_layer["surface_kind"] == "smooth_projected_nll_fitness_landscape"
+        assert surrogate_layer["point_count"] >= len(scaling["candidates"])
+    local_sheet = payload["nll_surface"].get("local_interpolating_sheet", {})
+    if local_sheet.get("available") is True:
+        assert local_sheet["surface_kind"] == "local_interpolating_nll_sheet"
+        assert local_sheet["point_count"] >= len(scaling["candidates"])
+    if "smooth_landscape_microstep_anchor_count" in payload["nll_surface"]:
+        assert payload["nll_surface"]["smooth_landscape_microstep_anchor_count"] >= 0
     assert payload["nll_surface"]["max_point_residual"] < 1e-5
     assert payload["nll_progress"]["edge_count"] == 3
     assert payload["nll_progress"]["improving_edge_fraction"] > 0.0
@@ -245,7 +289,25 @@ def test_trajectory_persistence_uses_growth_and_free_resolution(tmp_path: Path):
 
 def test_analogical_memory_visualization_renders_simplicial_maps(tmp_path: Path):
     record = FixtureGraphDataset(1)[0]
-    obj = build_filtered_simplicial_object(record)
+    descriptors = [
+        {"index": 0, "kind": "node", "node_id": "a", "text": "alpha"},
+        {"index": 1, "kind": "node", "node_id": "b", "text": "beta"},
+        {"index": 2, "kind": "node", "node_id": "c", "text": "gamma"},
+    ]
+    embeddings = [[0.0, 0.0, 0.0], [1.0, 0.2, 0.0], [0.2, 1.0, 0.1]]
+    probabilities = [
+        [0.82, 0.12, 0.06],
+        [0.10, 0.78, 0.12],
+        [0.08, 0.14, 0.78],
+    ]
+    obj = build_embedding_radius_simplicial_object(
+        record,
+        descriptors,
+        embeddings,
+        token_probabilities=probabilities,
+        metric="jensen_shannon",
+    )
+    assert obj["summary"]["filtration_model"] == "model_tropical_support_probability_jensen_shannon_vietoris_rips_2_skeleton"
     topo = _toy_topology(intervals=[{"dimension": 0, "birth": 0.0, "death": None, "infinite": True}])
     memory = {
         "bank_path": "",
@@ -257,7 +319,7 @@ def test_analogical_memory_visualization_renders_simplicial_maps(tmp_path: Path)
                 "embedding_similarity": 0.8,
                 "signature_similarity": 0.7,
                 "quality_score": 0.6,
-                "filtered_simplicial_object": obj,
+                "probability_filtered_simplicial_object": obj,
                 "topological_algebra": topo,
                 "derived_signature": topo["derived_equivalence_signature"],
             },
@@ -268,7 +330,7 @@ def test_analogical_memory_visualization_renders_simplicial_maps(tmp_path: Path)
                 "embedding_similarity": 0.6,
                 "signature_similarity": 0.5,
                 "quality_score": 0.4,
-                "filtered_simplicial_object": obj,
+                "probability_filtered_simplicial_object": obj,
                 "topological_algebra": topo,
                 "derived_signature": topo["derived_equivalence_signature"],
             }
@@ -277,12 +339,12 @@ def test_analogical_memory_visualization_renders_simplicial_maps(tmp_path: Path)
     paths = write_analogical_memory_visualization(
         memory,
         tmp_path,
-        query_context={"filtered_simplicial_object": obj, "topological_algebra": topo, "label": "query trajectory"},
+        query_context={"probability_filtered_simplicial_object": obj, "topological_algebra": topo, "label": "query trajectory"},
     )
     html = Path(paths["analogical_memory_retrieval_html"]).read_text(encoding="utf-8")
     maps = json.loads(Path(paths["analogical_simplicial_maps"]).read_text(encoding="utf-8"))
     assert "Analogical reasoning memory retrieval as simplicial maps" in html
-    assert "simplicial map candidate" in html
+    assert "model_probability_jensen_shannon_assignment" in html
     assert "persistent homology similarity" in html
     assert "free-resolution similarity" in html
     assert "vertex-only correspondences" in html
@@ -302,11 +364,42 @@ def test_analogical_memory_visualization_renders_simplicial_maps(tmp_path: Path)
     assert len(maps["maps"]) == 2
     assert maps["maps"][1]["pair_page"].endswith("analogical_memory_map_02.html")
     assert maps["maps"][0]["edge_preservation_rate"] >= 0.0
+    assert maps["maps"][0]["map_source"] == "model_probability_jensen_shannon_assignment"
+    assert maps["maps"][0]["query_complex_source"] == "probability_filtered_simplicial_object"
+    assert maps["maps"][0]["codomain_complex_source"] == "probability_filtered_simplicial_object"
+    assert maps["maps"][0]["simplicial_map_certificate"]["source"] == "finite_filtered_complex_check"
     assert maps["maps"][0]["derived_signature_similarity"] >= 0.0
     assert "is_simplicial_on_displayed_skeleton" in maps["maps"][0]
     assert isinstance(maps["maps"][0]["preserved_edge_pairs"], list)
     assert isinstance(maps["maps"][0]["failed_edge_pairs"], list)
     assert isinstance(maps["maps"][0]["preserved_edge_query_vertices"], list)
+
+
+def test_analogical_memory_without_query_probabilities_is_unavailable_not_fallback(tmp_path: Path):
+    record = FixtureGraphDataset(1)[0]
+    obj = build_filtered_simplicial_object(record)
+    topo = _toy_topology(intervals=[{"dimension": 0, "birth": 0.0, "death": None, "infinite": True}])
+    paths = write_analogical_memory_visualization(
+        {
+            "bank_path": "",
+            "retrieved": [
+                {
+                    "memory_id": "mem0",
+                    "record_id": "rec0",
+                    "retrieval_score": 0.9,
+                    "filtered_simplicial_object": obj,
+                    "topological_algebra": topo,
+                }
+            ],
+        },
+        tmp_path,
+        query_context={"filtered_simplicial_object": obj, "topological_algebra": topo, "label": "query trajectory"},
+    )
+    html = Path(paths["analogical_memory_retrieval_html"]).read_text(encoding="utf-8")
+    maps = json.loads(Path(paths["analogical_simplicial_maps"]).read_text(encoding="utf-8"))
+    assert maps == {"available": False, "reason": "missing_model_probability_query_complex", "maps": []}
+    assert "No model probability filtered query trajectory complex was available" in html
+    assert "model_probability_jensen_shannon_assignment" not in html
 
 
 def _toy_topology(intervals):

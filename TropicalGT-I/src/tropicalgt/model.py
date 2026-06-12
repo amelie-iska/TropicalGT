@@ -60,10 +60,14 @@ class TropicalGTModel(nn.Module):
         g = self.graph_proj(graph_batch.token_features)
         type_ids = graph_batch.token_type_ids.clamp_min(0).clamp_max(3)
         g = g + self.graph_type_emb(type_ids)
+        graph_token_embeddings = g
         if self.config.graph_tropical_block_size > 0 and g.shape[1] > self.config.graph_tropical_block_size:
             trop = self.tropical.blockwise(g, graph_batch.attention_mask, block_size=self.config.graph_tropical_block_size)
         else:
             trop = self.tropical(g, graph_batch.attention_mask)
+        masked_support_scores = trop.scores.float().masked_fill(~graph_batch.attention_mask[:, None, :], -torch.inf)
+        graph_token_support_probabilities = torch.softmax(masked_support_scores, dim=-1)
+        graph_token_support_probabilities = torch.nan_to_num(graph_token_support_probabilities, nan=0.0, posinf=0.0, neginf=0.0)
         masked = trop.context * graph_batch.attention_mask[..., None]
         denom = graph_batch.attention_mask.sum(dim=1).clamp_min(1).to(masked.dtype)[:, None]
         graph_state = masked.sum(dim=1) / denom
@@ -155,7 +159,17 @@ class TropicalGTModel(nn.Module):
                     **graphcg_metrics,
                 }
             )
-        return {"logits": logits, "loss": loss if loss is not None else torch.zeros((), device=input_ids.device), "graph_state": graph_state, "support": trop.support, "margin": trop.margin, **metrics}
+        return {
+            "logits": logits,
+            "loss": loss if loss is not None else torch.zeros((), device=input_ids.device),
+            "graph_state": graph_state,
+            "graph_token_embeddings": graph_token_embeddings,
+            "graph_token_context_embeddings": trop.context,
+            "graph_token_support_probabilities": graph_token_support_probabilities,
+            "support": trop.support,
+            "margin": trop.margin,
+            **metrics,
+        }
 
 
 def tropical_certificate_objective(scores: Tensor, support: Tensor, graph_batch: GraphTokenBatch) -> tuple[Tensor, dict[str, Tensor]]:

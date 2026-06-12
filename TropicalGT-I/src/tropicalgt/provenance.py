@@ -77,6 +77,8 @@ PROVENANCE_REGISTRY: tuple[ProvenanceEntry, ...] = (
             "NLL surrogate rendered grid",
             "landscape_domain_covers_all_points",
             "anchor_grid_exact_residual",
+            "retired global smooth_projected_nll_fitness_landscape entry",
+            "isinstance(surrogate, dict)",
         ),
     ),
     ProvenanceEntry(
@@ -261,6 +263,8 @@ PROVENANCE_REGISTRY: tuple[ProvenanceEntry, ...] = (
             "fallback_stats",
             'stats.get("fallback")',
             "_vertex_pca_feature",
+            "_feature_pca3_without_synthetic_jitter",
+            "feature_pca3_without_synthetic_jitter",
         ),
     ),
     ProvenanceEntry(
