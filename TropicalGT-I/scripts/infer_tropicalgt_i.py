@@ -204,33 +204,33 @@ def main() -> None:
     if args.memory_bank:
         bank = AnalogicalMemoryBank(args.memory_bank, max_records=args.memory_max_records)
         retrieved = []
-        current_record_ids = _current_scaling_record_ids(result)
+        current_source = _inference_memory_source(args.prompt, scale_seed, args.audit_output_dir)
         if args.memory_retrieve_top_k > 0:
             embedding, signature = query_signature_from_report(result)
             retrieved = bank.retrieve(
                 embedding,
                 signature,
                 top_k=args.memory_retrieve_top_k,
-                exclude_record_ids=current_record_ids,
+                exclude_sources={current_source},
             )
         added = 0
         if args.memory_save and isinstance(result.get("inference_scaling"), dict):
             records = memory_records_from_scaling_report(
                 result["inference_scaling"],
-                source=_inference_memory_source(args.prompt, scale_seed, args.audit_output_dir),
+                source=current_source,
                 max_records=min(args.memory_max_records, 16),
             )
             bank.extend(records)
             bank.save()
             added = len(records)
-            current_record_ids = current_record_ids | {record.record_id for record in records}
             if args.memory_retrieve_top_k > 0 and not retrieved:
                 embedding, signature = query_signature_from_report(result)
                 retrieved = bank.retrieve(
                     embedding,
                     signature,
                     top_k=args.memory_retrieve_top_k,
-                    exclude_record_ids=current_record_ids,
+                    exclude_sources={current_source},
+                    exclude_memory_ids={record.memory_id for record in records},
                 )
         result["analogical_memory_retrieval"] = {
             "bank_path": str(bank.path),

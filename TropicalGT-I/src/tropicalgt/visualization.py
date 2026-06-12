@@ -4013,6 +4013,11 @@ def _enrich_memory_row(row: dict[str, object], bank_records: dict[str, dict[str,
         enriched["probability_filtered_simplicial_object"] = bank_row["probability_filtered_simplicial_object"]
     if not isinstance(enriched.get("trajectory_probability_filtered_simplicial_object"), dict) and isinstance(bank_row.get("trajectory_probability_filtered_simplicial_object"), dict):
         enriched["trajectory_probability_filtered_simplicial_object"] = bank_row["trajectory_probability_filtered_simplicial_object"]
+    probability_complex = enriched.get("probability_filtered_simplicial_object")
+    if not isinstance(enriched.get("trajectory_probability_filtered_simplicial_object"), dict) and _has_real_probability_filtration(probability_complex):
+        enriched["trajectory_probability_filtered_simplicial_object"] = probability_complex
+        if isinstance(probability_complex, dict):
+            enriched.setdefault("trajectory_probability_summary", probability_complex.get("summary", {}))
     if not isinstance(enriched.get("filtered_simplicial_object"), dict) and isinstance(bank_row.get("filtered_simplicial_object"), dict):
         enriched["filtered_simplicial_object"] = bank_row["filtered_simplicial_object"]
     if not isinstance(enriched.get("topological_algebra"), dict) and isinstance(bank_row.get("topological_algebra"), dict):
@@ -4473,6 +4478,8 @@ def _complex_vertex_records(obj: dict[str, object]) -> list[dict[str, object]]:
                 "filtration": float(simplex.get("filtration", 0.0) or 0.0),
                 "embedding": simplex.get("embedding", []),
                 "probability": simplex.get("probability", []),
+                "model_probability_vector": simplex.get("model_probability_vector", []),
+                "probability_vector": simplex.get("probability_vector", []),
                 "probability_source": simplex.get("probability_source"),
                 "score": simplex.get("score"),
                 "nll": simplex.get("nll"),
@@ -4545,7 +4552,12 @@ def _simplex_label(simplex: dict[str, object], default_label: str) -> str:
 
 
 def _probability_feature_vector(row: dict[str, object]) -> list[float] | None:
-    raw = row.get("probability")
+    raw = None
+    for key in ("model_probability_vector", "probability_vector", "probability"):
+        value = row.get(key)
+        if isinstance(value, list) and value:
+            raw = value
+            break
     if isinstance(raw, list) and raw:
         vals = []
         for item in raw:
@@ -4581,8 +4593,10 @@ def _padded_jensen_shannon(a: list[float] | None, b: list[float] | None) -> floa
     pb = pb / sb
     mix = 0.5 * (pa + pb)
     eps = 1e-12
-    kl_a = float(np.sum(np.where(pa > 0.0, pa * np.log(pa / np.maximum(mix, eps)), 0.0)))
-    kl_b = float(np.sum(np.where(pb > 0.0, pb * np.log(pb / np.maximum(mix, eps)), 0.0)))
+    mask_a = pa > 0.0
+    mask_b = pb > 0.0
+    kl_a = float(np.sum(pa[mask_a] * np.log(pa[mask_a] / np.maximum(mix[mask_a], eps))))
+    kl_b = float(np.sum(pb[mask_b] * np.log(pb[mask_b] / np.maximum(mix[mask_b], eps))))
     return float(math.sqrt(max(0.0, 0.5 * (kl_a + kl_b))))
 
 

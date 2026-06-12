@@ -857,9 +857,10 @@ def _run_periodic_validation_round(
                     "audit_seed_record_id": audit_record.record_id,
                 }
                 if memory_bank is not None:
+                    memory_source = f"periodic:{run_name}:step{step}:record{record_idx}"
                     records = memory_records_from_scaling_report(
                         scaling,
-                        source=f"periodic:{run_name}:step{step}:record{record_idx}",
+                        source=memory_source,
                         min_score=cfg.get("memory_min_score"),
                         max_records=int(cfg.get("memory_records_per_audit", 8)),
                     )
@@ -876,11 +877,7 @@ def _run_periodic_validation_round(
                             query_embedding,
                             query_signature,
                             top_k=int(cfg.get("periodic_memory_retrieve_top_k", 5)),
-                            exclude_record_ids={
-                                str(row.get("record_id", ""))
-                                for row in scaling.get("candidates", [])
-                                if isinstance(row, dict)
-                            },
+                            exclude_sources={memory_source},
                             exclude_memory_ids={record.memory_id for record in records},
                         ),
                     }

@@ -101,16 +101,19 @@ class AnalogicalMemoryBank:
         diversity_weight: float = 0.18,
         exclude_record_ids: set[str] | None = None,
         exclude_memory_ids: set[str] | None = None,
+        exclude_sources: set[str] | None = None,
     ) -> list[dict[str, Any]]:
         if not self.records:
             return []
         exclude_record_ids = {str(value) for value in (exclude_record_ids or set())}
         exclude_memory_ids = {str(value) for value in (exclude_memory_ids or set())}
+        exclude_sources = {str(value) for value in (exclude_sources or set())}
         query_embedding = _normalize(np.asarray(embedding, dtype=float))
         query_signature = _normalize(np.asarray(signature_vector, dtype=float))
         rows = []
         for record in self.records:
-            if record.record_id in exclude_record_ids or record.memory_id in exclude_memory_ids:
+            trajectory_source = str(record.metadata.get("source", record.record_id)) if isinstance(record.metadata, dict) else record.record_id
+            if record.record_id in exclude_record_ids or record.memory_id in exclude_memory_ids or trajectory_source in exclude_sources:
                 continue
             emb_sim = _cosine(query_embedding, _normalize(np.asarray(record.embedding, dtype=float)))
             sig_sim = _cosine(query_signature, _normalize(np.asarray(record.signature_vector, dtype=float)))
@@ -118,7 +121,6 @@ class AnalogicalMemoryBank:
             retrieval_score = embedding_weight * emb_sim + signature_weight * sig_sim + score_weight * quality
             family = _record_family(record.record_id)
             signature_hash = _signature_hash(record.signature_vector)
-            trajectory_source = str(record.metadata.get("source", record.record_id)) if isinstance(record.metadata, dict) else record.record_id
             rows.append(
                 {
                     "memory_id": record.memory_id,
@@ -140,6 +142,8 @@ class AnalogicalMemoryBank:
                     "filtered_simplicial_object": record.filtered_simplicial_object,
                     "probability_filtered_simplicial_object": record.probability_filtered_simplicial_object,
                     "probability_filtered_summary": record.probability_filtered_simplicial_object.get("summary", {}),
+                    "trajectory_probability_filtered_simplicial_object": record.probability_filtered_simplicial_object,
+                    "trajectory_probability_filtered_summary": record.probability_filtered_simplicial_object.get("summary", {}),
                     "topological_algebra": record.topological_algebra,
                     "signature_vector": record.signature_vector,
                     "derived_signature": record.derived_signature,
@@ -290,7 +294,7 @@ def _compact_simplex(simplex: dict[str, Any], *, max_vector_len: int) -> dict[st
         "edge",
     }
     out = {key: value for key, value in simplex.items() if key in keep}
-    for vector_key in ("embedding", "model_probability_vector", "probability_vector"):
+    for vector_key in ("embedding", "probability", "model_probability_vector", "probability_vector"):
         vector = simplex.get(vector_key)
         if isinstance(vector, list):
             if len(vector) <= max_vector_len:

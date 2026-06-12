@@ -73,3 +73,27 @@ def test_analogical_memory_bank_roundtrip_and_retrieval(tmp_path):
         assert "summary" in record.filtered_simplicial_object
     assert "record_family" in retrieved[0]
     assert "base_retrieval_score" in retrieved[0]
+    probability_vertices = [
+        simplex
+        for record in records
+        for simplex in record.probability_filtered_simplicial_object.get("simplices", [])
+        if simplex.get("dimension") == 0
+    ]
+    assert any(simplex.get("probability") or simplex.get("model_probability_vector") or simplex.get("probability_vector") for simplex in probability_vertices)
+    probability_summary = retrieved[0]["trajectory_probability_filtered_simplicial_object"]["summary"]
+    assert retrieved[0]["trajectory_probability_filtered_summary"] == probability_summary
+    assert "jensen_shannon" in probability_summary["filtration_model"]
+    assert retrieved[0]["trajectory_probability_filtered_simplicial_object"].get("available") is not False
+
+    source_bank = AnalogicalMemoryBank(tmp_path / "source_memory.jsonl", max_records=8)
+    source_a = memory_records_from_scaling_report(report, source="source-a", max_records=1)
+    source_b = memory_records_from_scaling_report(report, source="source-b", max_records=1)
+    assert source_a and source_b and source_a[0].record_id == source_b[0].record_id
+    source_bank.extend(source_a + source_b)
+    source_hits = source_bank.retrieve(query_embedding, query_signature, top_k=4, exclude_sources={"source-a"})
+    assert source_hits
+    assert all(row["trajectory_source"] != "source-a" for row in source_hits)
+    assert "trajectory_probability_filtered_simplicial_object" in source_hits[0]
+    assert "jensen_shannon" in source_hits[0]["trajectory_probability_filtered_summary"]["filtration_model"]
+    assert any(row["trajectory_source"] == "source-b" for row in source_hits)
+    assert source_bank.retrieve(query_embedding, query_signature, top_k=4, exclude_sources={"source-a", "source-b"}) == []

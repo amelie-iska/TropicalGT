@@ -10,6 +10,7 @@ from tropicalgt.simplicial import build_embedding_radius_simplicial_object, buil
 from tropicalgt.tokenizer import TokenGTTokenizer
 from tropicalgt.visualization import (
     _simplicial_object_svg,
+    _simplicial_map_between_complexes,
     write_analogical_memory_visualization,
     write_got_trajectory_visualization,
     write_persistence_visualizations,
@@ -104,6 +105,35 @@ def test_missing_model_probabilities_and_embeddings_are_unavailable_diagnostics(
     assert missing_embeddings["available"] is False
     assert missing_embeddings["summary"]["filtration_model"] == "unavailable_no_model_embeddings"
     assert missing_embeddings["simplices"] == []
+
+
+def test_analogical_simplicial_map_uses_model_probability_vectors():
+    query = {
+        "available": True,
+        "summary": {"filtration_model": "model_candidate_probability_jensen_shannon_vietoris_rips_2_skeleton"},
+        "simplex_tree": {"backend": "gudhi.SimplexTree"},
+        "simplices": [
+            {"simplex": ["q0"], "dimension": 0, "filtration": 0.0, "model_probability_vector": [0.8, 0.1, 0.1]},
+            {"simplex": ["q1"], "dimension": 0, "filtration": 0.0, "model_probability_vector": [0.1, 0.8, 0.1]},
+            {"simplex": ["q0", "q1"], "dimension": 1, "filtration": 0.2},
+        ],
+    }
+    memory = {
+        "available": True,
+        "summary": {"filtration_model": "model_tropical_support_probability_jensen_shannon_vietoris_rips_2_skeleton"},
+        "simplex_tree": {"backend": "gudhi.SimplexTree"},
+        "simplices": [
+            {"simplex": ["m0"], "dimension": 0, "filtration": 0.0, "probability_vector": [0.78, 0.12, 0.10]},
+            {"simplex": ["m1"], "dimension": 0, "filtration": 0.0, "probability_vector": [0.12, 0.78, 0.10]},
+            {"simplex": ["m0", "m1"], "dimension": 1, "filtration": 0.1},
+        ],
+    }
+    report = _simplicial_map_between_complexes(query, memory)
+    assert report["map_source"] == "model_probability_jensen_shannon_assignment"
+    assert len(report["vertex_map"]) == 2
+    assert report["jensen_shannon_distance_summary"]["count"] == 2
+    assert report["assignment_cost_summary"]["count"] == 2
+    assert report["preserved_edge_pairs"]
 
 
 def test_visualization_payload_contains_topology_when_audited(tmp_path: Path):

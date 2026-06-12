@@ -327,16 +327,24 @@ For fresh sample-based browser review, run multiple independent inference audits
 ```bash
 PYTHONPATH=TropicalGT-I/src python \
 TropicalGT-I/scripts/run_multi_inference_audits.py \
+--config TropicalGT-I/configs/train_full_dataset_active.json \
 --checkpoint TropicalGT-I/checkpoints/tropicalgt_i_train_full_dataset_active.latest.pt \
 --samples 6 \
---output-root TropicalGT-I/outputs/multi_inference_audit/latest
+--scale-depth 3 \
+--scale-width 4 \
+--scale-branch-factor 3 \
+--audit-ph-backend auto \
+--memory-bank TropicalGT-I/outputs/multi_sample_browser/latest/browser_memory/reasoning_memory.jsonl \
+--memory-save \
+--memory-retrieve-top-k 3 \
+--output-root TropicalGT-I/outputs/multi_sample_browser/latest
 
 python -m http.server 8977 \
 --bind 127.0.0.1 \
---directory TropicalGT-I/outputs/multi_inference_audit/latest
+--directory TropicalGT-I/outputs/multi_sample_browser/latest
 ```
 
-Open `http://127.0.0.1:8977/browser_index.html`. Add `--skip-existing` only when intentionally reusing prior sample directories.
+Open `http://127.0.0.1:8977/browser_index.html`. The first sample may have no non-self memory yet; later samples should retrieve earlier sample trajectories and render per-rank analogical maps from `trajectory_probability_filtered_simplicial_object` complexes with `model_probability_jensen_shannon_assignment` provenance. Add `--skip-existing` only when intentionally reusing prior sample directories.
 
 Metric and visualization provenance can be audited with:
 

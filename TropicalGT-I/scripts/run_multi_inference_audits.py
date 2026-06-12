@@ -86,6 +86,8 @@ def _command(args: argparse.Namespace, prompt: str, sample_dir: Path, index: int
         cmd.extend(["--scale-sampling-exploration", str(args.scale_sampling_exploration)])
     if args.memory_bank:
         cmd.extend(["--memory-bank", str(args.memory_bank), "--memory-retrieve-top-k", str(args.memory_retrieve_top_k)])
+        if args.memory_save:
+            cmd.append("--memory-save")
     if args.no_memory_retrieve:
         cmd.extend(["--memory-retrieve-top-k", "0"])
     return cmd
@@ -132,6 +134,7 @@ def main() -> int:
     parser.add_argument("--audit-ph-backend", default="auto", choices=["auto", "gudhi", "ripser", "none"])
     parser.add_argument("--memory-bank", default="")
     parser.add_argument("--memory-retrieve-top-k", type=int, default=5)
+    parser.add_argument("--memory-save", action="store_true", help="Append each sample inference trajectory to the memory bank for later samples.")
     parser.add_argument("--no-memory-retrieve", action="store_true")
     parser.add_argument("--skip-existing", action="store_true")
     parser.add_argument("--title", default="TropicalGT-I Multi-Run Sample Audit")
