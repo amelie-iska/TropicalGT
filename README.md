@@ -57,17 +57,33 @@ TropicalGT-I/data/toricgt/curated_hf_shards
 
 Data is gitignored. Do not commit datasets, checkpoints, W&B runs, or `keys.txt`.
 
-The full `TropicalGT-I/configs/train.json` path is hybrid by default. It mixes the moved TropicalGT reasoning shards with OpenAI Parameter-Golf FineWeb windows that are decoded as text and then represented as TokenGT-style sequential DAG records. A minimal SP1024 Parameter-Golf cache can be populated with:
+The full `TropicalGT-I/configs/train.json` path is hybrid by default. It mixes the moved TropicalGT reasoning shards with OpenAI Parameter-Golf FineWeb windows that are decoded as text and then represented as TokenGT-style sequential DAG records. The primary local OAI path is:
 
 ```bash
-cd external/parameter-golf
-/home/iska/miniconda3/envs/tokengt/bin/python data/cached_challenge_fineweb.py --variant sp1024 --train-shards 1
+external/oai-parameter-golf
+```
+
+On this workstation that path can be a symlink to the existing ignored checkout at `external/parameter-golf`; `train.json` uses `external/oai-parameter-golf` first and keeps `external/parameter-golf` as a compatibility fallback. Populate the full SP1024 cache before a full run:
+
+```bash
+cd external/oai-parameter-golf
+/home/iska/miniconda3/envs/tokengt/bin/python data/cached_challenge_fineweb.py --variant sp1024 --train-shards 195
 cd ../..
 ```
 
-This creates `external/parameter-golf/data/datasets/fineweb10B_sp1024` and `external/parameter-golf/data/tokenizers/fineweb_1024_bpe.model`. Those data files are gitignored. Every OAI sample is graph structured before batching: each token window becomes a causal DAG of sequence chunks, while non-causal/cyclic graphs elsewhere use deterministic random autoregressive node order.
+This creates `external/oai-parameter-golf/data/datasets/fineweb10B_sp1024` and `external/oai-parameter-golf/data/tokenizers/fineweb_1024_bpe.model`. The manifest reports `19,473,201,340` SP1024 train tokens across `195` train shards, plus the moved Hugging Face reasoning parquet shards. Those data files are gitignored. Every OAI sample is graph structured before batching: each token window becomes a causal DAG of sequence chunks, while non-causal/cyclic graphs elsewhere use deterministic random autoregressive node order.
 
-Data-backed configs set `require_data: true`, so missing or unreadable required parquet shards fail loudly instead of silently training on fixture examples. Optional hybrid OAI shards are reported when absent. The parquet loader builds a row-group metadata index over train/validation/test shards and reads records through a bounded row-group cache controlled by `cache_shards`; it does not concatenate the full moved dataset into memory. The full `train.json` config enables `chunk_shuffle`, which randomizes parquet row-group order while preserving row-group-local reads when the dataset is parquet-only; the hybrid sampler uses deterministic weighted indexed sampling over already graph-structured sources.
+Data-backed configs set `require_data: true`, and the OAI source is required. Missing or unreadable required parquet/OAI shards fail loudly instead of silently training on fixture examples or a partial hybrid. `train.json` also requires both `tropicalgt_hf_reasoning` and `openai_parameter_golf`, at least `10,000,000,000` available train token slots, and at least `10,000,000,000` configured training token slots. The parquet loader builds a row-group metadata index over train/validation/test shards and reads records through a bounded row-group cache controlled by `cache_shards`; it does not concatenate the full moved dataset into memory. The hybrid sampler uses deterministic weighted indexed sampling over already graph-structured sources.
+
+Audit the data budget before a long run:
+
+```bash
+PYTHONPATH=TropicalGT-I/src \
+/home/iska/miniconda3/envs/tokengt/bin/python \
+TropicalGT-I/scripts/audit_training_data_budget.py \
+--config TropicalGT-I/configs/train.json \
+--output TropicalGT-I/outputs/train/data_budget.json
+```
 
 Generate a shard manifest and tokenization preflight report before a long run:
 
@@ -198,11 +214,11 @@ The current full training config is sized for the OpenAI Parameter-Golf 16MB art
 
 - model width/hidden size `1760`, memory width `220`, about `38.6M` parameters before int8+zlib export.
 - estimated stripped competition export `15,633,708` bytes, leaving about `366,292` bytes under the `16,000,000` byte cap.
-- `seq_len: 1024`, `batch_size: 68`, `checkpoint_every: 250`, `max_steps: 20000`.
+- `seq_len: 1024`, `batch_size: 68`, `checkpoint_every: 250`, `max_steps: 160000`, for `11,141,120,000` configured sequence token slots.
 - exact blockwise tropical ring attention over graph tokens with `graph_tropical_block_size: 32`.
 - pooled long-context sequence tropical ring attention with `sequence_tropical_max_tokens: 32`, `sequence_tropical_block_size: 16`, and residual weight `0.125`.
 - graph-aware autoregressive decoding: causal topological order for DAGs, deterministic random order for non-causal/cyclic graphs.
-- hybrid data weights `0.7` TropicalGT reasoning shards and `0.3` OpenAI Parameter-Golf SP1024 windows when the local OAI cache is present.
+- required hybrid data weights `0.7` TropicalGT reasoning shards and `0.3` OpenAI Parameter-Golf SP1024 windows from the full local OAI cache.
 
 Before launching the first full run, execute a CUDA dry-run readiness audit against `train.json`. This does not write a training checkpoint; it samples moved parquet data, builds the configured model, runs one optimizer step, checks the W&B key can be found, and gates finite train loss/BPB/graph-BPB:
 
@@ -312,6 +328,22 @@ TropicalGT-I/scripts/build_sample_browser_index.py \
 TropicalGT-I/outputs/train/periodic/step_00000250/got_audit \
 --output TropicalGT-I/outputs/train/periodic/step_00000250/got_audit/codex_browser_index.html
 ```
+
+For fresh sample-based browser review, run multiple independent inference audits into a clean output root and serve the generated `browser_index.html`:
+
+```bash
+PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python \
+TropicalGT-I/scripts/run_multi_inference_audits.py \
+--checkpoint TropicalGT-I/checkpoints/tropicalgt_i_train.latest.pt \
+--samples 6 \
+--output-root TropicalGT-I/outputs/multi_inference_audit/latest
+
+/home/iska/miniconda3/envs/tokengt/bin/python -m http.server 8977 \
+--bind 127.0.0.1 \
+--directory TropicalGT-I/outputs/multi_inference_audit/latest
+```
+
+Open `http://127.0.0.1:8977/browser_index.html`. Add `--skip-existing` only when intentionally reusing prior sample directories.
 
 Metric and visualization provenance can be audited with:
 

@@ -14,7 +14,15 @@ from torch.utils.data import DataLoader
 from tqdm.auto import tqdm
 
 from .algebra import compute_topological_algebra_report, summarize_algebra_reports
-from .data import ChunkShuffleSampler, ParquetGraphDataset, dataset_manifest, encode_record_bytes, make_dataset_from_config
+from .data import (
+    ChunkShuffleSampler,
+    ParquetGraphDataset,
+    dataset_budget_report,
+    dataset_manifest,
+    encode_record_bytes,
+    make_dataset_from_config,
+    validate_dataset_budget,
+)
 from .decoding import meet_in_middle_batch, meet_in_middle_config
 from .diagnostics import describe_graph_tokens, record_diagnostics
 from .memory import AnalogicalMemoryBank, memory_records_from_scaling_report, query_signature_from_report
@@ -341,6 +349,21 @@ def train(config_path: str | Path, resume_from: str | Path | None = None, max_st
     tokenizer = TokenGTTokenizer(**cfg.get("tokengt", {}))
     seq_len = int(cfg.get("seq_len", 128))
     batch_size = int(cfg.get("batch_size", 2))
+    config_max_steps = int(cfg.get("max_steps", 5))
+    max_steps = int(max_steps_override if max_steps_override is not None else config_max_steps)
+    train_data_budget = dataset_budget_report(train_ds, seq_len=seq_len, batch_size=batch_size, max_steps=config_max_steps)
+    train_data_budget["effective_max_steps"] = max_steps
+    train_data_budget["effective_training_token_slots"] = batch_size * max_steps * seq_len
+    data_budget_errors = validate_dataset_budget(
+        train_data_budget,
+        min_available_token_slots=cfg.get("min_available_train_token_slots"),
+        min_training_token_slots=cfg.get("min_training_token_slots"),
+        required_sources=cfg.get("required_hybrid_sources", ()),
+        source_requirements=cfg.get("hybrid_source_requirements", {}),
+    )
+    if data_budget_errors:
+        detail = "\n".join(f"- {error}" for error in data_budget_errors)
+        raise RuntimeError(f"Training data budget check failed:\n{detail}")
     device = torch.device("cuda" if torch.cuda.is_available() and cfg.get("device", "auto") != "cpu" else "cpu")
     model = build_model(cfg).to(device)
     opt = torch.optim.AdamW(model.parameters(), lr=float(cfg.get("lr", 3e-4)), weight_decay=float(cfg.get("weight_decay", 0.01)))
@@ -385,7 +408,6 @@ def train(config_path: str | Path, resume_from: str | Path | None = None, max_st
             ar_seed=seed + step,
         ),
     )
-    max_steps = int(max_steps_override if max_steps_override is not None else cfg.get("max_steps", 5))
     metrics_last: dict[str, float] = {}
     history: list[dict[str, float]] = []
     audit_level = str(cfg.get("audit_level", "none"))
@@ -714,6 +736,7 @@ def train(config_path: str | Path, resume_from: str | Path | None = None, max_st
             "train": dataset_manifest(train_ds, root, ("train", "validation")),
             "validation": dataset_manifest(val_ds, root, ("train", "validation")),
         },
+        "data_budget": train_data_budget,
         "sampler": sampler_report,
         "device": str(device),
         "seed": seed,

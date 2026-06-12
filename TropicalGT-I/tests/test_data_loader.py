@@ -4,7 +4,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from tropicalgt.data import ChunkShuffleSampler, ParameterGolfBinGraphDataset, ParquetGraphDataset, make_dataset, make_dataset_from_config, parquet_manifest
+from tropicalgt.data import ChunkShuffleSampler, ParameterGolfBinGraphDataset, ParquetGraphDataset, dataset_budget_report, make_dataset, make_dataset_from_config, parquet_manifest, validate_dataset_budget
 from tropicalgt.records import GraphRecord, graph_decoding_order
 
 
@@ -135,6 +135,83 @@ def test_make_dataset_from_config_mixes_graph_parquet_and_parameter_golf(tmp_pat
     sources = {(ds[i].metadata or {}).get("hybrid_source") for i in range(min(len(ds), 8))}
     assert sources <= {"graph_parquet", "openai_parameter_golf"}
     assert sources
+
+
+def test_hybrid_config_resolves_fallback_roots_and_reports_budget(tmp_path: Path):
+    parquet_root = tmp_path / "shards" / "train"
+    parquet_root.mkdir(parents=True)
+    pd.DataFrame([
+        {"record_id": "r0", "text": "abc", "graph_json": '{"nodes":[{"id":"a"}],"edges":[]}'},
+        {"record_id": "r1", "text": "def", "graph_json": '{"nodes":[{"id":"b"}],"edges":[]}'},
+    ]).to_parquet(parquet_root / "train-000.parquet")
+    pg_root = tmp_path / "pg"
+    pg_root.mkdir()
+    _write_parameter_golf_bin(pg_root / "fineweb_train_000000.bin", b"abcdefgh")
+    cfg = {
+        "seed": 7,
+        "seq_len": 4,
+        "batch_size": 2,
+        "max_steps": 3,
+        "hybrid_data": {
+            "enabled": True,
+            "sources": [
+                {"kind": "parquet", "name": "graph_parquet", "root": str(tmp_path / "missing_shards"), "fallback_roots": [str(tmp_path / "shards")], "weight": 1.0, "required": True},
+                {"kind": "parameter_golf_bin", "name": "openai_parameter_golf", "root": str(tmp_path / "missing_pg"), "fallback_roots": [str(pg_root)], "weight": 1.0, "required": True, "window_tokens": 4},
+            ],
+        },
+    }
+    ds = make_dataset_from_config(cfg, "train")
+    report = dataset_budget_report(ds, seq_len=4, batch_size=2, max_steps=3)
+
+    assert report["configured_training_token_slots"] == 24
+    assert report["available_token_slots"] == 16
+    assert {source["name"] for source in report["sources"]} == {"graph_parquet", "openai_parameter_golf"}
+    assert validate_dataset_budget(report, required_sources=["graph_parquet", "openai_parameter_golf"]) == []
+    errors = validate_dataset_budget(report, min_available_token_slots=17, min_training_token_slots=25)
+    assert any("available train token slots" in error for error in errors)
+    assert any("configured training token slots" in error for error in errors)
+
+
+def test_dataset_budget_validates_per_source_requirements(tmp_path: Path):
+    parquet_root = tmp_path / "shards" / "train"
+    parquet_root.mkdir(parents=True)
+    pd.DataFrame([{"record_id": "r", "text": "abc", "graph_json": '{"nodes":[{"id":"a"}],"edges":[]}'}]).to_parquet(parquet_root / "train-000.parquet")
+    pg_root = tmp_path / "pg"
+    pg_root.mkdir()
+    _write_parameter_golf_bin(pg_root / "fineweb_train_000000.bin", b"abcdefgh")
+    cfg = {
+        "seed": 7,
+        "seq_len": 4,
+        "hybrid_data": {
+            "enabled": True,
+            "sources": [
+                {"kind": "parquet", "name": "graph_parquet", "root": str(tmp_path / "shards"), "weight": 1.0, "required": True},
+                {"kind": "parameter_golf_bin", "name": "openai_parameter_golf", "root": str(pg_root), "weight": 1.0, "required": True, "window_tokens": 4},
+            ],
+        },
+    }
+    report = dataset_budget_report(make_dataset_from_config(cfg, "train"), seq_len=4)
+
+    errors = validate_dataset_budget(
+        report,
+        source_requirements={"openai_parameter_golf": {"min_files": 2, "min_raw_tokens": 9}},
+    )
+    assert any("source openai_parameter_golf files" in error for error in errors)
+    assert any("source openai_parameter_golf raw_tokens" in error for error in errors)
+
+
+def test_parameter_golf_strict_tokenizer_rejects_corrupt_model(tmp_path: Path):
+    pg_root = tmp_path / "pg"
+    pg_root.mkdir()
+    _write_parameter_golf_bin(pg_root / "fineweb_train_000000.bin", b"abcdef")
+    bad_model = tmp_path / "bad.model"
+    bad_model.write_bytes(b"not a sentencepiece model")
+
+    with pytest.raises(Exception):
+        ParameterGolfBinGraphDataset(pg_root, "train", tokenizer_path=bad_model, allow_token_id_fallback=False)
+
+    ds = ParameterGolfBinGraphDataset(pg_root, "train", tokenizer_path=bad_model, allow_token_id_fallback=True)
+    assert ds[0].text.startswith("tok_")
 
 
 def test_graph_decoding_order_uses_topological_order_for_dag_and_random_for_cycles():

@@ -165,6 +165,7 @@ class ParameterGolfBinGraphDataset(Dataset):
         stride: int | None = None,
         tokenizer_path: str | Path | None = None,
         max_graph_chunks: int = 64,
+        allow_token_id_fallback: bool = True,
     ) -> None:
         self.root = Path(root)
         self.split = split
@@ -172,7 +173,8 @@ class ParameterGolfBinGraphDataset(Dataset):
         self.stride = max(int(stride or window_tokens), 1)
         self.tokenizer_path = Path(tokenizer_path) if tokenizer_path else None
         self.max_graph_chunks = max(int(max_graph_chunks), 1)
-        self._decoder = _ParameterGolfDecoder(self.tokenizer_path)
+        self.allow_token_id_fallback = bool(allow_token_id_fallback)
+        self._decoder = _ParameterGolfDecoder(self.tokenizer_path, allow_token_id_fallback=self.allow_token_id_fallback)
         files = discover_parameter_golf_bin_files(self.root, split)
         if not files:
             raise FileNotFoundError(f"No Parameter Golf .bin files for split={split} under {self.root}")
@@ -232,15 +234,19 @@ class ParameterGolfBinGraphDataset(Dataset):
         )
 
     def manifest(self) -> dict[str, Any]:
+        raw_tokens = sum(shard.tokens for shard in self.shards)
         return {
             "root": str(self.root),
             "split": self.split,
             "files": len(self.shards),
+            "tokens": raw_tokens,
             "windows": len(self),
+            "token_slots": len(self) * max(self.window_tokens - 1, 1),
             "window_tokens": self.window_tokens,
             "stride": self.stride,
             "tokenizer_path": str(self.tokenizer_path) if self.tokenizer_path else "",
             "tokenizer_kind": self._decoder.kind,
+            "allow_token_id_fallback": self.allow_token_id_fallback,
             "shards": [
                 {"path": str(shard.path), "tokens": shard.tokens, "windows": shard.windows}
                 for shard in self.shards
@@ -414,29 +420,41 @@ def encode_record_bytes(record: GraphRecord, seq_len: int, graph_autoregressive:
 
 
 class _ParameterGolfDecoder:
-    def __init__(self, tokenizer_path: Path | None = None) -> None:
+    def __init__(self, tokenizer_path: Path | None = None, *, allow_token_id_fallback: bool = True) -> None:
         self.tokenizer_path = tokenizer_path
+        self.allow_token_id_fallback = bool(allow_token_id_fallback)
         self.kind = "token_ids"
         self.byte_offset = 4
         self._sp = None
-        if tokenizer_path and tokenizer_path.is_file():
-            if tokenizer_path.suffix == ".json":
-                try:
-                    payload = json.loads(tokenizer_path.read_text(encoding="utf-8"))
-                    if payload.get("tokenizer_type") == "pure_byte":
-                        cfg = payload.get("config", {})
-                        self.kind = "pure_byte"
-                        self.byte_offset = int(cfg.get("byte_offset", 4))
-                except Exception:
-                    self.kind = "token_ids"
-            elif tokenizer_path.suffix == ".model":
-                try:
-                    import sentencepiece as spm
+        if tokenizer_path is None or not tokenizer_path.is_file():
+            if not self.allow_token_id_fallback:
+                raise FileNotFoundError(f"Parameter Golf tokenizer is required: {tokenizer_path}")
+            return
+        if tokenizer_path.suffix == ".json":
+            try:
+                payload = json.loads(tokenizer_path.read_text(encoding="utf-8"))
+                if payload.get("tokenizer_type") == "pure_byte":
+                    cfg = payload.get("config", {})
+                    self.kind = "pure_byte"
+                    self.byte_offset = int(cfg.get("byte_offset", 4))
+                elif not self.allow_token_id_fallback:
+                    raise ValueError(f"Unsupported Parameter Golf tokenizer JSON: {tokenizer_path}")
+            except Exception:
+                if not self.allow_token_id_fallback:
+                    raise
+                self.kind = "token_ids"
+        elif tokenizer_path.suffix == ".model":
+            try:
+                import sentencepiece as spm
 
-                    self._sp = spm.SentencePieceProcessor(model_file=str(tokenizer_path))
-                    self.kind = "sentencepiece"
-                except Exception:
-                    self.kind = "token_ids"
+                self._sp = spm.SentencePieceProcessor(model_file=str(tokenizer_path))
+                self.kind = "sentencepiece"
+            except Exception:
+                if not self.allow_token_id_fallback:
+                    raise
+                self.kind = "token_ids"
+        elif not self.allow_token_id_fallback:
+            raise ValueError(f"Unsupported Parameter Golf tokenizer path: {tokenizer_path}")
 
     def decode(self, token_ids: np.ndarray) -> str:
         if self.kind == "pure_byte":
@@ -446,7 +464,10 @@ class _ParameterGolfDecoder:
             try:
                 return self._sp.decode([int(token) for token in token_ids.tolist()])
             except Exception:
-                pass
+                if not self.allow_token_id_fallback:
+                    raise
+        if not self.allow_token_id_fallback:
+            raise RuntimeError("Parameter Golf tokenizer fallback is disabled")
         return " ".join(f"tok_{int(token)}" for token in token_ids.tolist())
 
 
@@ -580,6 +601,110 @@ def parquet_manifest(
     return manifest
 
 
+def dataset_budget_report(dataset: Dataset, *, seq_len: int, batch_size: int = 0, max_steps: int = 0) -> dict[str, Any]:
+    """Estimate available and scheduled training token slots from metadata."""
+    seq_len = max(int(seq_len), 1)
+    batch_size = max(int(batch_size), 0)
+    max_steps = max(int(max_steps), 0)
+    manifest = dataset_manifest(dataset)
+    sources = _manifest_budget_sources(manifest, seq_len=seq_len)
+    available = sum(int(source.get("token_slots", 0)) for source in sources)
+    configured = batch_size * max_steps * seq_len
+    return {
+        "seq_len": seq_len,
+        "batch_size": batch_size,
+        "max_steps": max_steps,
+        "available_token_slots": available,
+        "configured_training_token_slots": configured,
+        "configured_to_available_ratio": (configured / available) if available else None,
+        "sources": sources,
+    }
+
+
+def validate_dataset_budget(
+    report: dict[str, Any],
+    *,
+    min_available_token_slots: int | None = None,
+    min_training_token_slots: int | None = None,
+    required_sources: Iterable[str] = (),
+    source_requirements: dict[str, Any] | None = None,
+) -> list[str]:
+    errors: list[str] = []
+    available = int(report.get("available_token_slots", 0) or 0)
+    configured = int(report.get("configured_training_token_slots", 0) or 0)
+    if min_available_token_slots is not None and available < int(min_available_token_slots):
+        errors.append(f"available train token slots {available:,} < required {int(min_available_token_slots):,}")
+    if min_training_token_slots is not None and configured < int(min_training_token_slots):
+        errors.append(f"configured training token slots {configured:,} < required {int(min_training_token_slots):,}")
+    present = {str(source.get("name", "")) for source in report.get("sources", [])}
+    missing = [str(name) for name in required_sources if str(name) not in present]
+    if missing:
+        errors.append(f"missing required data-budget source(s): {', '.join(missing)}")
+    by_name = {str(source.get("name", "")): source for source in report.get("sources", [])}
+    for source_name, requirements in (source_requirements or {}).items():
+        source = by_name.get(str(source_name))
+        if source is None:
+            errors.append(f"missing source requirement target: {source_name}")
+            continue
+        for requirement_key, metric_key in (
+            ("min_files", "files"),
+            ("min_examples", "examples"),
+            ("min_raw_tokens", "raw_tokens"),
+            ("min_token_slots", "token_slots"),
+        ):
+            if requirement_key not in requirements:
+                continue
+            required_value = int(requirements[requirement_key])
+            actual_value = source.get(metric_key)
+            if actual_value is None or int(actual_value) < required_value:
+                actual_display = "missing" if actual_value is None else f"{int(actual_value):,}"
+                errors.append(
+                    f"source {source_name} {metric_key} {actual_display} < required {required_value:,}"
+                )
+    return errors
+
+
+def _manifest_budget_sources(
+    manifest: dict[str, Any],
+    *,
+    seq_len: int,
+    name: str | None = None,
+    weight: float | None = None,
+) -> list[dict[str, Any]]:
+    if manifest.get("kind") == "hybrid":
+        rows: list[dict[str, Any]] = []
+        for source in manifest.get("sources", []):
+            source_name = str(source.get("name", "source"))
+            source_weight = float(source.get("weight", 1.0))
+            rows.extend(_manifest_budget_sources(source.get("manifest", {}), seq_len=seq_len, name=source_name, weight=source_weight))
+        return rows
+    if "windows" in manifest:
+        windows = int(manifest.get("windows", 0) or 0)
+        return [{
+            "name": name or str(manifest.get("root", "parameter_golf_bin")),
+            "kind": "parameter_golf_bin",
+            "weight": weight,
+            "examples": windows,
+            "raw_tokens": int(manifest.get("tokens", 0) or 0),
+            "token_slots": windows * seq_len,
+            "root": str(manifest.get("root", "")),
+            "files": int(manifest.get("files", 0) or 0),
+        }]
+    if "rows" in manifest:
+        rows = int(manifest.get("rows", 0) or 0)
+        return [{
+            "name": name or str(manifest.get("root", "parquet")),
+            "kind": "parquet",
+            "weight": weight,
+            "examples": rows,
+            "raw_tokens": None,
+            "token_slots": rows * seq_len,
+            "root": str(manifest.get("root", "")),
+            "files": int(manifest.get("files", 0) or 0),
+        }]
+    return []
+
+
 def make_dataset(
     root: str | Path | None,
     split: str,
@@ -646,7 +771,7 @@ def _make_dataset_source(cfg: dict[str, Any], source: dict[str, Any], split: str
     kind = str(source.get("kind", "parquet"))
     limit = source.get(f"{split}_limit", source.get("limit", split_limit))
     if kind in {"parquet", "hf_parquet", "graph_parquet"}:
-        root = source.get("root", cfg.get("data_root"))
+        root = _resolve_existing_config_path(source.get("root", cfg.get("data_root")), source.get("fallback_roots", ()), "parquet root")
         return ParquetGraphDataset(
             root,
             split=source.get("split", split),
@@ -654,13 +779,30 @@ def _make_dataset_source(cfg: dict[str, Any], source: dict[str, Any], split: str
             cache_shards=int(source.get("cache_shards", cfg.get("cache_shards", 2))),
         )
     if kind in {"parameter_golf_bin", "oai_parameter_golf", "openai_parameter_golf"}:
+        root = _resolve_existing_config_path(source["root"], source.get("fallback_roots", ()), "Parameter Golf root")
+        tokenizer_path = source.get("tokenizer_path")
+        if tokenizer_path:
+            tokenizer_path = _resolve_existing_config_path(tokenizer_path, source.get("tokenizer_fallback_paths", ()), "Parameter Golf tokenizer")
         return ParameterGolfBinGraphDataset(
-            source["root"],
+            root,
             split=source.get("split", split),
             limit=limit,
             window_tokens=int(source.get("window_tokens", cfg.get("seq_len", 1024) + 1)),
             stride=source.get("stride"),
-            tokenizer_path=source.get("tokenizer_path"),
+            tokenizer_path=tokenizer_path,
             max_graph_chunks=int(source.get("max_graph_chunks", 64)),
+            allow_token_id_fallback=bool(source.get("allow_token_id_fallback", tokenizer_path is None)),
         )
     raise ValueError(f"Unsupported dataset source kind: {kind}")
+
+
+def _resolve_existing_config_path(primary: str | Path | None, fallbacks: Iterable[str | Path] = (), label: str = "path") -> Path:
+    candidates = [Path(primary)] if primary else []
+    candidates.extend(Path(path) for path in fallbacks if path)
+    for candidate in candidates:
+        if candidate.exists():
+            return candidate
+    if not candidates:
+        raise FileNotFoundError(f"No {label} configured")
+    joined = ", ".join(str(candidate) for candidate in candidates)
+    raise FileNotFoundError(f"No existing {label}; checked: {joined}")

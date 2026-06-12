@@ -17,9 +17,9 @@ The main optimization metric remains byte-level BPB for the OpenAI Parameter-Gol
 
 The graph structural byte budget is derived from the actual TokenGT graph tuple: masks determine live graph tokens, node counts determine endpoint-id width, and edge endpoint ids are charged when supplied.
 
-All training records are graph structured. The moved TropicalGT reasoning shards carry graph JSON and also receive deterministic sequential text path graphs. The OpenAI Parameter-Golf FineWeb stream is loaded from `external/parameter-golf/data/datasets/fineweb10B_sp1024` and decoded with `external/parameter-golf/data/tokenizers/fineweb_1024_bpe.model`; every sampled token window becomes a causal sequential DAG before TokenGT tokenization. Graphs with causal DAG structure are decoded autoregressively in topological order. Cyclic or explicitly non-causal graphs use deterministic seeded random autoregressive order.
+All training records are graph structured. The moved TropicalGT reasoning shards carry graph JSON and also receive deterministic sequential text path graphs. The OpenAI Parameter-Golf FineWeb stream is loaded from `external/oai-parameter-golf/data/datasets/fineweb10B_sp1024` and decoded with `external/oai-parameter-golf/data/tokenizers/fineweb_1024_bpe.model`; `train.json` keeps the older `external/parameter-golf` checkout as a compatibility fallback. Every sampled token window becomes a causal sequential DAG before TokenGT tokenization. Graphs with causal DAG structure are decoded autoregressively in topological order. Cyclic or explicitly non-causal graphs use deterministic seeded random autoregressive order.
 
-The current full `configs/train.json` model is cap-sized for Parameter Golf: width/hidden size `1760`, memory width `220`, about `38.6M` raw parameters, and an estimated stripped int8+zlib competition export of `15,633,708` bytes. The CUDA training shape is `seq_len: 1024`, `batch_size: 68`, and `checkpoint_every: 250`; recent readiness/live runs allocate roughly `18-20 GiB` on the RTX 4090. Tropical ring attention is used in two places without duplicating parameters: exact blockwise graph-token attention (`graph_tropical_block_size: 32`) and pooled long-context sequence attention (`sequence_tropical_max_tokens: 32`, `sequence_tropical_block_size: 16`, residual weight `0.125`).
+The current full `configs/train.json` model is cap-sized for Parameter Golf: width/hidden size `1760`, memory width `220`, about `38.6M` raw parameters, and an estimated stripped int8+zlib competition export of `15,633,708` bytes. The CUDA training shape is `seq_len: 1024`, `batch_size: 68`, `checkpoint_every: 250`, and `max_steps: 160000`, which schedules `11,141,120,000` sequence token slots; recent readiness/live runs allocate roughly `18-20 GiB` on the RTX 4090. Tropical ring attention is used in two places without duplicating parameters: exact blockwise graph-token attention (`graph_tropical_block_size: 32`) and pooled long-context sequence attention (`sequence_tropical_max_tokens: 32`, `sequence_tropical_block_size: 16`, residual weight `0.125`).
 
 W&B metrics are logged in priority-ordered namespaces so the dashboard opens around the important quantities first:
 
@@ -52,6 +52,22 @@ Use `configs/gpu_ablation.json` for bounded data-backed RTX 4090 ablation ladder
 From the repository root, use the `tokengt` environment with `PYTHONPATH=TropicalGT-I/src` for training, evaluation, validation, inference, and visualization scripts. The top-level README contains the full command inventory for CPU smoke tests, GPU smoke runs, data-backed training, checkpoint resume, and readiness audits.
 
 The readiness audit should be treated as the pre-training acceptance check for this phase: it gates checkpoint reload, data-backed TokenGT conversion, sequential text graphification, finite eval, `bpb`, `graph_bpb`, topology-audit execution, ablation-tool availability, and generated visualization artifacts before a longer run is considered ready.
+
+
+Before launching the full run, populate the full SP1024 OAI cache and audit the token budget:
+
+```bash
+cd external/oai-parameter-golf
+/home/iska/miniconda3/envs/tokengt/bin/python data/cached_challenge_fineweb.py --variant sp1024 --train-shards 195
+cd ../..
+PYTHONPATH=TropicalGT-I/src \
+/home/iska/miniconda3/envs/tokengt/bin/python \
+TropicalGT-I/scripts/audit_training_data_budget.py \
+--config TropicalGT-I/configs/train.json \
+--output TropicalGT-I/outputs/train/data_budget.json
+```
+
+The audit must show both `tropicalgt_hf_reasoning` and `openai_parameter_golf`, at least `10,000,000,000` available train token slots, and at least `10,000,000,000` configured training token slots. Training startup runs the same guard before allocating the model, so a partial OAI cache fails fast instead of silently training on the wrong corpus.
 
 For the full `configs/train.json` path, run the readiness audit with `--train-dry-run --require-cuda --check-wandb-key` before launching the long job. That dry run samples the moved parquet train split, builds the configured model, performs one optimizer step on CUDA, and gates finite train loss, BPB, graph-BPB, and gradient norm.
 

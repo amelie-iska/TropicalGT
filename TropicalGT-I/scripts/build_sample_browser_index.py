@@ -182,6 +182,13 @@ def _sample_summary(root: Path, sample_dir: Path, index: int) -> dict[str, Any]:
         failed_maps += int(row.get("failed_edge_count", 0) or 0) + int(row.get("failed_face_count", 0) or 0)
 
     artifacts = _artifact_rows(root, sample_dir)
+    open_target = None
+    for candidate_name in ("browser_index.html", "inference_audit.html", "got_trajectory_pca_3d.html"):
+        candidate_path = sample_dir / candidate_name
+        if candidate_path.exists():
+            open_target = candidate_path
+            break
+    open_src = _relative_src(root, sample_dir, open_target) if open_target is not None else (artifacts[0]["src"] if artifacts else ".")
     record_id = str(root_candidate.get("record_id") or "")
     input_text = root_candidate.get("input_text") or root_candidate.get("input_preview") or ""
     target_text = root_candidate.get("target_text") or ""
@@ -208,6 +215,7 @@ def _sample_summary(root: Path, sample_dir: Path, index: int) -> dict[str, Any]:
         "target_preview": _short(target_text, 220),
         "output_preview": _short(output_text, 220),
         "artifacts": artifacts,
+        "open_src": open_src,
         "warning_count": len(warnings),
         "failed_simplicial_correspondences": failed_maps,
     }
@@ -220,7 +228,7 @@ def _json_attr(value: Any) -> str:
 def build_index(root: Path, output: Path, title: str) -> None:
     root = root.resolve()
     output = output.resolve()
-    samples = [_sample_summary(root, sample_dir.resolve(), idx) for idx, sample_dir in enumerate(_sample_dirs(root))]
+    samples = [_sample_summary(root, sample_dir, idx) for idx, sample_dir in enumerate(_sample_dirs(root))]
     if not samples:
         raise SystemExit(f"no sample audit directories found under {root}")
     first_artifact = samples[0]["artifacts"][0] if samples[0]["artifacts"] else {"src": "", "label": "No artifacts"}
@@ -241,7 +249,7 @@ def build_index(root: Path, output: Path, title: str) -> None:
                   <h2>{html.escape(sample['label'])}</h2>
                   <p class="record">record <code>{html.escape(sample['record_short'])}</code> · {html.escape(sample['dir'])}</p>
                 </div>
-                <a class="open-sample" href="{html.escape(sample['dir'] + '/browser_index.html' if sample['dir'] != '.' else 'browser_index.html', quote=True)}">open sample</a>
+                <a class="open-sample" href="{html.escape(sample['open_src'], quote=True)}">open sample</a>
               </div>
               <div class="metrics">
                 <span>{sample['candidate_count']} states</span>
@@ -369,12 +377,19 @@ def build_index(root: Path, output: Path, title: str) -> None:
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("audit_root", type=Path)
-    parser.add_argument("--output", type=Path, default=None)
+    parser.add_argument("--output", type=Path, default=None, help="Primary sample-first browser index path. Defaults to browser_index.html.")
+    parser.add_argument("--codex-output", type=Path, default=None, help="Optional secondary alias path. Defaults to codex_browser_index.html.")
     parser.add_argument("--title", default="TropicalGT-I Sample-Based Interactive Audit")
     args = parser.parse_args()
-    output = args.output if args.output is not None else args.audit_root / "codex_browser_index.html"
+    output = args.output if args.output is not None else args.audit_root / "browser_index.html"
+    codex_output = args.codex_output if args.codex_output is not None else args.audit_root / "codex_browser_index.html"
     build_index(args.audit_root, output, args.title)
-    print(output)
+    written = [output]
+    if codex_output.resolve() != output.resolve():
+        build_index(args.audit_root, codex_output, args.title)
+        written.append(codex_output)
+    for path in written:
+        print(path)
 
 
 if __name__ == "__main__":

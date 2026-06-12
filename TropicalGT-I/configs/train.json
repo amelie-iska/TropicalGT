@@ -15,7 +15,7 @@
   "val_limit": 512,
   "seq_len": 1024,
   "batch_size": 68,
-  "max_steps": 20000,
+  "max_steps": 160000,
   "lr": 0.0003,
   "weight_decay": 0.01,
   "grad_clip": 1.0,
@@ -82,12 +82,19 @@
       {
         "kind": "parameter_golf_bin",
         "name": "openai_parameter_golf",
-        "root": "external/parameter-golf/data/datasets/fineweb10B_sp1024",
-        "tokenizer_path": "external/parameter-golf/data/tokenizers/fineweb_1024_bpe.model",
+        "root": "external/oai-parameter-golf/data/datasets/fineweb10B_sp1024",
+        "tokenizer_path": "external/oai-parameter-golf/data/tokenizers/fineweb_1024_bpe.model",
         "weight": 0.3,
-        "required": false,
+        "required": true,
         "window_tokens": 1025,
-        "max_graph_chunks": 64
+        "max_graph_chunks": 64,
+        "fallback_roots": [
+          "external/parameter-golf/data/datasets/fineweb10B_sp1024"
+        ],
+        "tokenizer_fallback_paths": [
+          "external/parameter-golf/data/tokenizers/fineweb_1024_bpe.model"
+        ],
+        "allow_token_id_fallback": false
       }
     ]
   },
@@ -142,5 +149,21 @@
   "periodic_viz_scale_sampling_exploration": 0.45,
   "viz_scale_stochastic_actions": true,
   "viz_scale_sampling_temperature": 2.5,
-  "viz_scale_sampling_exploration": 0.45
+  "viz_scale_sampling_exploration": 0.45,
+  "min_available_train_token_slots": 10000000000,
+  "min_training_token_slots": 10000000000,
+  "required_hybrid_sources": [
+    "tropicalgt_hf_reasoning",
+    "openai_parameter_golf"
+  ],
+  "hybrid_source_requirements": {
+    "tropicalgt_hf_reasoning": {
+      "min_files": 117,
+      "min_examples": 4633582
+    },
+    "openai_parameter_golf": {
+      "min_files": 195,
+      "min_raw_tokens": 19473201340
+    }
+  }
 }
