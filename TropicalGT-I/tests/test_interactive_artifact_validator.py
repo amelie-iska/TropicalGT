@@ -50,6 +50,7 @@ def _row(root: Path, name: str) -> Path:
                 "plot": {
                     "x": candidate["embedding"][0],
                     "y": candidate["embedding"][1],
+                    "z": candidate["nll"],
                     "z_surface": candidate["nll"],
                     "z_centered_scaled_nll": candidate["nll"],
                     "raw_centered_scaled_nll": candidate["nll"],
@@ -91,7 +92,7 @@ def _row(root: Path, name: str) -> Path:
             "exact_anchor_layer": True,
             "actual_landscape_layer": True,
             "support_radius": 0.5,
-            "surface_contact_contract": "every rendered GoT state marker and trajectory edge endpoint uses z_surface sampled from the displayed NLL energy surface",
+            "surface_contact_contract": "every rendered GoT state marker and trajectory edge endpoint uses plot.z/plot.z_surface sampled from the displayed NLL energy surface",
             "trajectory_point_surface_residual_max": 0.0,
             "surface_projected_z_by_record_id": {row["record_id"]: row["nll"] for row in candidates},
             "local_interpolating_sheet": {"available": False, "reason": "disabled_to_preserve_exact_reasoning_point_surface_contact"},
@@ -378,9 +379,11 @@ def test_validate_audit_root_rejects_broken_nll_surface_contact_fields(tmp_path:
     cases = [
         ("missing_projected_map", lambda payload: payload["nll_surface"].pop("surface_projected_z_by_record_id"), "missing per-record projected z values"),
         ("touch_flag_false", lambda payload: payload["nodes"][0]["plot"].__setitem__("touches_nll_surface", False), "not marked as touching"),
+        ("missing_z", lambda payload: payload["nodes"][0]["plot"].pop("z"), "missing finite plotted z"),
         ("missing_z_surface", lambda payload: payload["nodes"][0]["plot"].pop("z_surface"), "missing finite z_surface"),
         ("missing_raw_centered", lambda payload: payload["nodes"][0]["plot"].pop("raw_centered_scaled_nll"), "missing raw centered/scaled NLL z"),
-        ("projected_z_mismatch", lambda payload: payload["nodes"][0]["plot"].__setitem__("z_surface", 999.0), "does not match the displayed NLL surface projection"),
+        ("projected_z_mismatch", lambda payload: payload["nodes"][0]["plot"].__setitem__("z", 999.0), "plotted z does not equal z_surface"),
+        ("projected_z_surface_mismatch", lambda payload: payload["nodes"][0]["plot"].__setitem__("z_surface", 999.0), "plotted z/z_surface does not match the displayed NLL surface projection"),
     ]
     for case_name, mutate, expected in cases:
         audit = tmp_path / case_name / "got_audit"

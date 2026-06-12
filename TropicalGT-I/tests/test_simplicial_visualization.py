@@ -224,7 +224,9 @@ def test_got_trajectory_visualization_renders_simplicial_panel_and_nll_surface(t
     for idx, node in enumerate(payload["nodes"]):
         rid = node["record_id"]
         assert node["plot"]["touches_nll_surface"] is True
+        assert node["plot"]["z"] == node["plot"]["z_surface"]
         assert abs(node["plot"]["z_surface"] - projected_by_id[rid]) < 1e-9
+        assert abs(node["plot"]["z"] - projected_by_id[rid]) < 1e-9
         assert node["plot"]["z_centered_scaled_nll"] == node["plot"]["z_surface"]
         assert "raw_centered_scaled_nll" in node["plot"]
         assert node["reasoning_step_index"] == idx

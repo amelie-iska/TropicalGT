@@ -368,13 +368,20 @@ def validate_row(row_dir: Path, *, min_candidates: int = 8, min_depth: int = 2, 
         rid = str(node.get("record_id", ""))
         plot = node.get("plot", {}) if isinstance(node.get("plot"), dict) else {}
         _assert(plot.get("touches_nll_surface") is True, errors, f"trajectory node {rid} is not marked as touching the NLL surface")
+        _assert(math.isfinite(_finite_float(plot.get("z"))), errors, f"trajectory node {rid} is missing finite plotted z")
         _assert(math.isfinite(_finite_float(plot.get("z_surface"))), errors, f"trajectory node {rid} is missing finite z_surface")
+        _assert(
+            abs(_finite_float(plot.get("z")) - _finite_float(plot.get("z_surface"))) <= nll_residual_tol,
+            errors,
+            f"trajectory node {rid} plotted z does not equal z_surface",
+        )
         _assert(math.isfinite(_finite_float(plot.get("raw_centered_scaled_nll"))), errors, f"trajectory node {rid} is missing raw centered/scaled NLL z")
         if isinstance(projected_by_record, dict) and rid in projected_by_record:
             _assert(
-                abs(_finite_float(plot.get("z_surface")) - _finite_float(projected_by_record.get(rid))) <= nll_residual_tol,
+                abs(_finite_float(plot.get("z")) - _finite_float(projected_by_record.get(rid))) <= nll_residual_tol
+                and abs(_finite_float(plot.get("z_surface")) - _finite_float(projected_by_record.get(rid))) <= nll_residual_tol,
                 errors,
-                f"trajectory node {rid} z_surface does not match the displayed NLL surface projection",
+                f"trajectory node {rid} plotted z/z_surface does not match the displayed NLL surface projection",
             )
     z_axis = surface.get("z_axis")
     _assert(

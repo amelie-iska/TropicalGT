@@ -436,7 +436,7 @@ def write_got_trajectory_visualization(scaling_report: dict[str, object], output
             "model_state_anchor_count": int(len(candidates)),
             "rendered_microsteps_are_nll_surface_anchors": False,
             "rendered_microsteps_policy": "disabled; only model-evaluated GoT states are plotted as trajectory points",
-            "surface_contact_contract": "every rendered GoT state marker and trajectory edge endpoint uses z_surface sampled from the displayed NLL energy surface",
+            "surface_contact_contract": "every rendered GoT state marker and trajectory edge endpoint uses plot.z/plot.z_surface sampled from the displayed NLL energy surface",
             "trajectory_point_surface_residual_max": 0.0,
             "raw_nll_z_residual_max": float(np.nanmax(np.abs(nll_plot_z - raw_nll_plot_z))) if nll_plot_z.size else 0.0,
             "surface_projection": surface_projection_meta,
@@ -626,6 +626,7 @@ def write_got_trajectory_visualization(scaling_report: dict[str, object], output
                 "plot": {
                     "x": float(pca[idx, 0]),
                     "y": float(pca[idx, 1]),
+                    "z": float(nll_plot_z[idx]),
                     "z_surface": float(nll_plot_z[idx]),
                     "z_centered_scaled_nll": float(nll_plot_z[idx]),
                     "raw_centered_scaled_nll": float(raw_nll_plot_z[idx]),
