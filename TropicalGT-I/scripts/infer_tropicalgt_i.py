@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 from __future__ import annotations
-import argparse, json, sys
+import argparse, hashlib, json, sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -18,6 +18,23 @@ from tropicalgt.records import GraphRecord
 from tropicalgt.scaling import run_inference_scaling
 from tropicalgt.tokenizer import TokenGTTokenizer
 from tropicalgt.visualization import write_inference_audit_artifacts
+
+
+def _inference_memory_source(prompt: str, sampling_seed: int, audit_output_dir: str) -> str:
+    digest = hashlib.blake2b(
+        f"{prompt}\n{sampling_seed}\n{audit_output_dir}".encode("utf-8", "ignore"),
+        digest_size=10,
+    ).hexdigest()
+    return f"inference:{digest}"
+
+
+def _current_scaling_record_ids(result: dict) -> set[str]:
+    scaling = result.get("inference_scaling")
+    if not isinstance(scaling, dict):
+        return set()
+    rows = scaling.get("candidates", [])
+    return {str(row.get("record_id")) for row in rows if isinstance(row, dict) and row.get("record_id") is not None}
+
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Run TropicalGT-I inference")
@@ -187,22 +204,34 @@ def main() -> None:
     if args.memory_bank:
         bank = AnalogicalMemoryBank(args.memory_bank, max_records=args.memory_max_records)
         retrieved = []
+        current_record_ids = _current_scaling_record_ids(result)
         if args.memory_retrieve_top_k > 0:
             embedding, signature = query_signature_from_report(result)
-            retrieved = bank.retrieve(embedding, signature, top_k=args.memory_retrieve_top_k)
+            retrieved = bank.retrieve(
+                embedding,
+                signature,
+                top_k=args.memory_retrieve_top_k,
+                exclude_record_ids=current_record_ids,
+            )
         added = 0
         if args.memory_save and isinstance(result.get("inference_scaling"), dict):
             records = memory_records_from_scaling_report(
                 result["inference_scaling"],
-                source="inference",
+                source=_inference_memory_source(args.prompt, scale_seed, args.audit_output_dir),
                 max_records=min(args.memory_max_records, 16),
             )
             bank.extend(records)
             bank.save()
             added = len(records)
+            current_record_ids = current_record_ids | {record.record_id for record in records}
             if args.memory_retrieve_top_k > 0 and not retrieved:
                 embedding, signature = query_signature_from_report(result)
-                retrieved = bank.retrieve(embedding, signature, top_k=args.memory_retrieve_top_k)
+                retrieved = bank.retrieve(
+                    embedding,
+                    signature,
+                    top_k=args.memory_retrieve_top_k,
+                    exclude_record_ids=current_record_ids,
+                )
         result["analogical_memory_retrieval"] = {
             "bank_path": str(bank.path),
             "bank_size": len(bank.records),

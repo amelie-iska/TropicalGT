@@ -68,7 +68,7 @@ This is not a plotting artifact: the PCA metadata and high distance correlation 
 Implemented after the follow-up browser audit:
 
 - Replaced the flat-looking raw NLL sheet with a two-layer audited NLL/fitness view:
-  - Retired in the 2026-06-12 repair pass: the broad smooth projected NLL/fitness surrogate is no longer rendered by default; the current view keeps exact sampled anchors and local interpolation only.
+  - Retired in the 2026-06-12 repair pass: the retired broad NLL/fitness surrogate is no longer rendered by default; the current view uses exact sampled anchors with the surface-contact projection contract so plotted trajectory points sit on the displayed NLL landscape.
   - `Exact GoT NLL anchor mesh`: exact Delaunay/triangular mesh through the sampled reasoning states with zero residual at anchors.
 - Added `nll_progress` payload diagnostics:
   - per-edge raw NLL deltas,
@@ -114,43 +114,38 @@ Immediate modeling recommendation:
 
 ## Current Artifact Locations
 
-- Remote audit root: `TropicalGT-I/outputs/train/periodic/step_00000250/got_audit`
-- Local screenshots: `/Users/amelieschreiber/Documents/LaTeX-projects/TropicalGT-audit-screenshots/step_00000250`
-- Latest checkpoint: `TropicalGT-I/checkpoints/tropicalgt_i_train.latest.pt`
+- Current repaired browser audit root: `TropicalGT-I/outputs/multi_sample_browser/latest`
+- Local screenshots: `<local-screenshot-root>/multi_sample_browser_latest`
+- Latest active checkpoint: `TropicalGT-I/checkpoints/tropicalgt_i_train_full_dataset_active.latest.pt`
 
-## 2026-06-11 Iteration: Actual Landscapes And Local NLL Sheet
+## 2026-06-11 Historical Iteration: Actual Landscapes And Local NLL Sheet
 
-Implemented after the follow-up critique that actual landscapes were missing and the NLL energy surface appeared not to contain all trajectory vertices.
+Historical note, superseded by the 2026-06-12 repair pass. It is retained only to explain the earlier failure mode where trajectory vertices appeared outside the NLL surface.
 
 - The 3D GoT NLL page now has audited NLL layers:
   - Retired in the 2026-06-12 repair pass: the smooth_projected_nll_fitness_landscape entry is recorded as unavailable instead of rendered as a default plot.
-  - `Local interpolating NLL sheet`: a sample-supported inverse-distance interpolant through model-state anchors and rendered microstep anchors. Metadata records `max_point_residual`, duplicate-coordinate collapse diagnostics, support radius, and masked fraction.
-  - `Actual sampled GoT NLL landscape (exact mesh)`: exact mesh through sampled model GoT states only.
-- The key distinction is now explicit: the exact mesh is scoped to sampled model states, while the local sheet and broad landscape also include rendered microstep vertices so those vertices are not visually floating outside the NLL field.
+  - Superseded: the retired local NLL sheet and extra rendered anchors are no longer part of the default repaired view.
+  - Current behavior: sampled model GoT states render against a displayed NLL surface-contact mesh; every plotted trajectory point and edge endpoint uses the displayed surface z-value, with raw centered/scaled NLL retained separately in JSON.
 - Added `trajectory_persistence/persistence_landscapes.html`, a dark-mode page plotting actual GUDHI `Landscape` functions `lambda_k(t)` by trajectory-growth level, not only L2 norms.
 - The landscape heatmap now uses the first finite homology dimension available in the audit instead of assuming finite H0 intervals. On the refreshed step-250 audit this selects H1, which is why the heatmap labels show `H1`.
 - Refreshed all three step-250 audit rows from their saved `inference_audit.json` payloads.
 - Validator result:
-  - `TropicalGT-I/outputs/train/periodic/step_00000250/interactive_audit_validation_landscapes.md`
+  - `<legacy-step-250-root>/interactive_audit_validation_landscapes.md`
   - status: `PASS`
   - rows checked: `3`
   - main row: `75` candidates, `74` edges, depth `8`, PCA distance correlation `0.989791`, NLL residual `0.0`.
 - Local mirror:
-  - `/Users/amelieschreiber/Documents/LaTeX-projects/TropicalGT-audit-browser/step_00000250/got_audit/got_trajectory_pca_3d.html`
-  - `/Users/amelieschreiber/Documents/LaTeX-projects/TropicalGT-audit-browser/step_00000250/got_audit/trajectory_persistence/persistence_landscapes.html`
+  - `<legacy-local-browser-artifact-root>/legacy_step_250/got_audit/got_trajectory_pca_3d.html`
+  - `<legacy-local-browser-artifact-root>/legacy_step_250/got_audit/trajectory_persistence/persistence_landscapes.html`
 - Fresh screenshots:
-  - `/Users/amelieschreiber/Documents/LaTeX-projects/TropicalGT-audit-browser/step_00000250/screenshots_landscape_pass_v2/nll_landscape_local_sheet.png`
-  - `/Users/amelieschreiber/Documents/LaTeX-projects/TropicalGT-audit-browser/step_00000250/screenshots_landscape_pass_v2/actual_persistence_landscapes.png`
+  - `<legacy-local-browser-artifact-root>/legacy_step_250/screenshots_landscape_pass_v2/nll_landscape_local_sheet.png`
+  - `<legacy-local-browser-artifact-root>/legacy_step_250/screenshots_landscape_pass_v2/actual_persistence_landscapes.png`
 
-## 2026-06-11 Iteration: Anchored Landscape, GraphCG, And Support Readability
+## 2026-06-11 Historical Iteration: Anchored Landscape, GraphCG, And Support Readability
 
 Implemented after the follow-up critique that actual landscapes must be visible and that trajectory vertices appeared outside the NLL surface.
 
-- The smooth projected NLL/fitness grid is now numerically pinned at the nearest grid cell for every sampled GoT state and rendered microstep anchor. The refreshed main payload reports:
-  - exact sampled mesh residual: `0.0`,
-  - smooth-grid anchor residual: `0.0`,
-  - smooth landscape domain covers all trajectory points: `true`,
-  - anchored grid cells: `77`.
+- Superseded: the retired broad NLL/fitness grid and extra rendered anchors are no longer accepted as the default repaired view. The current payload contract reports `trajectory_point_surface_residual_max: 0.0`, `surface_projected_z_by_record_id`, and per-node `touches_nll_surface: true`.
 - The exact layer is now labeled `Actual sampled GoT NLL landscape (exact mesh)` and carries `actual_landscape_layer=true`, `actual_landscape_scope`, and provenance metadata. It is intentionally not described as a dense latent-space model evaluation.
 - GraphCG visualization was redesigned from a hard-to-read label wall into:
   - a top-active-direction heatmap for readability,
@@ -161,18 +156,18 @@ Implemented after the follow-up critique that actual landscapes must be visible 
 - Tropical support visualization now treats the step-250 result as true active-support collapse rather than a rendering artifact. The payload records query-to-support flow edges and a margin summary; the page shows the collapsed support strip, per-token margin profile, margin histogram, and collapse metrics table.
 - Refreshed all three step-250 audit rows again from saved `inference_audit.json`.
 - Stricter validator result:
-  - `TropicalGT-I/outputs/train/periodic/step_00000250/interactive_audit_validation_landscape_graphcg_support.md`
+  - `<legacy-step-250-root>/interactive_audit_validation_landscape_graphcg_support.md`
   - status: `PASS`
   - rows checked: `3`
   - main row: `75` candidates, `74` edges, depth `8`, PCA distance correlation `0.989791`, NLL residual `0.0`.
 - Local screenshots:
-  - `/Users/amelieschreiber/Documents/LaTeX-projects/TropicalGT-audit-browser/step_00000250/screenshots_landscape_graphcg_support_pass/nll_actual_smoothed_landscape_webgl.png`
-  - `/Users/amelieschreiber/Documents/LaTeX-projects/TropicalGT-audit-browser/step_00000250/screenshots_landscape_graphcg_support_pass/graphcg_full_rank_audit.png`
-  - `/Users/amelieschreiber/Documents/LaTeX-projects/TropicalGT-audit-browser/step_00000250/screenshots_landscape_graphcg_support_pass/tropical_support_collapse_diagnostic.png`
+  - `<legacy-local-browser-artifact-root>/legacy_step_250/screenshots_landscape_graphcg_support_pass/nll_actual_smoothed_landscape_webgl.png`
+  - `<legacy-local-browser-artifact-root>/legacy_step_250/screenshots_landscape_graphcg_support_pass/graphcg_full_rank_audit.png`
+  - `<legacy-local-browser-artifact-root>/legacy_step_250/screenshots_landscape_graphcg_support_pass/tropical_support_collapse_diagnostic.png`
 
 Remaining limitation:
 
-- The broad NLL/fitness landscape is still a post-hoc projection/interpolation over sampled model states and rendered microsteps. A genuinely dense actual landscape would require a separately defined perturbation family and additional model forward passes at those perturbations. The current renderer does not pretend otherwise.
+- The default repaired renderer no longer displays broad post-hoc NLL/fitness landscapes or extra rendered anchors. A genuinely dense local landscape still requires a separately defined perturbation family and additional model forward passes at those perturbations.
 
 ## Provenance Audit Status
 
@@ -287,9 +282,9 @@ Implemented after the critique that the browser view should be sample-based rath
   - tropical support audit.
 - `validate_interactive_audit_artifacts.py` now optionally validates `codex_browser_index.html` for sample cards, per-sample artifact buttons, and broken relative links.
 - Current local browser mirror:
-  - `/Users/amelieschreiber/Documents/LaTeX-projects/TropicalGT-audit-browser/step_00000250/got_audit/codex_browser_index.html`
+  - `<legacy-local-browser-artifact-root>/legacy_step_250/got_audit/codex_browser_index.html`
 - Current remote generated dashboard:
-  - `TropicalGT-I/outputs/train/periodic/step_00000250/got_audit/codex_browser_index.html`
+  - `<legacy-step-250-audit-root>/codex_browser_index.html`
 
 Browser check:
 
@@ -299,9 +294,9 @@ Browser check:
 
 ## 2026-06-12 Repair Pass: Real Filtrations and Browser Validation
 
-- Removed the default smooth projected NLL/fitness surrogate from the GoT NLL
+- Removed the default retired broad NLL/fitness surrogate from the GoT NLL
   landscape. The page now renders sampled model-evaluated GoT NLL anchors and a
-  local interpolating sheet only when those model outputs exist; missing NLLs
+  surface-contact projection contract so every plotted trajectory marker and edge endpoint touches the displayed NLL landscape; missing NLLs
   are emitted as explicit unavailable diagnostics.
 - Split trajectory topology into Euclidean radius and Jensen-Shannon
   probability complexes, each with a GUDHI simplex-tree inclusion-poset page.
@@ -318,6 +313,6 @@ Browser check:
 
 ## 2026-06-12 Browser Review Note
 
-Served `TropicalGT-I/outputs/train/periodic/step_00008250/got_audit` through a local tunnel at `http://127.0.0.1:8977/codex_browser_index.html`. Browser inspection confirmed the sample-first index, NLL page, embedding map, full radius complex, full radius simplex tree, Jensen-Shannon probability complex, probability simplex tree, reasoning-step simplex tree, trajectory persistence landscapes, GraphCG full-rank direction audit, and tropical support page all load as interactive Plotly pages with the expected controls/markers. The saved step-8250 analogical page was generated before the probability-map repair and remains an older artifact; the repaired `write_analogical_memory_visualization` path is covered by tests and will be used by the restarted training process for subsequent periodic audit bundles.
+Served the repaired multi-sample browser bundle through a local tunnel at `http://127.0.0.1:8977/browser_index.html`. Browser inspection confirmed the sample-first index, NLL page, embedding map, full radius complex, full radius simplex tree, Jensen-Shannon probability complex, probability simplex tree, reasoning-step simplex tree, trajectory persistence landscapes, GraphCG full-rank direction audit, and tropical support page all load as interactive Plotly pages with the expected controls/markers. The saved step-8250 analogical page was generated before the probability-map repair and remains an older artifact; the repaired `write_analogical_memory_visualization` path is covered by tests and will be used by the restarted training process for subsequent periodic audit bundles.
 
-Training was restarted from `TropicalGT-I/checkpoints/tropicalgt_i_train.latest.pt` after browser artifact replay pressure; current live PID at this note is `734828`, with log pointer `TropicalGT-I/outputs/train/logs/train_resume_latest_20260612_031834.log`.
+Training was restarted with `TropicalGT-I/configs/train_full_dataset_active.json`; the active run records its PID in `TropicalGT-I/outputs/train_full_dataset_active/latest_training.pid` and logs to `TropicalGT-I/outputs/train_full_dataset_active/full_dataset_active_training.log`.

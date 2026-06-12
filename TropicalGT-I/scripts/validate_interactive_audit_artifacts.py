@@ -15,7 +15,7 @@ import numpy as np
 
 REQUIRED_HTML = {
     "embedding_map": ("got_embedding_map_3d.html", ("Graph-of-thought embedding-space trajectory map", "actual graph_state PCA")),
-    "trajectory_nll": ("got_trajectory_pca_3d.html", ("Graph-of-thought branching trajectory", "centered NLL")),
+    "trajectory_nll": ("got_trajectory_pca_3d.html", ("Graph-of-thought branching trajectory", "model-evaluated NLL landscape")),
     "full_complex": ("got_full_trajectory_complex.html", ("Full graph-of-thought trajectory filtered simplicial complex", "play filtration", "filtration backend=")),
     "full_simplex_tree": ("got_full_trajectory_simplex_tree_3d.html", ("Full graph-of-thought trajectory GUDHI simplex tree", "simplex-tree inclusion")),
     "probability_complex": ("got_full_trajectory_complex_jensen_shannon.html", ("probability filtered simplicial complex", "Jensen-Shannon")),
@@ -181,18 +181,18 @@ def _validate_file_set(row_dir: Path, errors: list[str]) -> dict[str, str]:
         files[key] = str(path)
     for key, (rel, needles) in REQUIRED_HTML.items():
         path = row_dir / rel
-        if key == "analogical_map" and not path.exists() and (row_dir / "analogical_memory_retrieval.html").exists():
-            path = row_dir / "analogical_memory_retrieval.html"
-        if key in {"analogical_index", "analogical_map"} and not path.exists():
+        if key in {"analogical_index", "analogical_map"}:
             maps_path = row_dir / "analogical_simplicial_maps.json"
             if maps_path.exists():
                 try:
                     map_payload = _read_json(maps_path)
                 except ArtifactValidationError:
                     map_payload = {}
-                if map_payload.get("available") is False and map_payload.get("reason") in {"missing_model_probability_query_complex", "no_non_self_model_memory"}:
+                if map_payload.get("available") is False and map_payload.get("reason") in {"missing_model_probability_query_complex", "missing_model_probability_codomain_complex", "no_non_self_model_memory"}:
                     files[key] = str(path)
                     continue
+        if key == "analogical_map" and not path.exists() and (row_dir / "analogical_memory_retrieval.html").exists():
+            path = row_dir / "analogical_memory_retrieval.html"
         _assert(path.exists(), errors, f"missing html {rel}")
         files[key] = str(path)
         if path.exists():
@@ -219,6 +219,9 @@ def _validate_file_set(row_dir: Path, errors: list[str]) -> dict[str, str]:
                 _assert(support_audit or collapse_audit, errors, f"{rel} is not the interpretable support audit view")
             if key == "graphcg":
                 _assert("Readable top-direction heatmap" in html, errors, f"{rel} does not use the readable GraphCG top-direction audit layout")
+            if key == "trajectory_nll":
+                _assert("selected-complex-graph" in html and "plotly_click" in html, errors, f"{rel} does not click-select an interactive reasoning-step complex")
+                _assert("open interactive reasoning-step complex page" in html, errors, f"{rel} does not expose per-step complex page links")
     return files
 
 
@@ -349,6 +352,30 @@ def validate_row(row_dir: Path, *, min_candidates: int = 8, min_depth: int = 2, 
     _assert(surface.get("available") is True, errors, "NLL surface unavailable")
     _assert(surface.get("touches_points") is True, errors, "NLL surface is not point-anchored")
     _assert(_finite_float(surface.get("max_point_residual"), 999.0) <= nll_residual_tol, errors, "NLL surface residual exceeds tolerance")
+    _assert(
+        str(surface.get("surface_contact_contract", "")).startswith("every rendered GoT state marker"),
+        errors,
+        "NLL surface is missing the trajectory point surface-contact contract",
+    )
+    _assert(
+        _finite_float(surface.get("trajectory_point_surface_residual_max"), 999.0) <= nll_residual_tol,
+        errors,
+        "NLL trajectory points are not guaranteed to touch the displayed surface",
+    )
+    projected_by_record = surface.get("surface_projected_z_by_record_id", {})
+    _assert(isinstance(projected_by_record, dict) and len(projected_by_record) >= len(nodes), errors, "NLL surface is missing per-record projected z values")
+    for node in nodes:
+        rid = str(node.get("record_id", ""))
+        plot = node.get("plot", {}) if isinstance(node.get("plot"), dict) else {}
+        _assert(plot.get("touches_nll_surface") is True, errors, f"trajectory node {rid} is not marked as touching the NLL surface")
+        _assert(math.isfinite(_finite_float(plot.get("z_surface"))), errors, f"trajectory node {rid} is missing finite z_surface")
+        _assert(math.isfinite(_finite_float(plot.get("raw_centered_scaled_nll"))), errors, f"trajectory node {rid} is missing raw centered/scaled NLL z")
+        if isinstance(projected_by_record, dict) and rid in projected_by_record:
+            _assert(
+                abs(_finite_float(plot.get("z_surface")) - _finite_float(projected_by_record.get(rid))) <= nll_residual_tol,
+                errors,
+                f"trajectory node {rid} z_surface does not match the displayed NLL surface projection",
+            )
     z_axis = surface.get("z_axis")
     _assert(
         z_axis in {"centered_scaled_nll", "projected_nll_fitness_energy"},
@@ -360,21 +387,14 @@ def validate_row(row_dir: Path, *, min_candidates: int = 8, min_depth: int = 2, 
     _assert(surface.get("actual_landscape_layer") is True, errors, "NLL surface is missing actual sampled landscape metadata")
     surface_kind = surface.get("surface_kind")
     _assert(
-        surface_kind in {"sample_supported_local_idw_surface", "exact_delaunay_nll_mesh"},
+        surface_kind in {"sample_supported_local_idw_surface", "exact_delaunay_nll_mesh", "sparse_exact_triangular_nll_mesh"},
         errors,
         "NLL surface is neither a sample-supported local field nor an exact point-anchored mesh",
     )
     local_sheet = surface.get("local_interpolating_sheet", {})
     surrogate = surface.get("surrogate_landscape_layer", {})
     if isinstance(local_sheet, dict) and local_sheet.get("available") is True:
-        _assert(
-            local_sheet.get("surface_kind") == "local_interpolating_nll_sheet",
-            errors,
-            "local NLL sheet is not labeled as a local interpolating NLL sheet",
-        )
-        _assert("provenance" in local_sheet, errors, "local NLL sheet is missing provenance")
-        _assert(_finite_float(local_sheet.get("max_point_residual"), 999.0) <= nll_residual_tol, errors, "local NLL sheet residual exceeds tolerance")
-        _assert(_finite_float(local_sheet.get("support_radius"), -1.0) > 0.0, errors, "local NLL sheet is missing support_radius")
+        _assert(False, errors, "local NLL interpolating sheet is enabled despite the exact surface-contact contract")
     if isinstance(surrogate, dict):
         _assert(surrogate.get("available") is not True, errors, "retired global NLL surrogate layer is enabled")
     support_radius = surface.get("support_radius")
@@ -394,16 +414,29 @@ def validate_row(row_dir: Path, *, min_candidates: int = 8, min_depth: int = 2, 
     _assert("interpretation" in support_metrics, errors, "tropical support payload is missing collapse interpretation")
     _assert(isinstance(support_metrics.get("margin_summary"), dict), errors, "tropical support payload is missing margin summary")
     flow_edges = support_payload.get("support_flow_edges", []) if isinstance(support_payload, dict) else []
-    _assert(isinstance(flow_edges, list) and len(flow_edges) >= int(_finite_float(support_metrics.get("token_count"), 0.0)), errors, "tropical support payload is missing query-to-support flow edges")
+    token_count = int(_finite_float(support_metrics.get("token_count"), 0.0))
+    _assert(isinstance(flow_edges, list) and len(flow_edges) >= token_count, errors, "tropical support payload is missing query-to-support flow edges")
+    for edge in flow_edges if isinstance(flow_edges, list) else []:
+        if not isinstance(edge, dict):
+            errors.append("tropical support payload contains non-object support-flow edge")
+            continue
+        query_idx = int(_finite_float(edge.get("query_index"), -1.0))
+        support_idx = int(_finite_float(edge.get("support_index"), -1.0))
+        _assert(0 <= query_idx < token_count, errors, "tropical support flow has out-of-range query_index")
+        _assert(0 <= support_idx < token_count, errors, "tropical support flow has out-of-range support_index")
 
-    _assert(graphcg_payload.get("available") is True, errors, "GraphCG payload is unavailable")
+    graphcg_available = graphcg_payload.get("available") is True
+    _assert(graphcg_available, errors, "GraphCG payload is unavailable")
     matrix_shape = graphcg_payload.get("matrix_shape", [])
-    _assert(isinstance(matrix_shape, list) and len(matrix_shape) == 2 and int(matrix_shape[0]) >= len(candidates), errors, "GraphCG payload has invalid matrix shape")
-    _assert(_finite_float(graphcg_payload.get("active_rank_nonzero_mean_abs"), 0.0) > 0, errors, "GraphCG payload reports no active directions")
-    _assert(int(_finite_float(graphcg_payload.get("full_rank_direction_count"), 0.0)) == int(matrix_shape[1]), errors, "GraphCG full-rank direction count does not match matrix width")
-    _assert(len(graphcg_payload.get("candidate_effective_direction_count", [])) >= len(candidates), errors, "GraphCG payload is missing candidate effective-direction counts")
-    _assert(len(graphcg_payload.get("direction_activity_sorted", [])) == int(matrix_shape[1]), errors, "GraphCG payload is missing full direction activity spectrum")
-    _assert(graphcg_payload.get("interpretation"), errors, "GraphCG payload is missing heatmap interpretation")
+    matrix_width = int(_finite_float(matrix_shape[1], 0.0)) if isinstance(matrix_shape, list) and len(matrix_shape) == 2 else 0
+    _assert(isinstance(matrix_shape, list) and len(matrix_shape) == 2 and int(_finite_float(matrix_shape[0], 0.0)) >= len(candidates), errors, "GraphCG payload has invalid matrix shape")
+    _assert(matrix_width > 0, errors, "GraphCG payload has invalid matrix width")
+    if graphcg_available and matrix_width > 0:
+        _assert(_finite_float(graphcg_payload.get("active_rank_nonzero_mean_abs"), 0.0) > 0, errors, "GraphCG payload reports no active directions")
+        _assert(int(_finite_float(graphcg_payload.get("full_rank_direction_count"), 0.0)) == matrix_width, errors, "GraphCG full-rank direction count does not match matrix width")
+        _assert(len(graphcg_payload.get("candidate_effective_direction_count", [])) >= len(candidates), errors, "GraphCG payload is missing candidate effective-direction counts")
+        _assert(len(graphcg_payload.get("direction_activity_sorted", [])) == matrix_width, errors, "GraphCG payload is missing full direction activity spectrum")
+        _assert(graphcg_payload.get("interpretation"), errors, "GraphCG payload is missing heatmap interpretation")
 
     _assert(len(embedded_nodes) == len(nodes), errors, "embedding map payload node count differs from trajectory payload")
     _assert(embedding_payload.get("coordinate_source", "").startswith("PCA of model graph_state embeddings"), errors, "embedding map payload has wrong coordinate source")
@@ -441,7 +474,7 @@ def validate_row(row_dir: Path, *, min_candidates: int = 8, min_depth: int = 2, 
         map_payload = _read_json(maps_path)
         maps = map_payload.get("maps", [])
         if map_payload.get("available") is False:
-            _assert(map_payload.get("reason") in {"missing_model_probability_query_complex", "no_non_self_model_memory"}, errors, "analogical maps are unavailable for an unrecognized reason")
+            _assert(map_payload.get("reason") in {"missing_model_probability_query_complex", "missing_model_probability_codomain_complex", "no_non_self_model_memory"}, errors, "analogical maps are unavailable for an unrecognized reason")
         else:
             allowed_sources = {"trajectory_probability_filtered_simplicial_object"}
             _assert(bool(maps), errors, "analogical_simplicial_maps.json contains no maps")
@@ -487,6 +520,17 @@ def validate_row(row_dir: Path, *, min_candidates: int = 8, min_depth: int = 2, 
     steps = [row for row in manifest.get("steps", []) if isinstance(row, dict)]
     _assert(len(steps) == len(candidates), errors, "reasoning-step complex map count does not match candidates")
     _assert(all(isinstance(row.get("simplex_tree"), dict) and row["simplex_tree"].get("backend") == "gudhi.SimplexTree" for row in steps), errors, "reasoning-step manifest is missing GUDHI SimplexTree provenance")
+    for idx, node in enumerate(nodes):
+        rid = str(node.get("record_id", ""))
+        step = steps[idx] if idx < len(steps) else {}
+        expected_step_href = f"reasoning_step_complex_maps/{step.get('file', '')}"
+        expected_tree_href = f"reasoning_step_complex_maps/{step.get('simplex_tree_file', '')}"
+        _assert(str(step.get("record_id", rid)) == rid, errors, f"reasoning-step manifest record_id mismatch at index {idx}")
+        _assert(node.get("reasoning_step_index") == idx, errors, f"trajectory node {rid} has wrong reasoning_step_index")
+        _assert(node.get("step_complex_href") == expected_step_href, errors, f"trajectory node {rid} has wrong step_complex_href")
+        _assert(node.get("step_simplex_tree_href") == expected_tree_href, errors, f"trajectory node {rid} has wrong step_simplex_tree_href")
+        _assert((row_dir / expected_step_href).exists(), errors, f"trajectory node {rid} references missing step complex page")
+        _assert((row_dir / expected_tree_href).exists(), errors, f"trajectory node {rid} references missing step simplex tree page")
     for idx in [0, len(steps) // 2, len(steps) - 1] if steps else []:
         step = steps[idx]
         step_file = row_dir / "reasoning_step_complex_maps" / str(step.get("file", ""))
@@ -538,10 +582,22 @@ def validate_row(row_dir: Path, *, min_candidates: int = 8, min_depth: int = 2, 
     }
 
 
+def _looks_like_audit_row(path: Path) -> bool:
+    return (path / REQUIRED_JSON["scaling_tree"]).exists() and (path / REQUIRED_JSON["trajectory_payload"]).exists()
+
+
 def _candidate_row_dirs(audit_root: Path) -> list[Path]:
     audit_root = audit_root.resolve()
     if audit_root.name != "got_audit" and (audit_root / "got_audit").is_dir():
         audit_root = audit_root / "got_audit"
+    if not _looks_like_audit_row(audit_root):
+        sample_rows = sorted(
+            path
+            for path in audit_root.iterdir()
+            if path.is_dir() and path.name.startswith("sample_") and _looks_like_audit_row(path)
+        )
+        if sample_rows:
+            return sample_rows
     rows = [audit_root]
     rows.extend(sorted(path for path in audit_root.glob("example_*") if path.is_dir()))
     return rows

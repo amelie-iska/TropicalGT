@@ -378,7 +378,7 @@ def build_reasoning_trajectory_complex(
         for record_id, vector in raw_embedding_by_id.items():
             supplied = raw_probability_by_id.get(record_id)
             embedding_by_id[record_id] = supplied
-            probability_source_by_id[record_id] = "model_candidate_probability_vector" if supplied is not None else None
+            probability_source_by_id[record_id] = "TropicalGTModel.gfn(graph_state).softmax_action_probability_vector" if supplied is not None else None
     else:
         embedding_by_id = raw_embedding_by_id
         probability_source_by_id = {record_id: None for record_id in raw_embedding_by_id}
@@ -649,8 +649,7 @@ def _normalize_probability_vector(value: list[float] | None) -> list[float] | No
         return None
     total = sum(vals)
     if total <= 0.0 or not math.isfinite(total):
-        uniform = 1.0 / float(len(vals))
-        return [uniform for _ in vals]
+        return None
     return [float(v / total) for v in vals]
 
 

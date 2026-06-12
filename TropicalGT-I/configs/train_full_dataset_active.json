@@ -1,0 +1,170 @@
+{
+  "run_name": "tropicalgt_i_train_full_dataset_active",
+  "seed": 1729,
+  "data_root": "TropicalGT-I/data/toricgt/curated_hf_shards",
+  "require_data": true,
+  "cache_shards": 1,
+  "graph_autoregressive_decoding": true,
+  "shuffle": false,
+  "chunk_shuffle": true,
+  "chunk_shuffle_seed": 1729,
+  "shuffle_rows_within_chunk": false,
+  "num_workers": 0,
+  "fixture_size": 8,
+  "train_limit": null,
+  "val_limit": 64,
+  "seq_len": 1024,
+  "batch_size": 4,
+  "max_steps": 2500000,
+  "lr": 0.0003,
+  "weight_decay": 0.01,
+  "grad_clip": 1.0,
+  "device": "auto",
+  "output_dir": "TropicalGT-I/outputs/train_full_dataset_active",
+  "checkpoint_dir": "TropicalGT-I/checkpoints",
+  "checkpoint_every": 1000,
+  "keys_path": "keys.txt",
+  "graph_bpb_side_weight": 1.0,
+  "wandb_html_max_bytes": 5000000,
+  "wandb_html_artifact_limit": 8,
+  "memory_bank_path": "TropicalGT-I/outputs/train_full_dataset_active/analogical_memory/reasoning_memory.jsonl",
+  "memory_max_records": 64,
+  "memory_records_per_audit": 1,
+  "viz_limit": 16,
+  "audit_level": "topology",
+  "ph_backend": "gudhi",
+  "audit_max_simplices": 256,
+  "validation_every_steps": 500,
+  "visualization_every_steps": 10000,
+  "periodic_eval_details_limit": 1,
+  "periodic_viz_limit": 1,
+  "periodic_audit_level": "full",
+  "periodic_ph_backend": "gudhi",
+  "periodic_audit_max_simplices": 256,
+  "periodic_viz_got_scaling": true,
+  "periodic_viz_scale_depth": 4,
+  "periodic_viz_scale_width": 5,
+  "periodic_viz_scale_branch_factor": 3,
+  "periodic_viz_scale_allow_stop": false,
+  "periodic_viz_scale_diverse_actions": true,
+  "periodic_viz_got_examples": 1,
+  "periodic_viz_got_record_pool": 4,
+  "periodic_memory_retrieve_top_k": 2,
+  "inference_memory_retrieve_top_k": 2,
+  "algebra_audit_interval": 10000,
+  "algebra_audit_limit": 1,
+  "viz_topological_algebra": true,
+  "viz_got_scaling": true,
+  "viz_scale_depth": 7,
+  "viz_scale_width": 8,
+  "viz_scale_branch_factor": 4,
+  "viz_scale_allow_stop": false,
+  "viz_scale_diverse_actions": true,
+  "viz_got_record_pool": 48,
+  "tokengt": {
+    "max_nodes": 64,
+    "max_edges": 128,
+    "node_id_dim": 16,
+    "feature_dim": 48,
+    "graph_token": true
+  },
+  "hybrid_data": {
+    "enabled": true,
+    "seed": 1729,
+    "sources": [
+      {
+        "kind": "parquet",
+        "name": "tropicalgt_hf_reasoning",
+        "root": "TropicalGT-I/data/toricgt/curated_hf_shards",
+        "weight": 0.7,
+        "required": true
+      },
+      {
+        "kind": "parameter_golf_bin",
+        "name": "openai_parameter_golf",
+        "root": "external/oai-parameter-golf/data/datasets/fineweb10B_sp1024",
+        "tokenizer_path": "external/oai-parameter-golf/data/tokenizers/fineweb_1024_bpe.model",
+        "weight": 0.3,
+        "required": true,
+        "window_tokens": 1025,
+        "max_graph_chunks": 64,
+        "fallback_roots": [
+          "external/parameter-golf/data/datasets/fineweb10B_sp1024"
+        ],
+        "tokenizer_fallback_paths": [
+          "external/parameter-golf/data/tokenizers/fineweb_1024_bpe.model"
+        ],
+        "allow_token_id_fallback": false
+      }
+    ]
+  },
+  "model": {
+    "dim": 1760,
+    "hidden_dim": 1760,
+    "graph_feature_dim": 48,
+    "num_actions": 8,
+    "graphcg_num_directions": 1760,
+    "graphcg_active_directions": 96,
+    "gflownet_weight": 0.02,
+    "graphcg_weight": 0.02,
+    "certificate_weight": 0.001,
+    "wall_margin_threshold": 0.001,
+    "memory_dim": 220,
+    "graph_tropical_block_size": 32,
+    "use_sequence_tropical": true,
+    "sequence_tropical_weight": 0.125,
+    "sequence_tropical_max_tokens": 32,
+    "sequence_tropical_block_size": 16
+  },
+  "meet_in_middle": {
+    "enabled": false,
+    "mode": "shared_weight_reverse_pass",
+    "split_ratio": 0.5,
+    "agreement_weight": 0.0,
+    "reverse_nll_weight": 0.0,
+    "max_records": 0,
+    "reverse_model_path": ""
+  },
+  "parameter_golf_export": {
+    "cap_bytes": 16000000,
+    "target_utilization": "approximately 97 percent after int8+zlib export plus stripped code bytes",
+    "size_checked_with": "TropicalGT-I/scripts/estimate_parameter_golf_export_size.py"
+  },
+  "inference_scaling": {
+    "depth": 8,
+    "width": 10,
+    "branch_factor": 4,
+    "stochastic_actions": true,
+    "sampling_temperature": 2.5,
+    "sampling_exploration": 0.45,
+    "sampling_seed": 1729
+  },
+  "wandb": {
+    "enabled": true,
+    "mode": "online",
+    "project": "TropicalGT-I"
+  },
+  "periodic_viz_scale_stochastic_actions": true,
+  "periodic_viz_scale_sampling_temperature": 2.5,
+  "periodic_viz_scale_sampling_exploration": 0.45,
+  "viz_scale_stochastic_actions": true,
+  "viz_scale_sampling_temperature": 2.5,
+  "viz_scale_sampling_exploration": 0.45,
+  "min_available_train_token_slots": 10000000000,
+  "min_training_token_slots": 10000000000,
+  "required_hybrid_sources": [
+    "tropicalgt_hf_reasoning",
+    "openai_parameter_golf"
+  ],
+  "hybrid_source_requirements": {
+    "tropicalgt_hf_reasoning": {
+      "min_files": 117,
+      "min_examples": 4633582
+    },
+    "openai_parameter_golf": {
+      "min_files": 195,
+      "min_raw_tokens": 19473201340
+    }
+  },
+  "periodic_got_record_pool": 16
+}

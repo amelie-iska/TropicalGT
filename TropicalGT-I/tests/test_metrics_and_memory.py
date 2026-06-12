@@ -1,3 +1,5 @@
+from dataclasses import asdict
+import json
 import math
 
 import torch
@@ -62,5 +64,12 @@ def test_analogical_memory_bank_roundtrip_and_retrieval(tmp_path):
     stored_summaries = [record.filtered_simplicial_object["summary"] for record in records]
     assert all(record.filtered_simplicial_object["summary"] == candidate_summaries[record.record_id] for record in records)
     assert any(summary != trajectory_summary for summary in stored_summaries)
+    serialized = [json.dumps(asdict(record)) for record in records]
+    assert max(len(row) for row in serialized) < 1_000_000
+    for record in records:
+        assert record.metadata["memory_payload_policy"] == "compact_real_trajectory_payload_no_duplicate_full_complexes"
+        assert "trajectory_filtered_simplicial_object" not in record.metadata
+        assert "trajectory_probability_filtered_simplicial_object" not in record.metadata
+        assert "summary" in record.filtered_simplicial_object
     assert "record_family" in retrieved[0]
     assert "base_retrieval_score" in retrieved[0]

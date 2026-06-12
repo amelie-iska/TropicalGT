@@ -103,8 +103,11 @@ def _write_sample_metadata(sample_dir: Path, index: int, prompt: str, cmd: list[
 
 def _clean_output_root(output_root: Path) -> None:
     for child in output_root.iterdir():
-        if child.is_dir() and child.name.startswith("sample_"):
-            shutil.rmtree(child)
+        if child.name.startswith("sample_"):
+            if child.is_symlink() or child.is_file():
+                child.unlink()
+            elif child.is_dir():
+                shutil.rmtree(child)
         elif child.name in {"manifest.json", "browser_index.html", "codex_browser_index.html"}:
             child.unlink()
 

@@ -218,7 +218,7 @@ The current browser-facing audit emits named artifacts with separate geometric
 and probability filtrations:
 
 - `got_trajectory_pca_3d.html`: sampled GoT graph-state PCA with exact NLL
-  anchors and optional local interpolation from model-evaluated states only.
+  anchors plus the surface-contact projection contract from model-evaluated states only.
 - `got_embedding_map_3d.html`: model `graph_state` embedding PCA, independent
   of tree/layout coordinates.
 - `got_full_trajectory_complex.html` and

@@ -38,20 +38,34 @@ def _row(root: Path, name: str) -> Path:
         {"record_id": "b", "path": ["verify"], "parent": "root", "level": 1, "nll": 1.1, "embedding": [0.0, 1.0, 0.0]},
         {"record_id": "c", "path": ["expand", "refine"], "parent": "a", "level": 2, "nll": 0.8, "embedding": [1.0, 1.0, 0.0]},
     ]
-    nodes = [
-        {
-            "record_id": row["record_id"],
-            "level": row["level"],
-            "nll": row["nll"],
-            "embedding": row["embedding"],
-            "embedding_pca": {"pc1": row["embedding"][0], "pc2": row["embedding"][1], "pc3": row["embedding"][2]},
-            "filtered_simplicial_object": {
-                "summary": {"num_vertices": 1, "num_edges": 0, "num_two_simplices": 0},
-                "simplices": [{"simplex": [row["record_id"]], "dimension": 0, "filtration": 0.0}],
-            },
-        }
-        for row in candidates
-    ]
+    nodes = []
+    for idx, candidate in enumerate(candidates):
+        nodes.append(
+            {
+                "record_id": candidate["record_id"],
+                "level": candidate["level"],
+                "nll": candidate["nll"],
+                "embedding": candidate["embedding"],
+                "embedding_pca": {"pc1": candidate["embedding"][0], "pc2": candidate["embedding"][1], "pc3": candidate["embedding"][2]},
+                "plot": {
+                    "x": candidate["embedding"][0],
+                    "y": candidate["embedding"][1],
+                    "z_surface": candidate["nll"],
+                    "z_centered_scaled_nll": candidate["nll"],
+                    "raw_centered_scaled_nll": candidate["nll"],
+                    "raw_nll": candidate["nll"],
+                    "touches_nll_surface": True,
+                },
+                "reasoning_step_index": idx,
+                "step_complex_href": f"reasoning_step_complex_maps/reasoning_step_{idx:03d}.html",
+                "step_simplex_tree_href": f"reasoning_step_complex_maps/reasoning_step_{idx:03d}_simplex_tree.html",
+                "step_complex_contract": "this GoT state maps to a per-step interactive filtered simplicial complex page and simplex-tree page",
+                "filtered_simplicial_object": {
+                    "summary": {"num_vertices": 1, "num_edges": 0, "num_two_simplices": 0},
+                    "simplices": [{"simplex": [candidate["record_id"]], "dimension": 0, "filtration": 0.0}],
+                },
+            }
+        )
     payload = {
         "nodes": nodes,
         "edges": [
@@ -72,11 +86,16 @@ def _row(root: Path, name: str) -> Path:
             "touches_points": True,
             "surface_kind": "sample_supported_local_idw_surface",
             "max_point_residual": 0.0,
-            "z_axis": "centered_scaled_nll",
+            "z_axis": "projected_nll_fitness_energy",
             "raw_nll_range": 0.3,
             "exact_anchor_layer": True,
             "actual_landscape_layer": True,
             "support_radius": 0.5,
+            "surface_contact_contract": "every rendered GoT state marker and trajectory edge endpoint uses z_surface sampled from the displayed NLL energy surface",
+            "trajectory_point_surface_residual_max": 0.0,
+            "surface_projected_z_by_record_id": {row["record_id"]: row["nll"] for row in candidates},
+            "local_interpolating_sheet": {"available": False, "reason": "disabled_to_preserve_exact_reasoning_point_surface_contact"},
+            "surrogate_landscape_layer": {"available": False, "reason": "disabled_by_default_not_model_evaluated"},
         },
         "nll_progress": {
             "edge_count": 3,
@@ -142,7 +161,13 @@ def _row(root: Path, name: str) -> Path:
         ),
     )
     steps = [
-        {"file": f"reasoning_step_{idx:03d}.html", "simplex_tree_file": f"reasoning_step_{idx:03d}_simplex_tree.html", "summary": {"num_vertices": 1}, "simplex_tree": {"backend": "gudhi.SimplexTree"}}
+        {
+            "record_id": candidates[idx]["record_id"],
+            "file": f"reasoning_step_{idx:03d}.html",
+            "simplex_tree_file": f"reasoning_step_{idx:03d}_simplex_tree.html",
+            "summary": {"num_vertices": 1},
+            "simplex_tree": {"backend": "gudhi.SimplexTree"},
+        }
         for idx in range(4)
     ]
     _write(row / "reasoning_step_complex_maps/manifest.json", json.dumps({"steps": steps}))
@@ -232,7 +257,10 @@ def _row(root: Path, name: str) -> Path:
             "Graph-of-thought embedding-space trajectory map actual graph_state PCA",
             "Plotly.newPlot simplicial-object-panel simplicial-object-plot selected-complex-graph hover-simplicial-card plotly_click",
         ),
-        "got_trajectory_pca_3d.html": _html("Graph-of-thought branching trajectory centered NLL"),
+        "got_trajectory_pca_3d.html": _html(
+            "Graph-of-thought branching trajectory model-evaluated NLL landscape",
+            "Plotly.newPlot selected-complex-graph plotly_click open interactive reasoning-step complex page",
+        ),
         "got_full_trajectory_complex.html": _html("Full graph-of-thought trajectory filtered simplicial complex", "Plotly.newPlot play filtration min-to-max Filtration radius model input model output filtration backend= simplicial-object-plot selected-complex-graph plotly_click"),
         "got_full_trajectory_simplex_tree_3d.html": _html("Full graph-of-thought trajectory GUDHI simplex tree", "Plotly.newPlot simplex-tree inclusion"),
         "got_full_trajectory_complex_jensen_shannon.html": _html("Full graph-of-thought trajectory probability filtered simplicial complex", "Plotly.newPlot Jensen-Shannon probability filtered simplicial complex"),
@@ -332,6 +360,38 @@ def test_codex_browser_index_requires_artifact_button_for_each_payload_item(tmp_
     report = validator.validate_audit_root(audit, min_rows=3, min_candidates=4, min_depth=2)
     assert not report["ok"]
     assert any("missing artifact button" in err and missing_src in err for err in report["errors"])
+
+
+def test_validate_bundle_root_accepts_sample_directories(tmp_path: Path):
+    validator = _load_validator()
+    bundle = tmp_path / "multi_sample_browser" / "latest"
+    _row(bundle, "sample_000")
+    _row(bundle, "sample_001")
+    _write(bundle / "browser_index.html", "<!doctype html><body>sample bundle</body>")
+    report = validator.validate_audit_root(bundle, min_rows=2, min_candidates=4, min_depth=2)
+    assert report["ok"], report["errors"]
+    assert report["rows_checked"] == 2
+
+
+def test_validate_audit_root_rejects_broken_nll_surface_contact_fields(tmp_path: Path):
+    validator = _load_validator()
+    cases = [
+        ("missing_projected_map", lambda payload: payload["nll_surface"].pop("surface_projected_z_by_record_id"), "missing per-record projected z values"),
+        ("touch_flag_false", lambda payload: payload["nodes"][0]["plot"].__setitem__("touches_nll_surface", False), "not marked as touching"),
+        ("missing_z_surface", lambda payload: payload["nodes"][0]["plot"].pop("z_surface"), "missing finite z_surface"),
+        ("missing_raw_centered", lambda payload: payload["nodes"][0]["plot"].pop("raw_centered_scaled_nll"), "missing raw centered/scaled NLL z"),
+        ("projected_z_mismatch", lambda payload: payload["nodes"][0]["plot"].__setitem__("z_surface", 999.0), "does not match the displayed NLL surface projection"),
+    ]
+    for case_name, mutate, expected in cases:
+        audit = tmp_path / case_name / "got_audit"
+        _row(audit, ".")
+        payload_path = audit / "got_trajectory_payloads.json"
+        payload = json.loads(payload_path.read_text(encoding="utf-8"))
+        mutate(payload)
+        payload_path.write_text(json.dumps(payload), encoding="utf-8")
+        report = validator.validate_audit_root(audit, min_rows=1, min_candidates=4, min_depth=2)
+        assert not report["ok"], case_name
+        assert any(expected in err for err in report["errors"]), (case_name, report["errors"])
 
 
 def test_validator_cli_writes_json_and_markdown(tmp_path: Path):

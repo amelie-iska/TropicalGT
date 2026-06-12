@@ -392,35 +392,29 @@ def write_got_trajectory_visualization(scaling_report: dict[str, object], output
     nll_values = np.asarray(nll_rows, dtype=float)
     nll_center = float(np.nanmedian(nll_values)) if nll_values.size else 0.0
     nll_plot_scale = _nll_visual_scale(nll_values)
-    nll_plot_z = (nll_values - nll_center) * nll_plot_scale
+    raw_nll_plot_z = (nll_values - nll_center) * nll_plot_scale
+    nll_plot_z, surface_projection_meta = _project_points_to_nll_surface_z(pca[:, 0], pca[:, 1], raw_nll_plot_z)
+    step_page_links = [
+        {
+            "reasoning_step_index": idx,
+            "step_complex_href": f"reasoning_step_complex_maps/reasoning_step_{idx:03d}.html",
+            "step_simplex_tree_href": f"reasoning_step_complex_maps/reasoning_step_{idx:03d}_simplex_tree.html",
+        }
+        for idx in range(len(candidates))
+    ]
     hover = [_candidate_hover(row) for row in candidates]
     nll_progress = _trajectory_nll_progress_diagnostics(candidates, ids, id_to_idx, nll_values, inferred_levels)
-    candidate_objects = [
-        row.get("filtered_simplicial_object") if isinstance(row.get("filtered_simplicial_object"), dict) else {}
-        for row in candidates
-    ]
+    candidate_objects = []
+    for idx, row in enumerate(candidates):
+        obj = row.get("filtered_simplicial_object") if isinstance(row.get("filtered_simplicial_object"), dict) else {}
+        obj = dict(obj)
+        obj.setdefault("record_id", ids[idx])
+        obj.update(step_page_links[idx])
+        candidate_objects.append(obj)
     panel_objects = list(candidate_objects)
     panel_hover = list(hover)
-    microstep_entries = _got_microstep_entries(
-        candidates,
-        ids,
-        id_to_idx,
-        pca,
-        nll_plot_z,
-        candidate_objects,
-        panel_objects,
-        panel_hover,
-    )
+    microstep_entries: list[dict[str, object]] = []
     microsteps_by_candidate: dict[int, list[dict[str, object]]] = {}
-    for entry in microstep_entries:
-        microsteps_by_candidate.setdefault(int(entry["candidate_index"]), []).append(entry)
-    microstep_x = np.asarray([float(entry["x"]) for entry in microstep_entries], dtype=float)
-    microstep_y = np.asarray([float(entry["y"]) for entry in microstep_entries], dtype=float)
-    microstep_z = np.asarray([float(entry["z"]) for entry in microstep_entries], dtype=float)
-    if microstep_z.size and np.isfinite(nll_plot_scale) and abs(nll_plot_scale) > 1e-12:
-        microstep_nll = nll_center + (microstep_z / nll_plot_scale)
-    else:
-        microstep_nll = np.asarray([], dtype=float)
     fig = go.Figure()
     nll_surface, nll_surface_meta = _nll_triangulated_surface_trace(
         pca[:, 0],
@@ -441,18 +435,18 @@ def write_got_trajectory_visualization(scaling_report: dict[str, object], output
             "local_interpolation_anchor_scope": "sampled model GoT states only",
             "model_state_anchor_count": int(len(candidates)),
             "rendered_microsteps_are_nll_surface_anchors": False,
+            "rendered_microsteps_policy": "disabled; only model-evaluated GoT states are plotted as trajectory points",
+            "surface_contact_contract": "every rendered GoT state marker and trajectory edge endpoint uses z_surface sampled from the displayed NLL energy surface",
+            "trajectory_point_surface_residual_max": 0.0,
+            "raw_nll_z_residual_max": float(np.nanmax(np.abs(nll_plot_z - raw_nll_plot_z))) if nll_plot_z.size else 0.0,
+            "surface_projection": surface_projection_meta,
+            "surface_projected_z_by_record_id": {ids[i]: float(nll_plot_z[i]) for i in range(len(ids))},
         }
     )
-    local_sheet_trace, local_sheet_meta = _nll_local_interpolating_sheet_trace(
-        pca[:, 0],
-        pca[:, 1],
-        nll_plot_z,
-        nll_values,
-        name="Local interpolation through model-evaluated GoT states",
-    )
-    if local_sheet_trace is not None:
-        fig.add_trace(local_sheet_trace)
-    nll_surface_meta["local_interpolating_sheet"] = local_sheet_meta
+    nll_surface_meta["local_interpolating_sheet"] = {
+        "available": False,
+        "reason": "disabled_to_preserve_exact_reasoning_point_surface_contact",
+    }
     nll_surface_meta["surrogate_landscape_layer"] = {
         "available": False,
         "reason": "disabled_by_default_not_model_evaluated",
@@ -483,7 +477,7 @@ def write_got_trajectory_visualization(scaling_report: dict[str, object], output
                     hovertext=(
                         f"{parent} -> {ids[idx]}<br>"
                         f"action={html.escape(action)}<br>"
-                        f"microsteps={len(chain) - 2}<br>"
+                        f"surface-contact=endpoint z values are sampled from the displayed NLL mesh<br>"
                         f"parent raw NLL={float(nll_values[j]):.6f}<br>"
                         f"child raw NLL={float(nll_values[idx]):.6f}<br>"
                         f"delta child-parent={raw_delta:+.6g} ({improvement_label})"
@@ -534,6 +528,8 @@ def write_got_trajectory_visualization(scaling_report: dict[str, object], output
                 text
                 + f"<br><b>embedding/PCA multiplicity</b>: {int(pca_multiplicity[idx])} candidate(s) at this rounded coordinate"
                 + f"<br><b>raw embedding unique ratio</b>: {float(pca_report.get('unique_embedding_ratio_rounded8', 1.0)):.3f}"
+                + f"<br><b>step complex page</b>: {html.escape(step_page_links[idx]['step_complex_href'])}"
+                + f"<br><b>step simplex tree</b>: {html.escape(step_page_links[idx]['step_simplex_tree_href'])}"
                 for idx, text in enumerate(hover)
             ],
             hoverinfo="text",
@@ -579,7 +575,7 @@ def write_got_trajectory_visualization(scaling_report: dict[str, object], output
             text=(
                 "NLL field diagnostic: raw range="
                 f"{raw_nll_range:.6g}; z-axis shows centered NLL scaled by {nll_plot_scale:.1f}.<br>"
-                "Visible layers: sampled GoT-state anchors plus local interpolation grounded only in model-evaluated NLL points."
+                "Visible layers: sampled GoT-state anchors and their surface-projected piecewise NLL mesh; no microstep or surrogate NLL anchors."
             ),
             x=0,
             y=0.985,
@@ -629,9 +625,16 @@ def write_got_trajectory_visualization(scaling_report: dict[str, object], output
                 "plot": {
                     "x": float(pca[idx, 0]),
                     "y": float(pca[idx, 1]),
+                    "z_surface": float(nll_plot_z[idx]),
                     "z_centered_scaled_nll": float(nll_plot_z[idx]),
+                    "raw_centered_scaled_nll": float(raw_nll_plot_z[idx]),
                     "raw_nll": float(nll_values[idx]),
+                    "touches_nll_surface": True,
                 },
+                "reasoning_step_index": int(step_page_links[idx]["reasoning_step_index"]),
+                "step_complex_href": step_page_links[idx]["step_complex_href"],
+                "step_simplex_tree_href": step_page_links[idx]["step_simplex_tree_href"],
+                "step_complex_contract": "this GoT state maps to a per-step interactive filtered simplicial complex page and simplex-tree page",
                 "score": scores[idx],
                 "nll": float(nll_values[idx]),
                 "level": int(inferred_levels[idx]),
@@ -1717,19 +1720,46 @@ def write_tropical_support_heatmap(result: dict[str, object], output_dir: str | 
         payload_path.write_text(json.dumps({"tokens": [], "supports": [], "metrics": {"available": False}}, indent=2), encoding="utf-8")
         return {"tropical_support_heatmap": str(path), "tropical_support_payload": str(payload_path)}
     n = len(tokens)
+
+    def active_support_index(token: dict[str, object]) -> int:
+        try:
+            return int(token.get("active_support_index", -1))
+        except (TypeError, ValueError):
+            return -1
+
     support_indices = []
     for token in tokens:
-        active = int(token.get("active_support_index", -1))
+        active = active_support_index(token) if isinstance(token, dict) else -1
         if 0 <= active < n and active not in support_indices:
             support_indices.append(active)
-    support_indices = sorted(support_indices, key=lambda idx: (-sum(1 for token in tokens if int(token.get("active_support_index", -1)) == idx), idx))
+    support_indices = sorted(support_indices, key=lambda idx: (-sum(1 for token in tokens if isinstance(token, dict) and active_support_index(token) == idx), idx))
     if not support_indices:
-        support_indices = [0]
+        reason = "no_valid_model_active_support_indices"
+        _write_dark_empty(path, "No valid model active-support indices were available; tropical support was not rendered.")
+        payload_path.write_text(
+            json.dumps(
+                {
+                    "tokens": tokens,
+                    "supports": [],
+                    "support_flow_edges": [],
+                    "metrics": {
+                        "available": False,
+                        "reason": reason,
+                        "token_count": int(n),
+                        "invalid_support_count": int(n),
+                        "interpretation": "No support index was fabricated; rerun inference with graph_token_trace active_support_index values from the model.",
+                    },
+                },
+                indent=2,
+            ),
+            encoding="utf-8",
+        )
+        return {"tropical_support_heatmap": str(path), "tropical_support_payload": str(payload_path)}
     z = np.zeros((n, len(support_indices)), dtype=float)
     hover_grid: list[list[str]] = []
     query_labels = []
     for row_idx, token in enumerate(tokens):
-        active = int(token.get("active_support_index", -1))
+        active = active_support_index(token) if isinstance(token, dict) else -1
         margin = float(token.get("margin", 0.0) or 0.0)
         query_labels.append(_support_token_label(row_idx, token))
         hover_row = []
@@ -1746,10 +1776,10 @@ def write_tropical_support_heatmap(result: dict[str, object], output_dir: str | 
             )
         hover_grid.append(hover_row)
     support_labels = [_support_token_label(idx, tokens[idx]) for idx in support_indices]
-    counts = np.asarray([sum(1 for token in tokens if int(token.get("active_support_index", -1)) == idx) for idx in support_indices], dtype=float)
+    counts = np.asarray([sum(1 for token in tokens if isinstance(token, dict) and active_support_index(token) == idx) for idx in support_indices], dtype=float)
     mean_margins = []
     for idx in support_indices:
-        vals = [float(token.get("margin", 0.0) or 0.0) for token in tokens if int(token.get("active_support_index", -1)) == idx]
+        vals = [float(token.get("margin", 0.0) or 0.0) for token in tokens if isinstance(token, dict) and active_support_index(token) == idx]
         mean_margins.append(float(np.mean(vals)) if vals else 0.0)
     margin_values = np.asarray([float(token.get("margin", 0.0) or 0.0) for token in tokens], dtype=float)
     finite_margins = margin_values[np.isfinite(margin_values)]
@@ -1764,7 +1794,7 @@ def write_tropical_support_heatmap(result: dict[str, object], output_dir: str | 
     }
     support_flow_edges = []
     for row_idx, token in enumerate(tokens):
-        active = int(token.get("active_support_index", -1))
+        active = active_support_index(token) if isinstance(token, dict) else -1
         support = tokens[active] if 0 <= active < n else {}
         support_flow_edges.append(
             {
@@ -2148,10 +2178,15 @@ def write_persistence_visualizations(
     fig2.update_layout(template="plotly_dark", title="Persistence module Betti rank profile (step functions)", xaxis_title="filtration", yaxis_title="Betti rank")
     _write_plotly_dark_html(module_path, fig2, "Persistence module Betti rank profile")
     _write_single_persistence_representations(representations_path, topology, title_prefix=title_prefix)
+    _write_dark_empty(
+        landscapes_path,
+        "Persistence landscapes require trajectory growth rows; no non-growth landscape plot is rendered.",
+    )
     return {
         "persistence_barcode": str(barcode),
         "persistence_module_betti": str(module_path),
         "persistence_representations": str(representations_path),
+        "persistence_landscapes": str(landscapes_path),
     }
 
 
@@ -3333,9 +3368,6 @@ def write_analogical_memory_visualization(
     if _has_real_probability_filtration(query.get("trajectory_probability_filtered_simplicial_object")):
         query_complex = query["trajectory_probability_filtered_simplicial_object"]
         query_complex_source = "trajectory_probability_filtered_simplicial_object"
-    elif _has_real_probability_filtration(query.get("probability_filtered_simplicial_object")):
-        query_complex = query["probability_filtered_simplicial_object"]
-        query_complex_source = "probability_filtered_simplicial_object"
     query_topology = query.get("topological_algebra") if isinstance(query.get("topological_algebra"), dict) else {}
     if not query_complex:
         reason = "No model probability filtered query trajectory complex was available; analogical maps are not rendered without model probabilities."
@@ -3345,6 +3377,28 @@ def write_analogical_memory_visualization(
                 {
                     "available": False,
                     "reason": "missing_model_probability_query_complex",
+                    "maps": [],
+                },
+                indent=2,
+            ),
+            encoding="utf-8",
+        )
+        return {"analogical_memory_retrieval_html": str(path), "analogical_simplicial_maps": str(map_path)}
+
+    enriched = [
+        row
+        for row in enriched
+        if _has_real_probability_filtration(row.get("trajectory_probability_filtered_simplicial_object"))
+    ]
+    if not enriched:
+        reason = "No model probability filtered codomain trajectory complex was available; analogical maps are not rendered without model probabilities."
+        _write_dark_empty(path, reason)
+        map_path.write_text(
+            json.dumps(
+                {
+                    "available": False,
+                    "reason": "missing_model_probability_codomain_complex",
+                    "query_complex_source": query_complex_source,
                     "maps": [],
                 },
                 indent=2,
@@ -3382,6 +3436,7 @@ def write_analogical_memory_visualization(
     map_path.write_text(
         json.dumps(
             {
+                "available": True,
                 "query_summary": query_complex.get("summary", {}) if isinstance(query_complex, dict) else {},
                 "query_complex_source": query_complex_source,
                 "query_derived_signature": query_topology.get("derived_equivalence_signature", {}) if isinstance(query_topology, dict) else {},
@@ -3424,9 +3479,6 @@ def _analogical_pair_figure(
     if _has_real_probability_filtration(row.get("trajectory_probability_filtered_simplicial_object")):
         mem_complex = row.get("trajectory_probability_filtered_simplicial_object")
         mem_complex_source = "trajectory_probability_filtered_simplicial_object"
-    elif _has_real_probability_filtration(row.get("probability_filtered_simplicial_object")):
-        mem_complex = row.get("probability_filtered_simplicial_object")
-        mem_complex_source = "probability_filtered_simplicial_object"
     else:
         mem_complex = _unavailable_complex("missing_model_probability_codomain_complex")
         mem_complex_source = "unavailable_missing_model_probability_codomain_complex"
@@ -4623,10 +4675,21 @@ def _memory_color(idx: int) -> str:
 
 def _write_inference_dashboard(paths: dict[str, str], output_dir: Path) -> Path:
     dash = output_dir / "inference_audit.html"
-    links = "\n".join(
-        f'<li><a href="{Path(path).name}"><span>{name}</span><code>{Path(path).name}</code></a></li>'
-        for name, path in sorted(paths.items())
-    )
+
+    def dashboard_href(path_value: str) -> str:
+        path = Path(path_value)
+        try:
+            return path.resolve().relative_to(output_dir.resolve()).as_posix()
+        except ValueError:
+            return path.name
+
+    link_rows = []
+    for name, path in sorted(paths.items()):
+        href = dashboard_href(str(path))
+        link_rows.append(
+            f'<li><a href="{html.escape(href, quote=True)}"><span>{html.escape(str(name))}</span><code>{html.escape(href)}</code></a></li>'
+        )
+    links = "\n".join(link_rows)
     dash.write_text(
         f"""<!doctype html>
 <html lang="en">
@@ -5673,6 +5736,15 @@ def _simplicial_panel_items(objects: list[dict[str, object]], hover: list[str]) 
         summary_html = compact_summary
         if idx < len(hover):
             summary_html += f"<br>{hover[idx]}"
+        if isinstance(obj, dict):
+            step_href = str(obj.get("step_complex_href", "")).strip()
+            tree_href = str(obj.get("step_simplex_tree_href", "")).strip()
+            if step_href:
+                safe_href = html.escape(step_href, quote=True)
+                summary_html += f'<br><a href="{safe_href}">open interactive reasoning-step complex page</a>'
+            if tree_href:
+                safe_tree_href = html.escape(tree_href, quote=True)
+                summary_html += f' · <a href="{safe_tree_href}">open simplex tree</a>'
         items.append(
             {
                 "title": title,
@@ -6373,6 +6445,46 @@ def _nll_surface_trace(
         "nll_mean": float(np.nanmean(nll)),
         "smoothing": "inverse_distance_weighted_three_pass_neighbor_average",
         "max_point_residual": None,
+    }
+
+
+def _project_points_to_nll_surface_z(
+    x_values: np.ndarray,
+    y_values: np.ndarray,
+    raw_z_values: np.ndarray,
+    decimals: int = 10,
+) -> tuple[np.ndarray, dict[str, object]]:
+    """Project marker z values onto the same single-valued surface used for display."""
+
+    x = np.asarray(x_values, dtype=float).reshape(-1)
+    y = np.asarray(y_values, dtype=float).reshape(-1)
+    raw_z = np.asarray(raw_z_values, dtype=float).reshape(-1)
+    projected = raw_z.copy()
+    groups: dict[tuple[float, float], list[int]] = {}
+    for idx, (px, py, pz) in enumerate(zip(x, y, raw_z)):
+        if not (np.isfinite(px) and np.isfinite(py) and np.isfinite(pz)):
+            continue
+        groups.setdefault((round(float(px), decimals), round(float(py), decimals)), []).append(idx)
+    duplicate_groups = 0
+    max_multiplicity = 1
+    max_raw_z_spread = 0.0
+    for members in groups.values():
+        if len(members) <= 1:
+            continue
+        duplicate_groups += 1
+        max_multiplicity = max(max_multiplicity, len(members))
+        values = raw_z[np.asarray(members, dtype=int)]
+        surface_z = float(np.nanmean(values))
+        max_raw_z_spread = max(max_raw_z_spread, float(np.nanmax(values) - np.nanmin(values)))
+        projected[np.asarray(members, dtype=int)] = surface_z
+    residual = np.abs(projected - raw_z)
+    residual = residual[np.isfinite(residual)]
+    return projected, {
+        "surface_z_policy": "single-valued display surface; duplicate PCA coordinates share the mean centered-scaled NLL surface height",
+        "duplicate_xy_group_count": int(duplicate_groups),
+        "max_duplicate_xy_multiplicity": int(max_multiplicity),
+        "max_duplicate_xy_raw_centered_z_spread": float(max_raw_z_spread),
+        "max_raw_to_surface_z_delta": float(np.nanmax(residual)) if residual.size else 0.0,
     }
 
 

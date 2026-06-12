@@ -13,21 +13,6 @@ TropicalGT develops reasoning agents that use tropical geometry in transformer e
 
 ![Dark 3D tropical hypersurface with Newton polytope](./assets/tropical_curve_newton_polytope_dark.png)
 
-## Remote workspace
-
-All implementation work for this repo is under:
-
-```bash
-tailscale ssh iska@iska
-cd /home/iska/Documents/amelie/bio/TropicalGT
-```
-
-Use the `tokengt` environment directly in noninteractive shells:
-
-```bash
-/home/iska/miniconda3/envs/tokengt/bin/python --version
-```
-
 ## Repository layout
 
 - `TropicalGT-I/` is the active v1 implementation.
@@ -36,7 +21,7 @@ Use the `tokengt` environment directly in noninteractive shells:
 - `TropicalGT-I/configs/smoke.json` is a CPU fixture smoke config.
 - `TropicalGT-I/configs/gpu_smoke.json` is the RTX 4090 data-backed smoke config.
 - `TropicalGT-I/configs/gpu_ablation.json` is a bounded data-backed RTX 4090 config for matched BPB/graph-BPB ablation grids.
-- `TropicalGT-I/configs/train.json` is the first full data-backed training config.
+- `TropicalGT-I/configs/train_full_dataset_active.json` is the active full-dataset training config; `TropicalGT-I/configs/train.json` is a legacy cap-sized review config.
 - `TropicalGT-I/assets/tropicalgt_neurips_research_paper.tex` is the paper source.
 - `planning/` contains reference synthesis and implementation notes.
 - `external/` contains separate fork checkouts and is intentionally gitignored by this repo.
@@ -57,44 +42,44 @@ TropicalGT-I/data/toricgt/curated_hf_shards
 
 Data is gitignored. Do not commit datasets, checkpoints, W&B runs, or `keys.txt`.
 
-The full `TropicalGT-I/configs/train.json` path is hybrid by default. It mixes the moved TropicalGT reasoning shards with OpenAI Parameter-Golf FineWeb windows that are decoded as text and then represented as TokenGT-style sequential DAG records. The primary local OAI path is:
+The active full-dataset `TropicalGT-I/configs/train_full_dataset_active.json` path is hybrid by default. It mixes the moved TropicalGT reasoning shards with OpenAI Parameter-Golf FineWeb windows that are decoded as text and then represented as TokenGT-style sequential DAG records. The primary local OAI path is:
 
 ```bash
 external/oai-parameter-golf
 ```
 
-On this workstation that path can be a symlink to the existing ignored checkout at `external/parameter-golf`; `train.json` uses `external/oai-parameter-golf` first and keeps `external/parameter-golf` as a compatibility fallback. Populate the full SP1024 cache before a full run:
+On this workstation that path can be a symlink to the existing ignored checkout at `external/parameter-golf`; `train_full_dataset_active.json` uses `external/oai-parameter-golf` first and keeps `external/parameter-golf` as a compatibility fallback. Populate the full SP1024 cache before a full run:
 
 ```bash
 cd external/oai-parameter-golf
-/home/iska/miniconda3/envs/tokengt/bin/python data/cached_challenge_fineweb.py --variant sp1024 --train-shards 195
+python data/cached_challenge_fineweb.py --variant sp1024 --train-shards 195
 cd ../..
 ```
 
 This creates `external/oai-parameter-golf/data/datasets/fineweb10B_sp1024` and `external/oai-parameter-golf/data/tokenizers/fineweb_1024_bpe.model`. The manifest reports `19,473,201,340` SP1024 train tokens across `195` train shards, plus the moved Hugging Face reasoning parquet shards. Those data files are gitignored. Every OAI sample is graph structured before batching: each token window becomes a causal DAG of sequence chunks, while non-causal/cyclic graphs elsewhere use deterministic random autoregressive node order.
 
-Data-backed configs set `require_data: true`, and the OAI source is required. Missing or unreadable required parquet/OAI shards fail loudly instead of silently training on fixture examples or a partial hybrid. `train.json` also requires both `tropicalgt_hf_reasoning` and `openai_parameter_golf`, at least `10,000,000,000` available train token slots, and at least `10,000,000,000` configured training token slots. The parquet loader builds a row-group metadata index over train/validation/test shards and reads records through a bounded row-group cache controlled by `cache_shards`; it does not concatenate the full moved dataset into memory. The hybrid sampler uses deterministic weighted indexed sampling over already graph-structured sources.
+Data-backed configs set `require_data: true`, and the OAI source is required. Missing or unreadable required parquet/OAI shards fail loudly instead of silently training on fixture examples or a partial hybrid. `train_full_dataset_active.json` also requires both `tropicalgt_hf_reasoning` and `openai_parameter_golf`, at least `10,000,000,000` available train token slots, and at least `10,000,000,000` configured training token slots. The parquet loader builds a row-group metadata index over train/validation/test shards and reads records through a bounded row-group cache controlled by `cache_shards`; it does not concatenate the full moved dataset into memory. The hybrid sampler uses deterministic weighted indexed sampling over already graph-structured sources.
 
 Audit the data budget before a long run:
 
 ```bash
 PYTHONPATH=TropicalGT-I/src \
-/home/iska/miniconda3/envs/tokengt/bin/python \
+python \
 TropicalGT-I/scripts/audit_training_data_budget.py \
---config TropicalGT-I/configs/train.json \
---output TropicalGT-I/outputs/train/data_budget.json
+--config TropicalGT-I/configs/train_full_dataset_active.json \
+--output TropicalGT-I/outputs/train_full_dataset_active/data_budget.json
 ```
 
 Generate a shard manifest and tokenization preflight report before a long run:
 
 ```bash
 PYTHONPATH=TropicalGT-I/src \
-/home/iska/miniconda3/envs/tokengt/bin/python \
+python \
 TropicalGT-I/scripts/validate_tropicalgt_i.py \
---config TropicalGT-I/configs/train.json \
+--config TropicalGT-I/configs/train_full_dataset_active.json \
 --split train \
 --limit 64 \
---output TropicalGT-I/outputs/train/validate_train.json
+--output TropicalGT-I/outputs/train_full_dataset_active/validate_train.json
 ```
 
 ## Install/runtime notes
@@ -104,15 +89,14 @@ The `tokengt` env already provides PyTorch, pandas, pyarrow, datasets, tqdm, skl
 ## Run tests
 
 ```bash
-cd /home/iska/Documents/amelie/bio/TropicalGT
-/home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests -q
+python -m pytest TropicalGT-I/tests -q
 ```
 
 ## CPU smoke
 
 ```bash
 PYTHONPATH=TropicalGT-I/src \
-/home/iska/miniconda3/envs/tokengt/bin/python \
+python \
 TropicalGT-I/scripts/train_tropicalgt_i.py \
 --config TropicalGT-I/configs/smoke.json
 ```
@@ -131,7 +115,7 @@ This writes:
 
 ```bash
 PYTHONPATH=TropicalGT-I/src \
-/home/iska/miniconda3/envs/tokengt/bin/python \
+python \
 TropicalGT-I/scripts/train_tropicalgt_i.py \
 --config TropicalGT-I/configs/gpu_smoke.json
 ```
@@ -200,34 +184,43 @@ Sequential text path graphs are deterministic from the byte stream and are exclu
 
 The certificate metrics are finite graph-structure checks: edge tokens are rewarded when their active tropical support lies on the edge itself or one of its endpoint vertex tokens. These certificates are useful for auditing whether tropical supports follow the TokenGT graph skeleton, but they are not semantic correctness proofs and must be interpreted beside task loss, verifier scores, and held-out BPB.
 
-The reasoning HTML artifacts are dark-mode interactive Plotly views. Hovering over a reasoning node opens a cursor-following dark hover card with the node's filtered simplicial object rendered as SVG/Plotly data, while also updating the persistent side panel. The PCA/NLL views show exact model-evaluated NLL anchors and local interpolation only when grounded in those anchors; missing model outputs are rendered as explicit unavailable diagnostics. The payload JSON stores hover text, PCA/NLL point coordinates, NLL-surface metadata, Euclidean radius complexes, Jensen-Shannon probability complexes when model probability vectors exist, simplex-tree provenance, and the finite filtered simplicial object for each visualized record.
+The reasoning HTML artifacts are dark-mode interactive Plotly views. Hovering over a reasoning node opens a cursor-following dark hover card with the node's filtered simplicial object rendered as SVG/Plotly data, while also updating the persistent side panel. The PCA/NLL views use model-evaluated NLL anchors projected onto the displayed NLL surface so every rendered reasoning-trajectory point lies on that surface; missing model outputs are rendered as explicit unavailable diagnostics. The payload JSON stores hover text, PCA/NLL point coordinates, NLL-surface metadata, Euclidean radius complexes, Jensen-Shannon probability complexes when model probability vectors exist, simplex-tree provenance, and the finite filtered simplicial object for each visualized record.
 
 Training checkpoints contain model state, optimizer state, current step, metrics, history, config, and RNG state. Resume a run by pointing `train_tropicalgt_i.py` at a final or `.latest.pt` checkpoint:
 
 ```bash
-PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python TropicalGT-I/scripts/train_tropicalgt_i.py --config TropicalGT-I/configs/gpu_smoke.json --resume-from TropicalGT-I/checkpoints/tropicalgt_i_gpu_smoke.latest.pt --max-steps 8
+PYTHONPATH=TropicalGT-I/src python TropicalGT-I/scripts/train_tropicalgt_i.py --config TropicalGT-I/configs/gpu_smoke.json --resume-from TropicalGT-I/checkpoints/tropicalgt_i_gpu_smoke.latest.pt --max-steps 8
 ```
 
 ## Data-backed training launch
 
-The current full training config is sized for the OpenAI Parameter-Golf 16MB artifact cap while using the RTX 4090. Its core settings are:
+The active full-dataset run uses `TropicalGT-I/configs/train_full_dataset_active.json`, not the bounded smoke or review-loop configs. It is intentionally configured to keep training over more than ten billion sequence-token slots while requiring both real data sources:
 
-- model width/hidden size `1760`, memory width `220`, about `38.6M` parameters before int8+zlib export.
-- estimated stripped competition export `15,633,708` bytes, leaving about `366,292` bytes under the `16,000,000` byte cap.
-- `seq_len: 1024`, `batch_size: 68`, `checkpoint_every: 250`, `max_steps: 160000`, for `11,141,120,000` configured sequence token slots.
-- exact blockwise tropical ring attention over graph tokens with `graph_tropical_block_size: 32`.
-- pooled long-context sequence tropical ring attention with `sequence_tropical_max_tokens: 32`, `sequence_tropical_block_size: 16`, and residual weight `0.125`.
-- graph-aware autoregressive decoding: causal topological order for DAGs, deterministic random order for non-causal/cyclic graphs.
-- required hybrid data weights `0.7` TropicalGT reasoning shards and `0.3` OpenAI Parameter-Golf SP1024 windows from the full local OAI cache.
+- `seq_len: 1024`, `batch_size: 4`, `max_steps: 2500000`, for `10,240,000,000` configured training token slots.
+- Required source `tropicalgt_hf_reasoning`: `117` train parquet shards, `4,633,582` examples, `4,744,787,968` token slots.
+- Required source `openai_parameter_golf`: full SP1024 cache, `195` train shards, `19,473,201,340` raw tokens, `19,454,008,320` token slots.
+- Total available train token slots reported by `outputs/train_full_dataset_active/data_budget.json`: `24,198,796,288`.
+- Active output root: `TropicalGT-I/outputs/train_full_dataset_active`.
+- Active validation/checkpoint cadence: validation every `500` steps, checkpoints every `1000` steps, heavier visualization/topology audit every `5000` steps.
 
-Before launching the first full run, execute a CUDA dry-run readiness audit against `train.json`. This does not write a training checkpoint; it samples moved parquet data, builds the configured model, runs one optimizer step, checks the W&B key can be found, and gates finite train loss/BPB/graph-BPB:
+The active run writes its PID to `TropicalGT-I/outputs/train_full_dataset_active/latest_training.pid` and logs to `TropicalGT-I/outputs/train_full_dataset_active/full_dataset_active_training.log`. W&B run names for this path use `tropicalgt_i_train_full_dataset_active`. Do not describe a run as full-dataset unless its data-budget audit passes the required-source and >10B slot gates.
+
+Launch or resume the active full-dataset path with:
+
+```bash
+PYTHONPATH=TropicalGT-I/src python TropicalGT-I/scripts/train_tropicalgt_i.py --config TropicalGT-I/configs/train_full_dataset_active.json
+```
+
+For the legacy cap-sized `configs/train.json` path, treat it as a separate review configuration unless its data-budget audit is refreshed and its configured token-slot gate still passes.
+
+Before launching or resuming the active full-dataset run, execute a CUDA dry-run readiness audit against `train_full_dataset_active.json`. This does not write a training checkpoint; it samples moved parquet data, builds the configured model, runs one optimizer step, checks the W&B key can be found, and gates finite train loss/BPB/graph-BPB:
 
 ```bash
 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True \
 PYTHONPATH=TropicalGT-I/src \
-/home/iska/miniconda3/envs/tokengt/bin/python \
+python \
 TropicalGT-I/scripts/audit_tropicalgt_i_readiness.py \
---config TropicalGT-I/configs/train.json \
+--config TropicalGT-I/configs/train_full_dataset_active.json \
 --split train \
 --sample-limit 80 \
 --details-limit 0 \
@@ -240,29 +233,29 @@ TropicalGT-I/scripts/audit_tropicalgt_i_readiness.py \
 --check-wandb-key \
 --train-dry-run \
 --require-cuda \
---output TropicalGT-I/outputs/train/readiness_train_dry_run.json
+--output TropicalGT-I/outputs/train_full_dataset_active/readiness_train_dry_run.json
 ```
 
 The latest hybrid cap-sized dry run used `21,484 MB` CUDA allocation, mixed in Parameter-Golf graph records at about `31%` of the sampled batch, and passed all readiness gates.
 
-After the dry-run preflight report is clean, launch the first full TropicalGT-I run with:
+After the dry-run preflight report is clean, launch the active full-dataset TropicalGT-I run with:
 
 ```bash
 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True \
 PYTHONPATH=TropicalGT-I/src \
-/home/iska/miniconda3/envs/tokengt/bin/python \
+python \
 TropicalGT-I/scripts/train_tropicalgt_i.py \
---config TropicalGT-I/configs/train.json
+--config TropicalGT-I/configs/train_full_dataset_active.json
 ```
 
 Resume it with:
 
 ```bash
 PYTHONPATH=TropicalGT-I/src \
-/home/iska/miniconda3/envs/tokengt/bin/python \
+python \
 TropicalGT-I/scripts/train_tropicalgt_i.py \
---config TropicalGT-I/configs/train.json \
---resume-from TropicalGT-I/checkpoints/tropicalgt_i_train.latest.pt
+--config TropicalGT-I/configs/train_full_dataset_active.json \
+--resume-from TropicalGT-I/checkpoints/tropicalgt_i_train_full_dataset_active.latest.pt
 ```
 
 The training report includes a parquet manifest for the train and validation splits in addition to losses, graph-token counts, certificate metrics, throughput metrics, W&B metadata, visualization paths, and checkpoint paths.
@@ -271,10 +264,10 @@ For the 5K Parameter-Golf review cadence, run the single-agent Codex review loop
 
 ```bash
 PYTHONPATH=TropicalGT-I/src \
-/home/iska/miniconda3/envs/tokengt/bin/python \
+python \
 TropicalGT-I/scripts/parameter_golf_codex_review_loop.py \
 --config TropicalGT-I/configs/train.json \
---python /home/iska/miniconda3/envs/tokengt/bin/python \
+--python python \
 --review-every-steps 5000 \
 --target-bpb 1.18 \
 --max-total-steps 20000 \
@@ -286,10 +279,10 @@ At every 5K boundary it writes a Codex prompt plus `active_training_contract_ste
 ## Eval, inference, validation, visualization
 
 ```bash
-PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python TropicalGT-I/scripts/validate_tropicalgt_i.py --config TropicalGT-I/configs/smoke.json
-PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python TropicalGT-I/scripts/eval_tropicalgt_i.py --config TropicalGT-I/configs/smoke.json --checkpoint TropicalGT-I/checkpoints/tropicalgt_i_cpu_smoke.pt --details-limit 4
-PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python TropicalGT-I/scripts/infer_tropicalgt_i.py --config TropicalGT-I/configs/smoke.json --checkpoint TropicalGT-I/checkpoints/tropicalgt_i_cpu_smoke.pt --prompt "Question: add 2 and 3 Answer:" --scale-depth 2 --scale-width 3 --scale-branch-factor 2 --output TropicalGT-I/outputs/smoke/inference_audit.json
-PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python TropicalGT-I/scripts/render_reasoning_visualizations.py --config TropicalGT-I/configs/smoke.json --checkpoint TropicalGT-I/checkpoints/tropicalgt_i_cpu_smoke.pt
+PYTHONPATH=TropicalGT-I/src python TropicalGT-I/scripts/validate_tropicalgt_i.py --config TropicalGT-I/configs/smoke.json
+PYTHONPATH=TropicalGT-I/src python TropicalGT-I/scripts/eval_tropicalgt_i.py --config TropicalGT-I/configs/smoke.json --checkpoint TropicalGT-I/checkpoints/tropicalgt_i_cpu_smoke.pt --details-limit 4
+PYTHONPATH=TropicalGT-I/src python TropicalGT-I/scripts/infer_tropicalgt_i.py --config TropicalGT-I/configs/smoke.json --checkpoint TropicalGT-I/checkpoints/tropicalgt_i_cpu_smoke.pt --prompt "Question: add 2 and 3 Answer:" --scale-depth 2 --scale-width 3 --scale-branch-factor 2 --output TropicalGT-I/outputs/smoke/inference_audit.json
+PYTHONPATH=TropicalGT-I/src python TropicalGT-I/scripts/render_reasoning_visualizations.py --config TropicalGT-I/configs/smoke.json --checkpoint TropicalGT-I/checkpoints/tropicalgt_i_cpu_smoke.pt
 ```
 
 Validation reports graph JSON fallback rates, graph-token count statistics, node/edge statistics, and sample graph-token descriptors. Evaluation reports aggregate NLL/BPB/graph-BPB plus optional per-record NLL, graph-token traces, tropical support histograms, filtered simplicial objects, and, when `--audit-level topology|algebra|full` is supplied, topological algebra diagnostics. Inference emits the generated byte-level argmax text together with BPB accounting, graph-token trace, tropical margins/supports, GFlowNet action probabilities, GraphCG direction diagnostics, and the filtered simplicial object for the prompt graph.
@@ -300,7 +293,7 @@ For a full algebraic/topological inference audit with analogical memory retrieva
 
 ```bash
 PYTHONPATH=TropicalGT-I/src \
-/home/iska/miniconda3/envs/tokengt/bin/python \
+python \
 TropicalGT-I/scripts/infer_tropicalgt_i.py \
 --config TropicalGT-I/configs/gpu_smoke.json \
 --checkpoint TropicalGT-I/checkpoints/tropicalgt_i_gpu_smoke.pt \
@@ -318,27 +311,27 @@ TropicalGT-I/scripts/infer_tropicalgt_i.py \
 --output TropicalGT-I/outputs/gpu_smoke/inference_full_audit.json
 ```
 
-This writes a dark-mode graph-of-thought PCA trajectory whose nodes are reasoning candidates and whose edges are parent-child expansions. Hovering over a node renders the filtered simplicial complex attached to that reasoning step directly in a cursor-following hover card and in the side panel. The 3D trajectory now shows exact sampled model NLL anchors and, when enough non-collinear model-evaluated points exist, a local interpolation through those anchors; missing NLL, embedding, or probability outputs are reported as unavailable diagnostics instead of synthetic/proxy geometry. The persistence bundle includes barcodes, Betti/free-resolution growth, `persistence_representations.html` for GUDHI vector summaries, and `persistence_landscapes.html` for the actual GUDHI landscape functions `lambda_k(t)` by trajectory-growth level. The JSON payload stores the full Euclidean radius complex, the Jensen-Shannon probability complex, simplex-tree provenance, multiparameter persistence report, vectorized persistence summaries, commutative-algebra proxies, derived-equivalence signature, GraphCG direction diagnostics, NLL-surface metadata, NLL-progress diagnostics, and analogical memory retrieval details.
+This writes a dark-mode graph-of-thought PCA trajectory whose nodes are reasoning candidates and whose edges are parent-child expansions. Hovering over a node renders the filtered simplicial complex attached to that reasoning step directly in a cursor-following hover card and in the side panel. The 3D trajectory now uses exact sampled model NLL anchors and a surface-contact projection contract: every plotted reasoning node and edge endpoint lies on the displayed NLL energy landscape, while each node retains the raw centered/scaled NLL value for audit. Missing NLL, embedding, or probability outputs are reported as unavailable diagnostics instead of synthetic/proxy geometry. The persistence bundle includes barcodes, Betti/free-resolution growth, `persistence_representations.html` for GUDHI vector summaries, and `persistence_landscapes.html` for the actual GUDHI landscape functions `lambda_k(t)` by trajectory-growth level. The JSON payload stores the full Euclidean radius complex, the Jensen-Shannon probability complex, simplex-tree provenance, multiparameter persistence report, vectorized persistence summaries, commutative-algebra proxies, derived-equivalence signature, GraphCG direction diagnostics, NLL-surface metadata, NLL-progress diagnostics, and analogical memory retrieval details.
 
 For Codex/browser review of a periodic audit, generate the sample-first dashboard so each sampled row/input is the top-level unit. Each sample card links to the GoT NLL landscape, embedding map, full radius complex, full simplex tree, Jensen-Shannon probability complex, probability simplex tree, every reasoning-step complex/tree, persistence pages, per-rank analogical maps, GraphCG, tropical support, and metric/audit pages:
 
 ```bash
-PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python \
+PYTHONPATH=TropicalGT-I/src python \
 TropicalGT-I/scripts/build_sample_browser_index.py \
-TropicalGT-I/outputs/train/periodic/step_00000250/got_audit \
---output TropicalGT-I/outputs/train/periodic/step_00000250/got_audit/codex_browser_index.html
+TropicalGT-I/outputs/train_full_dataset_active/periodic/step_XXXXXXXX/got_audit \
+--output TropicalGT-I/outputs/train_full_dataset_active/periodic/step_XXXXXXXX/got_audit/codex_browser_index.html
 ```
 
 For fresh sample-based browser review, run multiple independent inference audits into a clean output root and serve the generated `browser_index.html`:
 
 ```bash
-PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python \
+PYTHONPATH=TropicalGT-I/src python \
 TropicalGT-I/scripts/run_multi_inference_audits.py \
---checkpoint TropicalGT-I/checkpoints/tropicalgt_i_train.latest.pt \
+--checkpoint TropicalGT-I/checkpoints/tropicalgt_i_train_full_dataset_active.latest.pt \
 --samples 6 \
 --output-root TropicalGT-I/outputs/multi_inference_audit/latest
 
-/home/iska/miniconda3/envs/tokengt/bin/python -m http.server 8977 \
+python -m http.server 8977 \
 --bind 127.0.0.1 \
 --directory TropicalGT-I/outputs/multi_inference_audit/latest
 ```
@@ -348,10 +341,10 @@ Open `http://127.0.0.1:8977/browser_index.html`. Add `--skip-existing` only when
 Metric and visualization provenance can be audited with:
 
 ```bash
-PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python TropicalGT-I/scripts/audit_metric_provenance.py
+PYTHONPATH=TropicalGT-I/src python TropicalGT-I/scripts/audit_metric_provenance.py
 ```
 
-The report registers exact metrics, fast vectorized topology features, sample-local interpolants, unavailable diagnostics, spectral diagnostics, and historical guarded terms. The default active-code/docs scan now passes with `--fail-on-uncovered`; historical planning logs can still be audited explicitly with `--scan planning` when reviewing older status notes.
+The report registers exact metrics, fast vectorized topology features, surface-contact NLL diagnostics, unavailable diagnostics, spectral diagnostics, and historical guarded terms. The default active-code/docs scan now passes with `--fail-on-uncovered`; historical planning logs can still be audited explicitly with `--scan planning` when reviewing older status notes.
 
 ## BPB ablation analysis
 
@@ -359,7 +352,7 @@ Use the ablation analyzer after smoke runs or matched-seed experiment ladders to
 
 ```bash
 PYTHONPATH=TropicalGT-I/src \
-/home/iska/miniconda3/envs/tokengt/bin/python \
+python \
 TropicalGT-I/scripts/analyze_bpb_ablations.py \
 TropicalGT-I/outputs/gpu_smoke/train_report.json \
 --output-dir TropicalGT-I/outputs/gpu_smoke/bpb_ablation
@@ -371,7 +364,7 @@ To generate a matched ablation grid and optionally train the variants in sequenc
 
 ```bash
 PYTHONPATH=TropicalGT-I/src \
-/home/iska/miniconda3/envs/tokengt/bin/python \
+python \
 TropicalGT-I/scripts/run_bpb_ablation_grid.py \
 --config TropicalGT-I/configs/gpu_ablation.json \
 --output-dir TropicalGT-I/outputs/gpu_ablation/grid_iter19 \
@@ -387,7 +380,7 @@ For a checkpoint-backed smoke proof bundle, write a readiness report that checks
 
 ```bash
 PYTHONPATH=TropicalGT-I/src \
-/home/iska/miniconda3/envs/tokengt/bin/python \
+python \
 TropicalGT-I/scripts/audit_tropicalgt_i_readiness.py \
 --config TropicalGT-I/configs/gpu_smoke.json \
 --checkpoint TropicalGT-I/checkpoints/tropicalgt_i_gpu_smoke.pt \
@@ -430,7 +423,7 @@ The optional `graph_tokens` argument accepts either `(token_features, token_type
 To build an OpenAI Parameter-Golf stripped package without the full TropicalGT-I research stack, run from `external/parameter-golf`:
 
 ```bash
-/home/iska/miniconda3/envs/tokengt/bin/python scripts/export_tropicalgt_parameter_golf.py \
+python scripts/export_tropicalgt_parameter_golf.py \
   --model-artifact final_model.int8.ptz \
   --output-dir parameter_golf_export
 ```

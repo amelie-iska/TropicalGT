@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections import deque
 from dataclasses import asdict, dataclass
 import hashlib
 import json
@@ -78,10 +79,13 @@ class AnalogicalMemoryBank:
 
     def load(self) -> None:
         loaded = []
-        for line in self.path.read_text(encoding="utf-8").splitlines():
+        for line in _tail_jsonl_lines(self.path, self.max_records):
             if not line.strip():
                 continue
-            row = json.loads(line)
+            try:
+                row = json.loads(line)
+            except json.JSONDecodeError:
+                continue
             row.setdefault("probability_filtered_simplicial_object", {})
             loaded.append(AnalogicalMemoryRecord(**row))
         self.records = loaded[-self.max_records :]
@@ -146,6 +150,42 @@ class AnalogicalMemoryBank:
         return _diverse_top_k(rows, top_k=max(int(top_k), 0), diversity_weight=float(diversity_weight))
 
 
+def _tail_jsonl_lines(
+    path: Path,
+    max_lines: int,
+    *,
+    chunk_size: int = 4 * 1024 * 1024,
+    max_record_bytes: int = 16 * 1024 * 1024,
+) -> list[str]:
+    """Return bounded tail JSONL rows without materializing huge memory banks."""
+
+    max_lines = max(int(max_lines), 0)
+    if max_lines == 0:
+        return []
+    lines: deque[str] = deque(maxlen=max_lines)
+    with path.open("rb") as fh:
+        fh.seek(0, 2)
+        position = fh.tell()
+        pending = b""
+        while position > 0 and len(lines) < max_lines:
+            read_size = min(int(chunk_size), position)
+            position -= read_size
+            fh.seek(position)
+            chunk = fh.read(read_size)
+            block = chunk + pending
+            parts = block.splitlines()
+            if position > 0:
+                pending = parts[0] if parts else block
+                if len(pending) > max_record_bytes:
+                    pending = b""
+                parts = parts[1:]
+            else:
+                pending = b""
+            for raw in parts:
+                if raw.strip() and len(raw) <= max_record_bytes:
+                    lines.append(raw.decode("utf-8", "replace"))
+    return list(lines)[-max_lines:]
+
 def memory_records_from_scaling_report(
     scaling_report: dict[str, Any],
     source: str = "inference",
@@ -168,17 +208,17 @@ def memory_records_from_scaling_report(
         if row.get("parent") is not None
     ]
     trajectory_paths = [list(row.get("path", [])) for row in candidates]
-    trajectory_complex = scaling_report.get("trajectory_filtered_simplicial_object", {})
-    trajectory_probability_complex = scaling_report.get("trajectory_probability_filtered_simplicial_object", {})
-    trajectory_algebra = scaling_report.get("trajectory_topological_algebra", {})
-    trajectory_probability_algebra = scaling_report.get("trajectory_probability_topological_algebra", {})
+    trajectory_complex = _compact_filtered_object(scaling_report.get("trajectory_filtered_simplicial_object", {}))
+    trajectory_probability_complex = _compact_filtered_object(scaling_report.get("trajectory_probability_filtered_simplicial_object", {}))
+    trajectory_algebra = _compact_topological_algebra(scaling_report.get("trajectory_topological_algebra", {}))
+    trajectory_probability_algebra = _compact_topological_algebra(scaling_report.get("trajectory_probability_topological_algebra", {}))
     for row in sorted(candidates, key=lambda item: float(item.get("score", 0.0)), reverse=True)[:max_records]:
         score = float(row.get("score", 0.0))
         if min_score is not None and score < min_score:
             continue
-        topology = row.get("topological_algebra") or trajectory_algebra or {}
-        row_complex = row.get("filtered_simplicial_object", {})
-        row_probability_complex = row.get("probability_filtered_simplicial_object", {})
+        topology = _compact_topological_algebra(row.get("topological_algebra") or trajectory_algebra or {})
+        row_complex = _compact_filtered_object(row.get("filtered_simplicial_object", {}))
+        row_probability_complex = _compact_filtered_object(row.get("probability_filtered_simplicial_object", {}))
         embedding = [float(v) for v in row.get("embedding", [])]
         signature = signature_vector(topology)
         memory_id = _memory_id(row.get("record_id", ""), embedding, signature)
@@ -202,15 +242,81 @@ def memory_records_from_scaling_report(
                     "level": row.get("level"),
                     "path": row.get("path", []),
                     "graphcg_projection": row.get("graphcg_projection"),
-                    "trajectory_filtered_simplicial_object": trajectory_complex,
-                    "trajectory_probability_filtered_simplicial_object": trajectory_probability_complex,
-                    "trajectory_probability_topological_algebra": trajectory_probability_algebra,
                     "trajectory_summary": trajectory_complex.get("summary", {}) if isinstance(trajectory_complex, dict) else {},
                     "trajectory_probability_summary": trajectory_probability_complex.get("summary", {}) if isinstance(trajectory_probability_complex, dict) else {},
+                    "trajectory_probability_topological_algebra_summary": trajectory_probability_algebra.get("summary", {}) if isinstance(trajectory_probability_algebra, dict) else {},
+                    "memory_payload_policy": "compact_real_trajectory_payload_no_duplicate_full_complexes",
                 },
             )
         )
     return records
+
+
+def _compact_filtered_object(obj: Any, *, max_simplices: int = 512, max_vector_len: int = 4096) -> dict[str, Any]:
+    if not isinstance(obj, dict):
+        return {}
+    out: dict[str, Any] = {}
+    for key in ("available", "reason", "summary", "filtration_model", "source", "simplex_tree", "persistence", "persistent_homology"):
+        if key in obj:
+            out[key] = obj[key]
+    simplices = obj.get("simplices")
+    if isinstance(simplices, list):
+        compact = []
+        for simplex in simplices[:max_simplices]:
+            if isinstance(simplex, dict):
+                compact.append(_compact_simplex(simplex, max_vector_len=max_vector_len))
+        out["simplices"] = compact
+        out["simplices_truncated"] = len(simplices) > len(compact)
+        out["original_simplex_count"] = len(simplices)
+    return out
+
+
+def _compact_simplex(simplex: dict[str, Any], *, max_vector_len: int) -> dict[str, Any]:
+    keep = {
+        "simplex",
+        "dimension",
+        "filtration",
+        "label",
+        "record_id",
+        "source",
+        "target",
+        "path",
+        "level",
+        "score",
+        "nll",
+        "action",
+        "vertex",
+        "vertices",
+        "edge",
+    }
+    out = {key: value for key, value in simplex.items() if key in keep}
+    for vector_key in ("embedding", "model_probability_vector", "probability_vector"):
+        vector = simplex.get(vector_key)
+        if isinstance(vector, list):
+            if len(vector) <= max_vector_len:
+                out[vector_key] = vector
+            else:
+                out[vector_key + "_omitted"] = True
+                out[vector_key + "_length"] = len(vector)
+    return out
+
+
+def _compact_topological_algebra(obj: Any) -> dict[str, Any]:
+    if not isinstance(obj, dict):
+        return {}
+    keep = {
+        "summary",
+        "betti_numbers",
+        "persistence_summary",
+        "multiparameter_summary",
+        "free_resolution_summary",
+        "derived_equivalence_signature",
+        "derived_signature",
+        "status",
+        "available",
+        "reason",
+    }
+    return {key: value for key, value in obj.items() if key in keep}
 
 
 def query_signature_from_report(result: dict[str, Any]) -> tuple[list[float], list[float]]:

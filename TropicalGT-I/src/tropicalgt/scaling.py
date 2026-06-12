@@ -287,6 +287,9 @@ def score_records(
             ph_backend=ph_backend,
             audit_max_simplices=audit_max_simplices,
         )[0]
+        probability_complex = diagnostics.get("probability_filtered_simplicial_object") or diagnostics.get("filtered_simplicial_object", {})
+        embedding_complex = diagnostics.get("embedding_filtered_simplicial_object", {})
+        action_probability_vector = [float(row.get("probability", 0.0)) for row in action_probs]
         rows.append(
             {
                 "record": record,
@@ -303,13 +306,18 @@ def score_records(
                 "edge_tokens": int(graph_batch_cpu.edge_counts[idx].item()),
                 "margin_mean": margin_mean,
                 "gflownet_action_probs": action_probs,
-                "action_probability_vector": [float(row.get("probability", 0.0)) for row in action_probs],
+                "action_probability_vector": action_probability_vector,
+                "action_probability_source": "TropicalGTModel.gfn(graph_state).softmax",
                 "embedding": [float(v) for v in out_cpu["graph_state"][idx].tolist()],
+                "embedding_source": "TropicalGTModel.graph_state",
                 "graphcg_projection": graphcg_projection[idx],
                 "graph_token_trace": traces[idx],
-                "filtered_simplicial_object": diagnostics.get("filtered_simplicial_object", {}),
-                "probability_filtered_simplicial_object": diagnostics.get("filtered_simplicial_object", {}),
-                "embedding_filtered_simplicial_object": diagnostics.get("embedding_filtered_simplicial_object", {}),
+                "filtered_simplicial_object": probability_complex,
+                "filtered_simplicial_object_source": "probability_filtered_simplicial_object",
+                "probability_filtered_simplicial_object": probability_complex,
+                "probability_filtered_simplicial_object_source": "TropicalGTModel.graph_token_support_probabilities+jensen_shannon",
+                "embedding_filtered_simplicial_object": embedding_complex,
+                "embedding_filtered_simplicial_object_source": "TropicalGTModel.graph_token_embeddings+euclidean",
                 "record_diagnostics": diagnostics,
             }
         )
@@ -334,7 +342,9 @@ def _public_candidate(row: dict[str, Any]) -> dict[str, Any]:
         "margin_mean": row["margin_mean"],
         "gflownet_action_probs": row["gflownet_action_probs"],
         "action_probability_vector": row.get("action_probability_vector"),
+        "action_probability_source": row.get("action_probability_source"),
         "embedding": row.get("embedding"),
+        "embedding_source": row.get("embedding_source"),
         "input_text": row.get("input_text", ""),
         "target_text": row.get("target_text", ""),
         "decoded_argmax": row.get("decoded_argmax", ""),
@@ -342,8 +352,11 @@ def _public_candidate(row: dict[str, Any]) -> dict[str, Any]:
         "graphcg_projection": row.get("graphcg_projection"),
         "graph_token_trace": row["graph_token_trace"],
         "filtered_simplicial_object": row["filtered_simplicial_object"],
+        "filtered_simplicial_object_source": row.get("filtered_simplicial_object_source"),
         "probability_filtered_simplicial_object": row.get("probability_filtered_simplicial_object"),
+        "probability_filtered_simplicial_object_source": row.get("probability_filtered_simplicial_object_source"),
         "embedding_filtered_simplicial_object": row.get("embedding_filtered_simplicial_object"),
+        "embedding_filtered_simplicial_object_source": row.get("embedding_filtered_simplicial_object_source"),
         "topological_algebra": row.get("record_diagnostics", {}).get("topological_algebra"),
     }
 
