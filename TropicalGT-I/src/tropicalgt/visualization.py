@@ -428,7 +428,7 @@ def write_got_trajectory_visualization(scaling_report: dict[str, object], output
             "z_axis": "projected_nll_fitness_energy",
             "z_axis_center_raw_nll": nll_center,
             "z_axis_scale": nll_plot_scale,
-            "z_axis_label": f"centered raw NLL x {nll_plot_scale:g}",
+            "z_axis_label": f"projected surface z; raw centered NLL x {nll_plot_scale:g} retained separately",
             "raw_nll_range": float(np.nanmax(nll_values) - np.nanmin(nll_values)) if nll_values.size else 0.0,
             "exact_anchor_scope": "sampled model GoT states only",
             "actual_landscape_scope": "piecewise-linear interpolation through sampled model GoT states with no synthetic z-values",
@@ -519,7 +519,7 @@ def write_got_trajectory_visualization(scaling_report: dict[str, object], output
                 color=nll_values,
                 colorscale="Plasma",
                 showscale=True,
-                colorbar=dict(title="NLL"),
+                colorbar=dict(title="raw NLL", x=1.035, y=0.48, len=0.62, thickness=16),
                 line=dict(width=1.5, color="#e8eef8"),
             ),
             text=_sparse_got_state_labels(candidates, ids, inferred_levels, nll_values),
@@ -535,6 +535,7 @@ def write_got_trajectory_visualization(scaling_report: dict[str, object], output
             hoverinfo="text",
             customdata=np.arange(len(candidates), dtype=int),
             name="GoT state",
+            showlegend=False,
         )
     )
     fig.update_layout(
@@ -6567,7 +6568,7 @@ def _nll_local_interpolating_sheet_trace(
             "local interpolating NLL sheet<br>"
             "PC1=%{x:.3f}<br>"
             "PC2=%{y:.3f}<br>"
-            "centered scaled NLL=%{z:.4f}<br>"
+            "projected surface z=%{z:.4f}<br>"
             "local raw NLL=%{surfacecolor:.6f}<br>"
             "visible support is restricted to neighborhoods of model-evaluated GoT states<extra></extra>"
         ),
@@ -6742,10 +6743,10 @@ def _nll_anchor_trace(x: np.ndarray, y: np.ndarray, z: np.ndarray, nll: np.ndarr
             "surface anchor<br>"
             "PC1=%{x:.3f}<br>"
             "PC2=%{y:.3f}<br>"
-            "centered scaled NLL=%{z:.4f}<br>"
+            "projected surface z=%{z:.4f}<br>"
             "raw NLL=%{customdata:.6f}<extra></extra>"
         ),
-        showlegend=True,
+        showlegend=False,
     )
 
 
@@ -6800,7 +6801,7 @@ def _smooth_anchored_surface(
             opacity=0.55,
             showscale=False,
             name=name,
-            hovertemplate="PC1=%{x:.3f}<br>PC2=%{y:.3f}<br>centered scaled NLL=%{z:.4f}<br>raw NLL=%{intensity:.6f}<extra></extra>",
+            hovertemplate="PC1=%{x:.3f}<br>PC2=%{y:.3f}<br>projected surface z=%{z:.4f}<br>raw NLL=%{intensity:.6f}<extra></extra>",
         )
         return trace, {
             "available": True,
@@ -6840,7 +6841,7 @@ def _smooth_anchored_surface(
             "actual sampled NLL landscape<br>"
             "PC1=%{x:.3f}<br>"
             "PC2=%{y:.3f}<br>"
-            "centered scaled NLL=%{z:.4f}<br>"
+            "projected surface z=%{z:.4f}<br>"
             "raw NLL=%{intensity:.6f}<br>"
             "piecewise-linear triangles use only observed model-evaluated GoT states<extra></extra>"
         ),

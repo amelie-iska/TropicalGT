@@ -216,6 +216,9 @@ def test_got_trajectory_visualization_renders_simplicial_panel_and_nll_surface(t
     assert payload["microstep_nodes"] == []
     assert payload["nll_surface"]["rendered_microsteps_policy"].startswith("disabled")
     assert "reasoning microstep" not in html
+    assert "projected surface z=%{z:.4f}" in html
+    assert "centered scaled NLL=%{z:.4f}" not in html
+    assert payload["nll_surface"]["z_axis_label"].startswith("projected surface z; raw centered NLL")
     assert "open interactive reasoning-step complex page" in html
     assert "reasoning_step_complex_maps/reasoning_step_000.html" in html
     assert payload["nodes"][1]["input_text"] == "input"

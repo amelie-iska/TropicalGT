@@ -201,7 +201,7 @@ The active full-dataset run uses `TropicalGT-I/configs/train_full_dataset_active
 - Required source `openai_parameter_golf`: full SP1024 cache, `195` train shards, `19,473,201,340` raw tokens, `19,454,008,320` token slots.
 - Total available train token slots reported by `outputs/train_full_dataset_active/data_budget.json`: `24,198,796,288`.
 - Active output root: `TropicalGT-I/outputs/train_full_dataset_active`.
-- Active validation/checkpoint cadence: validation every `500` steps, checkpoints every `1000` steps, heavier visualization/topology audit every `5000` steps.
+- Active validation/checkpoint cadence: validation every `500` steps, checkpoints every `1000` steps, heavier visualization/topology audit every `10000` steps.
 
 The active run writes its PID to `TropicalGT-I/outputs/train_full_dataset_active/latest_training.pid` and logs to `TropicalGT-I/outputs/train_full_dataset_active/full_dataset_active_training.log`. W&B run names for this path use `tropicalgt_i_train_full_dataset_active`. Do not describe a run as full-dataset unless its data-budget audit passes the required-source and >10B slot gates.
 

@@ -15,6 +15,9 @@ def test_metric_provenance_registry_covers_current_risky_terms(tmp_path: Path):
         "graphcg_direction_svd_condition_proxy",
         "synthetic_h0_fallback",
         "json_fallback_graph_trace",
+        "parameter_golf_token_id_fallback",
+        "training_data_budget_estimate",
+        "config_default_fallback",
         "simplicial_projection_feature_fallback",
         "gudhi_vectorizer_autograd_boundary",
     ]:

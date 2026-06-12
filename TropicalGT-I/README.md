@@ -19,7 +19,7 @@ The graph structural byte budget is derived from the actual TokenGT graph tuple:
 
 All training records are graph structured. The moved TropicalGT reasoning shards carry graph JSON and also receive deterministic sequential text path graphs. The OpenAI Parameter-Golf FineWeb stream is loaded from `external/oai-parameter-golf/data/datasets/fineweb10B_sp1024` and decoded with `external/oai-parameter-golf/data/tokenizers/fineweb_1024_bpe.model`; `train_full_dataset_active.json` keeps the older `external/parameter-golf` checkout as a compatibility fallback. Every sampled token window becomes a causal sequential DAG before TokenGT tokenization. Graphs with causal DAG structure are decoded autoregressively in topological order. Cyclic or explicitly non-causal graphs use deterministic seeded random autoregressive order.
 
-The active full-dataset run uses `configs/train_full_dataset_active.json`. It requires both the moved Hugging Face reasoning shards and the full OpenAI Parameter-Golf SP1024 cache, and its startup data-budget gate requires more than `10,000,000,000` configured training token slots. The active shape is `seq_len: 1024`, `batch_size: 4`, `checkpoint_every: 1000`, `validation_every_steps: 500`, `visualization_every_steps: 5000`, and `max_steps: 2500000`, which schedules `10,240,000,000` sequence-token slots. Its budget report currently covers `117` HF train parquet shards plus `195` OAI train shards for `24,198,796,288` available train token slots.
+The active full-dataset run uses `configs/train_full_dataset_active.json`. It requires both the moved Hugging Face reasoning shards and the full OpenAI Parameter-Golf SP1024 cache, and its startup data-budget gate requires more than `10,000,000,000` configured training token slots. The active shape is `seq_len: 1024`, `batch_size: 4`, `checkpoint_every: 1000`, `validation_every_steps: 500`, `visualization_every_steps: 10000`, and `max_steps: 2500000`, which schedules `10,240,000,000` sequence-token slots. Its budget report currently covers `117` HF train parquet shards plus `195` OAI train shards for `24,198,796,288` available train token slots.
 
 The older `configs/train.json` remains a cap-sized review configuration unless its budget audit is explicitly refreshed.
 
@@ -89,7 +89,7 @@ TropicalGT-I/scripts/parameter_golf_codex_review_loop.py \
 
 Each boundary writes `active_training_contract_step_*.json/.md` with the active metrics, hyperparameters, losses, objectives, regularizers, dataset rates, VRAM/throughput, and restart decision. If `eval.bpb` is absent or above `1.18`, the generated Codex prompt requests a single-agent review of metrics, losses, hyperparameters, BPB behavior, and restart strategy.
 
-The active full-dataset config validates every `500` steps and renders heavier browser/topology artifacts every `5000` steps. Each periodic validation round writes a step-local bundle under `TropicalGT-I/outputs/train_full_dataset_active/periodic/step_XXXXXXXX/`:
+The active full-dataset config validates every `500` steps and renders heavier browser/topology artifacts every `10000` steps. Each periodic validation round writes a step-local bundle under `TropicalGT-I/outputs/train_full_dataset_active/periodic/step_XXXXXXXX/`:
 
 - `validation_report.json`: validation NLL, BPB, graph-BPB, graph source rates, and optional detailed record diagnostics.
 - `reasoning/reasoning_trajectory_3d.html`: dark-mode PCA of graph-of-thought/graph-state embeddings with hover-rendered filtered simplicial complexes.
