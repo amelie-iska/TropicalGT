@@ -1108,6 +1108,7 @@ def _write_full_trajectory_complex_map(scaling_report: dict[str, object], output
         return {}
     obj = _gudhi_canonical_complex(obj)
     obj = _attach_trajectory_overlay(obj, candidates)
+    obj = _attach_trajectory_decoding_order_overlay(obj, candidates, distance_metric="euclidean")
     probability_obj = scaling_report.get("trajectory_probability_filtered_simplicial_object")
     if candidates and not isinstance(probability_obj, dict):
         probability_obj = build_reasoning_trajectory_complex(candidates, metric="jensen_shannon")
@@ -1115,6 +1116,7 @@ def _write_full_trajectory_complex_map(scaling_report: dict[str, object], output
     probability_obj = _gudhi_canonical_complex(probability_obj) if probability_available and isinstance(probability_obj, dict) else None
     if isinstance(probability_obj, dict):
         probability_obj = _attach_trajectory_overlay(probability_obj, candidates, distance_metric="jensen_shannon")
+        probability_obj = _attach_trajectory_decoding_order_overlay(probability_obj, candidates, distance_metric="jensen_shannon")
     path = output_dir / "got_full_trajectory_complex.html"
     tree_path = output_dir / "got_full_trajectory_simplex_tree_3d.html"
     probability_path = output_dir / "got_full_trajectory_complex_jensen_shannon.html"
@@ -1207,6 +1209,95 @@ def _attach_trajectory_overlay(
             "GoT parent-child path over the same vertices without changing the radius/simplex filtration."
         ),
         "distance_metric": distance_metric,
+        "edge_count": len(edges),
+        "edges": edges,
+    }
+    return updated
+
+
+def _attach_trajectory_decoding_order_overlay(
+    obj: dict[str, object],
+    candidates: list[dict[str, object]],
+    *,
+    distance_metric: str = "euclidean",
+) -> dict[str, object]:
+    """Attach dotted GoT parent-child generation order to a trajectory-state complex.
+
+    Full trajectory complexes have GoT state vertices, not graph-token vertices.  The
+    dotted overlay here is therefore the actual sampled parent-child decoding/search
+    order of the reasoning trajectory.  Graph-node causal and token decoding edges are
+    rendered on each per-state TokenGT complex, where those vertices exist.
+    """
+    simplices = obj.get("simplices", []) if isinstance(obj, dict) else []
+    vertex_filtration: dict[str, float] = {}
+    for simplex in simplices if isinstance(simplices, list) else []:
+        if not isinstance(simplex, dict) or int(simplex.get("dimension", -1)) != 0:
+            continue
+        raw = simplex.get("simplex") if isinstance(simplex.get("simplex"), list) else []
+        if not raw:
+            continue
+        label = str(raw[0])
+        try:
+            filt = float(simplex.get("filtration", 0.0) or 0.0)
+        except (TypeError, ValueError):
+            filt = 0.0
+        vertex_filtration[label] = filt if math.isfinite(filt) else 0.0
+    visible = set(vertex_filtration)
+    row_by_id = {str(row.get("record_id", idx)): row for idx, row in enumerate(candidates) if isinstance(row, dict)}
+    edges: list[dict[str, object]] = []
+    for target_id, row in row_by_id.items():
+        parent = row.get("parent")
+        if not isinstance(parent, str) or parent not in row_by_id:
+            continue
+        if parent not in visible or target_id not in visible:
+            continue
+        target_level = int(row.get("level", 0) or 0)
+        try:
+            decoding_step = int(row.get("reasoning_step_index", len(edges) + 1) or len(edges) + 1)
+        except (TypeError, ValueError):
+            decoding_step = len(edges) + 1
+        action = _edge_action_label(row)
+        filtration = max(vertex_filtration.get(parent, 0.0), vertex_filtration.get(target_id, 0.0))
+        edges.append(
+            {
+                "source": parent,
+                "target": target_id,
+                "source_node_id": parent,
+                "target_node_id": target_id,
+                "role": "got_parent_child_decoding_order",
+                "edge_type": f"got_{action}_transition",
+                "action": action,
+                "decoding_step": decoding_step,
+                "reasoning_level": target_level,
+                "filtration": filtration,
+                "style": "dotted",
+                "color": _action_color(action),
+                "directed": True,
+                "causal": False,
+                "distance_metric": distance_metric,
+                "source_nll": _safe_float(row_by_id.get(parent, {}).get("nll")),
+                "target_nll": _safe_float(row.get("nll")),
+                "source_path": row_by_id.get(parent, {}).get("path", []),
+                "target_path": row.get("path", []),
+                "gate": {
+                    "radius": filtration,
+                    "reasoning_step": target_level,
+                    "decoding_step": decoding_step,
+                },
+            }
+        )
+    updated = dict(obj)
+    updated["decoding_causal_overlay"] = {
+        "source": "graph_of_thought_parent_decoding_order",
+        "semantic_note": (
+            "Dotted directed edges on the full trajectory complex show the observed sampled GoT parent-child "
+            "generation order between trajectory-state vertices. They are not graph-node causal edges; those are "
+            "rendered on per-reasoning-step TokenGT complexes where graph-token vertices are present."
+        ),
+        "distance_metric": distance_metric,
+        "decoding_order_kind": "graph_of_thought_parent_child_order",
+        "decoding_reverse_order_kind": "not_applicable_on_state_complex",
+        "decoding_is_dag": True,
         "edge_count": len(edges),
         "edges": edges,
     }

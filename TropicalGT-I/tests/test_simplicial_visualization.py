@@ -474,7 +474,18 @@ def test_got_trajectory_visualization_renders_simplicial_panel_and_nll_surface(t
         sibling_record.record_id,
         leaf_record.record_id,
     }
+    decoding_overlay = full_complex_payload["filtered_simplicial_object"]["decoding_causal_overlay"]
+    assert decoding_overlay["source"] == "graph_of_thought_parent_decoding_order"
+    assert decoding_overlay["edge_count"] == 3
+    assert all(edge["style"] == "dotted" for edge in decoding_overlay["edges"])
+    assert {edge["target"] for edge in decoding_overlay["edges"]} == {
+        child_record.record_id,
+        sibling_record.record_id,
+        leaf_record.record_id,
+    }
     assert "faint GoT parent-child trajectory overlay" in full_complex_html
+    assert "graph_of_thought_parent_decoding_order" in full_complex_html
+    assert "got_parent_child_decoding_order" in full_complex_html
     assert "radius/simplicial edges induced from the same embeddings" in full_complex_html
     assert "Full graph-of-thought trajectory filtered simplicial complex" in full_complex_html
     assert "Filtration radius" in full_complex_html

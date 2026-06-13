@@ -145,6 +145,8 @@ def test_causal_graph_records_have_forward_and_reverse_causal_orders():
 
 
 def test_explicit_noncausal_edge_overrides_directed_flag_for_roar():
+    from tropicalgt.scaling import _decoding_order_report
+
     record = GraphRecord.from_mapping(
         {
             "record_id": "noncausal-directed",
@@ -166,6 +168,12 @@ def test_explicit_noncausal_edge_overrides_directed_flag_for_roar():
     assert metadata["noncausal_edge_count"] == 1
     assert metadata["decoding_order_kind"] == "random_autoregressive"
     assert metadata["decoding_reverse_order_kind"] == "reverse_random_autoregressive"
+    overlay_report = _decoding_order_report(record)
+    assert not any(
+        edge.get("source") == "a" and edge.get("target") == "b"
+        for edge in overlay_report["causal_edges"]
+    )
+    assert overlay_report["noncausal_edge_count"] >= 1
 
 
 def test_cyclic_or_noncausal_graph_records_use_roar_random_order():

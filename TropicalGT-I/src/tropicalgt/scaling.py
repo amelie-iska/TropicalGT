@@ -11,7 +11,7 @@ import torch.nn.functional as F
 from .data import encode_bytes
 from .algebra import compute_level_radius_bifiltration_report, compute_topological_algebra_report
 from .diagnostics import ACTION_NAMES, graph_token_trace, per_record_nll, record_diagnostics
-from .records import GraphRecord, GraphTokenBatch, graph_decoding_order
+from .records import GraphRecord, GraphTokenBatch, NONCAUSAL_EDGE_TYPES, graph_decoding_order
 from .simplicial import build_reasoning_trajectory_complex
 from .tokenizer import TokenGTTokenizer
 
@@ -853,7 +853,9 @@ def _decoding_order_report(record: GraphRecord) -> dict[str, Any]:
         target = str(raw_edge.get("target", raw_edge.get("dst", "")))
         if source not in node_set or target not in node_set:
             continue
-        causal = bool(raw_edge.get("causal") is True or raw_edge.get("directed") is True)
+        edge_kind = str(raw_edge.get("type") or raw_edge.get("relation") or raw_edge.get("label") or "").strip().lower()
+        explicit_noncausal = raw_edge.get("causal") is False or raw_edge.get("directed") is False or edge_kind in NONCAUSAL_EDGE_TYPES
+        causal = False if explicit_noncausal else bool(raw_edge.get("causal") is True or raw_edge.get("directed") is True)
         if causal:
             causal_edges.append(
                 {
