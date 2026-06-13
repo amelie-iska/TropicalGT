@@ -222,15 +222,14 @@ def normalize_graph_causal_structure(graph: dict[str, Any] | None) -> tuple[dict
             continue
         edge = dict(raw_edge)
         kind = _edge_kind(edge)
-        if edge.get("causal") is True or edge.get("directed") is True:
-            edge["causal"] = bool(edge.get("causal", True))
-            edge["directed"] = bool(edge.get("directed", True))
-            explicit_causal += int(edge["causal"])
-            explicit_noncausal += int(not edge["causal"])
-        elif edge.get("causal") is False or edge.get("directed") is False or kind in NONCAUSAL_EDGE_TYPES:
+        if edge.get("causal") is False or edge.get("directed") is False or kind in NONCAUSAL_EDGE_TYPES:
             edge["causal"] = False
             edge["directed"] = False
             explicit_noncausal += 1
+        elif edge.get("causal") is True or edge.get("directed") is True:
+            edge["causal"] = True
+            edge["directed"] = True
+            explicit_causal += 1
         elif kind in CAUSAL_EDGE_TYPES or _edge_has_temporal_positions(edge):
             edge["causal"] = True
             edge["directed"] = True

@@ -774,6 +774,9 @@ def test_analogical_memory_visualization_renders_simplicial_maps(tmp_path: Path)
     assert "Edge, face, and filtration preservation can fail" in index_html
     assert "landscape L2 sim" in index_html
     assert "landscape cosine" in index_html
+    assert "vector aggregate" in index_html
+    assert "vectorized GUDHI family" in index_html
+    assert "Landscape, BettiCurve, Silhouette" in index_html
     assert "rank 2" in rank2_html
     assert '<input id="filtration-slider"' in rank2_html
     assert len(maps["maps"]) == 2
@@ -789,6 +792,11 @@ def test_analogical_memory_visualization_renders_simplicial_maps(tmp_path: Path)
     assert maps["maps"][0]["persistence_landscape_vector_available"] == 1.0
     assert maps["maps"][0]["persistence_landscape_l2_similarity"] > 0.0
     assert maps["maps"][0]["persistence_landscape_overlap_dim"] > 0.0
+    assert maps["maps"][0]["persistence_vector_component_count"] >= 2.0
+    assert "persistence_vector_components" in maps["maps"][0]
+    assert any(row["method"] == "landscape" for row in maps["maps"][0]["persistence_vector_components"])
+    assert "persistence_vector_comparison_space" in maps["maps"][0]
+    assert "differentiable" in maps["maps"][0]["persistence_vector_differentiable_note"]
     assert maps["maps"][0]["derived_invariant_comparison"]["persistence_landscape_vector_available"] is True
     assert "is_simplicial_on_displayed_skeleton" in maps["maps"][0]
     assert isinstance(maps["maps"][0]["preserved_edge_pairs"], list)
@@ -877,6 +885,12 @@ def _toy_topology(intervals):
                         "resolution": 4,
                         "vector": [0.0, 0.2, 0.1, 0.0, 0.0, 0.05, 0.0, 0.0],
                     },
+                    "betti_curve": {"values": [0.0, 1.0, 1.0, 0.0]},
+                    "silhouette": {"values": [0.0, 0.4, 0.2, 0.0]},
+                    "entropy": {"vector": [0.0, 0.1, 0.1, 0.0]},
+                    "persistence_lengths": {"values": [0.5, 0.25]},
+                    "topological_vector": {"values": [0.2, 0.3, 0.5]},
+                    "persistence_image": {"values": [[0.0, 0.2], [0.1, 0.0]]},
                 },
                 "1": {
                     "available": True,
@@ -885,6 +899,12 @@ def _toy_topology(intervals):
                         "resolution": 4,
                         "vector": [0.0, 0.1, 0.3, 0.0, 0.0, 0.02, 0.0, 0.0],
                     },
+                    "betti_curve": {"values": [0.0, 0.8, 0.9, 0.0]},
+                    "silhouette": {"values": [0.0, 0.2, 0.5, 0.0]},
+                    "entropy": {"vector": [0.0, 0.05, 0.15, 0.0]},
+                    "persistence_lengths": {"values": [0.4, 0.22]},
+                    "topological_vector": {"values": [0.15, 0.35, 0.5]},
+                    "persistence_image": {"values": [[0.0, 0.1], [0.2, 0.0]]},
                 },
             },
             "summary": {"landscape_l2_norm": 0.4},

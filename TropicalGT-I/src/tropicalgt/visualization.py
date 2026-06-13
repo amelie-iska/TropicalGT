@@ -2954,8 +2954,24 @@ def _table_trace(headers: Sequence[str], columns: Sequence[Sequence[Any]]) -> go
     )
 
 
+def _m2_selected_staircase_resolution(m2: Mapping[str, Any]) -> Dict[str, Any]:
+    staircase = m2.get("staircase") if isinstance(m2, Mapping) else {}
+    staircase = staircase if isinstance(staircase, Mapping) else {}
+    selected = staircase.get("selected_real_resolution")
+    if isinstance(selected, Mapping) and selected.get("available"):
+        return dict(selected)
+    positive = staircase.get("positive_radius_event_ideal_resolution")
+    if isinstance(positive, Mapping) and positive.get("available"):
+        return dict(positive)
+    full = staircase.get("minimal_ideal_resolution")
+    if isinstance(full, Mapping) and full.get("available"):
+        return dict(full)
+    return {}
+
+
 def _m2_betti_columns(m2: Mapping[str, Any]) -> Tuple[List[str], List[List[str]]]:
-    rows = list(m2.get("betti_table_rows", []) or [])
+    resolution = _m2_selected_staircase_resolution(m2)
+    rows = list((resolution.get("betti_table_rows") if resolution else m2.get("betti_table_rows", [])) or [])
     degrees = sorted({int(r.get("homological_degree", 0) or 0) for r in rows}) or [0]
     def _shift_display(row: Mapping[str, Any]) -> str:
         if row.get("shift_display") is not None:
@@ -2976,12 +2992,24 @@ def _m2_betti_columns(m2: Mapping[str, Any]) -> Tuple[List[str], List[List[str]]
 
 
 def _m2_free_module_columns(m2: Mapping[str, Any]) -> Tuple[List[str], List[List[str]]]:
-    modules = list(m2.get("free_modules", []) or [])
-    modules = sorted(modules, key=lambda item: int(item.get("degree", 0) or 0))
+    resolution = _m2_selected_staircase_resolution(m2)
+    modules = list((resolution.get("free_modules") if resolution else m2.get("free_modules", [])) or [])
+
+    def _module_order(item: Mapping[str, Any]) -> int:
+        name = str(item.get("name", item.get("module", "F_0")))
+        if "_" in name:
+            try:
+                return int(name.rsplit("_", 1)[1])
+            except ValueError:
+                pass
+        return int(item.get("degree", 0) or 0)
+
+    modules = sorted([m for m in modules if isinstance(m, Mapping)], key=_module_order)
     if not modules:
         return ["module", "rank", "display"], [["unavailable"], ["0"], ["no computed free-chain presentation"]]
+    display_label = "minimal free resolution display" if resolution else "chain-module display"
     return (
-        ["module", "rank", "chain-module display"],
+        ["module", "rank", display_label],
         [
             [str(m.get("module", m.get("name", f"F_{i}"))) for i, m in enumerate(modules)],
             [str(m.get("rank", 0)) for m in modules],
@@ -2991,7 +3019,8 @@ def _m2_free_module_columns(m2: Mapping[str, Any]) -> Tuple[List[str], List[List
 
 
 def _m2_differential_columns(m2: Mapping[str, Any], max_rows: int = 18) -> Tuple[List[str], List[List[str]]]:
-    differentials = list(m2.get("differentials", []) or [])[:max_rows]
+    resolution = _m2_selected_staircase_resolution(m2)
+    differentials = list((resolution.get("differentials") if resolution else m2.get("differentials", [])) or [])[:max_rows]
     if not differentials:
         return ["map", "shape", "rank", "matrix preview"], [["unavailable"], [""], [""], ["no differential matrices computed"]]
     maps: List[str] = []
@@ -3018,15 +3047,20 @@ def _m2_certificate_columns(m2: Mapping[str, Any], bifiltration: Mapping[str, An
     be = be if isinstance(be, Mapping) else {}
     rank_inv = bifiltration.get("rank_invariant") if isinstance(bifiltration, Mapping) else {}
     rank_inv = rank_inv if isinstance(rank_inv, Mapping) else {}
+    resolution = _m2_selected_staircase_resolution(m2)
+    res_be = resolution.get("buchsbaum_eisenbud_diagnostics", {}) if isinstance(resolution.get("buchsbaum_eisenbud_diagnostics"), Mapping) else {}
     items = [
-        ("ring", m2.get("ring", bifiltration.get("module_ring", "F2[x_level,x_radius]"))),
+        ("ring", resolution.get("ring", m2.get("ring", bifiltration.get("module_ring", "F2[x_level,x_radius]")))),
         ("field", m2.get("field", "F2")),
-        ("resolution status", cert.get("interpretation", "computed finite presentation; minimality not certified")),
-        ("real free resolution certified", cert.get("minimality_certified", False)),
+        ("chain object", "finite chain presentation; not a free resolution"),
+        ("scoped real resolution", bool(resolution)),
+        ("resolution scope", resolution.get("scope", "unavailable")),
+        ("object resolved", resolution.get("object_resolved", "unavailable")),
+        ("minimality certified", res_be.get("minimality_certified", False)),
+        ("exactness certified", res_be.get("exactness_certified", False)),
+        ("not full persistence-module resolution", resolution.get("not_full_persistence_module_resolution", True)),
         ("derived equivalence certified", cert.get("derived_equivalence_certified", False)),
-        ("differential-square checks", cert.get("differential_square_checks", cert.get("d_squared_zero_checks", ""))),
         ("Buchsbaum-Eisenbud exactness", be.get("passes_exactness_necessary_checks", False)),
-        ("Fitting ideal generators", len(bifiltration.get("fitting_ideals", {}).get("generator_ideal", []) or [])),
         ("rank invariant samples", rank_inv.get("num_samples", 0)),
         ("radius grade policy", bifiltration.get("radius_grade_policy", "")),
     ]
@@ -3036,6 +3070,14 @@ def _m2_certificate_columns(m2: Mapping[str, Any], bifiltration: Mapping[str, An
 def _m2_staircase_trace_payload(m2: Mapping[str, Any]) -> Dict[str, List[Any]]:
     staircase = m2.get("staircase") if isinstance(m2, Mapping) else {}
     staircase = staircase if isinstance(staircase, Mapping) else {}
+    resolution = _m2_selected_staircase_resolution(m2)
+    if resolution:
+        staircase = {
+            **dict(staircase),
+            "generator_bidegrees": resolution.get("minimal_generators", []),
+            "minimal_antichain_candidates": [row.get("bidegree", [0, 0]) for row in resolution.get("minimal_generators", []) if isinstance(row, Mapping)],
+            "adjacent_lcm_syzygy_candidates": resolution.get("adjacent_lcm_syzygies", []),
+        }
     def _xy(items: Any) -> Tuple[List[float], List[float], List[str]]:
         xs: List[float] = []
         ys: List[float] = []
@@ -4169,6 +4211,15 @@ def _free_resolution_line(topology: dict[str, object]) -> str:
     if chain_report is None:
         chain_report = ca.get("multiparameter_free_resolution_proxy", {}) if isinstance(ca.get("multiparameter_free_resolution_proxy"), dict) else {}
     ring = chain_report.get("ring", "F2[x_filtration,x_dimension,x_position]")
+    minimal = chain_report.get("minimal_free_resolution", {}) if isinstance(chain_report.get("minimal_free_resolution"), dict) else {}
+    if minimal.get("available"):
+        resolution = minimal.get("resolution", {}) if isinstance(minimal.get("resolution"), dict) else {}
+        modules = resolution.get("free_modules", []) if isinstance(resolution.get("free_modules"), list) else []
+        module_line = ", ".join(str(row.get("display", row.get("name", "F_i"))) for row in modules[:4] if isinstance(row, dict))
+        return (
+            f"scoped real staircase resolution over {resolution.get('ring', ring)}: {module_line}; "
+            "ambient chain presentation is still not a full persistence-module free resolution"
+        )
     return f"real free resolution unavailable; chain-presentation diagnostics over {ring}: " + (", ".join(ranks) if ranks else "no displayed chain modules")
 
 
@@ -4747,6 +4798,9 @@ def _analogical_quality_table_trace(
         ("vector topology aggregate", f"{float(sim.get('persistence_vector_aggregate_similarity', 0.0)):.4f}"),
         ("vector methods", vector_methods_display),
         ("vector method count", f"{int(float(sim.get('persistence_vector_component_count', 0.0)))}"),
+        ("vector component scores", html.escape(str(sim.get('persistence_vector_component_summary', 'unavailable')))),
+        ("vector comparison space", html.escape(str(sim.get('persistence_vector_comparison_space', 'unavailable')))),
+        ("vector differentiability note", html.escape(str(sim.get('persistence_vector_differentiable_note', 'unavailable')))),
         ("derived/algebraic similarity", f"{float(sim.get('derived_algebraic_similarity', 0.0)):.4f}"),
         ("coarse signature cosine", f"{float(sim.get('derived_signature_similarity', 0.0)):.4f}"),
         ("assignment source", source_label),
@@ -5065,13 +5119,15 @@ def _write_analogical_topk_index(path: Path, pair_pages: list[dict[str, object]]
             f"<td>{float(report.get('commutative_algebra_similarity', 0.0)):.4f}</td>"
             f"<td>{float(report.get('persistence_landscape_l2_similarity', 0.0)):.4f}</td>"
             f"<td>{float(report.get('persistence_landscape_cosine', 0.0)):.4f}</td>"
+            f"<td>{float(report.get('persistence_vector_aggregate_similarity', 0.0)):.4f}</td>"
+            f"<td>{html.escape(str(report.get('persistence_vector_component_summary', report.get('persistence_vector_methods', ''))))}</td>"
             f"<td>{float(report.get('derived_algebraic_similarity', 0.0)):.4f}</td>"
             f"<td>{float(report.get('derived_signature_similarity', 0.0)):.4f}</td>"
             f"<td>{int(report.get('simplex_tree_map_preserved', 0))}/{int(report.get('simplex_tree_map_checked', 0))} = {float(report.get('simplex_tree_map_preservation_rate', 0.0)):.4f}</td>"
             f"<td>{float(report.get('edge_preservation_rate', 0.0)):.4f}</td>"
             "</tr>"
         )
-    body = "\n".join(rows) or "<tr><td colspan='12'>No retrieved memories.</td></tr>"
+    body = "\n".join(rows) or "<tr><td colspan='14'>No retrieved memories.</td></tr>"
     path.write_text(
         f"""<!doctype html>
 <html>
@@ -5095,9 +5151,9 @@ def _write_analogical_topk_index(path: Path, pair_pages: list[dict[str, object]]
 <body>
   <main>
 	    <h1>Analogical top-k probability correspondences</h1>
-	    <p>Each row opens one query-to-memory vertex assignment with a finite filtered-complex certificate. Persistence-landscape columns compare real GUDHI landscape vectors from the query and memory topology payloads; unavailable vectors stay zero rather than being fabricated. Edge, face, and filtration preservation can fail and are reported on the rank page.</p>
+	    <p>Each row opens one query-to-memory vertex assignment with a finite filtered-complex certificate. The NLL/fitness landscape and the GUDHI persistence landscape are different objects: this table reports the persistence-landscape vector plus the wider vectorized GUDHI family (Landscape, BettiCurve, Silhouette, Entropy, PersistenceLengths, TopologicalVector, PersistenceImage). These are real cached vectors; the cosine/L2 comparisons are differentiable with respect to those vectors, while this HTML does not claim autograd through GUDHI diagram vectorization. Unavailable vectors stay zero rather than being fabricated. Edge, face, and filtration preservation can fail and are reported on the rank page.</p>
 	    <table>
-	      <thead><tr><th>rank</th><th>correspondence</th><th>retrieval</th><th>PH</th><th>chain pres.</th><th>comm. alg.</th><th>persistence-landscape L2 sim</th><th>persistence-landscape cosine</th><th>derived/algebraic</th><th>coarse signature</th><th>simplex-tree map</th><th>edge certificate</th></tr></thead>
+	      <thead><tr><th>rank</th><th>correspondence</th><th>retrieval</th><th>PH</th><th>chain pres.</th><th>comm. alg.</th><th>persistence-landscape L2 sim</th><th>persistence-landscape cosine</th><th>vector aggregate</th><th>vector methods</th><th>derived/algebraic</th><th>coarse signature</th><th>simplex-tree map</th><th>edge certificate</th></tr></thead>
       <tbody>{body}</tbody>
     </table>
   </main>
@@ -5285,7 +5341,46 @@ def _add_simplicial_map_traces(
         )
 
 
-def _topological_similarity_summary(query_topology: dict[str, object], memory_topology: dict[str, object], row: dict[str, object]) -> dict[str, float]:
+
+
+def _persistence_vector_component_rows(vector_report: dict[str, object]) -> list[dict[str, object]]:
+    components = vector_report.get("components") if isinstance(vector_report, dict) else None
+    if not isinstance(components, dict):
+        return []
+    rows: list[dict[str, object]] = []
+    for method, raw in sorted(components.items()):
+        if not isinstance(raw, dict) or not raw.get("available"):
+            continue
+        rows.append(
+            {
+                "method": str(method),
+                "source": str(raw.get("source", "gudhi.representations.vector_methods")),
+                "dimensions": list(raw.get("dims", [])) if isinstance(raw.get("dims"), list) else [],
+                "overlap_dim": int(raw.get("overlap_dim", 0) or 0),
+                "weight": float(raw.get("weight", 0.0) or 0.0),
+                "vector_similarity": float(raw.get("vector_similarity", 0.0) or 0.0),
+                "l2_similarity": float(raw.get("l2_similarity", 0.0) or 0.0),
+                "l2_distance": float(raw.get("l2_distance", 0.0) or 0.0),
+                "cosine": float(raw.get("cosine", 0.0) or 0.0),
+                "correlation": float(raw.get("correlation", 0.0) or 0.0),
+            }
+        )
+    return rows
+
+
+def _persistence_vector_component_label(rows: list[dict[str, object]], limit: int = 7) -> str:
+    if not rows:
+        return "unavailable"
+    parts = [
+        f"{row['method']}:{float(row.get('vector_similarity', 0.0)):.3f}"
+        for row in rows[:limit]
+    ]
+    if len(rows) > limit:
+        parts.append(f"+{len(rows) - limit} more")
+    return ", ".join(parts)
+
+
+def _topological_similarity_summary(query_topology: dict[str, object], memory_topology: dict[str, object], row: dict[str, object]) -> dict[str, object]:
     q_sig = _signature_numeric_vector(query_topology)
     m_sig = _signature_numeric_vector(memory_topology)
     q_free = _free_rank_vector(query_topology)
@@ -5325,6 +5420,10 @@ def _topological_similarity_summary(query_topology: dict[str, object], memory_to
         "persistence_vector_aggregate_similarity": float(vector_report.get("aggregate_similarity", 0.0)) if vector_report.get("available") else 0.0,
         "persistence_vector_component_count": float(vector_report.get("component_count", 0) or 0),
         "persistence_vector_methods": str(",".join(vector_report.get("available_methods", []))) if vector_report.get("available") else "",
+        "persistence_vector_comparison_space": str(vector_report.get("comparison_space", "")) if vector_report.get("available") else "",
+        "persistence_vector_differentiable_note": str(vector_report.get("differentiable_comparison_note", "")) if vector_report.get("available") else "",
+        "persistence_vector_components": _persistence_vector_component_rows(vector_report),
+        "persistence_vector_component_summary": _persistence_vector_component_label(_persistence_vector_component_rows(vector_report)),
         "derived_algebraic_similarity": float(max(0.0, min(1.0, derived_algebraic))),
         "derived_algebraic_components_available": float(1.0 if required_components_available else 0.0),
     }

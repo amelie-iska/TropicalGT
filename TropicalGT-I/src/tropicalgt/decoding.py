@@ -58,9 +58,13 @@ def encode_record_bytes_reverse(
     graph_autoregressive: bool = False,
     seed: int = 0,
 ) -> tuple[torch.Tensor, torch.Tensor]:
-    text = record.autoregressive_text(seed=seed, direction="forward") if graph_autoregressive else record.text
-    ids = [b + 1 for b in text.encode("utf-8", "ignore")]
-    ids.reverse()
+    if graph_autoregressive:
+        text = record.autoregressive_text(seed=seed, direction="reverse")
+        ids = [b + 1 for b in text.encode("utf-8", "ignore")]
+    else:
+        text = record.text
+        ids = [b + 1 for b in text.encode("utf-8", "ignore")]
+        ids.reverse()
     return encode_byte_ids(ids, seq_len)
 
 
@@ -184,9 +188,13 @@ def _agreement_terms(
     candidate_counts: list[int] = []
     verified_counts: list[int] = []
     for batch_idx, record in enumerate(records):
-        text = record.autoregressive_text(seed=seed, direction="forward") if graph_autoregressive else record.text
-        ids = [b + 1 for b in text.encode("utf-8", "ignore")]
-        n = min(len(ids), seq_len + 1)
+        forward_text = record.autoregressive_text(seed=seed, direction="forward") if graph_autoregressive else record.text
+        reverse_text = record.autoregressive_text(seed=seed, direction="reverse") if graph_autoregressive else record.text
+        ids = [b + 1 for b in forward_text.encode("utf-8", "ignore")]
+        reverse_ids = [b + 1 for b in reverse_text.encode("utf-8", "ignore")]
+        if not graph_autoregressive:
+            reverse_ids.reverse()
+        n = min(len(ids), len(reverse_ids), seq_len + 1)
         if n < 3:
             continue
         meet_indices = _selected_meet_indices(n, config.split_ratio, config.max_meet_points)
@@ -196,10 +204,11 @@ def _agreement_terms(
         point_rows = []
         for meet_index in meet_indices:
             f_pos = meet_index - 1
-            r_pos = n - 2 - meet_index
-            if r_pos < 0 or f_pos < 0 or r_pos >= reverse_logits.shape[1]:
+            r_pos = meet_index - 1 if graph_autoregressive else n - 2 - meet_index
+            if r_pos < 0 or f_pos < 0 or r_pos >= reverse_logits.shape[1] or meet_index >= len(ids) or r_pos + 1 >= len(reverse_ids):
                 continue
             true_token = int(ids[meet_index])
+            reverse_true_token = int(reverse_ids[r_pos + 1])
             rev_dist = reverse_logits[batch_idx, r_pos].float()
             rev_log_probs = F.log_softmax(rev_dist, dim=-1)
             rev_pred = int(rev_dist.argmax().detach().cpu())
@@ -214,11 +223,11 @@ def _agreement_terms(
                 loss_i = _distribution_agreement(fwd_log_probs, rev_log_probs, config.agreement_kind)
                 losses.append(loss_i)
                 agreement_value = _float_detached(loss_i)
-                true_log_probs.append(0.5 * (fwd_log_probs[true_token] + rev_log_probs[true_token]))
+                true_log_probs.append(0.5 * (fwd_log_probs[true_token] + rev_log_probs[reverse_true_token]))
                 if fwd_pred == rev_pred:
                     matches += 1
             else:
-                true_log_probs.append(rev_log_probs[true_token])
+                true_log_probs.append(rev_log_probs[reverse_true_token])
             valid += 1
             point_rows.append(
                 {
@@ -227,6 +236,9 @@ def _agreement_terms(
                     "reverse_position": int(r_pos),
                     "true_token": int(true_token),
                     "true_byte": int(true_token - 1),
+                    "reverse_true_token": int(reverse_true_token),
+                    "reverse_true_byte": int(reverse_true_token - 1),
+                    "same_true_token_alignment": bool(true_token == reverse_true_token),
                     "forward_argmax": fwd_pred,
                     "reverse_argmax": rev_pred,
                     "argmax_match": bool(fwd_pred == rev_pred) if fwd_pred is not None else False,

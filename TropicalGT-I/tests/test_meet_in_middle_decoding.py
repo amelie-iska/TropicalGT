@@ -33,6 +33,44 @@ def test_reverse_encoding_uses_same_shifted_byte_convention():
     assert forward_y.ne(0).sum().item() == y_rev.ne(0).sum().item()
 
 
+
+
+def test_graph_reverse_encoding_uses_reverse_graph_order_not_byte_reversed_forward_order():
+    record = GraphRecord.from_mapping(
+        {
+            "record_id": "causal-reverse-encoding",
+            "text": "one two three",
+            "graph_json": {
+                "nodes": [
+                    {"id": "a", "type": "problem", "text": "one"},
+                    {"id": "b", "type": "reasoning_step", "text": "two"},
+                    {"id": "c", "type": "answer", "text": "three"},
+                ],
+                "edges": [
+                    {"source": "a", "target": "b", "type": "depends_on"},
+                    {"source": "b", "target": "c", "type": "supports_answer"},
+                ],
+            },
+        }
+    )
+    forward_text = record.autoregressive_text(seed=0, direction="forward")
+    reverse_text = record.autoregressive_text(seed=0, direction="reverse")
+    forward_lines = forward_text.splitlines()
+    reverse_lines = reverse_text.splitlines()
+    assert forward_lines[0].startswith("[problem] one")
+    assert forward_lines[-1].startswith("[answer] three")
+    assert reverse_lines[0].startswith("[answer] three")
+    assert reverse_lines[-1].startswith("[problem] one")
+
+    x_rev, y_rev = encode_record_bytes_reverse(record, 48, graph_autoregressive=True)
+    reverse_ids = [b + 1 for b in reverse_text.encode("utf-8", "ignore")]
+    forward_ids = [b + 1 for b in forward_text.encode("utf-8", "ignore")]
+    byte_reversed_forward = list(reversed(forward_ids))
+    assert x_rev[0].item() == reverse_ids[0]
+    assert y_rev[0].item() == reverse_ids[1]
+    assert reverse_ids[:16] != byte_reversed_forward[:16]
+
+
 def test_meet_in_middle_batch_reports_shared_weight_reverse_pass():
     records = [FixtureGraphDataset(2)[0], FixtureGraphDataset(2)[1]]
     tokenizer = TokenGTTokenizer(feature_dim=48)
@@ -71,7 +109,7 @@ def test_meet_in_middle_batch_reports_shared_weight_reverse_pass():
     assert 0.0 <= report["metrics"]["mim_truth_verification_rate"] <= 1.0
     assert len(report["records"]) == 2
     assert {"context_mode", "reverse_context_mode", "meet_points"} <= set(report["records"][0])
-    assert {"meet_index", "forward_position", "reverse_position", "true_token"} <= set(report["records"][0]["meet_points"][0])
+    assert {"meet_index", "forward_position", "reverse_position", "true_token", "reverse_true_token", "same_true_token_alignment"} <= set(report["records"][0]["meet_points"][0])
 
 
 def test_causal_graph_records_have_forward_and_reverse_causal_orders():
@@ -102,6 +140,32 @@ def test_causal_graph_records_have_forward_and_reverse_causal_orders():
     assert original_reverse == ["c", "b", "a"]
     assert record.graph_json["edges"][0]["causal"] is True
     assert record.graph_json["edges"][0]["directed"] is True
+
+
+
+
+def test_explicit_noncausal_edge_overrides_directed_flag_for_roar():
+    record = GraphRecord.from_mapping(
+        {
+            "record_id": "noncausal-directed",
+            "text": "similar nodes are not a causal DAG",
+            "graph_json": {
+                "nodes": [
+                    {"id": "a", "text": "alpha"},
+                    {"id": "b", "text": "beta"},
+                ],
+                "edges": [
+                    {"source": "a", "target": "b", "type": "similar", "directed": True, "causal": False},
+                ],
+            },
+        }
+    )
+    metadata = record.metadata or {}
+    assert record.graph_json["edges"][0]["causal"] is False
+    assert record.graph_json["edges"][0]["directed"] is False
+    assert metadata["noncausal_edge_count"] == 1
+    assert metadata["decoding_order_kind"] == "random_autoregressive"
+    assert metadata["decoding_reverse_order_kind"] == "reverse_random_autoregressive"
 
 
 def test_cyclic_or_noncausal_graph_records_use_roar_random_order():

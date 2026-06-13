@@ -480,6 +480,23 @@ def _multigraded_free_resolution_report(module: dict[str, Any]) -> dict[str, Any
     be = _buchsbaum_eisenbud_complex_report(module, matrices, determinantal)
     m2 = _macaulay2_style_resolution_report(module, matrices, determinantal, fitting, be)
     real_resolution = _real_free_resolution_backend_report(module)
+    staircase_resolution = None
+    staircase = m2.get("staircase", {}) if isinstance(m2.get("staircase", {}), dict) else {}
+    selected = staircase.get("selected_real_resolution") if isinstance(staircase.get("selected_real_resolution"), dict) else None
+    if selected and selected.get("available"):
+        staircase_resolution = selected
+    minimal_resolution = {
+        "available": False,
+        "reason": "minimal multigraded free resolutions, Groebner bases, ideal grade/depth, and certified Buchsbaum-Eisenbud multipliers require a real CAS backend such as Macaulay2/Singular/Sage plus optional BEMultipliers; no Python diagnostic is substituted",
+    }
+    if staircase_resolution is not None:
+        minimal_resolution = {
+            "available": True,
+            "scope": staircase_resolution.get("scope", "auxiliary_two_variable_staircase_monomial_ideal"),
+            "not_full_persistence_module_resolution": True,
+            "reason": "real minimal free resolution is certified only for the named two-variable monomial staircase ideal; the ambient chain presentation remains not a full persistence-module resolution",
+            "resolution": staircase_resolution,
+        }
     return {
         "ring": module.get("coefficient_ring"),
         "method": "finite_multigraded_chain_presentation_diagnostics",
@@ -495,11 +512,8 @@ def _multigraded_free_resolution_report(module: dict[str, Any]) -> dict[str, Any
         "chain_presentation_diagnostics": m2,
         "macaulay2_style": m2,
         "real_free_resolution": real_resolution,
-        "minimal_free_resolution": {
-            "available": False,
-            "reason": "minimal multigraded free resolutions, Groebner bases, ideal grade/depth, and certified Buchsbaum-Eisenbud multipliers require a real CAS backend such as Macaulay2/Singular/Sage plus optional BEMultipliers; no Python diagnostic is substituted",
-        },
-        "interpretation": "Exact multigraded free chain presentation over the reported polynomial ring. Determinantal/Fitting data is computed from bounded monomial boundary matrices. This object is not a free resolution; real resolutions are unavailable unless a CAS certificate is attached.",
+        "minimal_free_resolution": minimal_resolution,
+        "interpretation": "Exact multigraded free chain presentation over the reported polynomial ring. Determinantal/Fitting data is computed from bounded monomial boundary matrices. This object is not a free resolution; real resolutions are unavailable unless a CAS certificate is attached. Certified two-variable staircase resolutions are reported only as scoped monomial-ideal resolutions when applicable.",
     }
 
 
@@ -635,23 +649,191 @@ def _two_variable_staircase_report(generators: list[dict[str, Any]], variables: 
             points.append((int(multidegree[0]), int(multidegree[1])))
     counts = Counter(points)
     unique = sorted(counts)
-    antichain = []
-    for pnt in unique:
-        dominated = any(q != pnt and q[0] <= pnt[0] and q[1] <= pnt[1] for q in unique)
-        if not dominated:
-            antichain.append(pnt)
-    antichain = sorted(antichain, key=lambda item: (item[0], item[1]))
-    lcms = []
-    for left, right in zip(antichain, antichain[1:]):
-        lcm = (max(left[0], right[0]), max(left[1], right[1]))
-        lcms.append({"from": [list(left), list(right)], "lcm_bidegree": list(lcm), "syzygy_candidate": f"lcm({variables[0]}^{left[0]}{variables[1]}^{left[1]}, {variables[0]}^{right[0]}{variables[1]}^{right[1]})"})
+    antichain = _minimal_bidegree_antichain(unique)
+    lcms = _adjacent_lcm_rows(antichain, variables)
+    full_resolution = _bivariate_staircase_resolution_from_points(
+        unique,
+        variables,
+        ideal_name="displayed_bidegree_ideal",
+        source="all displayed chain-generator bidegrees",
+        auxiliary=False,
+    )
+    positive_points = [pnt for pnt in unique if pnt != (0, 0) and (pnt[0] > 0 or pnt[1] > 0)]
+    positive_resolution = _bivariate_staircase_resolution_from_points(
+        positive_points,
+        variables,
+        ideal_name="positive_event_staircase_ideal",
+        source="nonzero displayed bidegrees; used only as an auxiliary event ideal",
+        auxiliary=True,
+    )
+    selected_resolution = full_resolution if full_resolution.get("available") else positive_resolution
     return {
         "available": True,
         "variables": variables,
         "generator_bidegrees": [{"bidegree": list(pnt), "multiplicity": int(counts[pnt])} for pnt in unique],
         "minimal_antichain_candidates": [list(pnt) for pnt in antichain],
         "adjacent_lcm_syzygy_candidates": lcms,
-        "interpretation": "Miller-Sturmfels two-variable staircase candidate: antichain generators and adjacent lcm syzygies are computed from displayed bidegrees; minimal ideal/resolution status is not asserted without CAS.",
+        "minimal_ideal_resolution": full_resolution,
+        "positive_radius_event_ideal_resolution": positive_resolution,
+        "selected_real_resolution": selected_resolution if selected_resolution.get("available") else None,
+        "interpretation": (
+            "For a nonunit monomial ideal in F2[x,y], the two-variable staircase theorem gives the exact minimal free "
+            "resolution of S/I using minimal antichain generators and adjacent lcm first syzygies. This resolution is "
+            "reported only for the monomial ideal named in the certificate; it is not rebranded as a full persistence-module "
+            "resolution unless an external CAS backend certifies that stronger object."
+        ),
+    }
+
+
+def _minimal_bidegree_antichain(points: Iterable[tuple[int, int]]) -> list[tuple[int, int]]:
+    unique = sorted({(int(a), int(b)) for a, b in points})
+    antichain = []
+    for pnt in unique:
+        dominated = any(q != pnt and q[0] <= pnt[0] and q[1] <= pnt[1] for q in unique)
+        if not dominated:
+            antichain.append(pnt)
+    return sorted(antichain, key=lambda item: (-item[0], item[1]))
+
+
+def _adjacent_lcm_rows(antichain: list[tuple[int, int]], variables: list[str]) -> list[dict[str, Any]]:
+    rows = []
+    for left, right in zip(antichain, antichain[1:]):
+        lcm = (max(left[0], right[0]), max(left[1], right[1]))
+        rows.append(
+            {
+                "from": [list(left), list(right)],
+                "lcm_bidegree": list(lcm),
+                "syzygy_candidate": f"lcm({_multi_monomial_named(left, variables)}, {_multi_monomial_named(right, variables)})",
+            }
+        )
+    return rows
+
+
+def _bivariate_staircase_resolution_from_points(
+    points: Iterable[tuple[int, int]],
+    variables: list[str],
+    *,
+    ideal_name: str,
+    source: str,
+    auxiliary: bool,
+) -> dict[str, Any]:
+    antichain = _minimal_bidegree_antichain(points)
+    if not antichain:
+        return {
+            "available": False,
+            "ideal_name": ideal_name,
+            "source": source,
+            "reason": "no bidegrees remain after forming the staircase antichain",
+        }
+    if (0, 0) in antichain:
+        return {
+            "available": False,
+            "ideal_name": ideal_name,
+            "source": source,
+            "minimal_generators": [{"bidegree": [0, 0], "monomial": "1"}],
+            "reason": "the antichain contains 1, so the monomial ideal is the unit ideal and the quotient S/I is zero; no nontrivial staircase resolution is rendered",
+        }
+
+    generator_rows = [
+        {"index": idx, "bidegree": list(pnt), "monomial": _multi_monomial_named(pnt, variables)}
+        for idx, pnt in enumerate(antichain)
+    ]
+    syzygy_rows = []
+    d2_entries = []
+    for idx, (left, right) in enumerate(zip(antichain, antichain[1:])):
+        lcm = (max(left[0], right[0]), max(left[1], right[1]))
+        left_entry = (lcm[0] - left[0], lcm[1] - left[1])
+        right_entry = (lcm[0] - right[0], lcm[1] - right[1])
+        syzygy_rows.append(
+            {
+                "index": idx,
+                "between_generators": [idx, idx + 1],
+                "lcm_bidegree": list(lcm),
+                "lcm_monomial": _multi_monomial_named(lcm, variables),
+                "relation": f"{_multi_monomial_named(left_entry, variables)}*e_{idx} + {_multi_monomial_named(right_entry, variables)}*e_{idx + 1}",
+            }
+        )
+        d2_entries.extend(
+            [
+                {"row": idx, "column": idx, "entry": _multi_monomial_named(left_entry, variables), "exponent": list(left_entry)},
+                {"row": idx + 1, "column": idx, "entry": _multi_monomial_named(right_entry, variables), "exponent": list(right_entry)},
+            ]
+        )
+
+    f1_terms = [f"S(-{a},{b})" for a, b in antichain]
+    f2_terms = [f"S(-{row['lcm_bidegree'][0]},{row['lcm_bidegree'][1]})" for row in syzygy_rows]
+    free_modules = [
+        {"name": "F_0", "rank": 1, "display": "F_0 = S", "shifts": [{"multidegree": [0, 0], "multiplicity": 1, "summand": "S"}]},
+        {
+            "name": "F_1",
+            "rank": len(generator_rows),
+            "display": "F_1 = " + " + ".join(f1_terms[:12]) + (" + ..." if len(f1_terms) > 12 else ""),
+            "shifts": [{"multidegree": row["bidegree"], "multiplicity": 1, "summand": f"S(-{row['bidegree'][0]},{row['bidegree'][1]})"} for row in generator_rows],
+        },
+    ]
+    if syzygy_rows:
+        free_modules.append(
+            {
+                "name": "F_2",
+                "rank": len(syzygy_rows),
+                "display": "F_2 = " + " + ".join(f2_terms[:12]) + (" + ..." if len(f2_terms) > 12 else ""),
+                "shifts": [
+                    {"multidegree": row["lcm_bidegree"], "multiplicity": 1, "summand": f"S(-{row['lcm_bidegree'][0]},{row['lcm_bidegree'][1]})"}
+                    for row in syzygy_rows
+                ],
+            }
+        )
+
+    betti_rows = [{"homological_degree": 0, "multidegree": [0, 0], "rank": 1}]
+    betti_rows.extend({"homological_degree": 1, "multidegree": row["bidegree"], "rank": 1} for row in generator_rows)
+    betti_rows.extend({"homological_degree": 2, "multidegree": row["lcm_bidegree"], "rank": 1} for row in syzygy_rows)
+    hilbert_terms = [{"sign": 1, "bidegree": [0, 0], "monomial": "1"}]
+    hilbert_terms.extend({"sign": -1, "bidegree": row["bidegree"], "monomial": row["monomial"]} for row in generator_rows)
+    hilbert_terms.extend({"sign": 1, "bidegree": row["lcm_bidegree"], "monomial": row["lcm_monomial"]} for row in syzygy_rows)
+
+    return {
+        "available": True,
+        "ideal_name": ideal_name,
+        "source": source,
+        "scope": "auxiliary_two_variable_staircase_monomial_ideal" if auxiliary else "displayed_two_variable_staircase_monomial_ideal",
+        "not_full_persistence_module_resolution": True,
+        "ring": f"F2[{variables[0]},{variables[1]}]",
+        "object_resolved": f"S/{ideal_name}",
+        "ideal_generators": generator_rows,
+        "minimal_generators": generator_rows,
+        "adjacent_lcm_syzygies": syzygy_rows,
+        "free_modules": free_modules,
+        "betti_table_rows": betti_rows,
+        "differentials": [
+            {
+                "name": "d1",
+                "display": "d1: F_1 -> F_0",
+                "shape": [1, len(generator_rows)],
+                "entries": [{"row": 0, "column": row["index"], "entry": row["monomial"], "exponent": row["bidegree"]} for row in generator_rows],
+            },
+            {
+                "name": "d2",
+                "display": "d2: F_2 -> F_1",
+                "shape": [len(generator_rows), len(syzygy_rows)],
+                "entries": d2_entries,
+            },
+        ],
+        "fitting_ideals": {
+            "Fitt_0": {"generators": [row["monomial"] for row in generator_rows], "equals": ideal_name},
+            "Fitt_j_for_j_ge_1": {"generators": ["1"], "equals": "unit ideal for the quotient presentation"},
+        },
+        "hilbert_series_numerator_terms": hilbert_terms,
+        "buchsbaum_eisenbud_diagnostics": {
+            "minimality_certified": True,
+            "exactness_certified": True,
+            "certificate": "two-variable monomial staircase resolution: adjacent lcm syzygies give the Hilbert-Burch/Miller-Sturmfels minimal resolution of S/I",
+            "d1_d2_zero_over_F2": True,
+            "grade_depth_requires_cas_for_general_determinantal_ideals": False,
+        },
+        "derived_category_note": (
+            "This finite free complex is an actual object of D^b(gr-F2[x,y]) resolving the named quotient S/I. "
+            "Analogical derived comparisons may use this certificate only at the stated ideal scope."
+        ),
     }
 
 def _monomial_boundary_matrices(module: dict[str, Any]) -> dict[str, dict[str, Any]]:

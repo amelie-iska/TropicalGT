@@ -1,6 +1,6 @@
 import torch
 
-from tropicalgt.algebra import compute_topological_algebra_report, summarize_algebra_reports
+from tropicalgt.algebra import compute_level_radius_bifiltration_report, compute_topological_algebra_report, summarize_algebra_reports
 from tropicalgt.data import FixtureGraphDataset
 from tropicalgt.model import TropicalGTConfig, TropicalGTModel
 from tropicalgt.records import GraphRecord
@@ -45,6 +45,65 @@ def test_topological_algebra_report_has_multiparameter_data():
     assert chain["real_free_resolution"]["candidate_backend_available"] in {True, False}
     summary = summarize_algebra_reports([report])
     assert summary["algebra_reports"] == 1.0
+
+
+def test_level_radius_bifiltration_reports_scoped_real_staircase_resolution():
+    growth = [
+        {
+            "level": 0,
+            "filtered_simplicial_object": {
+                "simplices": [{"simplex": ["root"], "dimension": 0, "filtration": 0.0}],
+            },
+        },
+        {
+            "level": 1,
+            "filtered_simplicial_object": {
+                "simplices": [
+                    {"simplex": ["root"], "dimension": 0, "filtration": 0.0},
+                    {"simplex": ["a"], "dimension": 0, "filtration": 0.6},
+                ],
+            },
+        },
+        {
+            "level": 2,
+            "filtered_simplicial_object": {
+                "simplices": [
+                    {"simplex": ["root"], "dimension": 0, "filtration": 0.0},
+                    {"simplex": ["b"], "dimension": 0, "filtration": 0.3},
+                    {"simplex": ["a"], "dimension": 0, "filtration": 0.6},
+                    {"simplex": ["a", "b"], "dimension": 1, "filtration": 0.7},
+                ],
+            },
+        },
+    ]
+    report = compute_level_radius_bifiltration_report(growth, max_simplices=32)
+    assert report["coefficient_ring"] == "F2[x_level,x_radius]"
+    assert report["grid_axes"][0] == [0, 1, 2]
+    assert report["radius_grade_values"] == {0: 0.0, 1: 0.3, 2: 0.6, 3: 0.7}
+    chain = report["chain_presentation_diagnostics"]
+    assert chain["not_a_free_resolution"] is True
+    minimal = chain["minimal_free_resolution"]
+    assert minimal["available"] is True
+    assert minimal["not_full_persistence_module_resolution"] is True
+    assert minimal["scope"] == "auxiliary_two_variable_staircase_monomial_ideal"
+    resolution = minimal["resolution"]
+    assert resolution["ring"] == "F2[x_level,x_radius]"
+    assert [row["display"] for row in resolution["free_modules"]] == [
+        "F_0 = S",
+        "F_1 = S(-2,1) + S(-1,2)",
+        "F_2 = S(-2,2)",
+    ]
+    assert resolution["differentials"][0]["entries"] == [
+        {"row": 0, "column": 0, "entry": "x_level^2*x_radius", "exponent": [2, 1]},
+        {"row": 0, "column": 1, "entry": "x_level*x_radius^2", "exponent": [1, 2]},
+    ]
+    assert resolution["differentials"][1]["entries"] == [
+        {"row": 0, "column": 0, "entry": "x_radius", "exponent": [0, 1]},
+        {"row": 1, "column": 0, "entry": "x_level", "exponent": [1, 0]},
+    ]
+    assert resolution["buchsbaum_eisenbud_diagnostics"]["exactness_certified"] is True
+    assert "D^b(gr-F2[x,y])" in resolution["derived_category_note"]
+
 
 
 def test_ripser_backend_is_selected_when_requested():
