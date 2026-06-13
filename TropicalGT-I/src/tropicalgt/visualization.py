@@ -4691,16 +4691,16 @@ def _analogical_pair_figure(
             "<br><sup>query trajectory complex to retrieved memory complex</sup>"
             "<br><sup>filtered-complex certificate from model-probability Jensen-Shannon assignment; gold=preserved 1-simplices, rose=vertex-only correspondences; slider filters domain/codomain/certificate edges</sup>"
         ),
-        height=960,
-        margin=dict(t=154, l=24, r=24, b=152),
+        height=1040,
+        margin=dict(t=154, l=24, r=24, b=164),
         scene=dict(
-            domain=dict(x=[0.0, 0.68], y=[0.24, 0.98]),
+            domain=dict(x=[0.0, 0.62], y=[0.24, 0.98]),
             xaxis=dict(title="domain / codomain embedding slabs", range=[-1.05, slab + 1.05]),
             yaxis=dict(title="PCoA/MDS-2", range=[-1.35, 1.35]),
             zaxis=dict(title="PCoA/MDS-3", range=[-1.35, 1.35]),
             camera=dict(eye=dict(x=2.05, y=1.55, z=1.05), center=dict(x=0.08, y=0.0, z=0.0)),
         ),
-        legend=dict(itemsizing="constant", x=0.70, y=0.98, xanchor="left", yanchor="top"),
+        legend=dict(itemsizing="constant", x=0.64, y=0.98, xanchor="left", yanchor="top"),
     )
     if not bool(sim_map.get("is_simplicial_on_displayed_skeleton")):
         fig.add_annotation(
@@ -4732,6 +4732,8 @@ def _analogical_quality_table_trace(
     status = "filtered correspondence certificate passed" if bool(sim_map.get("is_filtered_simplicial_map")) else "filtered correspondence certificate failed"
     derived = sim_map.get("derived_invariant_comparison", {}) if isinstance(sim_map.get("derived_invariant_comparison"), dict) else {}
     source_label = str(sim_map.get("map_source", "unknown")).replace("model_probability_jensen_shannon_assignment", "prob-JS assignment")
+    vector_methods_raw = str(sim.get("persistence_vector_methods", "")) or "unavailable"
+    vector_methods_display = vector_methods_raw if vector_methods_raw == "unavailable" else ",<br>".join(part.strip() for part in vector_methods_raw.split(",") if part.strip())
     rows = [
         ("rank", str(idx + 1)),
         ("memory", _short_label(str(row.get("memory_id", idx)), 24)),
@@ -4743,7 +4745,7 @@ def _analogical_quality_table_trace(
         ("persistence-landscape cosine", f"{float(sim.get('persistence_landscape_cosine', 0.0)):.4f}"),
         ("landscape vector dims", f"{int(float(sim.get('persistence_landscape_overlap_dim', 0.0)))}"),
         ("vector topology aggregate", f"{float(sim.get('persistence_vector_aggregate_similarity', 0.0)):.4f}"),
-        ("vector methods", str(sim.get('persistence_vector_methods', '')) or 'unavailable'),
+        ("vector methods", vector_methods_display),
         ("vector method count", f"{int(float(sim.get('persistence_vector_component_count', 0.0)))}"),
         ("derived/algebraic similarity", f"{float(sim.get('derived_algebraic_similarity', 0.0)):.4f}"),
         ("coarse signature cosine", f"{float(sim.get('derived_signature_similarity', 0.0)):.4f}"),
@@ -4759,19 +4761,19 @@ def _analogical_quality_table_trace(
         ("display status", status),
     ]
     return go.Table(
-        domain=dict(x=[0.70, 0.995], y=[0.36, 0.96]),
+        domain=dict(x=[0.64, 0.995], y=[0.24, 0.96]),
         header=dict(
             values=["certificate diagnostic", "value"],
             fill_color="#111827",
-            font=dict(color="#e8eef8", size=11),
+            font=dict(color="#e8eef8", size=12),
             align="left",
         ),
         cells=dict(
             values=[[row[0] for row in rows], [row[1] for row in rows]],
             fill_color=[["#0f172a"] * len(rows), ["#0b1220"] * len(rows)],
-            font=dict(color="#dbeafe", size=10),
+            font=dict(color="#dbeafe", size=11),
             align="left",
-            height=22,
+            height=30,
         ),
         name="filtered-complex certificate diagnostics",
     )

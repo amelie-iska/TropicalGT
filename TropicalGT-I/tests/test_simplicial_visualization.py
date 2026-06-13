@@ -760,8 +760,8 @@ def test_analogical_memory_visualization_renders_simplicial_maps(tmp_path: Path)
     assert "preserved 1-simplex correspondences" in html
     assert "vertex-only correspondences (legend only)" in html
     compact = html.replace(" ", "")
-    assert '"domain":{"x":[0.0,0.68],"y":[0.24,0.98]}' in compact
-    assert '"domain":{"x":[0.7,0.995],"y":[0.36,0.96]}' in compact
+    assert '"domain":{"x":[0.0,0.62],"y":[0.24,0.98]}' in compact
+    assert '"domain":{"x":[0.64,0.995],"y":[0.24,0.96]}' in compact
     assert "simplicial-object-panel" in html
     assert '<input id="filtration-slider"' in html
     assert '<div class="filtration-controls"' in html
