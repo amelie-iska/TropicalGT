@@ -733,6 +733,21 @@ def test_analogical_memory_visualization_renders_simplicial_maps(tmp_path: Path)
                 "retrieval_score": 0.9,
                 "embedding_similarity": 0.8,
                 "signature_similarity": 0.7,
+                "base_retrieval_score": 0.5,
+                "persistence_landscape_score_contribution": 0.1,
+                "persistence_vector_score_contribution": 0.3,
+                "retrieval_score_components": {
+                    "embedding": 0.2,
+                    "signature": 0.2,
+                    "quality": 0.1,
+                    "persistence_landscape": 0.1,
+                    "persistence_vector_family": 0.3,
+                },
+                "retrieval_weights": {
+                    "persistence_landscape_weight": 0.08,
+                    "persistence_vector_weight": 0.18,
+                    "persistence_vector_includes_landscape": False,
+                },
                 "quality_score": 0.6,
                 "trajectory_probability_filtered_simplicial_object": obj,
                 "topological_algebra": topo,
@@ -744,6 +759,17 @@ def test_analogical_memory_visualization_renders_simplicial_maps(tmp_path: Path)
                 "retrieval_score": 0.7,
                 "embedding_similarity": 0.6,
                 "signature_similarity": 0.5,
+                "base_retrieval_score": 0.4,
+                "persistence_landscape_score_contribution": 0.08,
+                "persistence_vector_score_contribution": 0.22,
+                "retrieval_score_components": {
+                    "embedding": 0.16,
+                    "signature": 0.14,
+                    "quality": 0.1,
+                    "persistence_landscape": 0.08,
+                    "persistence_vector_family": 0.22,
+                },
+                "retrieval_weights": {"persistence_landscape_weight": 0.08, "persistence_vector_weight": 0.18},
                 "quality_score": 0.4,
                 "trajectory_probability_filtered_simplicial_object": obj,
                 "topological_algebra": topo,
@@ -766,6 +792,10 @@ def test_analogical_memory_visualization_renders_simplicial_maps(tmp_path: Path)
     assert "persistence-landscape L2 similarity" in html
     assert "persistence-landscape cosine" in html
     assert "vertex-only correspondences" in html
+    assert "base retrieval" in html
+    assert "landscape contribution" in html
+    assert "vector-family contribution" in html
+    assert "retrieval weights" in html
     assert "preserved 1-simplex correspondence" in html
     assert "certificate diagnostic" in html
     assert "preserved 1-simplex correspondences" in html
@@ -787,7 +817,9 @@ def test_analogical_memory_visualization_renders_simplicial_maps(tmp_path: Path)
     assert "landscape cosine" in index_html
     assert "vector aggregate" in index_html
     assert "vectorized GUDHI family" in index_html
-    assert "Landscape, BettiCurve, Silhouette" in index_html
+    assert "BettiCurve, Silhouette" in index_html
+    assert "landscape contrib." in index_html
+    assert "vector contrib." in index_html
     assert "rank 2" in rank2_html
     assert '<input id="filtration-slider"' in rank2_html
     assert len(maps["maps"]) == 2
@@ -800,12 +832,20 @@ def test_analogical_memory_visualization_renders_simplicial_maps(tmp_path: Path)
     assert maps["maps"][0]["codomain_complex_source"] == "trajectory_probability_filtered_simplicial_object"
     assert maps["maps"][0]["simplicial_map_certificate"]["source"] == "finite_filtered_complex_check"
     assert maps["maps"][0]["derived_signature_similarity"] >= 0.0
+    assert maps["maps"][0]["persistence_vector_representation_similarity"]["includes_landscape"] is False
     assert maps["maps"][0]["persistence_landscape_vector_available"] == 1.0
     assert maps["maps"][0]["persistence_landscape_l2_similarity"] > 0.0
     assert maps["maps"][0]["persistence_landscape_overlap_dim"] > 0.0
     assert maps["maps"][0]["persistence_vector_component_count"] >= 2.0
+    assert maps["maps"][0]["base_retrieval_score"] == 0.5
+    assert maps["maps"][0]["persistence_landscape_score_contribution"] == 0.1
+    assert maps["maps"][0]["persistence_vector_score_contribution"] == 0.3
+    assert maps["maps"][0]["retrieval_score_components"]["persistence_vector_family"] == 0.3
+    assert maps["maps"][0]["retrieval_weights"]["persistence_vector_weight"] == 0.18
     assert "persistence_vector_components" in maps["maps"][0]
-    assert any(row["method"] == "landscape" for row in maps["maps"][0]["persistence_vector_components"])
+    component_methods = {row["method"] for row in maps["maps"][0]["persistence_vector_components"]}
+    assert "landscape" not in component_methods
+    assert {"betti_curve", "silhouette"}.issubset(component_methods)
     assert "persistence_vector_comparison_space" in maps["maps"][0]
     assert "differentiable" in maps["maps"][0]["persistence_vector_differentiable_note"]
     assert maps["maps"][0]["derived_invariant_comparison"]["persistence_landscape_vector_available"] is True

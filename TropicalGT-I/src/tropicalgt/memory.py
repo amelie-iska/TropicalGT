@@ -190,7 +190,8 @@ class AnalogicalMemoryBank:
         embedding_weight: float = 0.55,
         signature_weight: float = 0.35,
         score_weight: float = 0.10,
-        landscape_weight: float = 0.18,
+        landscape_weight: float = 0.08,
+        vector_representation_weight: float | None = None,
         diversity_weight: float = 0.18,
         query_topology: dict[str, Any] | None = None,
         exclude_record_ids: set[str] | None = None,
@@ -202,6 +203,9 @@ class AnalogicalMemoryBank:
         exclude_record_ids = {str(value) for value in (exclude_record_ids or set())}
         exclude_memory_ids = {str(value) for value in (exclude_memory_ids or set())}
         exclude_sources = {str(value) for value in (exclude_sources or set())}
+        legacy_vector_alias_mode = vector_representation_weight is None
+        landscape_only_weight = 0.0 if legacy_vector_alias_mode else float(landscape_weight or 0.0)
+        vector_weight = float(landscape_weight if legacy_vector_alias_mode else (vector_representation_weight or 0.0))
         query_embedding = _normalize(np.asarray(embedding, dtype=float))
         query_signature = _normalize(np.asarray(signature_vector, dtype=float))
         query_topology = query_topology if isinstance(query_topology, dict) else {}
@@ -217,13 +221,39 @@ class AnalogicalMemoryBank:
             if not isinstance(memory_topology, dict):
                 memory_topology = record.topological_algebra if isinstance(record.topological_algebra, dict) else {}
             landscape_report = persistence_landscape_vector_similarity(query_topology, memory_topology)
-            vector_report = persistence_vector_representation_similarity(query_topology, memory_topology)
+            vector_includes_landscape = bool(legacy_vector_alias_mode or landscape_only_weight <= 0.0)
+            vector_report = persistence_vector_representation_similarity(
+                query_topology,
+                memory_topology,
+                include_landscape=vector_includes_landscape,
+            )
             landscape_sim = float(landscape_report.get("l2_similarity", 0.0)) if landscape_report.get("available") else 0.0
-            vector_sim = float(vector_report.get("aggregate_similarity", 0.0)) if vector_report.get("available") else landscape_sim
+            vector_sim = float(vector_report.get("aggregate_similarity", 0.0)) if vector_report.get("available") else 0.0
             quality = float(record.score) - 0.05 * float(record.nll)
-            retrieval_score = embedding_weight * emb_sim + signature_weight * sig_sim + score_weight * quality
-            if vector_report.get("available") or landscape_report.get("available"):
-                retrieval_score += float(landscape_weight) * vector_sim
+            embedding_contribution = float(embedding_weight) * emb_sim
+            signature_contribution = float(signature_weight) * sig_sim
+            quality_contribution = float(score_weight) * quality
+            landscape_contribution = landscape_only_weight * landscape_sim if landscape_report.get("available") else 0.0
+            vector_contribution = vector_weight * vector_sim if vector_report.get("available") else 0.0
+            if legacy_vector_alias_mode and not vector_report.get("available") and landscape_report.get("available"):
+                vector_contribution = vector_weight * landscape_sim
+            retrieval_score = embedding_contribution + signature_contribution + quality_contribution + landscape_contribution + vector_contribution
+            retrieval_score_components = {
+                "embedding": float(embedding_contribution),
+                "signature": float(signature_contribution),
+                "quality": float(quality_contribution),
+                "persistence_landscape": float(landscape_contribution),
+                "persistence_vector_family": float(vector_contribution),
+            }
+            retrieval_weights = {
+                "embedding_weight": float(embedding_weight),
+                "signature_weight": float(signature_weight),
+                "score_weight": float(score_weight),
+                "persistence_landscape_weight": float(landscape_only_weight),
+                "persistence_vector_weight": float(vector_weight),
+                "persistence_vector_includes_landscape": bool(vector_includes_landscape),
+                "legacy_landscape_weight_alias_mode": bool(legacy_vector_alias_mode),
+            }
             family = _record_family(record.record_id)
             signature_hash = _signature_hash(record.signature_vector)
             trajectory_probability_complex = record_metadata.get("trajectory_probability_filtered_simplicial_object", {})
@@ -237,7 +267,12 @@ class AnalogicalMemoryBank:
                     "record_family": family,
                     "signature_hash": signature_hash,
                     "retrieval_score": float(retrieval_score),
-                    "base_retrieval_score": float(retrieval_score),
+                    "raw_retrieval_score": float(retrieval_score),
+                    "base_retrieval_score": float(embedding_contribution + signature_contribution + quality_contribution),
+                    "retrieval_score_components": retrieval_score_components,
+                    "retrieval_weights": retrieval_weights,
+                    "persistence_landscape_score_contribution": float(landscape_contribution),
+                    "persistence_vector_score_contribution": float(vector_contribution),
                     "embedding_similarity": float(emb_sim),
                     "signature_similarity": float(sig_sim),
                     "persistence_landscape_vector_similarity": landscape_report,
@@ -820,7 +855,12 @@ def _nested_method_value(row: dict[str, Any], path: tuple[str, ...]) -> Any:
     return current
 
 
-def persistence_vector_representations(topology: dict[str, Any], max_dimension: int | None = None) -> dict[str, dict[int, np.ndarray]]:
+def persistence_vector_representations(
+    topology: dict[str, Any],
+    max_dimension: int | None = None,
+    *,
+    include_landscape: bool = True,
+) -> dict[str, dict[int, np.ndarray]]:
     """Return real GUDHI vector-representation features grouped by method and homology dimension."""
 
     if not isinstance(topology, dict):
@@ -831,7 +871,12 @@ def persistence_vector_representations(topology: dict[str, Any], max_dimension: 
     methods = reps.get("methods")
     if not isinstance(methods, dict):
         return {}
-    out: dict[str, dict[int, np.ndarray]] = {name: {} for name in _VECTOR_REPRESENTATION_SPECS}
+    specs = {
+        name: spec
+        for name, spec in _VECTOR_REPRESENTATION_SPECS.items()
+        if include_landscape or name != "landscape"
+    }
+    out: dict[str, dict[int, np.ndarray]] = {name: {} for name in specs}
     for key, row in methods.items():
         try:
             dim = int(key)
@@ -841,7 +886,7 @@ def persistence_vector_representations(topology: dict[str, Any], max_dimension: 
             continue
         if not isinstance(row, dict) or not row.get("available"):
             continue
-        for name, (_source, value_path, _weight) in _VECTOR_REPRESENTATION_SPECS.items():
+        for name, (_source, value_path, _weight) in specs.items():
             values = _flatten_numeric_values(_nested_method_value(row, value_path))
             if values:
                 out[name][dim] = np.asarray(values, dtype=float)
@@ -875,7 +920,12 @@ def _vector_similarity_from_arrays(q_vec: np.ndarray, m_vec: np.ndarray) -> dict
     }
 
 
-def persistence_vector_representation_similarity(query_topology: dict[str, Any], memory_topology: dict[str, Any]) -> dict[str, Any]:
+def persistence_vector_representation_similarity(
+    query_topology: dict[str, Any],
+    memory_topology: dict[str, Any],
+    *,
+    include_landscape: bool = True,
+) -> dict[str, Any]:
     """Compare all available vectorized GUDHI persistence representations.
 
     These are real cached vectors produced from persistence diagrams by GUDHI.
@@ -885,13 +935,18 @@ def persistence_vector_representation_similarity(query_topology: dict[str, Any],
     through persistent homology.
     """
 
-    q_methods = persistence_vector_representations(query_topology)
-    m_methods = persistence_vector_representations(memory_topology)
+    q_methods = persistence_vector_representations(query_topology, include_landscape=include_landscape)
+    m_methods = persistence_vector_representations(memory_topology, include_landscape=include_landscape)
     components: dict[str, Any] = {}
     weighted_sum = 0.0
     weight_total = 0.0
     available_methods: list[str] = []
-    for name, (source, _value_path, default_weight) in _VECTOR_REPRESENTATION_SPECS.items():
+    specs = {
+        name: spec
+        for name, spec in _VECTOR_REPRESENTATION_SPECS.items()
+        if include_landscape or name != "landscape"
+    }
+    for name, (source, _value_path, default_weight) in specs.items():
         q_by_dim = q_methods.get(name, {})
         m_by_dim = m_methods.get(name, {})
         if not q_by_dim or not m_by_dim:
@@ -933,6 +988,7 @@ def persistence_vector_representation_similarity(query_topology: dict[str, Any],
             "available": False,
             "source": "gudhi.representations.vector_methods",
             "reason": "no_shared_vectorized_persistence_representations",
+            "includes_landscape": bool(include_landscape),
             "query_methods": sorted(q_methods.keys()),
             "memory_methods": sorted(m_methods.keys()),
             "components": components,
@@ -941,8 +997,14 @@ def persistence_vector_representation_similarity(query_topology: dict[str, Any],
     return {
         "available": True,
         "source": "gudhi.representations.vector_methods",
-        "comparison_space": "weighted vector-space comparison of GUDHI Landscape, BettiCurve, Silhouette, Entropy, PersistenceLengths, TopologicalVector, and PersistenceImage features",
+        "comparison_space": (
+            "weighted vector-space comparison of GUDHI Landscape, BettiCurve, Silhouette, Entropy, PersistenceLengths, "
+            "TopologicalVector, and PersistenceImage features"
+            if include_landscape
+            else "weighted vector-space comparison of non-landscape GUDHI BettiCurve, Silhouette, Entropy, PersistenceLengths, TopologicalVector, and PersistenceImage features"
+        ),
         "differentiable_comparison_note": "Cosine/L2/correlation over cached vectors are differentiable with respect to the vectors; this code does not backpropagate through GUDHI diagram vectorization.",
+        "includes_landscape": bool(include_landscape),
         "aggregate_similarity": aggregate_similarity,
         "component_count": len(available_methods),
         "available_methods": available_methods,
@@ -1080,7 +1142,7 @@ def _memory_id(record_id: object, embedding: list[float], signature: list[float]
 def _diverse_top_k(rows: list[dict[str, Any]], top_k: int, diversity_weight: float) -> list[dict[str, Any]]:
     if top_k <= 0:
         return []
-    ranked = sorted(rows, key=lambda row: float(row.get("retrieval_score", 0.0)), reverse=True)
+    ranked = sorted(rows, key=lambda row: float(row.get("raw_retrieval_score", row.get("retrieval_score", 0.0))), reverse=True)
     selected: list[dict[str, Any]] = []
     selected_families: set[str] = set()
     selected_signatures: set[str] = set()
@@ -1094,14 +1156,17 @@ def _diverse_top_k(rows: list[dict[str, Any]], top_k: int, diversity_weight: flo
                 penalty += diversity_weight
             if row.get("signature_hash") in selected_signatures:
                 penalty += diversity_weight * 0.5
-            adjusted = float(row.get("base_retrieval_score", row.get("retrieval_score", 0.0))) - penalty
+            raw_score = float(row.get("raw_retrieval_score", row.get("retrieval_score", 0.0)))
+            adjusted = raw_score - penalty
             if adjusted > best_score:
                 best_idx = idx
                 best_score = adjusted
         row = dict(remaining.pop(best_idx))
-        row["retrieval_score"] = float(best_score)
+        raw_score = float(row.get("raw_retrieval_score", row.get("retrieval_score", 0.0)))
+        row["retrieval_score"] = float(raw_score)
+        row["diversity_adjusted_retrieval_score"] = float(best_score)
         row["diversity_adjusted"] = True
-        row["diversity_penalty_applied"] = float(row.get("base_retrieval_score", 0.0)) - float(best_score)
+        row["diversity_penalty_applied"] = float(raw_score) - float(best_score)
         selected.append(row)
         selected_families.add(str(row.get("record_family", "")))
         selected_signatures.add(str(row.get("signature_hash", "")))

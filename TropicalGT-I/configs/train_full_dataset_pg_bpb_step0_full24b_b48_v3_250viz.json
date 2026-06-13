@@ -197,5 +197,8 @@
       "enable 250-step validation/visualization audits",
       "increase certificate_weight from 1e-4 to 1e-3"
     ]
-  }
+  },
+  "memory_retrieval_landscape_weight": 0.08,
+  "memory_retrieval_vector_weight": 0.18,
+  "memory_retrieval_vector_note": "Landscape-only similarity and the broader GUDHI vector-representation family are scored separately; when memory_retrieval_landscape_weight is positive, the vector-family channel excludes Landscape to avoid double counting and uses BettiCurve, Silhouette, Entropy, PersistenceLengths, TopologicalVector, and PersistenceImage when available."
 }

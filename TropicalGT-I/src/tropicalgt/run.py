@@ -204,6 +204,14 @@ WANDB_PRIORITY_GROUPS: tuple[tuple[str, tuple[str, ...]], ...] = (
             "analogical_memory_candidates_seen",
             "analogical_memory_eligible",
             "analogical_memory_rejected",
+            "analogical_memory_retrieved_count",
+            "analogical_memory_retrieval_landscape_weight",
+            "analogical_memory_retrieval_vector_weight",
+            "analogical_memory_vector_available_rate",
+            "analogical_memory_vector_component_count_mean",
+            "analogical_memory_vector_aggregate_similarity_mean",
+            "analogical_memory_vector_score_contribution_mean",
+            "analogical_memory_landscape_score_contribution_mean",
         ),
     ),
     (
@@ -871,6 +879,14 @@ def _run_periodic_validation_round(
     periodic_memory_candidates_seen = 0
     periodic_memory_eligible = 0
     periodic_memory_rejected = 0
+    periodic_memory_retrieved_count = 0
+    periodic_memory_landscape_weight = float(cfg.get("memory_retrieval_landscape_weight", 0.08) or 0.0)
+    periodic_memory_vector_weight = float(cfg.get("memory_retrieval_vector_weight", cfg.get("memory_retrieval_persistence_vector_weight", 0.18)) or 0.0)
+    periodic_memory_vector_available = 0
+    periodic_memory_vector_component_counts: list[float] = []
+    periodic_memory_vector_aggregate_similarities: list[float] = []
+    periodic_memory_vector_score_contributions: list[float] = []
+    periodic_memory_landscape_score_contributions: list[float] = []
     if render_visualizations:
         vis_paths.update(
             {
@@ -954,22 +970,37 @@ def _run_periodic_validation_round(
                     memory_added_this_round += len(records)
                     query_embedding, query_signature = query_signature_from_report(audit_result)
                     query_topology = query_topology_from_report(audit_result)
-                    memory_landscape_weight = float(cfg.get("memory_retrieval_landscape_weight", 0.18) or 0.0)
+                    retrieved = memory_bank.retrieve(
+                        query_embedding,
+                        query_signature,
+                        top_k=int(cfg.get("periodic_memory_retrieve_top_k", 5)),
+                        exclude_sources={memory_source},
+                        exclude_memory_ids={record.memory_id for record in records},
+                        query_topology=query_topology,
+                        landscape_weight=periodic_memory_landscape_weight,
+                        vector_representation_weight=periodic_memory_vector_weight,
+                    )
+                    periodic_memory_retrieved_count += len(retrieved)
+                    for hit in retrieved:
+                        vector_report = hit.get("persistence_vector_representation_similarity") if isinstance(hit, dict) else {}
+                        if isinstance(vector_report, dict) and vector_report.get("available"):
+                            periodic_memory_vector_available += 1
+                        periodic_memory_vector_component_counts.append(float(hit.get("persistence_vector_component_count", 0.0) or 0.0))
+                        periodic_memory_vector_aggregate_similarities.append(float(hit.get("persistence_vector_aggregate_similarity", 0.0) or 0.0))
+                        periodic_memory_vector_score_contributions.append(float(hit.get("persistence_vector_score_contribution", 0.0) or 0.0))
+                        periodic_memory_landscape_score_contributions.append(float(hit.get("persistence_landscape_score_contribution", 0.0) or 0.0))
                     audit_result["analogical_memory_retrieval"] = {
                         "bank_path": str(memory_bank.path),
                         "bank_size": len(memory_bank.records),
                         "records_added": len(records),
                         "quality_gate": gate_summary,
+                        "retrieval_weights": {
+                            "persistence_landscape_weight": periodic_memory_landscape_weight,
+                            "persistence_vector_weight": periodic_memory_vector_weight,
+                            "persistence_vector_source": "gudhi.representations.vector_methods",
+                        },
                         "top_k": int(cfg.get("periodic_memory_retrieve_top_k", 5)),
-                        "retrieved": memory_bank.retrieve(
-                            query_embedding,
-                            query_signature,
-                            top_k=int(cfg.get("periodic_memory_retrieve_top_k", 5)),
-                            exclude_sources={memory_source},
-                            exclude_memory_ids={record.memory_id for record in records},
-                            query_topology=query_topology,
-                            landscape_weight=memory_landscape_weight,
-                        ),
+                        "retrieved": retrieved,
                     }
                 example_dir = step_dir / "got_audit" if example_idx == 0 else step_dir / "got_audit" / f"example_{example_idx:02d}"
                 prefix = "got_audit" if example_idx == 0 else f"got_audit_example_{example_idx:02d}"
@@ -990,6 +1021,15 @@ def _run_periodic_validation_round(
                 metrics["analogical_memory_candidates_seen"] = float(periodic_memory_candidates_seen)
                 metrics["analogical_memory_eligible"] = float(periodic_memory_eligible)
                 metrics["analogical_memory_rejected"] = float(periodic_memory_rejected)
+                metrics["analogical_memory_retrieved_count"] = float(periodic_memory_retrieved_count)
+                metrics["analogical_memory_retrieval_landscape_weight"] = float(periodic_memory_landscape_weight)
+                metrics["analogical_memory_retrieval_vector_weight"] = float(periodic_memory_vector_weight)
+                if periodic_memory_retrieved_count > 0:
+                    metrics["analogical_memory_vector_available_rate"] = float(periodic_memory_vector_available / max(periodic_memory_retrieved_count, 1))
+                    metrics["analogical_memory_vector_component_count_mean"] = float(np.mean(periodic_memory_vector_component_counts)) if periodic_memory_vector_component_counts else 0.0
+                    metrics["analogical_memory_vector_aggregate_similarity_mean"] = float(np.mean(periodic_memory_vector_aggregate_similarities)) if periodic_memory_vector_aggregate_similarities else 0.0
+                    metrics["analogical_memory_vector_score_contribution_mean"] = float(np.mean(periodic_memory_vector_score_contributions)) if periodic_memory_vector_score_contributions else 0.0
+                    metrics["analogical_memory_landscape_score_contribution_mean"] = float(np.mean(periodic_memory_landscape_score_contributions)) if periodic_memory_landscape_score_contributions else 0.0
     report = {
         "step": step,
         "validation": str(eval_path),

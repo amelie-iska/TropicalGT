@@ -189,5 +189,8 @@
   },
   "full_dataset_available_token_slots": 24198796288,
   "full_dataset_configured_token_slots": 24198807552,
-  "configured_to_available_ratio_target": 1.00000047
+  "configured_to_available_ratio_target": 1.00000047,
+  "memory_retrieval_landscape_weight": 0.08,
+  "memory_retrieval_vector_weight": 0.18,
+  "memory_retrieval_vector_note": "Landscape-only similarity and the broader GUDHI vector-representation family are scored separately; when memory_retrieval_landscape_weight is positive, the vector-family channel excludes Landscape to avoid double counting and uses BettiCurve, Silhouette, Entropy, PersistenceLengths, TopologicalVector, and PersistenceImage when available."
 }

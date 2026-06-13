@@ -2754,8 +2754,8 @@ def write_tropical_support_heatmap(result: dict[str, object], output_dir: str | 
         fig.update_layout(
             template="plotly_dark",
             title=(
-                "Tropical active-support collapse diagnostic"
-                f"<br><sup>top support {html.escape(top_support_label)} captures {100.0 * collapse_rate:.1f}% of tokens. Yellow cells are selected-support assignments; margins are plotted separately.</sup>"
+                "Tropical active-support collapse diagnostic: observed supports only"
+                f"<br><sup>top-support collapse rate={collapse_rate:.3f}; top support {html.escape(top_support_label)} captures {100.0 * collapse_rate:.1f}% of tokens. Yellow cells are selected-support assignments; margins are plotted separately.</sup>"
             ),
             margin=dict(t=126, l=88, r=48, b=96),
             height=max(960, min(1420, 620 + 10 * n)),
@@ -2840,8 +2840,8 @@ def write_tropical_support_heatmap(result: dict[str, object], output_dir: str | 
     fig.update_layout(
         template="plotly_dark",
         title=(
-            "Tropical active-support audit"
-            f"<br><sup>observed supports={len(support_indices)}/{n}; effective={effective_supports:.2f}; entropy={support_entropy:.3f} bits; collapse={collapse_rate:.3f}. Yellow cells mark selected support assignments only.</sup>"
+            "Tropical active-support audit: observed supports only"
+            f"<br><sup>observed supports={len(support_indices)}/{n}; top-support collapse rate={collapse_rate:.3f}; effective={effective_supports:.2f}; entropy={support_entropy:.3f} bits. Yellow cells mark selected support assignments only.</sup>"
         ),
         height=max(1040, min(1660, 700 + 12 * n)),
         margin=dict(t=150, l=112, r=190, b=124),
@@ -3099,7 +3099,7 @@ def _m2_free_module_columns(m2: Mapping[str, Any]) -> Tuple[List[str], List[List
     modules = sorted([m for m in modules if isinstance(m, Mapping)], key=_module_order)
     if not modules:
         return ["module", "rank", "display"], [["unavailable"], ["0"], ["no computed free-chain presentation"]]
-    display_label = "minimal free resolution display" if resolution else "chain-module display"
+    display_label = "scoped monomial-ideal resolution display" if resolution else "chain-module display"
     return (
         ["module", "rank", display_label],
         [
@@ -3492,7 +3492,7 @@ def _write_growth_persistence_module(path: Path, topology: dict[str, object], gr
         specs=[[{"type": "heatmap"}, {"type": "bar"}]],
         subplot_titles=(
             "Betti ranks by trajectory level and filtration",
-            "Free-resolution proxy ranks by trajectory level",
+            "Chain-presentation diagnostic ranks by trajectory level",
         ),
         horizontal_spacing=0.08,
     )
@@ -4881,6 +4881,10 @@ def _analogical_quality_table_trace(
         ("rank", str(idx + 1)),
         ("memory", _short_label(str(row.get("memory_id", idx)), 24)),
         ("retrieval", f"{float(row.get('retrieval_score', 0.0)):.4f}"),
+        ("base retrieval", f"{float(sim.get('base_retrieval_score', 0.0)):.4f}"),
+        ("landscape contribution", f"{float(sim.get('persistence_landscape_score_contribution', 0.0)):.4f}"),
+        ("vector-family contribution", f"{float(sim.get('persistence_vector_score_contribution', 0.0)):.4f}"),
+        ("retrieval weights", html.escape(str(sim.get('retrieval_weights', {})))),
         ("PH similarity", f"{float(sim.get('persistent_homology_similarity', 0.0)):.4f}"),
         ("chain-presentation similarity", f"{float(sim.get('chain_presentation_similarity', sim.get('free_resolution_similarity', 0.0))):.4f}"),
         ("comm-algebra similarity", f"{float(sim.get('commutative_algebra_similarity', 0.0)):.4f}"),
@@ -5206,6 +5210,8 @@ def _write_analogical_topk_index(path: Path, pair_pages: list[dict[str, object]]
             f"<td>{int(page.get('rank', 0))}</td>"
             f"<td><a href='{rel}'>{html.escape(str(page.get('memory_id', 'memory')))}</a></td>"
             f"<td>{float(page.get('retrieval_score', 0.0)):.4f}</td>"
+            f"<td>{float(report.get('persistence_landscape_score_contribution', 0.0)):.4f}</td>"
+            f"<td>{float(report.get('persistence_vector_score_contribution', 0.0)):.4f}</td>"
             f"<td>{float(report.get('persistent_homology_similarity', 0.0)):.4f}</td>"
             f"<td>{float(report.get('chain_presentation_similarity', report.get('free_resolution_similarity', 0.0))):.4f}</td>"
             f"<td>{float(report.get('commutative_algebra_similarity', 0.0)):.4f}</td>"
@@ -5219,7 +5225,7 @@ def _write_analogical_topk_index(path: Path, pair_pages: list[dict[str, object]]
             f"<td>{float(report.get('edge_preservation_rate', 0.0)):.4f}</td>"
             "</tr>"
         )
-    body = "\n".join(rows) or "<tr><td colspan='14'>No retrieved memories.</td></tr>"
+    body = "\n".join(rows) or "<tr><td colspan='16'>No retrieved memories.</td></tr>"
     path.write_text(
         f"""<!doctype html>
 <html>
@@ -5245,7 +5251,7 @@ def _write_analogical_topk_index(path: Path, pair_pages: list[dict[str, object]]
 	    <h1>Analogical top-k probability correspondences</h1>
 	    <p>Each row opens one query-to-memory vertex assignment with a finite filtered-complex certificate. The NLL/fitness landscape and the GUDHI persistence landscape are different objects: this table reports the persistence-landscape vector plus the wider vectorized GUDHI family (Landscape, BettiCurve, Silhouette, Entropy, PersistenceLengths, TopologicalVector, PersistenceImage). These are real cached vectors; the cosine/L2 comparisons are differentiable with respect to those vectors, while this HTML does not claim autograd through GUDHI diagram vectorization. Unavailable vectors stay zero rather than being fabricated. Edge, face, and filtration preservation can fail and are reported on the rank page.</p>
 	    <table>
-	      <thead><tr><th>rank</th><th>correspondence</th><th>retrieval</th><th>PH</th><th>chain pres.</th><th>comm. alg.</th><th>persistence-landscape L2 sim</th><th>persistence-landscape cosine</th><th>vector aggregate</th><th>vector methods</th><th>derived/algebraic</th><th>coarse signature</th><th>simplex-tree map</th><th>edge certificate</th></tr></thead>
+	      <thead><tr><th>rank</th><th>correspondence</th><th>retrieval</th><th>landscape contrib.</th><th>vector contrib.</th><th>PH</th><th>chain pres.</th><th>comm. alg.</th><th>persistence-landscape L2 sim</th><th>persistence-landscape cosine</th><th>vector aggregate</th><th>vector methods</th><th>derived/algebraic</th><th>coarse signature</th><th>simplex-tree map</th><th>edge certificate</th></tr></thead>
       <tbody>{body}</tbody>
     </table>
   </main>
@@ -5482,7 +5488,18 @@ def _topological_similarity_summary(query_topology: dict[str, object], memory_to
     q_ca = _commutative_algebra_numeric_vector(query_topology)
     m_ca = _commutative_algebra_numeric_vector(memory_topology)
     landscape_report = _persistence_landscape_vector_similarity(query_topology, memory_topology)
-    vector_report = _persistence_vector_representation_similarity(query_topology, memory_topology)
+    retrieval_weights = row.get("retrieval_weights", {}) if isinstance(row.get("retrieval_weights"), dict) else {}
+    include_landscape_in_vector = bool(
+        retrieval_weights.get(
+            "persistence_vector_includes_landscape",
+            float(retrieval_weights.get("persistence_landscape_weight", 0.0) or 0.0) <= 0.0,
+        )
+    )
+    vector_report = _persistence_vector_representation_similarity(
+        query_topology,
+        memory_topology,
+        include_landscape=include_landscape_in_vector,
+    )
     sig_sim = _cosine_similarity(q_sig, m_sig)
     free_sim = _cosine_similarity(q_free, m_free)
     ph_sim = _cosine_similarity(q_ph, m_ph)
@@ -5496,6 +5513,11 @@ def _topological_similarity_summary(query_topology: dict[str, object], memory_to
     derived_algebraic = min(sig_sim, free_sim, ph_sim, ca_sim) if required_components_available else 0.0
     return {
         "retrieval_score": float(row.get("retrieval_score", 0.0)),
+        "base_retrieval_score": float(row.get("base_retrieval_score", 0.0)),
+        "persistence_landscape_score_contribution": float(row.get("persistence_landscape_score_contribution", 0.0)),
+        "persistence_vector_score_contribution": float(row.get("persistence_vector_score_contribution", 0.0)),
+        "retrieval_score_components": row.get("retrieval_score_components", {}) if isinstance(row.get("retrieval_score_components"), dict) else {},
+        "retrieval_weights": retrieval_weights,
         "embedding_similarity": float(row.get("embedding_similarity", 0.0)),
         "signature_similarity": float(row.get("signature_similarity", 0.0)),
         "derived_signature_similarity": float(sig_sim),
@@ -5509,6 +5531,8 @@ def _topological_similarity_summary(query_topology: dict[str, object], memory_to
         "persistence_landscape_l2_distance": float(landscape_report.get("l2_distance", 0.0)) if landscape_report.get("available") else 0.0,
         "persistence_landscape_correlation": float(landscape_report.get("correlation", 0.0)) if landscape_report.get("available") else 0.0,
         "persistence_landscape_overlap_dim": float(landscape_report.get("overlap_dim", 0) or 0),
+        "persistence_landscape_vector_similarity": landscape_report,
+        "persistence_vector_representation_similarity": vector_report,
         "persistence_vector_aggregate_similarity": float(vector_report.get("aggregate_similarity", 0.0)) if vector_report.get("available") else 0.0,
         "persistence_vector_component_count": float(vector_report.get("component_count", 0) or 0),
         "persistence_vector_methods": str(",".join(vector_report.get("available_methods", []))) if vector_report.get("available") else "",
@@ -5695,8 +5719,18 @@ def _analogical_realization_certificate(
     derived_ok = bool(derived_comparison.get("finite_invariants_match"))
     tree_ok = bool(sim_map.get("is_filtered_simplicial_map"))
     simplex_tree_rate = float(sim_map.get("simplex_tree_map_preservation_rate", 0.0) or 0.0)
+    real_resolution_certified = bool(
+        derived_comparison.get("real_free_resolution_certified")
+        or derived_comparison.get("certificate_attached")
+        or derived_comparison.get("cas_free_resolution_certificate")
+    )
+    claim = "not_certified"
+    if derived_ok and tree_ok and real_resolution_certified:
+        claim = "cas_certified_derived_geometric_realization"
+    elif derived_ok and tree_ok:
+        claim = "finite_invariant_filtered_correspondence"
     return {
-        "claim": "analogical_derived_geometric_realization" if derived_ok and tree_ok else "not_certified",
+        "claim": claim,
         "derived_algebraic_similarity": float(sim.get("derived_algebraic_similarity", 0.0)),
         "coarse_signature_cosine": float(sim.get("derived_signature_similarity", 0.0)),
         "requires": [
@@ -5707,6 +5741,7 @@ def _analogical_realization_certificate(
         "module_to_geometry_note": "A real derived/free-resolution claim requires a CAS-certified resolution or chain map; the displayed analogy is geometrically realized only when the probability-induced vertex map extends to a filtration-preserving simplex-tree map.",
         "chain_map_note": "A filtration-preserving simplicial map induces a chain map and hence a morphism of the associated F2[x,y] persistence modules.",
         "finite_invariants_match": derived_ok,
+        "real_free_resolution_certified": real_resolution_certified,
         "filtered_simplex_tree_map": tree_ok,
         "simplex_tree_map_preservation_rate": simplex_tree_rate,
     }
@@ -6215,8 +6250,13 @@ def _persistence_landscape_vector_similarity(query_topology: dict[str, object], 
     return report
 
 
-def _persistence_vector_representation_similarity(query_topology: dict[str, object], memory_topology: dict[str, object]) -> dict[str, object]:
-    return _memory_persistence_vector_representation_similarity(query_topology, memory_topology)
+def _persistence_vector_representation_similarity(
+    query_topology: dict[str, object],
+    memory_topology: dict[str, object],
+    *,
+    include_landscape: bool = True,
+) -> dict[str, object]:
+    return _memory_persistence_vector_representation_similarity(query_topology, memory_topology, include_landscape=include_landscape)
 
 
 def _persistence_numeric_vector(topology: dict[str, object], length: int = 16) -> np.ndarray:

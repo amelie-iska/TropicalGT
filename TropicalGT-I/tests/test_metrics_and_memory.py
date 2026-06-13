@@ -196,14 +196,34 @@ def test_analogical_memory_retrieval_uses_gudhi_vector_representation_family(tmp
         embedding_weight=0.0,
         signature_weight=0.0,
         score_weight=0.0,
-        landscape_weight=1.0,
+        landscape_weight=0.25,
+        vector_representation_weight=1.0,
         diversity_weight=0.0,
         query_topology=query_topology,
     )
     assert [row["record_id"] for row in hits] == ["match", "mismatch"]
+    assert hits[0]["retrieval_weights"]["persistence_landscape_weight"] == 0.25
+    assert hits[0]["retrieval_weights"]["persistence_vector_weight"] == 1.0
+    assert hits[0]["retrieval_weights"]["persistence_vector_includes_landscape"] is False
+    assert hits[0]["retrieval_weights"]["legacy_landscape_weight_alias_mode"] is False
+    assert hits[0]["base_retrieval_score"] == 0.0
+    assert hits[0]["persistence_landscape_score_contribution"] > 0.0
+    assert hits[0]["persistence_vector_score_contribution"] > 0.0
+    components = hits[0]["retrieval_score_components"]
+    assert components["persistence_landscape"] == hits[0]["persistence_landscape_score_contribution"]
+    assert components["persistence_vector_family"] == hits[0]["persistence_vector_score_contribution"]
+    assert math.isclose(
+        hits[0]["retrieval_score"],
+        hits[0]["base_retrieval_score"]
+        + hits[0]["persistence_landscape_score_contribution"]
+        + hits[0]["persistence_vector_score_contribution"],
+        rel_tol=1e-9,
+    )
     assert hits[0]["persistence_vector_representation_similarity"]["available"] is True
+    assert hits[0]["persistence_vector_representation_similarity"]["includes_landscape"] is False
     assert hits[0]["persistence_vector_aggregate_similarity"] > hits[1]["persistence_vector_aggregate_similarity"]
     assert "persistence_image" in hits[0]["persistence_vector_available_methods"]
+    assert "landscape" not in hits[0]["persistence_vector_available_methods"]
 
 
 def test_analogical_memory_retrieval_uses_persistence_landscape_vectors(tmp_path):
@@ -229,12 +249,17 @@ def test_analogical_memory_retrieval_uses_persistence_landscape_vectors(tmp_path
         signature_weight=0.0,
         score_weight=0.0,
         landscape_weight=1.0,
+        vector_representation_weight=0.0,
         diversity_weight=0.0,
         query_topology=query_topology,
     )
     assert [row["record_id"] for row in hits] == ["match", "mismatch"]
+    assert hits[0]["retrieval_weights"]["persistence_landscape_weight"] == 1.0
+    assert hits[0]["retrieval_weights"]["persistence_vector_weight"] == 0.0
+    assert hits[0]["retrieval_weights"]["persistence_vector_includes_landscape"] is False
     assert hits[0]["persistence_landscape_vector_similarity"]["available"] is True
     assert hits[0]["persistence_landscape_l2_similarity"] > hits[1]["persistence_landscape_l2_similarity"]
+    assert hits[0]["persistence_vector_score_contribution"] == 0.0
     assert hits[0]["persistence_landscape_overlap_dim"] == 5
 
 
