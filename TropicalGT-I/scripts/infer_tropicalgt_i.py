@@ -11,7 +11,7 @@ import torch
 from tropicalgt.algebra import compute_topological_algebra_report
 from tropicalgt.decoding import meet_in_middle_batch
 from tropicalgt.diagnostics import gflownet_diagnostics, graphcg_diagnostics, record_diagnostics
-from tropicalgt.memory import AnalogicalMemoryBank, memory_records_from_scaling_report, query_signature_from_report
+from tropicalgt.memory import AnalogicalMemoryBank, memory_records_from_scaling_report, query_signature_from_report, query_topology_from_report
 from tropicalgt.metrics import batch_bpb_metrics
 from tropicalgt.run import load_config, load_checkpoint, collate_records
 from tropicalgt.records import GraphRecord
@@ -87,7 +87,7 @@ def main() -> None:
     parser.add_argument(
         "--audit-all",
         action="store_true",
-        help="Emit full optional inference artifacts: GoT PCA, NLL surfaces, tropical support, GraphCG, analogical memory, free-resolution/algebra JSON, derived signatures, persistence plots, and dashboard HTML.",
+        help="Emit full optional inference artifacts: GoT PCA, NLL fields, tropical support, GraphCG, analogical memory, chain-presentation/algebra JSON, derived signatures, persistence plots, and dashboard HTML.",
     )
     parser.add_argument(
         "--require-complete-reasoning-steps",
@@ -98,6 +98,7 @@ def main() -> None:
     parser.add_argument("--memory-save", action="store_true", help="Append inference-scaling candidates to the memory bank")
     parser.add_argument("--memory-retrieve-top-k", type=int, default=0, help="Retrieve this many analogical memories")
     parser.add_argument("--memory-max-records", type=int, default=2048)
+    parser.add_argument("--memory-landscape-weight", type=float, default=None, help="Weight for GUDHI persistence-landscape vector similarity during analogical memory retrieval")
     parser.add_argument("--meet-in-middle", action="store_true", help="Enable graph-aware meet-in-the-middle reverse-pass diagnostics")
     parser.add_argument("--no-meet-in-middle", action="store_true", help="Disable meet-in-the-middle diagnostics even if enabled in config")
     args = parser.parse_args()
@@ -254,11 +255,15 @@ def main() -> None:
         current_source = _inference_memory_source(args.prompt, scale_seed, args.audit_output_dir)
         if args.memory_retrieve_top_k > 0:
             embedding, signature = query_signature_from_report(result)
+            query_topology = query_topology_from_report(result)
+            landscape_weight = float(args.memory_landscape_weight if args.memory_landscape_weight is not None else cfg.get("inference_memory_landscape_weight", cfg.get("memory_retrieval_landscape_weight", 0.18)) or 0.0)
             retrieved = bank.retrieve(
                 embedding,
                 signature,
                 top_k=args.memory_retrieve_top_k,
                 exclude_sources={current_source},
+                query_topology=query_topology,
+                landscape_weight=landscape_weight,
             )
         added = 0
         if args.memory_save and isinstance(result.get("inference_scaling"), dict):
@@ -272,12 +277,16 @@ def main() -> None:
             added = len(records)
             if args.memory_retrieve_top_k > 0 and not retrieved:
                 embedding, signature = query_signature_from_report(result)
+                query_topology = query_topology_from_report(result)
+                landscape_weight = float(args.memory_landscape_weight if args.memory_landscape_weight is not None else cfg.get("inference_memory_landscape_weight", cfg.get("memory_retrieval_landscape_weight", 0.18)) or 0.0)
                 retrieved = bank.retrieve(
                     embedding,
                     signature,
                     top_k=args.memory_retrieve_top_k,
                     exclude_sources={current_source},
                     exclude_memory_ids={record.memory_id for record in records},
+                    query_topology=query_topology,
+                    landscape_weight=landscape_weight,
                 )
         result["analogical_memory_retrieval"] = {
             "bank_path": str(bank.path),

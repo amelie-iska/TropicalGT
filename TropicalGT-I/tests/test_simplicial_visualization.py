@@ -296,6 +296,27 @@ def test_simplicial_object_svg_uses_3d_pca_radius_filtration():
     assert "radius filtration" in html
 
 
+def test_decoding_causal_overlay_uses_graph_decoding_order_report():
+    from tropicalgt.scaling import _decoding_order_report
+    from tropicalgt.visualization import _attach_decoding_causal_overlay, _simplicial_plot_payload
+
+    record = FixtureGraphDataset(1)[0]
+    obj = build_filtered_simplicial_object(record)
+    report = _decoding_order_report(record)
+    assert report["decoding_node_order"]
+
+    updated = _attach_decoding_causal_overlay(obj, {"level": 0, "decoding_order_report": report})
+    overlay = updated["decoding_causal_overlay"]
+    assert str(overlay["source"]).startswith("GraphRecord.metadata")
+    assert overlay["edge_count"] > 0
+    assert all(edge["style"] == "dotted" for edge in overlay["edges"])
+    assert {edge["role"] for edge in overlay["edges"]} & {"forward_decoding_order", "reverse_decoding_order", "causal_graph_edge"}
+
+    payload = _simplicial_plot_payload(updated)
+    assert payload["directed_edge_count"] == overlay["edge_count"]
+    assert all(edge["style"] == "dotted" for edge in payload["directed_edges"])
+
+
 def test_graph_token_direction_overlay_uses_model_trace_edges():
     obj = {
         "summary": {"num_vertices": 4, "num_edges": 0, "num_two_simplices": 0},
@@ -453,7 +474,7 @@ def test_got_trajectory_visualization_renders_simplicial_panel_and_nll_surface(t
         sibling_record.record_id,
         leaf_record.record_id,
     }
-    assert "GoT parent-child trajectory edges" in full_complex_html
+    assert "faint GoT parent-child trajectory overlay" in full_complex_html
     assert "radius/simplicial edges induced from the same embeddings" in full_complex_html
     assert "Full graph-of-thought trajectory filtered simplicial complex" in full_complex_html
     assert "Filtration radius" in full_complex_html
@@ -466,7 +487,7 @@ def test_got_trajectory_visualization_renders_simplicial_panel_and_nll_surface(t
     first_step_html = first_step.read_text(encoding="utf-8")
     assert "Filtration radius" in first_step_html
     assert "play filtration" in first_step_html
-    assert "directed GoT graph-token edges" in first_step_html
+    assert "faint directed graph-token overlay" in first_step_html
 
 
 
@@ -512,7 +533,7 @@ def test_simplicial_svg_wraps_long_topological_paths():
     assert svg.count("one-simplex") == 49
 
 
-def test_trajectory_persistence_uses_growth_and_free_resolution(tmp_path: Path):
+def test_trajectory_persistence_uses_growth_and_chain_presentation_diagnostics(tmp_path: Path):
     record = FixtureGraphDataset(1)[0]
     obj = build_filtered_simplicial_object(record)
     topo0 = _toy_topology(intervals=[{"dimension": 0, "birth": 0.0, "death": 0.45, "infinite": False}])
@@ -537,8 +558,8 @@ def test_trajectory_persistence_uses_growth_and_free_resolution(tmp_path: Path):
     landscapes_html = Path(paths["persistence_landscapes"]).read_text(encoding="utf-8")
     assert "persistent homology growth barcode" in barcode_html
     assert "trajectory growth level" in barcode_html
-    assert "multiparameter persistence and free-resolution growth" in module_html
-    assert "free-resolution proxy" in module_html
+    assert "multiparameter persistence and chain-presentation diagnostics" in module_html
+    assert "chain-presentation diagnostic" in module_html
     assert "simplicial-object-panel" in module_html
     assert "GUDHI persistence vectorization growth" in reps_html
     assert "Fast train" in reps_html
@@ -579,7 +600,7 @@ def test_tropical_support_heatmap_layout_keeps_legend_out_of_margin(tmp_path: Pa
     compact = html.replace(" ", "")
     assert '"showlegend":false' in compact
     assert '"r":190' in compact
-    assert '"x":1.11' in compact
+    assert "Support frequency and mean selected margin" in html
 
 
 def test_tropical_support_high_collapse_uses_compact_diagnostic(tmp_path: Path):
@@ -602,7 +623,8 @@ def test_tropical_support_high_collapse_uses_compact_diagnostic(tmp_path: Path):
     assert payload["metrics"]["top_support_collapse_rate"] > 0.7
     assert payload["metrics"]["raw_token_labels_truncated"] is True
     assert "Tropical active-support collapse diagnostic" in html
-    assert "top support captures" in html
+    assert "top support" in html
+    assert "captures" in html
 
 
 def test_plotly_dark_html_promotes_static_preview_for_webgl_failures(tmp_path: Path):
@@ -627,9 +649,9 @@ def test_plotly_dark_html_promotes_static_preview_for_webgl_failures(tmp_path: P
     path = tmp_path / "webgl_fallback.html"
     _write_plotly_dark_html(path, fig, "WebGL fallback test", _simplicial_panel_items([obj], ["panel hover"]))
     html = path.read_text(encoding="utf-8")
-    assert 'class="static-preview" open' in html
-    assert "WebGL unavailable: static complex preview shown" in html
-    assert "same serialized simplicial object payload" in html
+    assert 'class="static-preview"' in html
+    assert "Static SVG fallback preview" in html
+    assert "same filtered-complex payload" in html
 
 
 def test_graphcg_visualization_preserves_projection_basis_certificate(tmp_path: Path):
@@ -664,7 +686,9 @@ def test_graphcg_visualization_preserves_projection_basis_certificate(tmp_path: 
     assert payload["visible_direction_tick_label_limit"] == 8
     assert payload["exact_direction_labels_available_in_hover_and_payload"] is True
     assert "basis=effective_full_rank_qr" in html
-    assert "visible ticks bounded" in html
+    assert "heatmap shows all" in html
+    assert "Readable full-rank heatmap" in html
+    assert "direction rank by activity" in html
 
 
 def test_analogical_memory_visualization_renders_simplicial_maps(tmp_path: Path):
@@ -727,7 +751,9 @@ def test_analogical_memory_visualization_renders_simplicial_maps(tmp_path: Path)
     assert "filtered-complex certificate from model-probability Jensen-Shannon assignment" in html
     assert "model_probability_jensen_shannon_assignment" in html
     assert "persistent homology similarity" in html
-    assert "free-resolution similarity" in html
+    assert "chain-presentation diagnostic similarity" in html
+    assert "persistence-landscape L2 similarity" in html
+    assert "persistence-landscape cosine" in html
     assert "vertex-only correspondences" in html
     assert "preserved 1-simplex correspondence" in html
     assert "certificate diagnostic" in html
@@ -746,6 +772,8 @@ def test_analogical_memory_visualization_renders_simplicial_maps(tmp_path: Path)
     rank2_html = Path(paths["analogical_memory_map_02_html"]).read_text(encoding="utf-8")
     assert "Analogical top-k probability correspondences" in index_html
     assert "Edge, face, and filtration preservation can fail" in index_html
+    assert "landscape L2 sim" in index_html
+    assert "landscape cosine" in index_html
     assert "rank 2" in rank2_html
     assert '<input id="filtration-slider"' in rank2_html
     assert len(maps["maps"]) == 2
@@ -758,6 +786,10 @@ def test_analogical_memory_visualization_renders_simplicial_maps(tmp_path: Path)
     assert maps["maps"][0]["codomain_complex_source"] == "trajectory_probability_filtered_simplicial_object"
     assert maps["maps"][0]["simplicial_map_certificate"]["source"] == "finite_filtered_complex_check"
     assert maps["maps"][0]["derived_signature_similarity"] >= 0.0
+    assert maps["maps"][0]["persistence_landscape_vector_available"] == 1.0
+    assert maps["maps"][0]["persistence_landscape_l2_similarity"] > 0.0
+    assert maps["maps"][0]["persistence_landscape_overlap_dim"] > 0.0
+    assert maps["maps"][0]["derived_invariant_comparison"]["persistence_landscape_vector_available"] is True
     assert "is_simplicial_on_displayed_skeleton" in maps["maps"][0]
     assert isinstance(maps["maps"][0]["preserved_edge_pairs"], list)
     assert isinstance(maps["maps"][0]["failed_edge_pairs"], list)
@@ -833,6 +865,29 @@ def _toy_topology(intervals):
             "persistence_total_finite_length": 0.0,
             "multiparameter_grid_points": 2,
             "multiparameter_h0_rank_sample": [{"h0_rank": 1}],
+        },
+        "persistence_representations": {
+            "available": True,
+            "backend": "gudhi.representations",
+            "methods": {
+                "0": {
+                    "available": True,
+                    "landscape": {
+                        "num_landscapes": 2,
+                        "resolution": 4,
+                        "vector": [0.0, 0.2, 0.1, 0.0, 0.0, 0.05, 0.0, 0.0],
+                    },
+                },
+                "1": {
+                    "available": True,
+                    "landscape": {
+                        "num_landscapes": 2,
+                        "resolution": 4,
+                        "vector": [0.0, 0.1, 0.3, 0.0, 0.0, 0.02, 0.0, 0.0],
+                    },
+                },
+            },
+            "summary": {"landscape_l2_norm": 0.4},
         },
         "commutative_algebra": {
             "multiparameter_free_resolution_proxy": {

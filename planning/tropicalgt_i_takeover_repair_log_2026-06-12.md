@@ -148,3 +148,39 @@ Current validator failures for `TropicalGT-I/outputs/multi_sample_browser/latest
 - Updated training configs with `memory_quality_*` defaults requiring model-probability complexes, at least four probability vertices, at least three simplices, topological algebra, and nonnegative NLL improvement before storage.
 - Expanded certificate telemetry. `certificate_loss` remains the raw negative log mass assigned to allowed support sets, but W&B now also receives allowed-mass mean/min, node/edge/graph agreement and loss, disallowed-support rate, graph-support rate, node->graph support rate, edge->graph support rate, and token-order support transition rate.
 - Focused tests passed after fixes for `dimension=0` and `level=0` truthiness bugs in the memory gate: `test_metrics_and_memory.py` and `test_training_metrics.py` (`13 passed`).
+
+
+## 2026-06-12 23:26:47 UTC - Visual Math Repair Plan and Run Reset
+
+Added `planning/tropicalgt_i_visual_math_repair_plan_2026-06-12.md` after reviewing the latest browser annotations and the Miller-Sturmfels two-variable monomial ideal staircase section. New hard requirements:
+
+- Reasoning-step complexes must be derived from each step's model outputs, embeddings, probabilities, and graph-token trace; identical pages are treated as a data-path defect until payload hashes prove otherwise.
+- Radius filtrations must begin as disjoint vertex clouds and grow monotonically through GUDHI SimplexTree filtration values or model-probability Jensen-Shannon filtrations.
+- Two-parameter persistence views must be `F2[x_level,x_radius]` lattice/module views with multiplication maps, rank grids, staircase/minimal-generator candidates, adjacent lcm syzygy candidates, and conservative free-resolution labels.
+- Analogical retrieval must distinguish probability-JS correspondences from verified simplicial maps, and derived/algebraic similarity must fail closed when PH/free-resolution/rank-invariant checks fail.
+- Simplex-tree plots must be connected trie/Hasse diagrams of actual simplices and immediate face-to-coface inclusions, not disconnected stripe plots.
+- The current `b44` training run will be stopped and replaced by a fresh step-0 BPB-first `b48_v2` run with lower auxiliary pressure and deeper stochastic GoT audits.
+
+
+### Added Macaulay2-style algebra figure requirement
+
+The algebra repair target now includes Macaulay2/research-style Betti tables, multigraded free modules, sparse differential matrices over `F2[x_level,x_radius]`, staircase/lcm syzygy diagrams, and chain-map/derived-morphism diagrams between query and retrieved memory objects. These must be labeled as exact only when the computation certifies exactness/minimality; otherwise they are candidates/witnesses.
+
+## Repair Cycle Update: Persistence-Landscape Vectors And Resolution Guardrails
+
+- Added persistence-landscape vector comparisons to analogical memory retrieval. Retrieval now accepts query topology, reads real GUDHI `Landscape` vectors from query and memory topology payloads, and contributes an optional L2-similarity term only when both sides have actual vectors. Missing landscape vectors are reported unavailable/zero and are not fabricated.
+- Added browser/top-k diagnostics for persistence-landscape L2 similarity, cosine, correlation, vector overlap dimension, and L2 distance. The analogical top-k table now has explicit persistence-landscape columns so derived/algebraic and coarse-signature columns are not shifted or mislabeled.
+- Kept both overloaded “landscape” pages, but separated language: GUDHI persistence landscapes remain `lambda_k(t)` vectorized topology pages; GoT/NLL pages are labeled as observed NLL/fitness fields or anchor views, not persistence landscapes.
+- Tightened the free-resolution truthfulness contract. Multigraded diagnostics are now canonicalized as `*_chain_presentation_diagnostics`; legacy `*_free_resolution*` keys remain as deprecated aliases for compatibility and carry `not_a_free_resolution=true`.
+- Real/minimal free resolutions are now unavailable unless a CAS certificate is attached. Macaulay2/Sage/Singular are reported as candidate backends only; `multipers` is tracked separately for multiparameter persistence and is not treated as a certified minimal-free-resolution backend.
+- Memory quality and compact payloads now distinguish `has_chain_presentation_diagnostics` from `has_real_free_resolution` so early training and browser artifacts do not count chain modules as true resolutions.
+- Focused tests passed after the patch: `test_algebraic_persistence.py` and `test_simplicial_visualization.py` (`28 passed`).
+- Regenerating the model-backed multi-sample browser bundle from the active checkpoint on CPU, leaving the live GPU training process untouched.
+
+## 2026-06-12 persistence-landscape vector retrieval and label audit update
+
+- Integrated the persistence-landscape vector comparison into analogical memory retrieval and inference using the real GUDHI `Landscape.vector` payloads already stored in topology reports.
+- Aligned browser-side persistence-landscape similarity with the same dimension-aware retrieval helper so top-k scores, analogical map diagnostics, and rendered tables cannot diverge when homology dimensions have different vector lengths.
+- Relabeled browser/table output from `free-res similarity` to `chain-presentation similarity` unless a future CAS backend attaches an explicit free-resolution certificate. The legacy JSON key remains only as a deprecated alias for compatibility.
+- Kept the GUDHI persistence-landscape page as a separate artifact; renamed the GoT page link to `GoT observed NLL PCA anchors` so the two uses of “landscape” are not conflated.
+- Focused tests passed after the patch: `test_algebraic_persistence.py`, `test_simplicial_visualization.py`, `test_interactive_artifact_validator.py`, and `test_metric_provenance.py`.

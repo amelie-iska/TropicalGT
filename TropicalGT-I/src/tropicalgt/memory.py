@@ -190,7 +190,9 @@ class AnalogicalMemoryBank:
         embedding_weight: float = 0.55,
         signature_weight: float = 0.35,
         score_weight: float = 0.10,
+        landscape_weight: float = 0.18,
         diversity_weight: float = 0.18,
+        query_topology: dict[str, Any] | None = None,
         exclude_record_ids: set[str] | None = None,
         exclude_memory_ids: set[str] | None = None,
         exclude_sources: set[str] | None = None,
@@ -202,6 +204,7 @@ class AnalogicalMemoryBank:
         exclude_sources = {str(value) for value in (exclude_sources or set())}
         query_embedding = _normalize(np.asarray(embedding, dtype=float))
         query_signature = _normalize(np.asarray(signature_vector, dtype=float))
+        query_topology = query_topology if isinstance(query_topology, dict) else {}
         rows = []
         for record in self.records:
             trajectory_source = str(record.metadata.get("source", record.record_id)) if isinstance(record.metadata, dict) else record.record_id
@@ -209,10 +212,21 @@ class AnalogicalMemoryBank:
                 continue
             emb_sim = _cosine(query_embedding, _normalize(np.asarray(record.embedding, dtype=float)))
             sig_sim = _cosine(query_signature, _normalize(np.asarray(record.signature_vector, dtype=float)))
+            record_metadata = record.metadata if isinstance(record.metadata, dict) else {}
+            memory_topology = record_metadata.get("trajectory_probability_topological_algebra")
+            if not isinstance(memory_topology, dict):
+                memory_topology = record.topological_algebra if isinstance(record.topological_algebra, dict) else {}
+            landscape_report = persistence_landscape_vector_similarity(query_topology, memory_topology)
+            landscape_sim = float(landscape_report.get("l2_similarity", 0.0)) if landscape_report.get("available") else 0.0
             quality = float(record.score) - 0.05 * float(record.nll)
             retrieval_score = embedding_weight * emb_sim + signature_weight * sig_sim + score_weight * quality
+            if landscape_report.get("available"):
+                retrieval_score += float(landscape_weight) * landscape_sim
             family = _record_family(record.record_id)
             signature_hash = _signature_hash(record.signature_vector)
+            trajectory_probability_complex = record_metadata.get("trajectory_probability_filtered_simplicial_object", {})
+            if not isinstance(trajectory_probability_complex, dict):
+                trajectory_probability_complex = {}
             rows.append(
                 {
                     "memory_id": record.memory_id,
@@ -224,6 +238,12 @@ class AnalogicalMemoryBank:
                     "base_retrieval_score": float(retrieval_score),
                     "embedding_similarity": float(emb_sim),
                     "signature_similarity": float(sig_sim),
+                    "persistence_landscape_vector_similarity": landscape_report,
+                    "persistence_landscape_l2_similarity": float(landscape_report.get("l2_similarity", 0.0)) if landscape_report.get("available") else 0.0,
+                    "persistence_landscape_cosine": float(landscape_report.get("cosine", 0.0)) if landscape_report.get("available") else 0.0,
+                    "persistence_landscape_correlation": float(landscape_report.get("correlation", 0.0)) if landscape_report.get("available") else 0.0,
+                    "persistence_landscape_l2_distance": float(landscape_report.get("l2_distance", 0.0)) if landscape_report.get("available") else 0.0,
+                    "persistence_landscape_overlap_dim": int(landscape_report.get("overlap_dim", 0) or 0),
                     "quality_score": quality,
                     "score": record.score,
                     "nll": record.nll,
@@ -234,8 +254,9 @@ class AnalogicalMemoryBank:
                     "filtered_simplicial_object": record.filtered_simplicial_object,
                     "probability_filtered_simplicial_object": record.probability_filtered_simplicial_object,
                     "probability_filtered_summary": record.probability_filtered_simplicial_object.get("summary", {}),
-                    "trajectory_probability_filtered_simplicial_object": record.probability_filtered_simplicial_object,
-                    "trajectory_probability_filtered_summary": record.probability_filtered_simplicial_object.get("summary", {}),
+                    "row_probability_filtered_simplicial_object": record.probability_filtered_simplicial_object,
+                    "trajectory_probability_filtered_simplicial_object": trajectory_probability_complex,
+                    "trajectory_probability_filtered_summary": trajectory_probability_complex.get("summary", {}),
                     "topological_algebra": record.topological_algebra,
                     "signature_vector": record.signature_vector,
                     "derived_signature": record.derived_signature,
@@ -315,10 +336,11 @@ def memory_records_from_scaling_report(
         topology = _compact_topological_algebra(row.get("topological_algebra") or trajectory_algebra or {})
         row_complex = _compact_filtered_object(row.get("filtered_simplicial_object", {}))
         row_probability_complex = _compact_filtered_object(row.get("probability_filtered_simplicial_object", {}))
+        probability_complex_for_gate = trajectory_probability_complex if trajectory_probability_complex else row_probability_complex
         quality_report = gate.evaluate(
             row,
             scaling_report=scaling_report,
-            probability_complex=row_probability_complex or trajectory_probability_complex,
+            probability_complex=probability_complex_for_gate,
             topology=topology or trajectory_algebra,
         )
         if not quality_report["passed"]:
@@ -338,7 +360,7 @@ def memory_records_from_scaling_report(
                 trajectory_edges=trajectory_edges,
                 trajectory_paths=trajectory_paths,
                 filtered_simplicial_object=row_complex or trajectory_complex,
-                probability_filtered_simplicial_object=row_probability_complex or trajectory_probability_complex,
+                probability_filtered_simplicial_object=row_probability_complex,
                 topological_algebra=topology or trajectory_algebra,
                 derived_signature=(topology or trajectory_algebra).get("derived_equivalence_signature", {}),
                 metadata={
@@ -347,8 +369,12 @@ def memory_records_from_scaling_report(
                     "path": row.get("path", []),
                     "graphcg_projection": row.get("graphcg_projection"),
                     "trajectory_summary": trajectory_complex.get("summary", {}) if isinstance(trajectory_complex, dict) else {},
+                    "trajectory_filtered_simplicial_object": trajectory_complex,
                     "trajectory_probability_summary": trajectory_probability_complex.get("summary", {}) if isinstance(trajectory_probability_complex, dict) else {},
+                    "trajectory_probability_filtered_simplicial_object": trajectory_probability_complex,
+                    "trajectory_probability_topological_algebra": trajectory_probability_algebra,
                     "trajectory_probability_topological_algebra_summary": trajectory_probability_algebra.get("summary", {}) if isinstance(trajectory_probability_algebra, dict) else {},
+                    "row_probability_filtered_simplicial_object": row_probability_complex,
                     "quality_gate": quality_report,
                     "memory_payload_policy": "compact_real_trajectory_payload_no_duplicate_full_complexes",
                 },
@@ -489,14 +515,37 @@ def _simplex_dimension(simplex: dict[str, Any]) -> int:
 
 def _topology_quality(topology: dict[str, Any]) -> dict[str, Any]:
     if not isinstance(topology, dict) or topology.get("available") is False:
-        return {"available": False, "has_persistence": False, "has_free_resolution": False, "has_commutative_algebra": False}
+        return {
+            "available": False,
+            "has_persistence": False,
+            "has_free_resolution": False,
+            "has_real_free_resolution": False,
+            "has_chain_presentation_diagnostics": False,
+            "has_commutative_algebra": False,
+        }
     has_persistence = bool(topology.get("persistence") or topology.get("persistence_summary") or topology.get("betti_numbers"))
     ca = topology.get("commutative_algebra") if isinstance(topology.get("commutative_algebra"), dict) else {}
-    has_free = any(isinstance(ca.get(key), dict) and bool(ca.get(key)) for key in ("two_parameter_free_resolution", "multiparameter_free_resolution_proxy"))
+    chain_keys = (
+        "two_parameter_chain_presentation_diagnostics",
+        "multiparameter_chain_presentation_diagnostics",
+        "two_parameter_free_resolution",
+        "multiparameter_free_resolution_proxy",
+    )
+    has_chain = any(isinstance(ca.get(key), dict) and bool(ca.get(key)) for key in chain_keys)
+    has_real = False
+    for key in chain_keys:
+        value = ca.get(key)
+        if isinstance(value, dict):
+            real = value.get("real_free_resolution") if isinstance(value.get("real_free_resolution"), dict) else {}
+            if bool(real.get("available")) and bool(real.get("certificate_attached")):
+                has_real = True
+                break
     return {
-        "available": bool(has_persistence or has_free or topology.get("derived_equivalence_signature")),
+        "available": bool(has_persistence or has_chain or topology.get("derived_equivalence_signature")),
         "has_persistence": has_persistence,
-        "has_free_resolution": has_free,
+        "has_free_resolution": has_real,
+        "has_real_free_resolution": has_real,
+        "has_chain_presentation_diagnostics": has_chain,
         "has_commutative_algebra": bool(ca),
     }
 
@@ -577,7 +626,13 @@ def _compact_topological_algebra(obj: Any) -> dict[str, Any]:
 
 def _compact_commutative_algebra(ca: dict[str, Any]) -> dict[str, Any]:
     out: dict[str, Any] = {}
-    for key in ("two_parameter_free_resolution", "multiparameter_free_resolution_proxy", "taylor_resolution_upper_bound"):
+    for key in (
+        "two_parameter_chain_presentation_diagnostics",
+        "multiparameter_chain_presentation_diagnostics",
+        "two_parameter_free_resolution",
+        "multiparameter_free_resolution_proxy",
+        "taylor_resolution_upper_bound",
+    ):
         value = ca.get(key)
         if isinstance(value, dict):
             out[key] = _compact_free_resolution(value)
@@ -592,9 +647,14 @@ def _compact_free_resolution(value: dict[str, Any]) -> dict[str, Any]:
     out: dict[str, Any] = {
         "ring": value.get("ring"),
         "method": value.get("method"),
+        "resolution_status": value.get("resolution_status"),
+        "not_a_free_resolution": value.get("not_a_free_resolution", True),
+        "certificate_attached": value.get("certificate_attached", False),
+        "deprecated_alias_for": value.get("deprecated_alias_for"),
         "field": value.get("field"),
         "free_chain_modules": value.get("free_chain_modules", []),
         "monomial_labeled_boundary_entry_counts": value.get("monomial_labeled_boundary_entry_counts", {}),
+        "real_free_resolution": value.get("real_free_resolution", {}),
         "minimal_free_resolution": value.get("minimal_free_resolution", {}),
     }
     det = value.get("determinantal_ideals") if isinstance(value.get("determinantal_ideals"), dict) else {}
@@ -637,6 +697,132 @@ def query_signature_from_report(result: dict[str, Any]) -> tuple[list[float], li
     return [float(v) for v in embedding], signature_vector(topology)
 
 
+def query_topology_from_report(result: dict[str, Any]) -> dict[str, Any]:
+    scaling = result.get("inference_scaling", {}) if isinstance(result, dict) else {}
+    best = scaling.get("best", {}) if isinstance(scaling, dict) else {}
+    for candidate in (
+        scaling.get("trajectory_probability_topological_algebra") if isinstance(scaling, dict) else None,
+        scaling.get("trajectory_topological_algebra") if isinstance(scaling, dict) else None,
+        best.get("topological_algebra") if isinstance(best, dict) else None,
+        result.get("topological_algebra") if isinstance(result, dict) else None,
+    ):
+        if isinstance(candidate, dict):
+            return candidate
+    return {}
+
+
+def persistence_landscape_vector(topology: dict[str, Any], max_dimension: int | None = None) -> dict[int, np.ndarray]:
+    if not isinstance(topology, dict):
+        return {}
+    reps = topology.get("persistence_representations")
+    if not isinstance(reps, dict) or not reps.get("available"):
+        return {}
+    methods = reps.get("methods")
+    if not isinstance(methods, dict):
+        return {}
+    dims: list[int] = []
+    for key in methods.keys():
+        try:
+            dim = int(key)
+        except (TypeError, ValueError):
+            continue
+        if max_dimension is None or dim <= max_dimension:
+            dims.append(dim)
+    vectors: dict[int, np.ndarray] = {}
+    for dim in sorted(set(dims)):
+        row = methods.get(str(dim), {})
+        if not isinstance(row, dict) or not row.get("available"):
+            continue
+        landscape = row.get("landscape")
+        if not isinstance(landscape, dict):
+            continue
+        raw = landscape.get("vector")
+        if not isinstance(raw, list) or not raw:
+            continue
+        vals: list[float] = []
+        for value in raw:
+            try:
+                v = float(value)
+            except (TypeError, ValueError):
+                continue
+            if math.isfinite(v):
+                vals.append(v)
+        if vals:
+            vectors[dim] = np.asarray(vals, dtype=float)
+    return vectors
+
+
+def _concatenate_landscape_vectors(left: dict[int, np.ndarray], right: dict[int, np.ndarray]) -> tuple[np.ndarray, np.ndarray, list[int]]:
+    dims = sorted(set(left) | set(right))
+    if not dims:
+        return np.zeros(0, dtype=float), np.zeros(0, dtype=float), []
+    left_parts: list[np.ndarray] = []
+    right_parts: list[np.ndarray] = []
+    for dim in dims:
+        lv = left.get(dim, np.zeros(0, dtype=float))
+        rv = right.get(dim, np.zeros(0, dtype=float))
+        n = max(int(lv.size), int(rv.size))
+        if n <= 0:
+            continue
+        lp = np.zeros(n, dtype=float)
+        rp = np.zeros(n, dtype=float)
+        lp[: int(lv.size)] = lv[:n]
+        rp[: int(rv.size)] = rv[:n]
+        left_parts.append(lp)
+        right_parts.append(rp)
+    if not left_parts:
+        return np.zeros(0, dtype=float), np.zeros(0, dtype=float), []
+    return np.concatenate(left_parts), np.concatenate(right_parts), dims
+
+
+def persistence_landscape_vector_similarity(query_topology: dict[str, Any], memory_topology: dict[str, Any]) -> dict[str, Any]:
+    q_by_dim = persistence_landscape_vector(query_topology)
+    m_by_dim = persistence_landscape_vector(memory_topology)
+    if not q_by_dim or not m_by_dim:
+        return {
+            "available": False,
+            "source": "gudhi.representations.Landscape.vector",
+            "reason": "missing_gudhi_landscape_vector",
+            "query_dims": sorted(q_by_dim.keys()),
+            "memory_dims": sorted(m_by_dim.keys()),
+        }
+    q_vec, m_vec, dims = _concatenate_landscape_vectors(q_by_dim, m_by_dim)
+    if q_vec.size == 0 or m_vec.size == 0:
+        return {
+            "available": False,
+            "source": "gudhi.representations.Landscape.vector",
+            "reason": "empty_concatenated_landscape_vector",
+            "query_dims": sorted(q_by_dim.keys()),
+            "memory_dims": sorted(m_by_dim.keys()),
+        }
+    q_norm = float(np.linalg.norm(q_vec))
+    m_norm = float(np.linalg.norm(m_vec))
+    denom = q_norm * m_norm
+    cosine = float(np.dot(q_vec, m_vec) / denom) if denom > 1e-12 else (1.0 if float(np.linalg.norm(q_vec - m_vec)) <= 1e-12 else 0.0)
+    l2_distance = float(np.linalg.norm(q_vec - m_vec))
+    l2_similarity = float(1.0 / (1.0 + l2_distance))
+    if q_vec.size > 1 and m_vec.size > 1 and float(np.std(q_vec)) > 1e-12 and float(np.std(m_vec)) > 1e-12:
+        correlation = float(np.corrcoef(q_vec, m_vec)[0, 1])
+    else:
+        correlation = cosine
+    return {
+        "available": True,
+        "source": "gudhi.representations.Landscape.vector",
+        "comparison_space": "concatenated sampled persistence landscape lambda_k(t) vectors by homology dimension",
+        "differentiable_comparison_note": "cosine, L2, and correlation are differentiable vector comparisons; the current GUDHI vectorizer is a cached NumPy transform, not a torch-native differentiable layer",
+        "dims": dims,
+        "query_dims": sorted(q_by_dim.keys()),
+        "memory_dims": sorted(m_by_dim.keys()),
+        "overlap_dim": int(q_vec.size),
+        "query_norm": q_norm,
+        "memory_norm": m_norm,
+        "cosine": cosine,
+        "l2_distance": l2_distance,
+        "l2_similarity": l2_similarity,
+        "correlation": correlation,
+    }
+
+
 def signature_vector(topology: dict[str, Any], length: int = 32) -> list[float]:
     sig = topology.get("derived_equivalence_signature", {}) if isinstance(topology, dict) else {}
     chain = topology.get("chain_complex", {}) if isinstance(topology, dict) else {}
@@ -670,7 +856,13 @@ def signature_vector(topology: dict[str, Any], length: int = 32) -> list[float]:
 def _commutative_algebra_signature_values(topology: dict[str, Any]) -> list[float]:
     ca = topology.get("commutative_algebra", {}) if isinstance(topology, dict) else {}
     values: list[float] = []
-    for key in ("two_parameter_free_resolution", "multiparameter_free_resolution_proxy"):
+    chain_keys = (
+        "two_parameter_chain_presentation_diagnostics",
+        "multiparameter_chain_presentation_diagnostics",
+    )
+    legacy_keys = ("two_parameter_free_resolution", "multiparameter_free_resolution_proxy")
+    keys = chain_keys if any(isinstance(ca.get(key), dict) for key in chain_keys) else legacy_keys
+    for key in keys:
         fr = ca.get(key, {}) if isinstance(ca.get(key), dict) else {}
         for row in fr.get("free_chain_modules", []) if isinstance(fr.get("free_chain_modules"), list) else []:
             if isinstance(row, dict):

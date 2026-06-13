@@ -35,6 +35,14 @@ def test_topological_algebra_report_has_multiparameter_data():
     assert "maps" in proxy["fitting_ideals"]
     assert "rank_exactness_checks" in proxy["buchsbaum_eisenbud"]
     assert proxy["minimal_free_resolution"]["available"] is False
+    assert proxy["not_a_free_resolution"] is True
+    assert proxy["resolution_status"] == "chain_presentation_only"
+    assert proxy["real_free_resolution"]["available"] is False
+    assert proxy["real_free_resolution"]["certificate_attached"] is False
+    chain = report["commutative_algebra"]["multiparameter_chain_presentation_diagnostics"]
+    assert chain["not_a_free_resolution"] is True
+    assert chain["real_free_resolution"]["available"] is False
+    assert chain["real_free_resolution"]["candidate_backend_available"] in {True, False}
     summary = summarize_algebra_reports([report])
     assert summary["algebra_reports"] == 1.0
 

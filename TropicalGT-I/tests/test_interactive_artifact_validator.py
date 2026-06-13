@@ -90,7 +90,8 @@ def _row(root: Path, name: str) -> Path:
             "z_axis": "projected_nll_fitness_energy",
             "raw_nll_range": 0.3,
             "exact_anchor_layer": True,
-            "actual_landscape_layer": True,
+            "sparse_observed_anchor_layer": True,
+            "actual_landscape_layer": False,
             "support_radius": 0.5,
             "surface_contact_contract": "every rendered GoT state marker and trajectory edge endpoint uses plot.z/plot.z_surface sampled from the displayed NLL energy surface",
             "trajectory_point_surface_residual_max": 0.0,
@@ -273,7 +274,7 @@ def _row(root: Path, name: str) -> Path:
             "Plotly.newPlot simplicial-object-panel simplicial-object-plot selected-complex-graph hover-simplicial-card plotly_click",
         ),
         "got_trajectory_pca_3d.html": _html(
-            "Graph-of-thought branching trajectory model-evaluated NLL landscape",
+            "Graph-of-thought branching trajectory with observed NLL anchors",
             "Plotly.newPlot selected-complex-graph plotly_click open interactive reasoning-step complex page",
         ),
         "got_full_trajectory_complex.html": _html("Full graph-of-thought trajectory filtered simplicial complex", "Plotly.newPlot play filtration min-to-max Filtration radius model input model output filtration backend= simplicial-object-plot selected-complex-graph plotly_click"),

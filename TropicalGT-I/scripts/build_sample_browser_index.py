@@ -26,7 +26,7 @@ class ArtifactSpec(NamedTuple):
 
 
 PRIMARY_ARTIFACTS: tuple[ArtifactSpec, ...] = (
-    ArtifactSpec("GoT NLL landscape", "got_trajectory_pca_3d.html", "NLL"),
+    ArtifactSpec("GoT observed NLL PCA anchors", "got_trajectory_pca_3d.html", "NLL"),
     ArtifactSpec("Embedding map", "got_embedding_map_3d.html", "PCA"),
     ArtifactSpec("Full radius complex", "got_full_trajectory_complex.html", "radius"),
     ArtifactSpec("Full radius simplex tree", "got_full_trajectory_simplex_tree_3d.html", "tree"),
@@ -41,9 +41,9 @@ PRIMARY_ARTIFACTS: tuple[ArtifactSpec, ...] = (
     ArtifactSpec("Analogical top-k index", "analogical_memory_topk_index.html", "top-k"),
     ArtifactSpec("Persistence barcode", "trajectory_persistence/persistence_barcode.html", "bars"),
     ArtifactSpec("2-parameter F2[x,y] bifiltration", "trajectory_persistence/two_parameter_bifiltration.html", "2-param"),
-    ArtifactSpec("Persistence Betti/free-resolution", "trajectory_persistence/persistence_module_betti.html", "betti"),
+    ArtifactSpec("Persistence Betti/chain presentation", "trajectory_persistence/persistence_module_betti.html", "betti"),
     ArtifactSpec("Persistence vector representations", "trajectory_persistence/persistence_representations.html", "vector"),
-    ArtifactSpec("Persistence landscapes", "trajectory_persistence/persistence_landscapes.html", "land"),
+    ArtifactSpec("Persistence landscape lambda_k(t)", "trajectory_persistence/persistence_landscapes.html", "land"),
     ArtifactSpec("GraphCG directions", "graphcg_direction_cosines.html", "rank"),
     ArtifactSpec("Tropical support", "tropical_support_heatmap.html", "support"),
     ArtifactSpec("Generated sample index", "browser_index.html", "raw"),

@@ -25,7 +25,7 @@ from .data import (
 )
 from .decoding import meet_in_middle_batch, meet_in_middle_config
 from .diagnostics import describe_graph_tokens, record_diagnostics
-from .memory import AnalogicalMemoryBank, AnalogicalMemoryQualityGate, memory_quality_gate_summary, memory_records_from_scaling_report, query_signature_from_report
+from .memory import AnalogicalMemoryBank, AnalogicalMemoryQualityGate, memory_quality_gate_summary, memory_records_from_scaling_report, query_signature_from_report, query_topology_from_report
 from .metrics import aggregate_bpb_metrics, batch_bpb_metrics, explicit_graph_json_bytes, graph_token_structural_bytes
 from .model import TropicalGTConfig, TropicalGTModel
 from .scaling import run_inference_scaling
@@ -953,6 +953,8 @@ def _run_periodic_validation_round(
                     memory_bank.save()
                     memory_added_this_round += len(records)
                     query_embedding, query_signature = query_signature_from_report(audit_result)
+                    query_topology = query_topology_from_report(audit_result)
+                    memory_landscape_weight = float(cfg.get("memory_retrieval_landscape_weight", 0.18) or 0.0)
                     audit_result["analogical_memory_retrieval"] = {
                         "bank_path": str(memory_bank.path),
                         "bank_size": len(memory_bank.records),
@@ -965,6 +967,8 @@ def _run_periodic_validation_round(
                             top_k=int(cfg.get("periodic_memory_retrieve_top_k", 5)),
                             exclude_sources={memory_source},
                             exclude_memory_ids={record.memory_id for record in records},
+                            query_topology=query_topology,
+                            landscape_weight=memory_landscape_weight,
                         ),
                     }
                 example_dir = step_dir / "got_audit" if example_idx == 0 else step_dir / "got_audit" / f"example_{example_idx:02d}"

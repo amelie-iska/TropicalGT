@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+from bisect import bisect_left
 from collections import Counter, defaultdict
 from itertools import combinations, permutations, product
 from math import comb, isinf
 from typing import Any, Iterable
+import importlib.util
+import shutil
 import warnings
 
 import numpy as np
@@ -83,6 +86,8 @@ def compute_topological_algebra_report(
             max_syzygy_basis=max_syzygy_basis,
         )
         dgca = _dgca_report(by_dim, boundaries)
+        two_parameter_chain = _multigraded_free_resolution_report(two_parameter)
+        multiparameter_chain = _multigraded_free_resolution_report(multiparameter)
         report["commutative_algebra"] = {
             "multigraded_hilbert_poincare": _hilbert_poincare_report(closed["simplices"]),
             "stanley_reisner": sr,
@@ -90,8 +95,10 @@ def compute_topological_algebra_report(
             "taylor_resolution_upper_bound": _taylor_resolution_report(sr),
             "boundary_syzygies": boundaries["syzygies"],
             "dg_commutative_algebra": dgca,
-            "two_parameter_free_resolution": _multigraded_free_resolution_report(two_parameter),
-            "multiparameter_free_resolution_proxy": _multigraded_free_resolution_report(multiparameter),
+            "two_parameter_chain_presentation_diagnostics": two_parameter_chain,
+            "multiparameter_chain_presentation_diagnostics": multiparameter_chain,
+            "two_parameter_free_resolution": {**two_parameter_chain, "deprecated_alias_for": "two_parameter_chain_presentation_diagnostics"},
+            "multiparameter_free_resolution_proxy": {**multiparameter_chain, "deprecated_alias_for": "multiparameter_chain_presentation_diagnostics"},
             "notes": [
                 "Boundary syzygies are F2 nullspaces of displayed boundary maps.",
                 "Taylor ranks are nonminimal upper bounds for the displayed Stanley-Reisner generators.",
@@ -219,6 +226,18 @@ def compute_level_radius_bifiltration_report(
     if len(thresholds) > 64:
         take = np.linspace(0, len(thresholds) - 1, 64).round().astype(int)
         thresholds = [thresholds[int(idx)] for idx in take]
+    thresholds = sorted(dict.fromkeys(float(value) for value in thresholds))
+    radius_grade_values = {idx: float(value) for idx, value in enumerate(thresholds)}
+
+    def radius_grade(value: float) -> int:
+        # Use the exact sampled radius-grid index, not a rounded bucket. This
+        # keeps the finite F2[x_level,x_radius] fibers injective over the
+        # displayed grid and prevents distinct radii from overwriting one
+        # another in the persistence-module dictionary.
+        if not thresholds:
+            return 0
+        idx = bisect_left(thresholds, float(value) - 1e-12)
+        return int(min(max(idx, 0), len(thresholds) - 1))
 
     subsets: dict[tuple[int, int], list[dict[str, Any]]] = {}
     fiber_profile: list[dict[str, Any]] = []
@@ -241,21 +260,22 @@ def compute_level_radius_bifiltration_report(
                     ):
                         generator_by_simplex[key] = {
                             **simplex,
-                            "multidegree": [src_level, _bucket(float(simplex.get("filtration", 0.0) or 0.0))],
+                            "multidegree": [src_level, radius_grade(float(simplex.get("filtration", 0.0) or 0.0))],
+                            "radius_value": float(simplex.get("filtration", 0.0) or 0.0),
                             "first_level": src_level,
                         }
-        for threshold in thresholds:
-            radius_grade = _bucket(threshold)
+        for radius_idx, threshold in enumerate(thresholds):
             subset = [row for row in level_simplices.values() if float(row.get("filtration", 0.0) or 0.0) <= threshold + 1e-12]
-            grade = (level, radius_grade)
+            grade = (level, radius_idx)
             subsets[grade] = subset
             by_dim = _simplices_by_dim(subset)
             boundaries = _boundary_reports(by_dim, max_syzygy_basis=0)
             homology = _homology_report(by_dim, boundaries)
             fiber_profile.append(
                 {
-                    "grade": [level, radius_grade],
+                    "grade": [level, radius_idx],
                     "level": level,
+                    "radius_grade": radius_idx,
                     "radius": float(threshold),
                     "chain_group_ranks": {str(dim): len(rows_) for dim, rows_ in sorted(by_dim.items())},
                     "betti": homology["betti"],
@@ -290,21 +310,27 @@ def compute_level_radius_bifiltration_report(
                 "homological_degree": int(row["dimension"]),
                 "multidegree": row["multidegree"],
                 "filtration": float(row.get("filtration", 0.0) or 0.0),
+                "radius_value": float(row.get("radius_value", row.get("filtration", 0.0)) or 0.0),
                 "source": row.get("source", "observed"),
             }
             for row in generators
         ],
         "boundary_monomials": boundary,
-        "grid_axes": [levels, [_bucket(radius) for radius in thresholds]],
+        "grid_axes": [levels, list(range(len(thresholds)))],
+        "radius_grade_values": radius_grade_values,
+        "radius_grade_policy": "exact_sorted_radius_grid_index_no_bucket_collision",
         "fiber_rank_profile": fiber_profile,
         "rank_invariant_samples": rank_samples,
         "notes": [
             "A finite 2-parameter persistence module is represented as a multigraded F2[x_level,x_radius]-module.",
-            "Each fiber is computed by F2 chain complexes on K_{level,radius}; H0 rank samples are exact inclusion-induced ranks.",
-            "Minimal free resolutions are unavailable unless a CAS backend certifies them; the emitted resolution is the exact multigraded free chain presentation plus labeled boundary maps.",
+            "Each fiber is computed by F2 chain complexes on K_{level,radius}; H0 rank samples are exact inclusion-induced ranks on the sampled radius grid.",
+            "The x_radius grade is the exact sorted radius-grid index; radius_grade_values records the real radius for each index.",
+            "Real free resolutions are unavailable unless a CAS backend certifies them; the emitted object is only the exact multigraded free chain presentation plus labeled boundary maps.",
         ],
     }
-    report["free_resolution"] = _multigraded_free_resolution_report(report)
+    chain_report = _multigraded_free_resolution_report(report)
+    report["chain_presentation_diagnostics"] = chain_report
+    report["free_resolution"] = {**chain_report, "deprecated_alias_for": "chain_presentation_diagnostics"}
     return report
 
 
@@ -355,7 +381,9 @@ def _two_parameter_module_report(
             "Trajectory growth uses the separate explicit F2[x_level,x_radius] bifiltration report.",
         ],
     }
-    report["free_resolution"] = _multigraded_free_resolution_report(report)
+    chain_report = _multigraded_free_resolution_report(report)
+    report["chain_presentation_diagnostics"] = chain_report
+    report["free_resolution"] = {**chain_report, "deprecated_alias_for": "chain_presentation_diagnostics"}
     return report
 
 
@@ -450,22 +478,181 @@ def _multigraded_free_resolution_report(module: dict[str, Any]) -> dict[str, Any
     determinantal = _determinantal_ideal_report(module, matrices)
     fitting = _fitting_ideal_report(matrices, determinantal)
     be = _buchsbaum_eisenbud_complex_report(module, matrices, determinantal)
+    m2 = _macaulay2_style_resolution_report(module, matrices, determinantal, fitting, be)
+    real_resolution = _real_free_resolution_backend_report(module)
     return {
         "ring": module.get("coefficient_ring"),
-        "method": "finite_multigraded_free_chain_presentation",
+        "method": "finite_multigraded_chain_presentation_diagnostics",
+        "not_a_free_resolution": True,
+        "resolution_status": "chain_presentation_only",
+        "certificate_attached": False,
         "field": "F2",
         "free_chain_modules": [{"homological_degree": degree, "rank": count} for degree, count in sorted(by_degree.items())],
         "monomial_labeled_boundary_entry_counts": boundary_counts,
         "determinantal_ideals": determinantal,
         "fitting_ideals": fitting,
         "buchsbaum_eisenbud": be,
+        "chain_presentation_diagnostics": m2,
+        "macaulay2_style": m2,
+        "real_free_resolution": real_resolution,
         "minimal_free_resolution": {
             "available": False,
-            "reason": "minimal multigraded free resolution, Groebner bases, ideal grade/depth, and certified Buchsbaum-Eisenbud multipliers require a CAS backend such as Macaulay2/Singular/Sage; not silently approximated",
+            "reason": "minimal multigraded free resolutions, Groebner bases, ideal grade/depth, and certified Buchsbaum-Eisenbud multipliers require a real CAS backend such as Macaulay2/Singular/Sage plus optional BEMultipliers; no Python diagnostic is substituted",
         },
-        "interpretation": "Exact multigraded free chain presentation over the reported polynomial ring; determinantal/Fitting data is computed from bounded monomial boundary matrices; this is not a certified minimal free resolution unless a CAS certificate is attached.",
+        "interpretation": "Exact multigraded free chain presentation over the reported polynomial ring. Determinantal/Fitting data is computed from bounded monomial boundary matrices. This object is not a free resolution; real resolutions are unavailable unless a CAS certificate is attached.",
     }
 
+
+
+def _real_free_resolution_backend_report(module: dict[str, Any]) -> dict[str, Any]:
+    executable_backends = {
+        "Macaulay2_M2": shutil.which("M2"),
+        "SageMath_sage": shutil.which("sage"),
+        "Singular": shutil.which("Singular"),
+    }
+    python_backends = {
+        name: bool(importlib.util.find_spec(name))
+        for name in ("sageall", "sage", "sageconf")
+    }
+    multiparameter_backends = {"multipers": bool(importlib.util.find_spec("multipers"))}
+    candidate_backend_available = any(bool(path) for path in executable_backends.values()) or any(python_backends.values())
+    certificate_attached = False
+    return {
+        "available": bool(certificate_attached),
+        "candidate_backend_available": bool(candidate_backend_available),
+        "ring": module.get("coefficient_ring"),
+        "allowed_backends": [
+            "Macaulay2: res, syz, KustinMiller::resBE, MultiplierIdeals",
+            "SageMath: syzygy_matrix, free_resolution, macaulay2 bridge",
+            "Singular: std/syz/res via Sage or CLI",
+            "BEMultipliers: https://github.com/amelie-iska/BEMultipliers.git for Buchsbaum-Eisenbud multiplier analyses",
+        ],
+        "executable_backends": executable_backends,
+        "python_backends": python_backends,
+        "multiparameter_backends": multiparameter_backends,
+        "certificate_attached": certificate_attached,
+        "reason": "No Macaulay2/SageMath/Singular/BEMultipliers certificate is attached in the active tokengt environment; minimal free resolutions are therefore unavailable and must not be rendered or scored as real resolutions.",
+        "multipers_note": "multipers is useful for multiparameter persistence invariants and signed measures, but it is not treated here as a certified minimal-free-resolution backend.",
+    }
+
+
+def _macaulay2_style_resolution_report(
+    module: dict[str, Any],
+    matrices: dict[str, dict[str, Any]],
+    determinantal: dict[str, Any],
+    fitting: dict[str, Any],
+    be: dict[str, Any],
+) -> dict[str, Any]:
+    ring = str(module.get("coefficient_ring", "F2[x,y]"))
+    variables = _ring_variable_names(ring)
+    generators = [row for row in module.get("chain_module_generators", []) if isinstance(row, dict)]
+    by_degree: dict[int, list[dict[str, Any]]] = defaultdict(list)
+    for row in generators:
+        by_degree[int(row.get("homological_degree", 0) or 0)].append(row)
+    betti_rows: list[dict[str, Any]] = []
+    free_modules: list[dict[str, Any]] = []
+    for degree in sorted(by_degree):
+        shift_counts: Counter[tuple[int, ...]] = Counter()
+        for row in by_degree[degree]:
+            multidegree = row.get("multidegree", [])
+            if isinstance(multidegree, list):
+                shift_counts[tuple(int(v) for v in multidegree)] += 1
+        shifts = [
+            {
+                "multidegree": list(shift),
+                "multiplicity": int(count),
+                "summand": f"{_ring_module_symbol(ring)}(-{','.join(str(v) for v in shift)})" + (f"^{int(count)}" if int(count) > 1 else ""),
+            }
+            for shift, count in sorted(shift_counts.items())
+        ]
+        display = f"F_{degree} = " + (" + ".join(row["summand"] for row in shifts[:12]) if shifts else "0") + (" + ..." if len(shifts) > 12 else "")
+        free_modules.append({"name": f"F_{degree}", "rank": len(by_degree[degree]), "display": display, "shifts": shifts})
+        for shift, count in sorted(shift_counts.items()):
+            betti_rows.append({"homological_degree": degree, "multidegree": list(shift), "rank": int(count)})
+    differentials: list[dict[str, Any]] = []
+    for key, matrix in sorted(matrices.items(), key=lambda item: item[0]):
+        degree = int(matrix.get("homological_degree", str(key)[1:] if str(key).startswith("d") else 0) or 0)
+        entries = matrix.get("entries", {}) if isinstance(matrix.get("entries"), dict) else {}
+        samples = []
+        for (r, c), exp in sorted(entries.items())[:24]:
+            samples.append({"row": int(r), "column": int(c), "entry": _multi_monomial_named(exp, variables), "exponent": list(exp)})
+        differentials.append(
+            {
+                "name": str(key),
+                "display": f"{key}: F_{degree} -> F_{degree - 1}",
+                "shape": [int(matrix.get("target_rank", 0)), int(matrix.get("source_rank", 0))],
+                "rank_over_F2_incidence": int(matrix.get("rank_over_F2_incidence", 0)),
+                "nonzero_entries": int(matrix.get("nonzero_entries", 0)),
+                "entry_samples": samples,
+                "matrix_preview": _macaulay2_matrix_preview(samples, int(matrix.get("target_rank", 0)), int(matrix.get("source_rank", 0))),
+            }
+        )
+    staircase = _two_variable_staircase_report(generators, variables)
+    be_checks = be.get("composition_zero_checks", []) if isinstance(be.get("composition_zero_checks"), list) else []
+    exact_checks = be.get("rank_exactness_checks", []) if isinstance(be.get("rank_exactness_checks"), list) else []
+    return {
+        "available": True,
+        "ring": ring,
+        "field": "F2",
+        "style": "Macaulay2-inspired finite multigraded chain-presentation diagnostic (not a real free resolution)",
+        "betti_table_rows": betti_rows,
+        "free_modules": free_modules,
+        "differentials": differentials,
+        "staircase": staircase,
+        "chain_complex_certificate": {
+            "d_squared_zero_checks": be_checks,
+            "rank_exactness_shadow": exact_checks,
+            "minimality_certified": False,
+            "derived_equivalence_certified": False,
+            "reason": "This is a finite multigraded free-chain presentation with determinantal/Fitting/BE diagnostics. It is not a free resolution; minimality and derived equivalence require CAS certificates and are not asserted.",
+        },
+        "fitting_ideals": fitting,
+        "determinantal_ideals": determinantal,
+    }
+
+
+def _ring_module_symbol(ring: str) -> str:
+    return "S" if "[" in str(ring) else "F"
+
+
+def _macaulay2_matrix_preview(samples: list[dict[str, Any]], rows: int, cols: int, max_rows: int = 8, max_cols: int = 8) -> list[list[str]]:
+    grid = [["0" for _ in range(min(cols, max_cols))] for _ in range(min(rows, max_rows))]
+    for item in samples:
+        r = int(item.get("row", -1))
+        c = int(item.get("column", -1))
+        if 0 <= r < len(grid) and 0 <= c < (len(grid[r]) if grid else 0):
+            grid[r][c] = str(item.get("entry", "1"))
+    return grid
+
+
+def _two_variable_staircase_report(generators: list[dict[str, Any]], variables: list[str]) -> dict[str, Any]:
+    if len(variables) != 2:
+        return {"available": False, "reason": "staircase diagram is specific to two-variable multigrades"}
+    points = []
+    for row in generators:
+        multidegree = row.get("multidegree", [])
+        if isinstance(multidegree, list) and len(multidegree) >= 2:
+            points.append((int(multidegree[0]), int(multidegree[1])))
+    counts = Counter(points)
+    unique = sorted(counts)
+    antichain = []
+    for pnt in unique:
+        dominated = any(q != pnt and q[0] <= pnt[0] and q[1] <= pnt[1] for q in unique)
+        if not dominated:
+            antichain.append(pnt)
+    antichain = sorted(antichain, key=lambda item: (item[0], item[1]))
+    lcms = []
+    for left, right in zip(antichain, antichain[1:]):
+        lcm = (max(left[0], right[0]), max(left[1], right[1]))
+        lcms.append({"from": [list(left), list(right)], "lcm_bidegree": list(lcm), "syzygy_candidate": f"lcm({variables[0]}^{left[0]}{variables[1]}^{left[1]}, {variables[0]}^{right[0]}{variables[1]}^{right[1]})"})
+    return {
+        "available": True,
+        "variables": variables,
+        "generator_bidegrees": [{"bidegree": list(pnt), "multiplicity": int(counts[pnt])} for pnt in unique],
+        "minimal_antichain_candidates": [list(pnt) for pnt in antichain],
+        "adjacent_lcm_syzygy_candidates": lcms,
+        "interpretation": "Miller-Sturmfels two-variable staircase candidate: antichain generators and adjacent lcm syzygies are computed from displayed bidegrees; minimal ideal/resolution status is not asserted without CAS.",
+    }
 
 def _monomial_boundary_matrices(module: dict[str, Any]) -> dict[str, dict[str, Any]]:
     generators = module.get("chain_module_generators", [])

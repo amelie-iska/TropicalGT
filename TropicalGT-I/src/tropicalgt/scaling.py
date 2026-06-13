@@ -15,6 +15,26 @@ from .records import GraphRecord, GraphTokenBatch, graph_decoding_order
 from .simplicial import build_reasoning_trajectory_complex
 from .tokenizer import TokenGTTokenizer
 
+def _has_real_probability_complex(obj: Any) -> bool:
+    if not isinstance(obj, dict) or obj.get("available") is False:
+        return False
+    summary = obj.get("summary") if isinstance(obj.get("summary"), dict) else {}
+    model = str(summary.get("filtration_model", summary.get("metric", ""))).lower()
+    if "probability" not in model and "jensen" not in model and "js" not in model:
+        return False
+    if int(summary.get("num_edges", summary.get("edges", 0)) or 0) <= 0:
+        return False
+    simplices = obj.get("simplices", [])
+    if not isinstance(simplices, list):
+        return False
+    for simplex in simplices:
+        if not isinstance(simplex, dict) or int(simplex.get("dimension", -1) or -1) != 0:
+            continue
+        if any(key in simplex for key in ("probability", "probability_vector", "model_probability_vector", "token_probability")):
+            return True
+    return False
+
+
 
 def apply_reasoning_action(record: GraphRecord, action: str, rank: int = 0) -> GraphRecord:
     graph = deepcopy(record.graph_json or {"nodes": [], "edges": []})
@@ -227,11 +247,21 @@ def run_inference_scaling(
                     ),
                 }
             )
+    probability_growth_available = bool(
+        trajectory_growth
+        and _has_real_probability_complex(trajectory_probability_complex)
+        and all(_has_real_probability_complex(row.get("probability_filtered_simplicial_object")) for row in trajectory_growth if isinstance(row, dict))
+    )
     trajectory_level_radius_bifiltration = compute_level_radius_bifiltration_report(
         trajectory_growth,
-        object_key="probability_filtered_simplicial_object" if trajectory_probability_algebra is not None else "filtered_simplicial_object",
+        object_key="probability_filtered_simplicial_object" if probability_growth_available else "filtered_simplicial_object",
         max_simplices=audit_max_simplices,
     ) if trajectory_growth else {"available": False, "reason": "trajectory growth unavailable"}
+    if isinstance(trajectory_level_radius_bifiltration, dict):
+        trajectory_level_radius_bifiltration["object_key_policy"] = (
+            "probability Jensen-Shannon complexes only when every growth row has real model probability vertices/edges; otherwise embedding radius complexes"
+        )
+        trajectory_level_radius_bifiltration["object_key_selected"] = "probability_filtered_simplicial_object" if probability_growth_available else "filtered_simplicial_object"
 
     return {
         "enabled": depth > 0,
@@ -319,6 +349,7 @@ def score_records(
                 "target_text": _decode_shifted_bytes(ys[idx]),
                 "decoded_argmax": decoded_argmax[idx],
                 "graph_json_summary": _graph_json_summary(record.graph_json),
+                "decoding_order_report": _decoding_order_report(record),
                 "graph_tokens": graph_tokens,
                 "node_tokens": int(graph_batch_cpu.node_counts[idx].item()),
                 "edge_tokens": int(graph_batch_cpu.edge_counts[idx].item()),
@@ -369,6 +400,7 @@ def _public_candidate(row: dict[str, Any]) -> dict[str, Any]:
         "target_text": row.get("target_text", ""),
         "decoded_argmax": row.get("decoded_argmax", ""),
         "graph_json_summary": row.get("graph_json_summary", {}),
+        "decoding_order_report": row.get("decoding_order_report", {}),
         "graphcg_projection": row.get("graphcg_projection"),
         "graph_token_trace": row["graph_token_trace"],
         "filtered_simplicial_object": row["filtered_simplicial_object"],
@@ -796,6 +828,78 @@ def _graph_json_summary(graph_json: dict[str, Any] | None) -> dict[str, Any]:
     }
 
 
+def _decoding_order_report(record: GraphRecord) -> dict[str, Any]:
+    graph = record.graph_json if isinstance(record.graph_json, dict) else {"nodes": [], "edges": []}
+    metadata = record.metadata if isinstance(record.metadata, dict) else {}
+    report = graph_decoding_order(graph, seed=int(metadata.get("decoding_random_seed", 0) or 0), record_id=record.record_id)
+    for key in (
+        "decoding_order_kind",
+        "decoding_reverse_order_kind",
+        "decoding_is_dag",
+        "decoding_node_order",
+        "decoding_reverse_node_order",
+        "decoding_random_seed",
+    ):
+        if key in metadata:
+            report[key] = metadata[key]
+    nodes = graph.get("nodes", []) if isinstance(graph.get("nodes", []), list) else []
+    node_set = {str(node.get("id", idx)) for idx, node in enumerate(nodes) if isinstance(node, dict)}
+    causal_edges: list[dict[str, Any]] = []
+    noncausal_edges = 0
+    for idx, raw_edge in enumerate(graph.get("edges", []) if isinstance(graph.get("edges", []), list) else []):
+        if not isinstance(raw_edge, dict):
+            continue
+        source = str(raw_edge.get("source", raw_edge.get("src", "")))
+        target = str(raw_edge.get("target", raw_edge.get("dst", "")))
+        if source not in node_set or target not in node_set:
+            continue
+        causal = bool(raw_edge.get("causal") is True or raw_edge.get("directed") is True)
+        if causal:
+            causal_edges.append(
+                {
+                    "source": source,
+                    "target": target,
+                    "edge_index": idx,
+                    "edge_type": str(raw_edge.get("type", "graph_edge")),
+                    "causal": True,
+                    "directed": True,
+                }
+            )
+        else:
+            noncausal_edges += 1
+    def order_edges(order: object, role: str) -> list[dict[str, Any]]:
+        if not isinstance(order, list):
+            return []
+        clean = [str(item) for item in order if str(item) in node_set]
+        return [
+            {
+                "source": clean[idx],
+                "target": clean[idx + 1],
+                "decoding_step": idx + 1,
+                "edge_type": role,
+                "causal": bool(report.get("decoding_is_dag")),
+                "directed": True,
+            }
+            for idx in range(max(0, len(clean) - 1))
+        ]
+    forward = order_edges(report.get("decoding_node_order"), "forward_decoding_order")
+    reverse = order_edges(report.get("decoding_reverse_node_order"), "reverse_decoding_order")
+    return {
+        "source": "GraphRecord.metadata+graph_decoding_order",
+        "record_id": record.record_id,
+        "decoding_order_kind": str(report.get("decoding_order_kind", "unknown")),
+        "decoding_reverse_order_kind": str(report.get("decoding_reverse_order_kind", "unknown")),
+        "decoding_is_dag": bool(report.get("decoding_is_dag")),
+        "decoding_node_order": list(report.get("decoding_node_order", []) or [])[:256],
+        "decoding_reverse_node_order": list(report.get("decoding_reverse_node_order", []) or [])[:256],
+        "causal_edges": causal_edges[:512],
+        "forward_decoding_edges": forward[:512],
+        "reverse_decoding_edges": reverse[:512],
+        "noncausal_edge_count": int(noncausal_edges),
+        "overlay_policy": "causal DAGs render forward+reverse causal order; cyclic/noncausal graphs render ROAR/random-order forward+reverse decoding edges",
+    }
+
+
 def _last_node_id(nodes: list[dict[str, Any]]) -> str | None:
     if not nodes:
         return None
@@ -831,7 +935,7 @@ def _reasoning_microsteps(record: GraphRecord, action: str, rank: int) -> list[d
         ],
         "retrieve": [
             ("query", "Form an analogical memory query from the current filtered simplicial object."),
-            ("match", "Retrieve candidate memories with similar persistence, free-resolution, and derived signatures."),
+            ("match", "Retrieve candidate memories with similar persistence, chain-presentation diagnostics, and derived signatures."),
             ("attach", "Attach the retrieved evidence as a separate graph branch for downstream verification."),
         ],
         "verify": [

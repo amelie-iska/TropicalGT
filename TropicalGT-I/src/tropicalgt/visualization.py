@@ -6,6 +6,7 @@ import html
 import json
 import math
 from itertools import combinations
+from typing import Any, Iterable, Mapping, Sequence
 
 import numpy as np
 import torch
@@ -16,6 +17,7 @@ from plotly.subplots import make_subplots
 
 from .data import encode_bytes
 from .diagnostics import describe_graph_tokens, per_record_nll, record_diagnostics
+from .memory import persistence_landscape_vector_similarity as _memory_persistence_landscape_vector_similarity
 from .simplicial import build_embedding_radius_simplicial_object, build_reasoning_trajectory_complex
 
 
@@ -296,8 +298,8 @@ def write_inference_audit_artifacts(
             try:
                 from .algebra import compute_level_radius_bifiltration_report
 
-                has_probability = any(
-                    isinstance(row, dict) and isinstance(row.get("probability_filtered_simplicial_object"), dict)
+                has_probability = all(
+                    isinstance(row, dict) and _has_real_probability_filtration(row.get("probability_filtered_simplicial_object"))
                     for row in trajectory_growth
                 )
                 level_radius = compute_level_radius_bifiltration_report(
@@ -342,9 +344,9 @@ def write_inference_audit_artifacts(
         level_radius = scaling.get("trajectory_level_radius_bifiltration") if isinstance(scaling, dict) else None
         if isinstance(level_radius, dict):
             paths["trajectory_level_radius_bifiltration_3d"] = write_two_parameter_bifiltration_visualization(
-                level_radius,
                 output_dir / "trajectory_persistence" / "two_parameter_bifiltration.html",
-                title_prefix="Trajectory ",
+                level_radius,
+                title="Trajectory 2-parameter persistence over F2[x_level,x_radius]",
             )
         if isinstance(memory, dict):
             query_context = {}
@@ -397,7 +399,7 @@ def write_got_trajectory_visualization(scaling_report: dict[str, object], output
     if missing_nll_ids:
         reason = (
             "Graph-of-thought NLL outputs unavailable for "
-            f"{len(missing_nll_ids)}/{len(candidates)} model-evaluated states; NLL landscape was not rendered."
+            f"{len(missing_nll_ids)}/{len(candidates)} model-evaluated states; GoT observed-NLL PCA view was not rendered."
         )
         missing = set(missing_nll_ids)
         _write_dark_empty(path, reason)
@@ -470,7 +472,7 @@ def write_got_trajectory_visualization(scaling_report: dict[str, object], output
             "actual_landscape_scope": "unavailable: this artifact shows only a sparse observed-state anchor mesh, not a dense model-evaluated landscape",
             "sparse_observed_anchor_layer": True,
             "dense_model_evaluated_field": False,
-            "truthfulness_warning": "The surface is only a piecewise-linear mesh through sampled model GoT states; it must not be read as a dense latent energy landscape.",
+            "truthfulness_warning": "The surface is only a piecewise-linear mesh through sampled model GoT states; it must not be read as a dense latent-space NLL field.",
             "local_interpolation_anchor_scope": "observed model-evaluated GoT states only",
             "model_state_anchor_count": int(len(candidates)),
             "rendered_microsteps_are_nll_surface_anchors": False,
@@ -615,7 +617,7 @@ def write_got_trajectory_visualization(scaling_report: dict[str, object], output
             text=(
                 "NLL field diagnostic: raw range="
                 f"{raw_nll_range:.6g}; z-axis shows centered NLL scaled by {nll_plot_scale:.1f}.<br>"
-                "Visible layers: observed model-evaluated GoT-state anchors and their sparse exact anchor mesh; no dense latent landscape, microstep, or surrogate NLL anchors."
+                "Visible layers: observed model-evaluated GoT-state anchors and their sparse exact anchor mesh; no dense latent-space NLL field, microstep, or surrogate NLL anchors."
             ),
             x=0,
             y=0.985,
@@ -1046,6 +1048,111 @@ def _attach_graph_token_direction_overlay(obj: dict[str, object], row: dict[str,
     return updated
 
 
+
+def _vertex_label_maps(obj: dict[str, object]) -> tuple[dict[str, str], dict[str, dict[str, object]]]:
+    node_label_by_id: dict[str, str] = {}
+    vertex_by_label: dict[str, dict[str, object]] = {}
+    for simplex in obj.get("simplices", []) if isinstance(obj.get("simplices"), list) else []:
+        if not isinstance(simplex, dict) or int(simplex.get("dimension", -1)) != 0:
+            continue
+        simplex_vertices = simplex.get("simplex") if isinstance(simplex.get("simplex"), list) else []
+        if not simplex_vertices:
+            continue
+        label = str(simplex_vertices[0])
+        vertex_by_label[label] = simplex
+        # Some complexes store graph-node ids directly as 0-simplex labels; model-derived
+        # TokenGT complexes may instead carry them as node_id metadata. Accept both, but
+        # never invent correspondences beyond labels already present in the complex.
+        node_label_by_id.setdefault(label, label)
+        node_id = simplex.get("node_id")
+        if isinstance(node_id, str) and node_id:
+            node_label_by_id[node_id] = label
+    return node_label_by_id, vertex_by_label
+
+
+def _attach_decoding_causal_overlay(obj: dict[str, object], row: dict[str, object]) -> dict[str, object]:
+    report = row.get("decoding_order_report") if isinstance(row, dict) else None
+    if not isinstance(report, dict):
+        updated = dict(obj)
+        updated["decoding_causal_overlay"] = {
+            "source": "unavailable_decoding_order_report",
+            "edge_count": 0,
+            "edges": [],
+            "semantic_note": "No decoding-order report was emitted for this model row, so no causal/decoding overlay is rendered.",
+        }
+        return updated
+    node_label_by_id, vertex_by_label = _vertex_label_maps(obj)
+
+    def vertex_filtration(label: str) -> float:
+        row_obj = vertex_by_label.get(label, {})
+        try:
+            value = float(row_obj.get("filtration", 0.0) or 0.0)
+        except (TypeError, ValueError):
+            value = 0.0
+        return value if math.isfinite(value) else 0.0
+
+    edges: list[dict[str, object]] = []
+
+    def add_edge(raw: object, role: str, color: str, style: str = "dotted") -> None:
+        if not isinstance(raw, dict):
+            return
+        source_node = str(raw.get("source", ""))
+        target_node = str(raw.get("target", ""))
+        source = node_label_by_id.get(source_node)
+        target = node_label_by_id.get(target_node)
+        if not source or not target or source == target:
+            return
+        try:
+            decoding_step = int(raw.get("decoding_step", raw.get("edge_index", len(edges) + 1)) or len(edges) + 1)
+        except (TypeError, ValueError):
+            decoding_step = len(edges) + 1
+        filtration = max(vertex_filtration(source), vertex_filtration(target))
+        edges.append(
+            {
+                "source": source,
+                "target": target,
+                "source_node_id": source_node,
+                "target_node_id": target_node,
+                "role": role,
+                "edge_type": str(raw.get("edge_type", role)),
+                "decoding_step": decoding_step,
+                "reasoning_level": int(row.get("level", 0) or 0),
+                "filtration": filtration,
+                "style": style,
+                "color": color,
+                "directed": True,
+                "causal": bool(raw.get("causal", False)),
+                "gate": {
+                    "radius": filtration,
+                    "reasoning_step": int(row.get("level", 0) or 0),
+                    "decoding_step": decoding_step,
+                },
+            }
+        )
+
+    for raw in report.get("causal_edges", []) if isinstance(report.get("causal_edges"), list) else []:
+        add_edge(raw, "causal_graph_edge", "rgba(250,204,21,0.86)")
+    for raw in report.get("forward_decoding_edges", []) if isinstance(report.get("forward_decoding_edges"), list) else []:
+        add_edge(raw, "forward_decoding_order", "rgba(94,234,212,0.88)")
+    for raw in report.get("reverse_decoding_edges", []) if isinstance(report.get("reverse_decoding_edges"), list) else []:
+        add_edge(raw, "reverse_decoding_order", "rgba(244,114,182,0.82)")
+
+    updated = dict(obj)
+    updated["decoding_causal_overlay"] = {
+        "source": "GraphRecord.metadata.graph_decoding_order",
+        "semantic_note": (
+            "Dotted directed edges are model-record decoding/causal order overlays. They are not simplices: "
+            "the radius slider reveals them only when their endpoint vertices have entered the displayed complex. "
+            "DAG rows show causal forward and reverse order; cyclic/noncausal rows show ROAR/random-order autoregressive order."
+        ),
+        "decoding_order_kind": str(report.get("decoding_order_kind", "unknown")),
+        "decoding_reverse_order_kind": str(report.get("decoding_reverse_order_kind", "unknown")),
+        "decoding_is_dag": bool(report.get("decoding_is_dag")),
+        "edge_count": len(edges),
+        "edges": edges,
+    }
+    return updated
+
 def _safe_float(value: object) -> float | None:
     try:
         out = float(value)  # type: ignore[arg-type]
@@ -1108,6 +1215,7 @@ def _write_reasoning_step_complex_maps(candidates: list[dict[str, object]], outp
         if not isinstance(obj, dict):
             continue
         obj = _attach_graph_token_direction_overlay(obj, row)
+        obj = _attach_decoding_causal_overlay(obj, row)
         obj_summary = _gudhi_canonical_complex(obj)
         record_id = str(row.get("record_id", f"step-{idx}"))
         file_name = f"reasoning_step_{idx:03d}.html"
@@ -1137,6 +1245,7 @@ def _write_reasoning_step_complex_maps(candidates: list[dict[str, object]], outp
                 "summary": obj_summary.get("summary", {}),
                 "simplex_tree": obj_summary.get("simplex_tree", {}),
                 "graph_token_direction_overlay": obj.get("graph_token_direction_overlay", {}),
+                "decoding_causal_overlay": obj.get("decoding_causal_overlay", {}),
             }
         )
     index_path = directory / "index.html"
@@ -1585,6 +1694,71 @@ def _complex_slider_traces(
         direction_y.extend([sy, ty, None])
         direction_z.extend([sz, tz, None])
         direction_hover.extend([label, label, None])
+
+    def append_dotted_segment(
+        xs: list[float | None],
+        ys: list[float | None],
+        zs: list[float | None],
+        hovers: list[str | None],
+        start: tuple[float, float, float],
+        end: tuple[float, float, float],
+        label: str,
+        segments: int = 10,
+        duty: float = 0.46,
+    ) -> None:
+        ax, ay, az = start
+        bx, by, bz = end
+        for segment in range(max(segments, 1)):
+            t0 = segment / max(segments, 1)
+            t1 = min((segment + duty) / max(segments, 1), 1.0)
+            xs.extend([ax + (bx - ax) * t0, ax + (bx - ax) * t1, None])
+            ys.extend([ay + (by - ay) * t0, ay + (by - ay) * t1, None])
+            zs.extend([az + (bz - az) * t0, az + (bz - az) * t1, None])
+            hovers.extend([label, label, None])
+
+    decoding_overlay = obj.get("decoding_causal_overlay", {}) if isinstance(obj.get("decoding_causal_overlay"), dict) else {}
+    decoding_x: list[float | None] = []
+    decoding_y: list[float | None] = []
+    decoding_z: list[float | None] = []
+    decoding_hover: list[str | None] = []
+    decoding_marker_x: list[float] = []
+    decoding_marker_y: list[float] = []
+    decoding_marker_z: list[float] = []
+    decoding_marker_hover: list[str] = []
+    decoding_marker_color: list[str] = []
+    for directed_edge in decoding_overlay.get("edges", []) if isinstance(decoding_overlay.get("edges"), list) else []:
+        if not isinstance(directed_edge, dict):
+            continue
+        source = str(directed_edge.get("source", ""))
+        target = str(directed_edge.get("target", ""))
+        try:
+            edge_filtration = float(directed_edge.get("filtration", 0.0) or 0.0)
+        except (TypeError, ValueError):
+            edge_filtration = 0.0
+        if edge_filtration > threshold + 1e-12:
+            continue
+        if source not in coords3 or target not in coords3 or source not in visible or target not in visible:
+            continue
+        sx, sy, sz = coords3[source]
+        tx, ty, tz = coords3[target]
+        color = str(directed_edge.get("color", "rgba(94,234,212,0.78)"))
+        label = (
+            f"dotted causal/decoding overlay<br>{html.escape(source)} -> {html.escape(target)}"
+            f"<br>role={html.escape(str(directed_edge.get('role', 'decoding_order')))}"
+            f"<br>edge type={html.escape(str(directed_edge.get('edge_type', 'order_edge')))}"
+            f"<br>source node={html.escape(str(directed_edge.get('source_node_id', '')))}"
+            f"<br>target node={html.escape(str(directed_edge.get('target_node_id', '')))}"
+            f"<br>decoding step={html.escape(str(directed_edge.get('decoding_step', '')))}"
+            f"<br>reasoning level={html.escape(str(directed_edge.get('reasoning_level', '')))}"
+            f"<br>gate radius={edge_filtration:.6g}"
+            f"<br>overlay source={html.escape(str(decoding_overlay.get('source', 'GraphRecord.metadata.graph_decoding_order')))}"
+        )
+        append_dotted_segment(decoding_x, decoding_y, decoding_z, decoding_hover, (sx, sy, sz), (tx, ty, tz), label)
+        decoding_marker_x.append(tx)
+        decoding_marker_y.append(ty)
+        decoding_marker_z.append(tz)
+        decoding_marker_hover.append(label)
+        decoding_marker_color.append(color)
     labels = [str((row.get("simplex") or [""])[0]) for row in vertices]
     vertex_x = [coords3[label][0] for label in labels if label in coords3]
     vertex_y = [coords3[label][1] for label in labels if label in coords3]
@@ -1626,6 +1800,26 @@ def _complex_slider_traces(
             hovertext=direction_hover,
             hoverinfo="text",
             name="faint directed graph-token overlay",
+        ),
+        go.Scatter3d(
+            x=decoding_x,
+            y=decoding_y,
+            z=decoding_z,
+            mode="lines",
+            line=dict(width=3.0, color="rgba(255,255,255,0.68)"),
+            hovertext=decoding_hover,
+            hoverinfo="text",
+            name="dotted causal/decoding order overlay",
+        ),
+        go.Scatter3d(
+            x=decoding_marker_x,
+            y=decoding_marker_y,
+            z=decoding_marker_z,
+            mode="markers",
+            marker=dict(size=4.5, color=decoding_marker_color, symbol="diamond", line=dict(color="#0f172a", width=0.6)),
+            hovertext=decoding_marker_hover,
+            hoverinfo="text",
+            name="causal/decoding arrowheads",
         ),
         go.Scatter3d(
             x=vertex_x,
@@ -2194,8 +2388,8 @@ def write_tropical_support_heatmap(result: dict[str, object], output_dir: str | 
                 name="margin profile",
                 showlegend=False,
             ),
-            row=1,
-            col=2,
+            row=2,
+            col=1,
         )
         fig.add_trace(
             go.Histogram(
@@ -2481,161 +2675,329 @@ def write_persistence_visualizations(
     }
 
 
-def write_two_parameter_bifiltration_visualization(
-    bifiltration: dict[str, object],
-    path: str | Path,
-    title_prefix: str = "",
-) -> str:
-    """Render the explicit F2[x,y] trajectory bifiltration as a 3D plot."""
 
+def _m2_style_report_from_bifiltration(bifiltration: Mapping[str, Any]) -> Dict[str, Any]:
+    free = bifiltration.get("free_resolution") if isinstance(bifiltration, Mapping) else None
+    if not isinstance(free, Mapping):
+        return {}
+    m2 = free.get("chain_presentation_diagnostics")
+    if not isinstance(m2, Mapping):
+        m2 = free.get("macaulay2_style")
+    return dict(m2) if isinstance(m2, Mapping) else {}
+
+
+def _table_trace(headers: Sequence[str], columns: Sequence[Sequence[Any]]) -> go.Table:
+    width = max((len(col) for col in columns), default=0)
+    padded: List[List[str]] = []
+    for col in columns:
+        vals = [str(v) for v in col]
+        vals.extend([""] * max(0, width - len(vals)))
+        padded.append(vals)
+    return go.Table(
+        header=dict(
+            values=[html.escape(str(h)) for h in headers],
+            fill_color="#10243f",
+            line_color="#345f8f",
+            font=dict(color="#e8f2ff", size=13),
+            align="left",
+        ),
+        cells=dict(
+            values=padded,
+            fill_color="#07111f",
+            line_color="#203d5e",
+            font=dict(color="#d7e8ff", size=12),
+            align="left",
+            height=28,
+        ),
+    )
+
+
+def _m2_betti_columns(m2: Mapping[str, Any]) -> Tuple[List[str], List[List[str]]]:
+    rows = list(m2.get("betti_table_rows", []) or [])
+    degrees = sorted({int(r.get("homological_degree", 0) or 0) for r in rows}) or [0]
+    def _shift_display(row: Mapping[str, Any]) -> str:
+        if row.get("shift_display") is not None:
+            return str(row.get("shift_display"))
+        md = row.get("multidegree", [0, 0])
+        if isinstance(md, (list, tuple)):
+            return "(" + ",".join(str(int(v)) for v in md[:2]) + ")"
+        return "(0,0)"
+    shifts = sorted({_shift_display(r) for r in rows}) or ["(0,0)"]
+    lookup: Dict[Tuple[str, int], int] = defaultdict(int)
+    for r in rows:
+        lookup[(_shift_display(r), int(r.get("homological_degree", 0) or 0))] += int(r.get("multiplicity", r.get("rank", 0)) or 0)
+    headers = ["multidegree"] + [f"F_{d}" for d in degrees]
+    columns: List[List[str]] = [shifts]
+    for d in degrees:
+        columns.append([str(lookup.get((s, d), 0)) for s in shifts])
+    return headers, columns
+
+
+def _m2_free_module_columns(m2: Mapping[str, Any]) -> Tuple[List[str], List[List[str]]]:
+    modules = list(m2.get("free_modules", []) or [])
+    modules = sorted(modules, key=lambda item: int(item.get("degree", 0) or 0))
+    if not modules:
+        return ["module", "rank", "display"], [["unavailable"], ["0"], ["no computed free-chain presentation"]]
+    return (
+        ["module", "rank", "chain-module display"],
+        [
+            [str(m.get("module", m.get("name", f"F_{i}"))) for i, m in enumerate(modules)],
+            [str(m.get("rank", 0)) for m in modules],
+            [str(m.get("display", "")) for m in modules],
+        ],
+    )
+
+
+def _m2_differential_columns(m2: Mapping[str, Any], max_rows: int = 18) -> Tuple[List[str], List[List[str]]]:
+    differentials = list(m2.get("differentials", []) or [])[:max_rows]
+    if not differentials:
+        return ["map", "shape", "rank", "matrix preview"], [["unavailable"], [""], [""], ["no differential matrices computed"]]
+    maps: List[str] = []
+    shapes: List[str] = []
+    ranks: List[str] = []
+    previews: List[str] = []
+    for d in differentials:
+        preview = d.get("matrix_preview", [])
+        if isinstance(preview, list):
+            preview_text = " ; ".join(str(row) for row in preview[:4])
+        else:
+            preview_text = str(preview)
+        maps.append(str(d.get("map", d.get("display", d.get("name", "d_i")))))
+        shapes.append(str(d.get("shape", "")))
+        ranks.append(str(d.get("rank", d.get("rank_over_F2_incidence", ""))))
+        previews.append(_json_clip(preview_text, 220))
+    return ["map", "shape", "rank", "matrix preview"], [maps, shapes, ranks, previews]
+
+
+def _m2_certificate_columns(m2: Mapping[str, Any], bifiltration: Mapping[str, Any]) -> Tuple[List[str], List[List[str]]]:
+    cert = m2.get("chain_complex_certificate") if isinstance(m2, Mapping) else {}
+    cert = cert if isinstance(cert, Mapping) else {}
+    be = bifiltration.get("buchsbaum_eisenbud") if isinstance(bifiltration, Mapping) else {}
+    be = be if isinstance(be, Mapping) else {}
+    rank_inv = bifiltration.get("rank_invariant") if isinstance(bifiltration, Mapping) else {}
+    rank_inv = rank_inv if isinstance(rank_inv, Mapping) else {}
+    items = [
+        ("ring", m2.get("ring", bifiltration.get("module_ring", "F2[x_level,x_radius]"))),
+        ("field", m2.get("field", "F2")),
+        ("resolution status", cert.get("interpretation", "computed finite presentation; minimality not certified")),
+        ("real free resolution certified", cert.get("minimality_certified", False)),
+        ("derived equivalence certified", cert.get("derived_equivalence_certified", False)),
+        ("differential-square checks", cert.get("differential_square_checks", cert.get("d_squared_zero_checks", ""))),
+        ("Buchsbaum-Eisenbud exactness", be.get("passes_exactness_necessary_checks", False)),
+        ("Fitting ideal generators", len(bifiltration.get("fitting_ideals", {}).get("generator_ideal", []) or [])),
+        ("rank invariant samples", rank_inv.get("num_samples", 0)),
+        ("radius grade policy", bifiltration.get("radius_grade_policy", "")),
+    ]
+    return ["diagnostic", "value"], [[k for k, _ in items], [str(v) for _, v in items]]
+
+
+def _m2_staircase_trace_payload(m2: Mapping[str, Any]) -> Dict[str, List[Any]]:
+    staircase = m2.get("staircase") if isinstance(m2, Mapping) else {}
+    staircase = staircase if isinstance(staircase, Mapping) else {}
+    def _xy(items: Any) -> Tuple[List[float], List[float], List[str]]:
+        xs: List[float] = []
+        ys: List[float] = []
+        labels: List[str] = []
+        for item in items or []:
+            if not isinstance(item, Mapping):
+                continue
+            bg = item.get("bidegree", item.get("lcm_bidegree", item.get("shift", [0, 0])))
+            if not isinstance(bg, (list, tuple)) or len(bg) < 2:
+                continue
+            xs.append(float(bg[0]))
+            ys.append(float(bg[1]))
+            labels.append(str(item.get("module", item.get("source", bg))))
+        return xs, ys, labels
+    gx, gy, gl = _xy(staircase.get("generators") or staircase.get("generator_bidegrees"))
+    antichain_rows = staircase.get("minimal_antichain") or staircase.get("minimal_antichain_candidates")
+    if antichain_rows and all(isinstance(item, (list, tuple)) for item in antichain_rows):
+        antichain_rows = [{"bidegree": list(item), "module": f"antichain {idx}"} for idx, item in enumerate(antichain_rows)]
+    ax, ay, al = _xy(antichain_rows)
+    syzygy_rows = staircase.get("first_syzygy_lcms") or staircase.get("adjacent_lcm_syzygy_candidates")
+    sx, sy, sl = _xy(syzygy_rows)
+    return {"gen_x": gx, "gen_y": gy, "gen_label": gl, "anti_x": ax, "anti_y": ay, "anti_label": al, "syz_x": sx, "syz_y": sy, "syz_label": sl}
+
+
+def write_two_parameter_bifiltration_visualization(
+    path: Path,
+    bifiltration: Mapping[str, Any],
+    *,
+    title: str = "2-parameter persistence module and chain-presentation diagnostics",
+) -> str:
+    """Render computed F2[x_level,x_radius] module diagnostics.
+
+    Real free resolutions are rendered only when a CAS certificate is attached.
+    Otherwise the figure shows finite chain modules, boundary matrices, Fitting/minor
+    diagnostics, and Miller-Sturmfels staircase candidates as diagnostics only.
+    """
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
-    profile = bifiltration.get("fiber_rank_profile", []) if isinstance(bifiltration, dict) else []
-    rows = [row for row in profile if isinstance(row, dict)]
-    levels = sorted({int(row.get("level", row.get("grade", [0])[0]) or 0) for row in rows})
-    radii = sorted({round(float(row.get("radius", 0.0) or 0.0), 8) for row in rows})
+    rows = list((bifiltration.get("fiber_rows") or bifiltration.get("fiber_rank_profile") or []) if isinstance(bifiltration, Mapping) else [])
+    m2 = _m2_style_report_from_bifiltration(bifiltration)
     fig = make_subplots(
-        rows=2,
+        rows=3,
         cols=2,
-        specs=[[{"type": "scene", "colspan": 2}, None], [{"type": "table"}, {"type": "xy"}]],
+        specs=[
+            [{"type": "scene"}, {"type": "xy"}],
+            [{"type": "table"}, {"type": "table"}],
+            [{"type": "table"}, {"type": "table"}],
+        ],
         subplot_titles=(
-            "2-parameter Betti surfaces over F2[x_level,x_radius]",
-            "Free-chain presentation",
-            "Exact H0 rank-invariant samples",
+            "2-parameter module fibers on the (level, radius) lattice",
+            "Miller-Sturmfels staircase / monomial generator diagram",
+            "Multigraded chain-rank table (not a resolution)",
+            "Free chain modules over S = F2[x_level,x_radius]",
+            "Differential matrices d_i: F_i -> F_{i-1}",
+            "Certificates, Fitting/Buchsbaum-Eisenbud diagnostics",
         ),
-        row_heights=[0.74, 0.26],
-        vertical_spacing=0.11,
         horizontal_spacing=0.08,
+        vertical_spacing=0.12,
     )
-    if rows and levels and radii:
-        colors = {0: "#55d6be", 1: "#7aa2ff", 2: "#fbbf24", 3: "#fb7185"}
-        dims = sorted({int(dim) for row in rows for dim in (row.get("betti", {}) if isinstance(row.get("betti"), dict) else {}).keys() if str(dim).isdigit()})
-        index = {(int(row.get("level", 0) or 0), round(float(row.get("radius", 0.0) or 0.0), 8)): row for row in rows}
-        for dim in dims[:4]:
-            z = []
-            text_grid = []
-            for level in levels:
-                zrow = []
-                trow = []
-                for radius in radii:
-                    row = index.get((level, radius), {})
-                    beta = int(row.get("betti", {}).get(str(dim), 0)) if isinstance(row.get("betti"), dict) else 0
-                    ranks = row.get("chain_group_ranks", {}) if isinstance(row.get("chain_group_ranks"), dict) else {}
-                    zrow.append(beta)
-                    trow.append(
-                        f"<b>K_(level≤{level}, radius≤{radius:.4g})</b>"
-                        f"<br>ring=F2[x_level,x_radius]"
-                        f"<br>homology=H{dim}; beta={beta}"
-                        f"<br>chain ranks={html.escape(_json_clip(ranks, 140))}"
-                        f"<br>Euler={row.get('euler_characteristic', 0)}"
-                    )
-                z.append(zrow)
-                text_grid.append(trow)
-            opacity = 0.72 if dim == 0 else 0.42
-            fig.add_trace(
-                go.Surface(
-                    x=radii,
-                    y=levels,
-                    z=z,
-                    surfacecolor=z,
-                    colorscale="Viridis" if dim == 0 else "Cividis" if dim == 1 else "Plasma",
-                    opacity=opacity,
-                    showscale=(dim == dims[0]),
-                    colorbar=dict(title=f"beta_{dim}", x=0.94, len=0.42) if dim == dims[0] else None,
-                    name=f"beta_{dim} surface",
-                    text=text_grid,
-                    hovertemplate="%{text}<extra></extra>",
-                    contours={"z": {"show": True, "usecolormap": True, "highlightcolor": "#e8eef8", "project_z": True}},
-                ),
-                row=1,
-                col=1,
-            )
+
+    if rows:
+        levels = sorted({int(r.get("level", 0) or 0) for r in rows})
+        radius_grades = sorted({int(r.get("radius_grade", r.get("radius", 0)) or 0) for r in rows})
+        beta0_lookup = {(int(r.get("level", 0) or 0), int(r.get("radius_grade", r.get("radius", 0)) or 0)): int(r.get("beta", {}).get("0", r.get("beta", {}).get(0, 0)) or 0) for r in rows if isinstance(r.get("beta", {}), Mapping)}
+        beta1_lookup = {(int(r.get("level", 0) or 0), int(r.get("radius_grade", r.get("radius", 0)) or 0)): int(r.get("beta", {}).get("1", r.get("beta", {}).get(1, 0)) or 0) for r in rows if isinstance(r.get("beta", {}), Mapping)}
+        for label, lookup, color in (("H0 fiber rank", beta0_lookup, "#4fe3d3"), ("H1 fiber rank", beta1_lookup, "#78a7ff")):
+            xs: List[int] = []
+            ys: List[int] = []
+            zs: List[int] = []
+            hover: List[str] = []
+            for lvl in levels:
+                for rg in radius_grades:
+                    if (lvl, rg) not in lookup:
+                        continue
+                    xs.append(lvl)
+                    ys.append(rg)
+                    zs.append(lookup[(lvl, rg)])
+                    hover.append(f"level={lvl}<br>radius grade={rg}<br>{label}={lookup[(lvl, rg)]}")
             fig.add_trace(
                 go.Scatter3d(
-                    x=[radius for _level in levels for radius in radii],
-                    y=[level for level in levels for _radius in radii],
-                    z=[index.get((level, radius), {}).get("betti", {}).get(str(dim), 0) if isinstance(index.get((level, radius), {}).get("betti", {}), dict) else 0 for level in levels for radius in radii],
-                    mode="markers",
-                    marker=dict(size=3.2, color=colors.get(dim, "#e2e8f0"), opacity=0.9),
-                    name=f"beta_{dim} fibers",
-                    hovertemplate=f"beta_{dim} fiber<br>radius=%{{x:.4g}}<br>level=%{{y}}<br>rank=%{{z}}<extra></extra>",
-                    showlegend=True,
+                    x=xs,
+                    y=ys,
+                    z=zs,
+                    mode="markers+lines",
+                    name=label,
+                    marker=dict(size=4, color=color, opacity=0.92),
+                    line=dict(color=color, width=4),
+                    text=hover,
+                    hovertemplate="%{text}<extra></extra>",
                 ),
                 row=1,
                 col=1,
             )
-    else:
-        fig.add_annotation(text="2-parameter bifiltration unavailable", xref="paper", yref="paper", x=0.5, y=0.72, showarrow=False)
+        edge_x: List[Any] = []
+        edge_y: List[Any] = []
+        edge_z: List[Any] = []
+        for lvl in levels:
+            for rg in radius_grades:
+                z0 = beta0_lookup.get((lvl, rg))
+                if z0 is None:
+                    continue
+                for nxt in ((lvl + 1, rg), (lvl, rg + 1)):
+                    z1 = beta0_lookup.get(nxt)
+                    if z1 is None:
+                        continue
+                    edge_x.extend([lvl, nxt[0], None])
+                    edge_y.extend([rg, nxt[1], None])
+                    edge_z.extend([z0, z1, None])
+        if edge_x:
+            fig.add_trace(
+                go.Scatter3d(
+                    x=edge_x,
+                    y=edge_y,
+                    z=edge_z,
+                    mode="lines",
+                    name="module structure maps",
+                    line=dict(color="rgba(255,210,70,0.45)", width=2),
+                    hoverinfo="skip",
+                ),
+                row=1,
+                col=1,
+            )
 
-    free = bifiltration.get("free_resolution", {}) if isinstance(bifiltration.get("free_resolution"), dict) else {}
-    modules = free.get("free_chain_modules", []) if isinstance(free.get("free_chain_modules"), list) else []
-    det = free.get("determinantal_ideals", {}) if isinstance(free.get("determinantal_ideals"), dict) else {}
-    fitting = free.get("fitting_ideals", {}) if isinstance(free.get("fitting_ideals"), dict) else {}
-    be = free.get("buchsbaum_eisenbud", {}) if isinstance(free.get("buchsbaum_eisenbud"), dict) else {}
-    module_labels = [f"F{int(row.get('homological_degree', 0))}" for row in modules if isinstance(row, dict)] or ["none"]
-    module_ranks = [str(int(row.get("rank", 0) or 0)) for row in modules if isinstance(row, dict)] or ["0"]
-    diagnostics = [
-        f"ring: {free.get('ring', bifiltration.get('coefficient_ring', 'F2[x,y]'))}",
-        f"determinantal maps: {len(det.get('maps', {})) if isinstance(det.get('maps', {}), dict) else 0}",
-        f"fitting maps: {len(fitting.get('maps', {})) if isinstance(fitting.get('maps', {}), dict) else 0}",
-        "BE composition checks: " + str(len(be.get("composition_zero_checks", [])) if isinstance(be.get("composition_zero_checks", []), list) else 0),
-        "minimal resolution: unavailable without CAS certificate",
-    ]
-    fig.add_trace(
-        go.Table(
-            header=dict(values=["free module", "rank", "commutative-algebra diagnostics"], fill_color="#111827", font=dict(color="#e8eef8", size=12), align="left"),
-            cells=dict(
-                values=[module_labels, module_ranks, diagnostics + [""] * max(0, len(module_labels) - len(diagnostics))],
-                fill_color="#0f172a",
-                font=dict(color="#dbeafe", size=11),
-                align="left",
-                height=26,
-            ),
-        ),
-        row=2,
-        col=1,
-    )
-    rank_samples = bifiltration.get("rank_invariant_samples", []) if isinstance(bifiltration.get("rank_invariant_samples"), list) else []
-    if rank_samples:
-        shown = [row for row in rank_samples if isinstance(row, dict)][:96]
+    staircase = _m2_staircase_trace_payload(m2)
+    if staircase["gen_x"]:
         fig.add_trace(
             go.Scatter(
-                x=list(range(len(shown))),
-                y=[int(row.get("h0_rank", 0) or 0) for row in shown],
-                mode="lines+markers",
-                line=dict(color="#fbbf24", width=2),
-                marker=dict(size=4, color="#55d6be", line=dict(color="#e8eef8", width=0.5)),
-                name="exact H0 rank invariant samples",
-                hovertext=[
-                    f"source={row.get('source_grade')}<br>target={row.get('target_grade')}<br>rank H0 map={row.get('h0_rank')}"
-                    for row in shown
-                ],
-                hoverinfo="text",
+                x=staircase["gen_x"],
+                y=staircase["gen_y"],
+                mode="markers",
+                name="monomial generators",
+                marker=dict(color="#5eead4", size=12, line=dict(color="#e8f2ff", width=1)),
+                text=staircase["gen_label"],
+                hovertemplate="generator %{text}<br>x-degree=%{x}<br>y-degree=%{y}<extra></extra>",
             ),
-            row=2,
+            row=1,
             col=2,
         )
+    if staircase["anti_x"]:
+        order = sorted(range(len(staircase["anti_x"])), key=lambda i: (staircase["anti_x"][i], -staircase["anti_y"][i]))
+        fig.add_trace(
+            go.Scatter(
+                x=[staircase["anti_x"][i] for i in order],
+                y=[staircase["anti_y"][i] for i in order],
+                mode="markers+lines",
+                name="minimal antichain / staircase",
+                marker=dict(color="#ffd54a", size=13, symbol="diamond", line=dict(color="#e8f2ff", width=1)),
+                line=dict(color="#ffd54a", width=3, shape="hv"),
+                text=[staircase["anti_label"][i] for i in order],
+                hovertemplate="staircase generator %{text}<br>x-degree=%{x}<br>y-degree=%{y}<extra></extra>",
+            ),
+            row=1,
+            col=2,
+        )
+    if staircase["syz_x"]:
+        fig.add_trace(
+            go.Scatter(
+                x=staircase["syz_x"],
+                y=staircase["syz_y"],
+                mode="markers",
+                name="lcm first syzygies",
+                marker=dict(color="#ff6b8a", size=11, symbol="x"),
+                text=staircase["syz_label"],
+                hovertemplate="first syzygy %{text}<br>lcm x-degree=%{x}<br>lcm y-degree=%{y}<extra></extra>",
+            ),
+            row=1,
+            col=2,
+        )
+
+    headers, columns = _m2_betti_columns(m2)
+    fig.add_trace(_table_trace(headers, columns), row=2, col=1)
+    headers, columns = _m2_free_module_columns(m2)
+    fig.add_trace(_table_trace(headers, columns), row=2, col=2)
+    headers, columns = _m2_differential_columns(m2)
+    fig.add_trace(_table_trace(headers, columns), row=3, col=1)
+    headers, columns = _m2_certificate_columns(m2, bifiltration)
+    fig.add_trace(_table_trace(headers, columns), row=3, col=2)
+
+    notes = bifiltration.get("notes", []) if isinstance(bifiltration, Mapping) else []
+    subtitle = " ".join(str(n) for n in notes[:2])
+    if subtitle:
+        subtitle = _json_clip(subtitle, 260)
     fig.update_layout(
         template="plotly_dark",
-        title=(
-            f"{title_prefix}2-parameter persistence module over F2[x,y]"
-            "<br><sup>Grid fibers K_(level,radius) are exact F2 chain complexes. The lower table reports the multigraded free-chain presentation, determinantal/Fitting diagnostics, and CAS status.</sup>"
+        title=dict(
+            text=f"{html.escape(title)}<br><sup>{html.escape(subtitle)}</sup>",
+            x=0.02,
         ),
-        height=1080,
-        margin=dict(t=138, l=70, r=78, b=88),
-        legend=dict(orientation="h", y=0.33, x=0.02, bgcolor="rgba(2,6,23,0.65)"),
-        scene=dict(
-            xaxis_title="radius filtration",
-            yaxis_title="reasoning level",
-            zaxis_title="Betti rank",
-            camera=dict(eye=dict(x=1.7, y=-1.85, z=1.2)),
-            aspectmode="manual",
-            aspectratio=dict(x=1.25, y=0.82, z=0.72),
-        ),
+        height=1260,
+        margin=dict(l=52, r=42, t=132, b=62),
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="left", x=0.0),
     )
-    fig.update_xaxes(title_text="rank-invariant sample index", row=2, col=2)
-    fig.update_yaxes(title_text="rank H0(K_u -> K_v)", row=2, col=2)
-    _write_plotly_dark_html(path, fig, f"{title_prefix}2-parameter persistence module over F2[x,y]")
+    fig.update_scenes(
+        xaxis_title="x_level grade",
+        yaxis_title="x_radius grade",
+        zaxis_title="module fiber rank",
+        bgcolor="#050914",
+        xaxis=dict(gridcolor="#315c86"),
+        yaxis=dict(gridcolor="#315c86"),
+        zaxis=dict(gridcolor="#315c86"),
+    )
+    fig.update_xaxes(title_text="x_level", row=1, col=2, gridcolor="#203d5e")
+    fig.update_yaxes(title_text="x_radius", row=1, col=2, gridcolor="#203d5e")
+    _write_plotly_dark_html(path, fig, title)
     return str(path)
 
 def _write_growth_persistence_barcode(path: Path, topology: dict[str, object], growth: list[object], title_prefix: str = "") -> None:
@@ -2731,7 +3093,7 @@ def _write_growth_persistence_barcode(path: Path, topology: dict[str, object], g
             "<br><sup>standard interval view with level-grouped y-axis; "
             f"intervals={interval_count}; "
             f"backends={html.escape(backend_summary)}; "
-            "hover shows GUDHI/topology provenance and free-resolution summary; regular bands indicate either stable topology or collapsed/regular filtration, not visual smoothing</sup>"
+            "hover shows GUDHI/topology provenance and chain-presentation summary; regular bands indicate either stable topology or collapsed/regular filtration, not visual smoothing</sup>"
         ),
         xaxis_title="filtration birth/death",
         yaxis=dict(title="trajectory level", tickmode="array", tickvals=tick_vals, ticktext=tick_text, autorange="reversed", tickfont=dict(size=10)),
@@ -2850,7 +3212,7 @@ def _write_growth_persistence_module(path: Path, topology: dict[str, object], gr
                 marker=dict(color=y, colorscale="Turbo", line=dict(color="#e8eef8", width=0.7)),
                 hovertext=[str(cell["hover"]) for cell in free_cells],
                 hoverinfo="text",
-                name="free-resolution proxy",
+                name="chain-presentation diagnostic",
             ),
             row=1,
             col=2,
@@ -2860,7 +3222,7 @@ def _write_growth_persistence_module(path: Path, topology: dict[str, object], gr
     fig.update_layout(
         template="plotly_dark",
         title=(
-            f"{title_prefix}multiparameter persistence and free-resolution growth"
+            f"{title_prefix}multiparameter persistence and chain-presentation diagnostics"
             "<br><sup>2D matrix/bar view replaces decorative 3D spikes; hover opens the corresponding filtered complex panel</sup>"
         ),
         height=940,
@@ -2873,7 +3235,7 @@ def _write_growth_persistence_module(path: Path, topology: dict[str, object], gr
     _write_plotly_dark_html(
         path,
         fig,
-        f"{title_prefix}multiparameter persistence and free-resolution growth",
+        f"{title_prefix}multiparameter persistence and chain-presentation diagnostics",
         _simplicial_panel_items(panel_objects, panel_hover),
     )
 
@@ -3012,13 +3374,13 @@ def _write_single_persistence_representations(path: Path, topology: dict[str, ob
         title=(
             f"{title_prefix}GUDHI persistence vectorizations"
             "<br><sup>Fast vectorized topology: landscapes/Betti curves/images/silhouettes/lengths/topological vectors. "
-            f"landscape L2={float(summary.get('landscape_l2_norm', 0.0)):.4g}, "
+            f"persistence-landscape L2={float(summary.get('landscape_l2_norm', 0.0)):.4g}, "
             f"entropy sum={float(summary.get('entropy_scalar_sum', 0.0)):.4g}</sup>"
         ),
         legend=dict(orientation="h", y=-0.18),
     )
     fig.update_xaxes(title_text="filtration", row=1, col=1)
-    fig.update_yaxes(title_text="landscape / silhouette", row=1, col=1)
+    fig.update_yaxes(title_text="persistence landscape / silhouette", row=1, col=1)
     fig.update_xaxes(title_text="persistence-image x pixel", row=1, col=2)
     fig.update_yaxes(title_text="persistence-image y pixel", row=1, col=2)
     fig.update_xaxes(title_text="filtration", row=2, col=1)
@@ -3035,7 +3397,7 @@ def _write_growth_persistence_representations(path: Path, topology: dict[str, ob
         cols=2,
         specs=[[{"type": "xy"}, {"type": "heatmap"}], [{"type": "xy"}, {"type": "xy"}]],
         subplot_titles=(
-            "Landscape norm growth",
+            "Persistence-landscape norm growth",
             "Betti curve heatmap by level",
             "Persistence length mass",
             "Topological vector norm / entropy",
@@ -3077,8 +3439,8 @@ def _write_growth_persistence_representations(path: Path, topology: dict[str, ob
                 mode="lines+markers",
                 line=dict(color="#55d6be", width=3),
                 marker=dict(size=7),
-                name="landscape L2",
-                hovertemplate="level=%{x}<br>landscape L2=%{y:.5g}<extra></extra>",
+                name="persistence-landscape L2",
+                hovertemplate="level=%{x}<br>persistence-landscape L2=%{y:.5g}<extra></extra>",
             ),
             row=1,
             col=1,
@@ -3148,7 +3510,7 @@ def _write_growth_persistence_representations(path: Path, topology: dict[str, ob
         legend=dict(orientation="h", y=-0.18),
     )
     fig.update_xaxes(title_text="trajectory level", row=1, col=1)
-    fig.update_yaxes(title_text="landscape L2", row=1, col=1)
+    fig.update_yaxes(title_text="persistence-landscape L2", row=1, col=1)
     fig.update_xaxes(title_text="Betti-curve grid coordinate", row=1, col=2)
     fig.update_yaxes(title_text="trajectory level", row=1, col=2)
     fig.update_xaxes(title_text="trajectory level", row=2, col=1)
@@ -3166,14 +3528,15 @@ def _write_growth_persistence_representations(path: Path, topology: dict[str, ob
 def _write_growth_persistence_landscapes(path: Path, topology: dict[str, object], growth: list[object], title_prefix: str = "") -> None:
     rows = _trajectory_growth_rows(topology, growth)
     fig = make_subplots(
-        rows=1,
-        cols=2,
-        specs=[[{"type": "scene"}, {"type": "heatmap"}]],
+        rows=2,
+        cols=1,
+        specs=[[{"type": "scene"}], [{"type": "heatmap"}]],
         subplot_titles=(
-            "Actual Landscape lambda_k(t) curves by growth level",
+            "GUDHI persistence landscape lambda_k(t) curves by growth level",
             "First available lambda_1(t) image by growth level",
         ),
-        horizontal_spacing=0.08,
+        row_heights=[0.64, 0.36],
+        vertical_spacing=0.13,
     )
     panel_objects: list[dict[str, object]] = []
     panel_hover: list[str] = []
@@ -3230,9 +3593,9 @@ def _write_growth_persistence_landscapes(path: Path, topology: dict[str, object]
                         name=f"L{level} H{dim} lambda_{layer_idx + 1}",
                         hovertemplate=(
                             f"growth level={level}<br>"
-                            f"H{dim} actual landscape lambda_{layer_idx + 1}(t)<br>"
+                            f"H{dim} GUDHI persistence landscape lambda_{layer_idx + 1}(t)<br>"
                             "filtration t=%{x:.4g}<br>"
-                            "landscape value=%{z:.5g}<extra></extra>"
+                            "lambda value=%{z:.5g}<extra></extra>"
                         ),
                         showlegend=False,
                     ),
@@ -3253,12 +3616,12 @@ def _write_growth_persistence_landscapes(path: Path, topology: dict[str, object]
                     [0.78, "#bef264"],
                     [1.0, "#facc15"],
                 ],
-                colorbar=dict(title=f"H{heatmap_dim if heatmap_dim is not None else '?'} lambda_1(t)", x=1.02, y=0.70, len=0.46, thickness=14),
+                colorbar=dict(title=f"H{heatmap_dim if heatmap_dim is not None else '?'} lambda_1(t)", x=1.02, y=0.20, len=0.28, thickness=14),
                 hovertemplate="level/dim=%{y}<br>filtration t=%{x:.4g}<br>lambda_1(t)=%{z:.5g}<extra></extra>",
                 name="lambda_1 heatmap",
             ),
-            row=1,
-            col=2,
+            row=2,
+            col=1,
         )
     if trace_count == 0:
         fig.add_annotation(
@@ -3273,21 +3636,23 @@ def _write_growth_persistence_landscapes(path: Path, topology: dict[str, object]
         template="plotly_dark",
         title=(
             f"{title_prefix}Actual GUDHI persistence landscapes"
-            "<br><sup>lambda_k(t) curves from GUDHI Landscape vectors; hover links each row to the filtered complex.</sup>"
+            "<br><sup>lambda_k(t) curves from GUDHI Landscape vectors, not norm-only summaries; "
+            "hover links each row to the filtered complex. This is distinct from the GoT NLL/fitness landscape.</sup>"
         ),
         scene=dict(
-            domain=dict(x=[0.0, 0.56], y=[0.16, 0.98]),
             xaxis_title="filtration t",
             yaxis_title="trajectory growth level",
-            zaxis_title="actual landscape value",
+            zaxis_title="GUDHI persistence landscape value",
             aspectmode="manual",
             aspectratio=dict(x=1.15, y=0.78, z=0.86),
             camera=dict(eye=dict(x=1.55, y=-1.75, z=1.18)),
         ),
         showlegend=False,
-        height=980,
-        margin=dict(t=132, l=72, r=118, b=96),
+        height=1260,
+        margin=dict(t=150, l=82, r=118, b=96),
     )
+    fig.update_xaxes(title_text="filtration t", row=2, col=1)
+    fig.update_yaxes(title_text="growth level / homology dimension", row=2, col=1)
     _write_plotly_dark_html(
         path,
         fig,
@@ -3558,9 +3923,11 @@ def _free_resolution_line(topology: dict[str, object]) -> str:
     modules = _free_resolution_modules(topology)
     ranks = [f"F{int(row.get('homological_degree', 0))}:{int(row.get('rank', row.get('rank_upper_bound', 0)))}" for row in modules[:6]]
     ca = topology.get("commutative_algebra", {}) if isinstance(topology, dict) else {}
-    free_resolution_proxy = ca.get("multiparameter_free_resolution_proxy", {}) if isinstance(ca.get("multiparameter_free_resolution_proxy"), dict) else {}
-    ring = free_resolution_proxy.get("ring", "F2[x_filtration,x_dimension,x_position]")
-    return f"free-resolution proxy over {ring}: " + (", ".join(ranks) if ranks else "no displayed free modules")
+    chain_report = ca.get("multiparameter_chain_presentation_diagnostics") if isinstance(ca.get("multiparameter_chain_presentation_diagnostics"), dict) else None
+    if chain_report is None:
+        chain_report = ca.get("multiparameter_free_resolution_proxy", {}) if isinstance(ca.get("multiparameter_free_resolution_proxy"), dict) else {}
+    ring = chain_report.get("ring", "F2[x_filtration,x_dimension,x_position]")
+    return f"real free resolution unavailable; chain-presentation diagnostics over {ring}: " + (", ".join(ranks) if ranks else "no displayed chain modules")
 
 
 def _persistence_representation_line(topology: dict[str, object]) -> str:
@@ -3572,15 +3939,17 @@ def _persistence_representation_line(topology: dict[str, object]) -> str:
         "persistence vectorizations: "
         f"available={bool(reps.get('available'))}, "
         f"finite intervals={int(reps.get('finite_interval_count', 0) or 0)}, "
-        f"landscape L2={float(summary.get('landscape_l2_norm', 0.0) or 0.0):.4g}, "
+        f"persistence-landscape L2={float(summary.get('landscape_l2_norm', 0.0) or 0.0):.4g}, "
         f"topological-vector L2={float(summary.get('topological_vector_l2_norm', 0.0) or 0.0):.4g}"
     )
 
 
 def _free_resolution_modules(topology: dict[str, object]) -> list[dict[str, object]]:
     ca = topology.get("commutative_algebra", {}) if isinstance(topology, dict) else {}
-    free_resolution_proxy = ca.get("multiparameter_free_resolution_proxy", {}) if isinstance(ca.get("multiparameter_free_resolution_proxy"), dict) else {}
-    modules = free_resolution_proxy.get("free_chain_modules", []) if isinstance(free_resolution_proxy, dict) else []
+    chain_report = ca.get("multiparameter_chain_presentation_diagnostics") if isinstance(ca.get("multiparameter_chain_presentation_diagnostics"), dict) else None
+    if chain_report is None:
+        chain_report = ca.get("multiparameter_free_resolution_proxy", {}) if isinstance(ca.get("multiparameter_free_resolution_proxy"), dict) else {}
+    modules = chain_report.get("free_chain_modules", []) if isinstance(chain_report, dict) else []
     if modules:
         return [row for row in modules if isinstance(row, dict)]
     taylor = ca.get("taylor_resolution_upper_bound", {}) if isinstance(ca.get("taylor_resolution_upper_bound"), dict) else {}
@@ -3712,14 +4081,15 @@ def write_graphcg_trajectory_visualization(scaling_report: dict[str, object], ou
         ),
         encoding="utf-8",
     )
+    graphcg_height = int(max(1380, 940 + 32 * len(compact_labels)))
     fig = make_subplots(
         rows=4,
         cols=1,
         specs=[[{"type": "heatmap"}], [{"type": "scatter"}], [{"type": "scatter"}], [{"type": "scatter"}]],
-        row_heights=[0.40, 0.20, 0.20, 0.20],
-        vertical_spacing=0.075,
+        row_heights=[0.46, 0.18, 0.18, 0.18],
+        vertical_spacing=0.09,
         subplot_titles=(
-            "All model GraphCG directions",
+            "Readable full-rank heatmap: every model GraphCG direction",
             "Full-rank activity spectrum",
             "Candidate activity by observed GoT state",
             "Signed bias for every direction",
@@ -3805,10 +4175,10 @@ def write_graphcg_trajectory_visualization(scaling_report: dict[str, object], ou
         template="plotly_dark",
         title=(
             "GraphCG full-rank direction audit"
-            f"<br><sup>basis={html.escape(projection_basis)}; all {direction_count} model-derived directions shown; active nonzero rank={active_rank}; exact ids in hover/payload.</sup>"
+            f"<br><sup>heatmap shows all {direction_count} model-derived directions; basis={html.escape(projection_basis)}; active nonzero rank={active_rank}; exact ids in hover/payload.</sup>"
         ),
-        margin=dict(t=132, l=92, r=68, b=92),
-        height=1280,
+        margin=dict(t=150, l=118, r=96, b=120),
+        height=graphcg_height,
     )
     x_labels = [f"d{int(idx)}" for idx in top_idx]
     x_step = max(1, int(math.ceil(len(x_labels) / max(visible_direction_tick_label_limit, 1))))
@@ -3816,7 +4186,7 @@ def write_graphcg_trajectory_visualization(scaling_report: dict[str, object], ou
     y_step = max(1, int(math.ceil(len(labels) / max(visible_candidate_tick_label_limit, 1))))
     y_tickvals = [label for pos, label in enumerate(compact_labels) if pos % y_step == 0 or pos == len(compact_labels) - 1]
     fig.update_xaxes(title_text="GraphCG direction (bounded visible ticks; hover for exact direction)", tickangle=-35, tickmode="array", tickvals=x_tickvals, ticktext=x_tickvals, tickfont=dict(size=9), row=1, col=1)
-    fig.update_yaxes(title_text="GoT state index (hover for path)", tickmode="array", tickvals=y_tickvals, ticktext=y_tickvals, row=1, col=1, tickfont=dict(size=9))
+    fig.update_yaxes(title_text="GoT state index (hover for path)", tickmode="array", tickvals=y_tickvals, ticktext=y_tickvals, row=1, col=1, tickfont=dict(size=10))
     fig.update_xaxes(title_text="direction rank by activity", row=2, col=1)
     fig.update_yaxes(title_text="mean absolute cosine", row=2, col=1)
     fig.update_xaxes(title_text="GoT candidate index", row=3, col=1)
@@ -4003,8 +4373,10 @@ def _analogical_pair_figure(
         f"<b>codomain memory {idx + 1}</b>: {html.escape(str(row.get('memory_id', idx)))}"
         f"<br>retrieval={float(row.get('retrieval_score', 0.0)):.4f}"
         f"<br>persistent homology similarity={sim['persistent_homology_similarity']:.4f}"
-        f"<br>free-resolution similarity={sim['free_resolution_similarity']:.4f}"
+        f"<br>chain-presentation diagnostic similarity={float(sim.get('chain_presentation_similarity', sim.get('free_resolution_similarity', 0.0))):.4f}"
         f"<br>commutative-algebra similarity={sim.get('commutative_algebra_similarity', 0.0):.4f}"
+        f"<br>persistence-landscape L2 similarity={sim.get('persistence_landscape_l2_similarity', 0.0):.4f}"
+        f"<br>persistence-landscape cosine={sim.get('persistence_landscape_cosine', 0.0):.4f}"
         f"<br>derived/algebraic similarity={sim['derived_algebraic_similarity']:.4f}"
         f"<br>coarse signature cosine={sim['derived_signature_similarity']:.4f}"
         f"<br>finite derived invariants match={derived_comparison['finite_invariants_match']}"
@@ -4121,8 +4493,11 @@ def _analogical_quality_table_trace(
         ("memory", _short_label(str(row.get("memory_id", idx)), 24)),
         ("retrieval", f"{float(row.get('retrieval_score', 0.0)):.4f}"),
         ("PH similarity", f"{float(sim.get('persistent_homology_similarity', 0.0)):.4f}"),
-        ("free-res similarity", f"{float(sim.get('free_resolution_similarity', 0.0)):.4f}"),
+        ("chain-presentation similarity", f"{float(sim.get('chain_presentation_similarity', sim.get('free_resolution_similarity', 0.0))):.4f}"),
         ("comm-algebra similarity", f"{float(sim.get('commutative_algebra_similarity', 0.0)):.4f}"),
+        ("persistence-landscape L2 sim", f"{float(sim.get('persistence_landscape_l2_similarity', 0.0)):.4f}"),
+        ("persistence-landscape cosine", f"{float(sim.get('persistence_landscape_cosine', 0.0)):.4f}"),
+        ("landscape vector dims", f"{int(float(sim.get('persistence_landscape_overlap_dim', 0.0)))}"),
         ("derived/algebraic similarity", f"{float(sim.get('derived_algebraic_similarity', 0.0)):.4f}"),
         ("coarse signature cosine", f"{float(sim.get('derived_signature_similarity', 0.0)):.4f}"),
         ("assignment source", source_label),
@@ -4187,7 +4562,7 @@ def _analogical_pair_traces(
         f"<br>memory_id={html.escape(str(row.get('memory_id', idx)))}"
         f"<br>retrieval={float(row.get('retrieval_score', 0.0)):.4f}"
         f"<br>PH similarity={sim['persistent_homology_similarity']:.4f}"
-        f"<br>free-resolution similarity={sim['free_resolution_similarity']:.4f}"
+        f"<br>chain-presentation diagnostic similarity={float(sim.get('chain_presentation_similarity', sim.get('free_resolution_similarity', 0.0))):.4f}"
         f"<br>derived/algebraic similarity={sim['derived_algebraic_similarity']:.4f}"
         f"<br>coarse signature cosine={sim['derived_signature_similarity']:.4f}"
     )
@@ -4389,7 +4764,7 @@ def _simplicial_map_traces(
             f"<br>2-simplex preservation={float(sim_map.get('two_simplex_preservation_rate', 0.0)):.4f}"
             f"<br>displayed map edges={len(map_rows)}/{raw_map_count} top-scoring vertex maps"
             f"<br>PH similarity={sim['persistent_homology_similarity']:.4f}"
-            f"<br>free-resolution similarity={sim['free_resolution_similarity']:.4f}"
+            f"<br>chain-presentation diagnostic similarity={float(sim.get('chain_presentation_similarity', sim.get('free_resolution_similarity', 0.0))):.4f}"
             f"<br>commutative-algebra similarity={sim.get('commutative_algebra_similarity', 0.0):.4f}"
             f"<br>derived/algebraic similarity={sim['derived_algebraic_similarity']:.4f}<br>coarse signature cosine={sim['derived_signature_similarity']:.4f}"
             f"<br><br><b>domain vertex</b><br>{q_summary}"
@@ -4437,15 +4812,17 @@ def _write_analogical_topk_index(path: Path, pair_pages: list[dict[str, object]]
             f"<td><a href='{rel}'>{html.escape(str(page.get('memory_id', 'memory')))}</a></td>"
             f"<td>{float(page.get('retrieval_score', 0.0)):.4f}</td>"
             f"<td>{float(report.get('persistent_homology_similarity', 0.0)):.4f}</td>"
-            f"<td>{float(report.get('free_resolution_similarity', 0.0)):.4f}</td>"
+            f"<td>{float(report.get('chain_presentation_similarity', report.get('free_resolution_similarity', 0.0))):.4f}</td>"
             f"<td>{float(report.get('commutative_algebra_similarity', 0.0)):.4f}</td>"
+            f"<td>{float(report.get('persistence_landscape_l2_similarity', 0.0)):.4f}</td>"
+            f"<td>{float(report.get('persistence_landscape_cosine', 0.0)):.4f}</td>"
             f"<td>{float(report.get('derived_algebraic_similarity', 0.0)):.4f}</td>"
             f"<td>{float(report.get('derived_signature_similarity', 0.0)):.4f}</td>"
             f"<td>{int(report.get('simplex_tree_map_preserved', 0))}/{int(report.get('simplex_tree_map_checked', 0))} = {float(report.get('simplex_tree_map_preservation_rate', 0.0)):.4f}</td>"
             f"<td>{float(report.get('edge_preservation_rate', 0.0)):.4f}</td>"
             "</tr>"
         )
-    body = "\n".join(rows) or "<tr><td colspan='10'>No retrieved memories.</td></tr>"
+    body = "\n".join(rows) or "<tr><td colspan='12'>No retrieved memories.</td></tr>"
     path.write_text(
         f"""<!doctype html>
 <html>
@@ -4469,9 +4846,9 @@ def _write_analogical_topk_index(path: Path, pair_pages: list[dict[str, object]]
 <body>
   <main>
 	    <h1>Analogical top-k probability correspondences</h1>
-	    <p>Each row opens one query-to-memory vertex assignment with a finite filtered-complex certificate. Edge, face, and filtration preservation can fail and are reported on the rank page.</p>
+	    <p>Each row opens one query-to-memory vertex assignment with a finite filtered-complex certificate. Persistence-landscape columns compare real GUDHI landscape vectors from the query and memory topology payloads; unavailable vectors stay zero rather than being fabricated. Edge, face, and filtration preservation can fail and are reported on the rank page.</p>
 	    <table>
-	      <thead><tr><th>rank</th><th>correspondence</th><th>retrieval</th><th>PH</th><th>free res.</th><th>comm. alg.</th><th>derived/algebraic</th><th>coarse signature</th><th>simplex-tree map</th><th>edge certificate</th></tr></thead>
+	      <thead><tr><th>rank</th><th>correspondence</th><th>retrieval</th><th>PH</th><th>chain pres.</th><th>comm. alg.</th><th>persistence-landscape L2 sim</th><th>persistence-landscape cosine</th><th>derived/algebraic</th><th>coarse signature</th><th>simplex-tree map</th><th>edge certificate</th></tr></thead>
       <tbody>{body}</tbody>
     </table>
   </main>
@@ -4519,11 +4896,8 @@ def _enrich_memory_row(row: dict[str, object], bank_records: dict[str, dict[str,
         enriched["probability_filtered_simplicial_object"] = bank_row["probability_filtered_simplicial_object"]
     if not isinstance(enriched.get("trajectory_probability_filtered_simplicial_object"), dict) and isinstance(bank_row.get("trajectory_probability_filtered_simplicial_object"), dict):
         enriched["trajectory_probability_filtered_simplicial_object"] = bank_row["trajectory_probability_filtered_simplicial_object"]
-    probability_complex = enriched.get("probability_filtered_simplicial_object")
-    if not isinstance(enriched.get("trajectory_probability_filtered_simplicial_object"), dict) and _has_real_probability_filtration(probability_complex):
-        enriched["trajectory_probability_filtered_simplicial_object"] = probability_complex
-        if isinstance(probability_complex, dict):
-            enriched.setdefault("trajectory_probability_summary", probability_complex.get("summary", {}))
+    # Do not promote a row-level probability complex to a trajectory-level object;
+    # analogical maps must be between like-for-like trajectory complexes.
     if not isinstance(enriched.get("filtered_simplicial_object"), dict) and isinstance(bank_row.get("filtered_simplicial_object"), dict):
         enriched["filtered_simplicial_object"] = bank_row["filtered_simplicial_object"]
     if not isinstance(enriched.get("topological_algebra"), dict) and isinstance(bank_row.get("topological_algebra"), dict):
@@ -4638,7 +5012,7 @@ def _add_simplicial_map_traces(
             f"<br>edge preservation={float(sim_map.get('edge_preservation_rate', 0.0)):.4f}"
             f"<br>2-simplex preservation={float(sim_map.get('two_simplex_preservation_rate', 0.0)):.4f}"
             f"<br>PH similarity={sim['persistent_homology_similarity']:.4f}"
-            f"<br>free-resolution similarity={sim['free_resolution_similarity']:.4f}"
+            f"<br>chain-presentation diagnostic similarity={float(sim.get('chain_presentation_similarity', sim.get('free_resolution_similarity', 0.0))):.4f}"
             f"<br>commutative-algebra similarity={sim.get('commutative_algebra_similarity', 0.0):.4f}"
             f"<br>derived/algebraic similarity={sim['derived_algebraic_similarity']:.4f}<br>coarse signature cosine={sim['derived_signature_similarity']:.4f}"
         )
@@ -4671,6 +5045,7 @@ def _topological_similarity_summary(query_topology: dict[str, object], memory_to
     m_ph = _persistence_numeric_vector(memory_topology)
     q_ca = _commutative_algebra_numeric_vector(query_topology)
     m_ca = _commutative_algebra_numeric_vector(memory_topology)
+    landscape_report = _persistence_landscape_vector_similarity(query_topology, memory_topology)
     sig_sim = _cosine_similarity(q_sig, m_sig)
     free_sim = _cosine_similarity(q_free, m_free)
     ph_sim = _cosine_similarity(q_ph, m_ph)
@@ -4687,9 +5062,16 @@ def _topological_similarity_summary(query_topology: dict[str, object], memory_to
         "embedding_similarity": float(row.get("embedding_similarity", 0.0)),
         "signature_similarity": float(row.get("signature_similarity", 0.0)),
         "derived_signature_similarity": float(sig_sim),
-        "free_resolution_similarity": float(free_sim),
+        "chain_presentation_similarity": float(free_sim),
+        "free_resolution_similarity": float(free_sim),  # deprecated alias: this is a chain-presentation diagnostic unless a CAS certificate is attached.
         "persistent_homology_similarity": float(ph_sim),
         "commutative_algebra_similarity": float(ca_sim),
+        "persistence_landscape_vector_available": float(1.0 if landscape_report.get("available") else 0.0),
+        "persistence_landscape_cosine": float(landscape_report.get("cosine", 0.0)) if landscape_report.get("available") else 0.0,
+        "persistence_landscape_l2_similarity": float(landscape_report.get("l2_similarity", 0.0)) if landscape_report.get("available") else 0.0,
+        "persistence_landscape_l2_distance": float(landscape_report.get("l2_distance", 0.0)) if landscape_report.get("available") else 0.0,
+        "persistence_landscape_correlation": float(landscape_report.get("correlation", 0.0)) if landscape_report.get("available") else 0.0,
+        "persistence_landscape_overlap_dim": float(landscape_report.get("overlap_dim", 0) or 0),
         "derived_algebraic_similarity": float(max(0.0, min(1.0, derived_algebraic))),
         "derived_algebraic_components_available": float(1.0 if required_components_available else 0.0),
     }
@@ -4708,6 +5090,17 @@ def _derived_invariant_comparison(query_topology: dict[str, object], memory_topo
     m_ph = _persistence_numeric_vector(memory_topology, length=32)
     q_ca = _commutative_algebra_numeric_vector(query_topology, length=32)
     m_ca = _commutative_algebra_numeric_vector(memory_topology, length=32)
+    q_landscape = _persistence_landscape_numeric_vector(query_topology)
+    m_landscape = _persistence_landscape_numeric_vector(memory_topology)
+    if q_landscape.size or m_landscape.size:
+        n_landscape = max(q_landscape.size, m_landscape.size)
+        q_landscape_padded = np.zeros(n_landscape, dtype=float)
+        m_landscape_padded = np.zeros(n_landscape, dtype=float)
+        q_landscape_padded[: q_landscape.size] = q_landscape
+        m_landscape_padded[: m_landscape.size] = m_landscape
+    else:
+        q_landscape_padded = np.zeros(0, dtype=float)
+        m_landscape_padded = np.zeros(0, dtype=float)
 
     def close_vec(a: np.ndarray, b: np.ndarray) -> bool:
         return bool(a.shape == b.shape and np.allclose(a, b, atol=tol, rtol=0.0))
@@ -4717,17 +5110,18 @@ def _derived_invariant_comparison(query_topology: dict[str, object], memory_topo
     free_rank_match = close_vec(q_free, m_free)
     persistence_match = close_vec(q_ph, m_ph)
     commutative_algebra_match = close_vec(q_ca, m_ca)
+    landscape_vector_match = close_vec(q_landscape_padded, m_landscape_padded) if q_landscape_padded.size or m_landscape_padded.size else False
     finite_match = bool(betti_match and signature_match and free_rank_match and persistence_match and commutative_algebra_match)
     return {
-        "comparison_kind": "finite_F2xy_persistence_module_and_free_resolution_invariant_comparison",
+        "comparison_kind": "finite_F2xy_persistence_module_and_chain_presentation_invariant_comparison",
         "field": "F2",
         "module_category": "finite grid presentation over F2[x_level,x_radius]",
-        "derived_category": "bounded free-chain/free-resolution invariant comparison; CAS-free necessary diagnostics, not a full equivalence proof",
+        "derived_category": "bounded finite-chain invariant comparison; no derived equivalence or free-resolution claim without a CAS certificate",
         "tolerance": float(tol),
         "derived_algebraic_similarity": float((sim or {}).get("derived_algebraic_similarity", 0.0)),
         "derived_signature_cosine": float((sim or {}).get("derived_signature_similarity", 0.0)),
         "derived_equivalence_claim": "compatible_finite_invariant_witness" if finite_match else "not_certified",
-        "geometric_realization_required": "a filtered simplex-tree map is required; module/free-resolution similarity alone does not construct a unique simplicial map",
+        "geometric_realization_required": "a filtered simplex-tree map is required; module/chain-presentation diagnostic similarity alone does not construct a unique simplicial map",
         "induced_map_direction": "filtered_simplicial_map -> chain_map -> F2[x,y]-persistence_module_morphism -> derived_category_morphism",
         "finite_invariants_match": finite_match,
         "betti_vector_match": bool(betti_match),
@@ -4735,12 +5129,15 @@ def _derived_invariant_comparison(query_topology: dict[str, object], memory_topo
         "free_chain_rank_vector_match": bool(free_rank_match),
         "persistence_summary_vector_match": bool(persistence_match),
         "commutative_algebra_vector_match": bool(commutative_algebra_match),
+        "persistence_landscape_vector_match": bool(landscape_vector_match),
+        "persistence_landscape_vector_available": bool(q_landscape_padded.size > 0 and m_landscape_padded.size > 0),
         "query_betti_vector": q_betti,
         "memory_betti_vector": m_betti,
         "signature_l2_distance": float(np.linalg.norm(q_signature - m_signature)),
         "free_rank_l2_distance": float(np.linalg.norm(q_free - m_free)),
         "persistence_l2_distance": float(np.linalg.norm(q_ph - m_ph)),
         "commutative_algebra_l2_distance": float(np.linalg.norm(q_ca - m_ca)),
+        "persistence_landscape_l2_distance": float(np.linalg.norm(q_landscape_padded - m_landscape_padded)) if q_landscape_padded.size or m_landscape_padded.size else 0.0,
     }
 
 
@@ -4860,10 +5257,10 @@ def _analogical_realization_certificate(
         "coarse_signature_cosine": float(sim.get("derived_signature_similarity", 0.0)),
         "requires": [
             "compatible finite F2[x,y] persistence module invariants",
-            "compatible free-chain/free-resolution diagnostics",
+            "compatible chain-presentation diagnostics plus a real free-resolution certificate when available",
             "filtered simplex-tree map induced by model probabilities",
         ],
-        "module_to_geometry_note": "Derived/free-resolution compatibility is algebraic evidence; the displayed analogy is only geometrically realized when the probability-induced vertex map extends to a filtration-preserving simplex-tree map.",
+        "module_to_geometry_note": "A real derived/free-resolution claim requires a CAS-certified resolution or chain map; the displayed analogy is geometrically realized only when the probability-induced vertex map extends to a filtration-preserving simplex-tree map.",
         "chain_map_note": "A filtration-preserving simplicial map induces a chain map and hence a morphism of the associated F2[x,y] persistence modules.",
         "finite_invariants_match": derived_ok,
         "filtered_simplex_tree_map": tree_ok,
@@ -5289,7 +5686,13 @@ def _free_rank_vector(topology: dict[str, object], length: int = 16) -> np.ndarr
 def _commutative_algebra_numeric_vector(topology: dict[str, object], length: int = 16) -> np.ndarray:
     ca = topology.get("commutative_algebra", {}) if isinstance(topology, dict) else {}
     values: list[float] = []
-    for key in ("two_parameter_free_resolution", "multiparameter_free_resolution_proxy"):
+    chain_keys = (
+        "two_parameter_chain_presentation_diagnostics",
+        "multiparameter_chain_presentation_diagnostics",
+    )
+    legacy_keys = ("two_parameter_free_resolution", "multiparameter_free_resolution_proxy")
+    keys = chain_keys if any(isinstance(ca.get(key), dict) for key in chain_keys) else legacy_keys
+    for key in keys:
         fr = ca.get(key, {}) if isinstance(ca.get(key), dict) else {}
         for row in fr.get("free_chain_modules", []) if isinstance(fr.get("free_chain_modules"), list) else []:
             if isinstance(row, dict):
@@ -5320,6 +5723,52 @@ def _commutative_algebra_numeric_vector(topology: dict[str, object], length: int
     if len(values) < length:
         values.extend([0.0] * (length - len(values)))
     return np.asarray(values[:length], dtype=float)
+
+
+def _persistence_landscape_numeric_vector(topology: dict[str, object]) -> np.ndarray:
+    if not isinstance(topology, dict):
+        return np.zeros(0, dtype=float)
+    reps = topology.get("persistence_representations")
+    if not isinstance(reps, dict) or not reps.get("available"):
+        return np.zeros(0, dtype=float)
+    methods = reps.get("methods")
+    if not isinstance(methods, dict):
+        return np.zeros(0, dtype=float)
+    parts: list[np.ndarray] = []
+    def _sort_key(value: object) -> int:
+        try:
+            return int(str(value))
+        except (TypeError, ValueError):
+            return 999
+    for key in sorted(methods.keys(), key=_sort_key):
+        row = methods.get(key, {})
+        if not isinstance(row, dict) or not row.get("available"):
+            continue
+        landscape = row.get("landscape")
+        if not isinstance(landscape, dict):
+            continue
+        raw = landscape.get("vector")
+        if not isinstance(raw, list) or not raw:
+            continue
+        vals: list[float] = []
+        for value in raw:
+            try:
+                v = float(value)
+            except (TypeError, ValueError):
+                continue
+            if math.isfinite(v):
+                vals.append(v)
+        if vals:
+            parts.append(np.asarray(vals, dtype=float))
+    return np.concatenate(parts) if parts else np.zeros(0, dtype=float)
+
+
+def _persistence_landscape_vector_similarity(query_topology: dict[str, object], memory_topology: dict[str, object]) -> dict[str, object]:
+    report = _memory_persistence_landscape_vector_similarity(query_topology, memory_topology)
+    if report.get("available"):
+        report = dict(report)
+        report.setdefault("differentiable_comparison_note", "cosine, L2, and correlation are differentiable vector comparisons once landscapes are vectorized; this implementation uses cached GUDHI NumPy vectors.")
+    return report
 
 
 def _persistence_numeric_vector(topology: dict[str, object], length: int = 16) -> np.ndarray:
@@ -6194,6 +6643,7 @@ def _write_plotly_dark_html(path: Path, fig: go.Figure, title: str, panel_items:
       const plot = (item && item.plot) || {{}};
       const vertices = Array.isArray(plot.vertices) ? plot.vertices : [];
       const edges = Array.isArray(plot.edges) ? plot.edges : [];
+      const directedEdges = Array.isArray(plot.directed_edges) ? plot.directed_edges : [];
       const triangles = Array.isArray(plot.triangles) ? plot.triangles : [];
       const threshold = panelThreshold(item);
       const visible = new Set(vertices.filter((v) => Number(v.filtration ?? 0) <= threshold + 1e-12).map((v) => String(v.label)));
@@ -6209,6 +6659,29 @@ def _write_plotly_dark_html(path: Path, fig: go.Figure, title: str, panel_items:
         edgeY.push(a.y, b.y, null);
         edgeZ.push(a.z, b.z, null);
         edgeHover.push(hover, hover, null);
+      }});
+      const directedX = [], directedY = [], directedZ = [], directedHover = [];
+      const directedMarkerX = [], directedMarkerY = [], directedMarkerZ = [], directedMarkerHover = [];
+      function appendDotted(a, b, hover) {{
+        const segments = 10;
+        const duty = 0.46;
+        for (let idx = 0; idx < segments; idx += 1) {{
+          const t0 = idx / segments;
+          const t1 = Math.min((idx + duty) / segments, 1.0);
+          directedX.push(a.x + (b.x - a.x) * t0, a.x + (b.x - a.x) * t1, null);
+          directedY.push(a.y + (b.y - a.y) * t0, a.y + (b.y - a.y) * t1, null);
+          directedZ.push(a.z + (b.z - a.z) * t0, a.z + (b.z - a.z) * t1, null);
+          directedHover.push(hover, hover, null);
+        }}
+      }}
+      directedEdges.forEach((e) => {{
+        const a = vertexByLabel.get(String(e.a));
+        const b = vertexByLabel.get(String(e.b));
+        if (!a || !b || !visible.has(String(e.a)) || !visible.has(String(e.b))) return;
+        if (Number(e.filtration ?? 0) > threshold + 1e-12) return;
+        const hover = e.hover || `<b>dotted causal/decoding overlay</b><br>${{e.a}} -> ${{e.b}}<br>role=${{e.role || "decoding_order"}}<br>decoding step=${{e.decoding_step ?? ""}}<br>reasoning level=${{e.reasoning_level ?? ""}}`;
+        appendDotted(a, b, hover);
+        directedMarkerX.push(b.x); directedMarkerY.push(b.y); directedMarkerZ.push(b.z); directedMarkerHover.push(hover);
       }});
       const shownVertices = vertices.filter((v) => visible.has(String(v.label)));
       const showLabels = shownVertices.length <= 18;
@@ -6259,6 +6732,30 @@ def _write_plotly_dark_html(path: Path, fig: go.Figure, title: str, panel_items:
           name: "2-simplices",
           hoverinfo: "skip",
           showscale: false
+        }});
+      }}
+      if (directedX.length) {{
+        traces.push({{
+          type: "scatter3d",
+          mode: "lines",
+          x: directedX,
+          y: directedY,
+          z: directedZ,
+          line: {{color: "rgba(255,255,255,0.74)", width: 3}},
+          hovertext: directedHover,
+          hoverinfo: "text",
+          name: "dotted causal/decoding order"
+        }});
+        traces.push({{
+          type: "scatter3d",
+          mode: "markers",
+          x: directedMarkerX,
+          y: directedMarkerY,
+          z: directedMarkerZ,
+          marker: {{size: 4.5, color: "#fde047", symbol: "diamond", line: {{color: "#0f172a", width: 0.6}}}},
+          hovertext: directedMarkerHover,
+          hoverinfo: "text",
+          name: "directed edge heads"
         }});
       }}
       traces.push({{
@@ -6575,6 +7072,39 @@ def _simplicial_plot_payload(obj: dict[str, object], max_vertices: int = 220) ->
                 "type": str(edge.get("type", "edge")),
             }
         )
+    payload_directed_edges: list[dict[str, object]] = []
+    decoding_overlay = obj.get("decoding_causal_overlay", {}) if isinstance(obj.get("decoding_causal_overlay"), dict) else {}
+    for directed_edge in decoding_overlay.get("edges", []) if isinstance(decoding_overlay.get("edges"), list) else []:
+        if not isinstance(directed_edge, dict):
+            continue
+        source = str(directed_edge.get("source", ""))
+        target = str(directed_edge.get("target", ""))
+        if source not in visible or target not in visible:
+            continue
+        try:
+            edge_filtration = float(directed_edge.get("filtration", 0.0) or 0.0)
+        except (TypeError, ValueError):
+            edge_filtration = 0.0
+        payload_directed_edges.append(
+            {
+                "a": source,
+                "b": target,
+                "filtration": edge_filtration,
+                "type": str(directed_edge.get("edge_type", "decoding_order")),
+                "role": str(directed_edge.get("role", "decoding_order")),
+                "decoding_step": directed_edge.get("decoding_step"),
+                "reasoning_level": directed_edge.get("reasoning_level"),
+                "style": "dotted",
+                "source_node_id": str(directed_edge.get("source_node_id", "")),
+                "target_node_id": str(directed_edge.get("target_node_id", "")),
+                "hover": (
+                    f"dotted causal/decoding overlay<br>{html.escape(source)} -> {html.escape(target)}"
+                    f"<br>role={html.escape(str(directed_edge.get('role', 'decoding_order')))}"
+                    f"<br>decoding step={html.escape(str(directed_edge.get('decoding_step', '')))}"
+                    f"<br>reasoning level={html.escape(str(directed_edge.get('reasoning_level', '')))}"
+                ),
+            }
+        )
     payload_triangles: list[dict[str, object]] = []
     for tri in triangles[:1200]:
         simplex = [str(v) for v in (tri.get("simplex") or [])[:3]]
@@ -6598,6 +7128,8 @@ def _simplicial_plot_payload(obj: dict[str, object], max_vertices: int = 220) ->
         "vertex_count": len(payload_vertices),
         "edge_count": len(payload_edges),
         "triangle_count": len(payload_triangles),
+        "directed_edge_count": len(payload_directed_edges),
+        "directed_edges": payload_directed_edges,
         "source_vertex_count": sum(1 for row in simplices if isinstance(row, dict) and int(row.get("dimension", -1)) == 0),
         "source_edge_count": sum(1 for row in simplices if isinstance(row, dict) and int(row.get("dimension", -1)) == 1),
         "source_triangle_count": sum(1 for row in simplices if isinstance(row, dict) and int(row.get("dimension", -1)) == 2),
@@ -7617,7 +8149,7 @@ def _smooth_anchored_surface(
         "sparse_observed_anchor_layer": True,
         "dense_model_evaluated_field": False,
         "interpolation": "Exact piecewise-linear triangulation through observed PCA states; no synthetic anchor values are introduced in this layer",
-        "truthfulness_warning": "This is a sparse observed-state anchor mesh, not a dense model-evaluated NLL landscape.",
+        "truthfulness_warning": "This is a sparse observed-state anchor mesh, not a dense model-evaluated NLL/fitness field.",
         "provenance": "computed only from observed model-evaluated GoT state embeddings and their measured raw NLL values",
         "point_count": int(x.size),
         "hull_masked_fraction": float(support_meta.get("masked_fraction", 0.0)),
