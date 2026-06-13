@@ -203,3 +203,9 @@ The algebra repair target now includes Macaulay2/research-style Betti tables, mu
 - Added a 3D PCA NLL density-cloud artifact generated from actual GoT graph-state PCA anchors and measured raw NLL values. The Gaussian cloud is explicitly visualization-only local mass around actual embeddings; cloud points are not treated as model states.
 - Browser QA passed on the current served bundle at `http://127.0.0.1:8990`: sample index includes the bifiltration and density-cloud pages; direct bifiltration page renders the `F2[x_level,x_radius]` lattice; direct density-cloud page renders actual-state anchors plus local NLL cloud. Remaining visual issue: the bifiltration page is mathematically backed but still visually dense and needs a cleaner Miller-Sturmfels-style research layout.
 
+## 2026-06-13 08:35:47 UTC - Persistence-Landscape Retrieval Regression Test
+
+- Added a targeted analogical-memory regression test proving that, when embedding/signature/quality terms are tied, AnalogicalMemoryBank.retrieve ranks memories by GUDHI persistence-landscape vector similarity.
+- The tested comparison uses the cached gudhi.representations.Landscape.vector payload shape and asserts L2 similarity/overlap metadata are exposed in retrieval rows.
+- Updated the memory roundtrip test to reflect the current compact-memory policy: compact trajectory/probability complexes may be stored for analogical maps, but payload size remains bounded and summaries must match the model-derived trajectory object.
+

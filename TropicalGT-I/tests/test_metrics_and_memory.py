@@ -5,7 +5,7 @@ import math
 import torch
 
 from tropicalgt.data import FixtureGraphDataset, encode_bytes
-from tropicalgt.memory import AnalogicalMemoryBank, AnalogicalMemoryQualityGate, memory_quality_gate_summary, memory_records_from_scaling_report, query_signature_from_report
+from tropicalgt.memory import AnalogicalMemoryBank, AnalogicalMemoryQualityGate, AnalogicalMemoryRecord, memory_quality_gate_summary, memory_records_from_scaling_report, persistence_landscape_vector_similarity, query_signature_from_report
 from tropicalgt.metrics import batch_bpb_metrics, explicit_graph_json_bytes, graph_token_structural_bytes
 from tropicalgt.model import TropicalGTConfig, TropicalGTModel
 from tropicalgt.scaling import run_inference_scaling
@@ -68,8 +68,12 @@ def test_analogical_memory_bank_roundtrip_and_retrieval(tmp_path):
     assert max(len(row) for row in serialized) < 1_000_000
     for record in records:
         assert record.metadata["memory_payload_policy"] == "compact_real_trajectory_payload_no_duplicate_full_complexes"
-        assert "trajectory_filtered_simplicial_object" not in record.metadata
-        assert "trajectory_probability_filtered_simplicial_object" not in record.metadata
+        compact_trajectory = record.metadata["trajectory_filtered_simplicial_object"]
+        compact_probability = record.metadata["trajectory_probability_filtered_simplicial_object"]
+        assert compact_trajectory["summary"] == trajectory_summary
+        assert "summary" in compact_probability
+        assert len(json.dumps(compact_trajectory)) < 500_000
+        assert len(json.dumps(compact_probability)) < 500_000
         assert "summary" in record.filtered_simplicial_object
     assert "record_family" in retrieved[0]
     assert "base_retrieval_score" in retrieved[0]
@@ -97,6 +101,76 @@ def test_analogical_memory_bank_roundtrip_and_retrieval(tmp_path):
     assert "jensen_shannon" in source_hits[0]["trajectory_probability_filtered_summary"]["filtration_model"]
     assert any(row["trajectory_source"] == "source-b" for row in source_hits)
     assert source_bank.retrieve(query_embedding, query_signature, top_k=4, exclude_sources={"source-a", "source-b"}) == []
+
+
+
+def _landscape_topology(vector):
+    return {
+        "persistence_representations": {
+            "available": True,
+            "source": "gudhi.representations",
+            "methods": {
+                "0": {
+                    "available": True,
+                    "landscape": {
+                        "source": "gudhi.representations.Landscape.vector",
+                        "vector": [float(value) for value in vector],
+                    },
+                }
+            },
+        }
+    }
+
+
+def _memory_record(record_id, topology):
+    return AnalogicalMemoryRecord(
+        memory_id=f"mem-{record_id}",
+        record_id=record_id,
+        score=1.0,
+        nll=1.0,
+        embedding=[1.0, 0.0, 0.0],
+        signature_vector=[1.0, 0.0, 0.0],
+        trajectory_embeddings=[[0.0, 0.0, 0.0]],
+        trajectory_edges=[],
+        trajectory_paths=[[]],
+        filtered_simplicial_object={"summary": {"simplices": 1}, "simplices": []},
+        probability_filtered_simplicial_object={"summary": {"filtration_model": "probability_jensen_shannon", "simplices": 1}, "simplices": []},
+        topological_algebra=topology,
+        derived_signature={"betti_vector": [1, 0]},
+        metadata={"source": record_id, "trajectory_probability_topological_algebra": topology},
+    )
+
+
+def test_analogical_memory_retrieval_uses_persistence_landscape_vectors(tmp_path):
+    query_topology = _landscape_topology([0.0, 0.25, 0.75, 0.25, 0.0])
+    matching_topology = _landscape_topology([0.0, 0.24, 0.74, 0.26, 0.0])
+    mismatched_topology = _landscape_topology([0.9, 0.1, 0.0, 0.1, 0.9])
+    similarity = persistence_landscape_vector_similarity(query_topology, matching_topology)
+    mismatch = persistence_landscape_vector_similarity(query_topology, mismatched_topology)
+    assert similarity["available"] is True
+    assert similarity["source"] == "gudhi.representations.Landscape.vector"
+    assert similarity["l2_similarity"] > mismatch["l2_similarity"]
+
+    bank = AnalogicalMemoryBank(tmp_path / "landscape_memory.jsonl", max_records=8)
+    bank.extend([
+        _memory_record("mismatch", mismatched_topology),
+        _memory_record("match", matching_topology),
+    ])
+    hits = bank.retrieve(
+        [1.0, 0.0, 0.0],
+        [1.0, 0.0, 0.0],
+        top_k=2,
+        embedding_weight=0.0,
+        signature_weight=0.0,
+        score_weight=0.0,
+        landscape_weight=1.0,
+        diversity_weight=0.0,
+        query_topology=query_topology,
+    )
+    assert [row["record_id"] for row in hits] == ["match", "mismatch"]
+    assert hits[0]["persistence_landscape_vector_similarity"]["available"] is True
+    assert hits[0]["persistence_landscape_l2_similarity"] > hits[1]["persistence_landscape_l2_similarity"]
+    assert hits[0]["persistence_landscape_overlap_dim"] == 5
 
 
 

@@ -687,5 +687,5 @@ Stage only intended files, exclude unrelated files, commit, push `tropicalgt-i-i
 - [x] Require exact level/radius grade metadata, sorted min-to-max radius grades, rank-invariant samples with 2D grades, and uncertified-chain diagnostics to stay explicitly non-resolution unless a CAS certificate is present.
 - [x] Add model-backed 3D PCA NLL density-cloud page with explicit disclosure that Gaussian cloud points are not model states.
 - [ ] Replace the current dense bifiltration/free-chain visual layout with a clearer Miller-Sturmfels staircase plus Macaulay2-style tables once a real CAS-backed resolution path is available.
-- [ ] Add tests for persistence-landscape-weighted analogical retrieval once memory-quality threshold fixtures are stable.
+- [x] Add tests for persistence-landscape-weighted analogical retrieval once memory-quality threshold fixtures are stable.
 
