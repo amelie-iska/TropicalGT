@@ -209,3 +209,16 @@ The algebra repair target now includes Macaulay2/research-style Betti tables, mu
 - The tested comparison uses the cached gudhi.representations.Landscape.vector payload shape and asserts L2 similarity/overlap metadata are exposed in retrieval rows.
 - Updated the memory roundtrip test to reflect the current compact-memory policy: compact trajectory/probability complexes may be stored for analogical maps, but payload size remains bounded and summaries must match the model-derived trajectory object.
 
+## Vectorized Persistence Retrieval Update
+
+Status: implemented and under test. Analogical memory retrieval now compares the full cached GUDHI vector-representation family when available, not only persistence landscapes. The comparison contract is:
+
+- Source data: real `persistence_representations.methods` payloads computed from finite persistence intervals by GUDHI.
+- Methods: Landscape vector, BettiCurve values, Silhouette values, Entropy vector, PersistenceLengths, TopologicalVector, and PersistenceImage flattened grids.
+- Scoring: each shared query-memory method is concatenated by homology dimension, zero-padded only to align existing vector lengths, and compared by L2 similarity, cosine, and correlation. The retrieval aggregate is a weighted mean of vector similarities across available methods.
+- Guardrail: if a method is absent for either query or memory it is reported unavailable and contributes no score. There is no fabricated topology vector.
+- Differentiability statement: the vector comparisons are differentiable with respect to the cached vectors, but the current GUDHI vectorizers are NumPy/scikit-learn transforms rather than torch-native differentiable persistent-homology layers.
+- Browser impact: analogical retrieval tables now show the vector topology aggregate, available method count, and method names alongside the landscape-only diagnostics.
+
+This keeps both overloaded “landscape” meanings separate: persistence landscapes `lambda_k(t)` are topological vector features; NLL/fitness landscapes or density clouds are model-evaluation visualizations over projected embeddings.
+

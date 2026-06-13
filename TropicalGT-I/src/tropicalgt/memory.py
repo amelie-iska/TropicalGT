@@ -217,11 +217,13 @@ class AnalogicalMemoryBank:
             if not isinstance(memory_topology, dict):
                 memory_topology = record.topological_algebra if isinstance(record.topological_algebra, dict) else {}
             landscape_report = persistence_landscape_vector_similarity(query_topology, memory_topology)
+            vector_report = persistence_vector_representation_similarity(query_topology, memory_topology)
             landscape_sim = float(landscape_report.get("l2_similarity", 0.0)) if landscape_report.get("available") else 0.0
+            vector_sim = float(vector_report.get("aggregate_similarity", 0.0)) if vector_report.get("available") else landscape_sim
             quality = float(record.score) - 0.05 * float(record.nll)
             retrieval_score = embedding_weight * emb_sim + signature_weight * sig_sim + score_weight * quality
-            if landscape_report.get("available"):
-                retrieval_score += float(landscape_weight) * landscape_sim
+            if vector_report.get("available") or landscape_report.get("available"):
+                retrieval_score += float(landscape_weight) * vector_sim
             family = _record_family(record.record_id)
             signature_hash = _signature_hash(record.signature_vector)
             trajectory_probability_complex = record_metadata.get("trajectory_probability_filtered_simplicial_object", {})
@@ -239,6 +241,10 @@ class AnalogicalMemoryBank:
                     "embedding_similarity": float(emb_sim),
                     "signature_similarity": float(sig_sim),
                     "persistence_landscape_vector_similarity": landscape_report,
+                    "persistence_vector_representation_similarity": vector_report,
+                    "persistence_vector_aggregate_similarity": float(vector_report.get("aggregate_similarity", 0.0)) if vector_report.get("available") else 0.0,
+                    "persistence_vector_component_count": int(vector_report.get("component_count", 0) or 0),
+                    "persistence_vector_available_methods": list(vector_report.get("available_methods", [])) if vector_report.get("available") else [],
                     "persistence_landscape_l2_similarity": float(landscape_report.get("l2_similarity", 0.0)) if landscape_report.get("available") else 0.0,
                     "persistence_landscape_cosine": float(landscape_report.get("cosine", 0.0)) if landscape_report.get("available") else 0.0,
                     "persistence_landscape_correlation": float(landscape_report.get("correlation", 0.0)) if landscape_report.get("available") else 0.0,
@@ -773,6 +779,176 @@ def _concatenate_landscape_vectors(left: dict[int, np.ndarray], right: dict[int,
     if not left_parts:
         return np.zeros(0, dtype=float), np.zeros(0, dtype=float), []
     return np.concatenate(left_parts), np.concatenate(right_parts), dims
+
+
+_VECTOR_REPRESENTATION_SPECS: dict[str, tuple[str, tuple[str, ...], float]] = {
+    "landscape": ("gudhi.representations.Landscape.vector", ("landscape", "vector"), 1.00),
+    "betti_curve": ("gudhi.representations.BettiCurve.values", ("betti_curve", "values"), 0.85),
+    "silhouette": ("gudhi.representations.Silhouette.values", ("silhouette", "values"), 0.65),
+    "entropy_vector": ("gudhi.representations.Entropy.vector", ("entropy", "vector"), 0.35),
+    "persistence_lengths": ("gudhi.representations.PersistenceLengths.values", ("persistence_lengths", "values"), 0.55),
+    "topological_vector": ("gudhi.representations.TopologicalVector.values", ("topological_vector", "values"), 0.80),
+    "persistence_image": ("gudhi.representations.PersistenceImage.values", ("persistence_image", "values"), 0.55),
+}
+
+
+def _flatten_numeric_values(raw: Any) -> list[float]:
+    values: list[float] = []
+    if isinstance(raw, dict):
+        for key in sorted(raw):
+            values.extend(_flatten_numeric_values(raw[key]))
+        return values
+    if isinstance(raw, (list, tuple)):
+        for item in raw:
+            values.extend(_flatten_numeric_values(item))
+        return values
+    try:
+        value = float(raw)
+    except (TypeError, ValueError):
+        return values
+    if math.isfinite(value):
+        values.append(value)
+    return values
+
+
+def _nested_method_value(row: dict[str, Any], path: tuple[str, ...]) -> Any:
+    current: Any = row
+    for key in path:
+        if not isinstance(current, dict):
+            return None
+        current = current.get(key)
+    return current
+
+
+def persistence_vector_representations(topology: dict[str, Any], max_dimension: int | None = None) -> dict[str, dict[int, np.ndarray]]:
+    """Return real GUDHI vector-representation features grouped by method and homology dimension."""
+
+    if not isinstance(topology, dict):
+        return {}
+    reps = topology.get("persistence_representations")
+    if not isinstance(reps, dict) or not reps.get("available"):
+        return {}
+    methods = reps.get("methods")
+    if not isinstance(methods, dict):
+        return {}
+    out: dict[str, dict[int, np.ndarray]] = {name: {} for name in _VECTOR_REPRESENTATION_SPECS}
+    for key, row in methods.items():
+        try:
+            dim = int(key)
+        except (TypeError, ValueError):
+            continue
+        if max_dimension is not None and dim > max_dimension:
+            continue
+        if not isinstance(row, dict) or not row.get("available"):
+            continue
+        for name, (_source, value_path, _weight) in _VECTOR_REPRESENTATION_SPECS.items():
+            values = _flatten_numeric_values(_nested_method_value(row, value_path))
+            if values:
+                out[name][dim] = np.asarray(values, dtype=float)
+    return {name: dims for name, dims in out.items() if dims}
+
+
+def _vector_similarity_from_arrays(q_vec: np.ndarray, m_vec: np.ndarray) -> dict[str, float]:
+    q_norm = float(np.linalg.norm(q_vec))
+    m_norm = float(np.linalg.norm(m_vec))
+    denom = q_norm * m_norm
+    if denom > 1e-12:
+        cosine = float(np.dot(q_vec, m_vec) / denom)
+    else:
+        cosine = 1.0 if float(np.linalg.norm(q_vec - m_vec)) <= 1e-12 else 0.0
+    l2_distance = float(np.linalg.norm(q_vec - m_vec))
+    l2_similarity = float(1.0 / (1.0 + l2_distance))
+    if q_vec.size > 1 and m_vec.size > 1 and float(np.std(q_vec)) > 1e-12 and float(np.std(m_vec)) > 1e-12:
+        correlation = float(np.corrcoef(q_vec, m_vec)[0, 1])
+    else:
+        correlation = cosine
+    cosine_01 = float(max(0.0, min(1.0, 0.5 * (cosine + 1.0))))
+    return {
+        "query_norm": q_norm,
+        "memory_norm": m_norm,
+        "cosine": cosine,
+        "cosine_01": cosine_01,
+        "l2_distance": l2_distance,
+        "l2_similarity": l2_similarity,
+        "correlation": correlation,
+        "vector_similarity": float(0.55 * l2_similarity + 0.45 * cosine_01),
+    }
+
+
+def persistence_vector_representation_similarity(query_topology: dict[str, Any], memory_topology: dict[str, Any]) -> dict[str, Any]:
+    """Compare all available vectorized GUDHI persistence representations.
+
+    These are real cached vectors produced from persistence diagrams by GUDHI.
+    The comparison operations are vector-space operations suitable for retrieval
+    losses or rewards; the upstream GUDHI transforms in this project remain
+    NumPy/scikit-learn transforms, so this is not claiming end-to-end autograd
+    through persistent homology.
+    """
+
+    q_methods = persistence_vector_representations(query_topology)
+    m_methods = persistence_vector_representations(memory_topology)
+    components: dict[str, Any] = {}
+    weighted_sum = 0.0
+    weight_total = 0.0
+    available_methods: list[str] = []
+    for name, (source, _value_path, default_weight) in _VECTOR_REPRESENTATION_SPECS.items():
+        q_by_dim = q_methods.get(name, {})
+        m_by_dim = m_methods.get(name, {})
+        if not q_by_dim or not m_by_dim:
+            components[name] = {
+                "available": False,
+                "source": source,
+                "reason": "missing_query_or_memory_vector",
+                "query_dims": sorted(q_by_dim.keys()),
+                "memory_dims": sorted(m_by_dim.keys()),
+            }
+            continue
+        q_vec, m_vec, dims = _concatenate_landscape_vectors(q_by_dim, m_by_dim)
+        if q_vec.size == 0 or m_vec.size == 0:
+            components[name] = {
+                "available": False,
+                "source": source,
+                "reason": "empty_concatenated_vector",
+                "query_dims": sorted(q_by_dim.keys()),
+                "memory_dims": sorted(m_by_dim.keys()),
+            }
+            continue
+        metrics = _vector_similarity_from_arrays(q_vec, m_vec)
+        component = {
+            "available": True,
+            "source": source,
+            "dims": dims,
+            "query_dims": sorted(q_by_dim.keys()),
+            "memory_dims": sorted(m_by_dim.keys()),
+            "overlap_dim": int(q_vec.size),
+            "weight": float(default_weight),
+            **metrics,
+        }
+        components[name] = component
+        weighted_sum += float(default_weight) * float(component["vector_similarity"])
+        weight_total += float(default_weight)
+        available_methods.append(name)
+    if weight_total <= 0.0:
+        return {
+            "available": False,
+            "source": "gudhi.representations.vector_methods",
+            "reason": "no_shared_vectorized_persistence_representations",
+            "query_methods": sorted(q_methods.keys()),
+            "memory_methods": sorted(m_methods.keys()),
+            "components": components,
+        }
+    aggregate_similarity = float(weighted_sum / weight_total)
+    return {
+        "available": True,
+        "source": "gudhi.representations.vector_methods",
+        "comparison_space": "weighted vector-space comparison of GUDHI Landscape, BettiCurve, Silhouette, Entropy, PersistenceLengths, TopologicalVector, and PersistenceImage features",
+        "differentiable_comparison_note": "Cosine/L2/correlation over cached vectors are differentiable with respect to the vectors; this code does not backpropagate through GUDHI diagram vectorization.",
+        "aggregate_similarity": aggregate_similarity,
+        "component_count": len(available_methods),
+        "available_methods": available_methods,
+        "weight_total": float(weight_total),
+        "components": components,
+    }
 
 
 def persistence_landscape_vector_similarity(query_topology: dict[str, Any], memory_topology: dict[str, Any]) -> dict[str, Any]:

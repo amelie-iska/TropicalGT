@@ -131,6 +131,15 @@ PROVENANCE_REGISTRY: tuple[ProvenanceEntry, ...] = (
         match_terms=("persistence_image", "persistence images"),
     ),
     ProvenanceEntry(
+        name="persistence_vector_representation_similarity",
+        kind="fast_vectorized_topology",
+        surface="analogical retrieval metric",
+        optimize_directly=True,
+        description="Weighted vector-space comparison across real cached GUDHI Landscape, BettiCurve, Silhouette, Entropy, PersistenceLengths, TopologicalVector, and PersistenceImage features.",
+        replacement_or_guardrail="Use only when both query and memory expose real GUDHI vector payloads; do not treat the NumPy vectorizer as a torch-native differentiable PH layer.",
+        match_terms=("persistence_vector_representation_similarity", "persistence_vector_aggregate_similarity", "gudhi.representations.vector_methods"),
+    ),
+    ProvenanceEntry(
         name="multiparameter_free_resolution_proxy",
         kind="algebra_proxy",
         surface="topological algebra report",

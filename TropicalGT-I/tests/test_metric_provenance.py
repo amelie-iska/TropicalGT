@@ -34,6 +34,7 @@ def test_metric_provenance_registry_covers_current_risky_terms(tmp_path: Path):
     assert registry["bpb_proxy"]["kind"] == "legacy_exact_alias"
     assert registry["smooth_projected_nll_fitness_landscape"]["optimize_directly"] is False
     assert registry["persistence_landscape"]["kind"] == "fast_vectorized_topology"
+    assert registry["persistence_vector_representation_similarity"]["optimize_directly"] is True
     assert registry["browser_static_preview_rendering_fallback"]["kind"] == "rendering_fallback"
 
 

@@ -18,7 +18,10 @@ from plotly.subplots import make_subplots
 
 from .data import encode_bytes
 from .diagnostics import describe_graph_tokens, per_record_nll, record_diagnostics
-from .memory import persistence_landscape_vector_similarity as _memory_persistence_landscape_vector_similarity
+from .memory import (
+    persistence_landscape_vector_similarity as _memory_persistence_landscape_vector_similarity,
+    persistence_vector_representation_similarity as _memory_persistence_vector_representation_similarity,
+)
 from .simplicial import build_embedding_radius_simplicial_object, build_reasoning_trajectory_complex
 
 
@@ -4616,6 +4619,8 @@ def _analogical_pair_figure(
         f"<br>commutative-algebra similarity={sim.get('commutative_algebra_similarity', 0.0):.4f}"
         f"<br>persistence-landscape L2 similarity={sim.get('persistence_landscape_l2_similarity', 0.0):.4f}"
         f"<br>persistence-landscape cosine={sim.get('persistence_landscape_cosine', 0.0):.4f}"
+        f"<br>vectorized topology aggregate={sim.get('persistence_vector_aggregate_similarity', 0.0):.4f}"
+        f"<br>vectorized methods={html.escape(str(sim.get('persistence_vector_methods', '')))}"
         f"<br>derived/algebraic similarity={sim['derived_algebraic_similarity']:.4f}"
         f"<br>coarse signature cosine={sim['derived_signature_similarity']:.4f}"
         f"<br>finite derived invariants match={derived_comparison['finite_invariants_match']}"
@@ -4737,6 +4742,9 @@ def _analogical_quality_table_trace(
         ("persistence-landscape L2 sim", f"{float(sim.get('persistence_landscape_l2_similarity', 0.0)):.4f}"),
         ("persistence-landscape cosine", f"{float(sim.get('persistence_landscape_cosine', 0.0)):.4f}"),
         ("landscape vector dims", f"{int(float(sim.get('persistence_landscape_overlap_dim', 0.0)))}"),
+        ("vector topology aggregate", f"{float(sim.get('persistence_vector_aggregate_similarity', 0.0)):.4f}"),
+        ("vector methods", str(sim.get('persistence_vector_methods', '')) or 'unavailable'),
+        ("vector method count", f"{int(float(sim.get('persistence_vector_component_count', 0.0)))}"),
         ("derived/algebraic similarity", f"{float(sim.get('derived_algebraic_similarity', 0.0)):.4f}"),
         ("coarse signature cosine", f"{float(sim.get('derived_signature_similarity', 0.0)):.4f}"),
         ("assignment source", source_label),
@@ -5285,6 +5293,7 @@ def _topological_similarity_summary(query_topology: dict[str, object], memory_to
     q_ca = _commutative_algebra_numeric_vector(query_topology)
     m_ca = _commutative_algebra_numeric_vector(memory_topology)
     landscape_report = _persistence_landscape_vector_similarity(query_topology, memory_topology)
+    vector_report = _persistence_vector_representation_similarity(query_topology, memory_topology)
     sig_sim = _cosine_similarity(q_sig, m_sig)
     free_sim = _cosine_similarity(q_free, m_free)
     ph_sim = _cosine_similarity(q_ph, m_ph)
@@ -5311,6 +5320,9 @@ def _topological_similarity_summary(query_topology: dict[str, object], memory_to
         "persistence_landscape_l2_distance": float(landscape_report.get("l2_distance", 0.0)) if landscape_report.get("available") else 0.0,
         "persistence_landscape_correlation": float(landscape_report.get("correlation", 0.0)) if landscape_report.get("available") else 0.0,
         "persistence_landscape_overlap_dim": float(landscape_report.get("overlap_dim", 0) or 0),
+        "persistence_vector_aggregate_similarity": float(vector_report.get("aggregate_similarity", 0.0)) if vector_report.get("available") else 0.0,
+        "persistence_vector_component_count": float(vector_report.get("component_count", 0) or 0),
+        "persistence_vector_methods": str(",".join(vector_report.get("available_methods", []))) if vector_report.get("available") else "",
         "derived_algebraic_similarity": float(max(0.0, min(1.0, derived_algebraic))),
         "derived_algebraic_components_available": float(1.0 if required_components_available else 0.0),
     }
@@ -6008,6 +6020,10 @@ def _persistence_landscape_vector_similarity(query_topology: dict[str, object], 
         report = dict(report)
         report.setdefault("differentiable_comparison_note", "cosine, L2, and correlation are differentiable vector comparisons once landscapes are vectorized; this implementation uses cached GUDHI NumPy vectors.")
     return report
+
+
+def _persistence_vector_representation_similarity(query_topology: dict[str, object], memory_topology: dict[str, object]) -> dict[str, object]:
+    return _memory_persistence_vector_representation_similarity(query_topology, memory_topology)
 
 
 def _persistence_numeric_vector(topology: dict[str, object], length: int = 16) -> np.ndarray:

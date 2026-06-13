@@ -5,7 +5,7 @@ import math
 import torch
 
 from tropicalgt.data import FixtureGraphDataset, encode_bytes
-from tropicalgt.memory import AnalogicalMemoryBank, AnalogicalMemoryQualityGate, AnalogicalMemoryRecord, memory_quality_gate_summary, memory_records_from_scaling_report, persistence_landscape_vector_similarity, query_signature_from_report
+from tropicalgt.memory import AnalogicalMemoryBank, AnalogicalMemoryQualityGate, AnalogicalMemoryRecord, memory_quality_gate_summary, memory_records_from_scaling_report, persistence_landscape_vector_similarity, persistence_vector_representation_similarity, query_signature_from_report
 from tropicalgt.metrics import batch_bpb_metrics, explicit_graph_json_bytes, graph_token_structural_bytes
 from tropicalgt.model import TropicalGTConfig, TropicalGTModel
 from tropicalgt.scaling import run_inference_scaling
@@ -104,20 +104,21 @@ def test_analogical_memory_bank_roundtrip_and_retrieval(tmp_path):
 
 
 
-def _landscape_topology(vector):
+def _landscape_topology(vector, *, extra_vectors=None):
+    row = {
+        "available": True,
+        "landscape": {
+            "source": "gudhi.representations.Landscape.vector",
+            "vector": [float(value) for value in vector],
+        },
+    }
+    if extra_vectors:
+        row.update(extra_vectors)
     return {
         "persistence_representations": {
             "available": True,
             "source": "gudhi.representations",
-            "methods": {
-                "0": {
-                    "available": True,
-                    "landscape": {
-                        "source": "gudhi.representations.Landscape.vector",
-                        "vector": [float(value) for value in vector],
-                    },
-                }
-            },
+            "methods": {"0": row},
         }
     }
 
@@ -139,6 +140,70 @@ def _memory_record(record_id, topology):
         derived_signature={"betti_vector": [1, 0]},
         metadata={"source": record_id, "trajectory_probability_topological_algebra": topology},
     )
+
+
+def test_analogical_memory_retrieval_uses_gudhi_vector_representation_family(tmp_path):
+    query_topology = _landscape_topology(
+        [0.0, 0.25, 0.75, 0.25, 0.0],
+        extra_vectors={
+            "betti_curve": {"values": [0.0, 1.0, 1.0, 0.0]},
+            "silhouette": {"values": [0.0, 0.4, 0.2, 0.0]},
+            "entropy": {"vector": [0.0, 0.1, 0.1, 0.0]},
+            "persistence_lengths": {"values": [0.75, 0.25]},
+            "topological_vector": {"values": [0.2, 0.3, 0.5]},
+            "persistence_image": {"values": [[0.0, 0.2], [0.1, 0.0]]},
+        },
+    )
+    matching_topology = _landscape_topology(
+        [0.0, 0.24, 0.74, 0.26, 0.0],
+        extra_vectors={
+            "betti_curve": {"values": [0.0, 1.0, 0.9, 0.0]},
+            "silhouette": {"values": [0.0, 0.39, 0.21, 0.0]},
+            "entropy": {"vector": [0.0, 0.11, 0.1, 0.0]},
+            "persistence_lengths": {"values": [0.74, 0.26]},
+            "topological_vector": {"values": [0.21, 0.29, 0.49]},
+            "persistence_image": {"values": [[0.0, 0.21], [0.1, 0.0]]},
+        },
+    )
+    mismatched_topology = _landscape_topology(
+        [0.9, 0.1, 0.0, 0.1, 0.9],
+        extra_vectors={
+            "betti_curve": {"values": [3.0, 0.0, 0.0, 3.0]},
+            "silhouette": {"values": [1.0, 0.0, 0.0, 1.0]},
+            "entropy": {"vector": [1.0, 0.0, 0.0, 1.0]},
+            "persistence_lengths": {"values": [0.05, 0.04]},
+            "topological_vector": {"values": [2.0, -1.0, 0.0]},
+            "persistence_image": {"values": [[1.0, 0.0], [0.0, 1.0]]},
+        },
+    )
+    similarity = persistence_vector_representation_similarity(query_topology, matching_topology)
+    mismatch = persistence_vector_representation_similarity(query_topology, mismatched_topology)
+    assert similarity["available"] is True
+    assert similarity["source"] == "gudhi.representations.vector_methods"
+    assert set(similarity["available_methods"]) >= {"landscape", "betti_curve", "silhouette", "persistence_image", "topological_vector"}
+    assert similarity["aggregate_similarity"] > mismatch["aggregate_similarity"]
+    assert similarity["components"]["persistence_image"]["overlap_dim"] == 4
+
+    bank = AnalogicalMemoryBank(tmp_path / "vector_family_memory.jsonl", max_records=8)
+    bank.extend([
+        _memory_record("mismatch", mismatched_topology),
+        _memory_record("match", matching_topology),
+    ])
+    hits = bank.retrieve(
+        [1.0, 0.0, 0.0],
+        [1.0, 0.0, 0.0],
+        top_k=2,
+        embedding_weight=0.0,
+        signature_weight=0.0,
+        score_weight=0.0,
+        landscape_weight=1.0,
+        diversity_weight=0.0,
+        query_topology=query_topology,
+    )
+    assert [row["record_id"] for row in hits] == ["match", "mismatch"]
+    assert hits[0]["persistence_vector_representation_similarity"]["available"] is True
+    assert hits[0]["persistence_vector_aggregate_similarity"] > hits[1]["persistence_vector_aggregate_similarity"]
+    assert "persistence_image" in hits[0]["persistence_vector_available_methods"]
 
 
 def test_analogical_memory_retrieval_uses_persistence_landscape_vectors(tmp_path):
