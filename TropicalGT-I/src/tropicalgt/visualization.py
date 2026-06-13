@@ -2674,11 +2674,11 @@ def write_tropical_support_heatmap(result: dict[str, object], output_dir: str | 
             specs=[[{"type": "heatmap"}, {"type": "scatter"}], [{"type": "histogram"}, {"type": "table"}]],
             column_widths=[0.48, 0.52],
             row_heights=[0.62, 0.38],
-            horizontal_spacing=0.13,
-            vertical_spacing=0.18,
+            horizontal_spacing=0.18,
+            vertical_spacing=0.20,
             subplot_titles=(
-                "Active-support assignments",
-                "Selected-support margin by token",
+                "Support assignments",
+                "Margin profile",
                 "Margin distribution",
                 "Collapse metrics",
             ),
@@ -2721,8 +2721,8 @@ def write_tropical_support_heatmap(result: dict[str, object], output_dir: str | 
                 name="margin profile",
                 showlegend=False,
             ),
-            row=2,
-            col=1,
+            row=1,
+            col=2,
         )
         fig.add_trace(
             go.Histogram(
@@ -2732,6 +2732,7 @@ def write_tropical_support_heatmap(result: dict[str, object], output_dir: str | 
                 opacity=0.82,
                 hovertemplate="margin bin=%{x}<br>count=%{y}<extra></extra>",
                 name="margin distribution",
+                showlegend=False,
             ),
             row=2,
             col=1,
@@ -2759,7 +2760,7 @@ def write_tropical_support_heatmap(result: dict[str, object], output_dir: str | 
             margin=dict(t=126, l=88, r=48, b=96),
             height=max(960, min(1420, 620 + 10 * n)),
         )
-        fig.update_xaxes(title_text="active support token", tickangle=45, row=1, col=1)
+        fig.update_xaxes(title_text="", tickangle=45, row=1, col=1)
         fig.update_yaxes(title_text="query token", row=1, col=1)
         fig.update_xaxes(title_text="graph-token index", row=1, col=2)
         fig.update_yaxes(title_text="active-support margin", row=1, col=2)
