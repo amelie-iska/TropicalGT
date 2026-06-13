@@ -267,6 +267,35 @@ def _row(root: Path, name: str) -> Path:
             }
         ),
     )
+    _write(
+        row / "trajectory_level_radius_bifiltration.json",
+        json.dumps(
+            {
+                "available": True,
+                "coefficient_ring": "F2[x_level,x_radius]",
+                "num_parameters": 2,
+                "parameters": [
+                    {"name": "trajectory_level", "meaning": "reasoning growth level"},
+                    {"name": "radius", "meaning": "scalar radius threshold"},
+                ],
+                "grid_axes": [[0, 1, 2], [0, 1, 2]],
+                "levels": [0, 1, 2],
+                "radii": [0.0, 0.5, 1.0],
+                "radius_grade_policy": "exact_sorted_radius_grid_index_no_bucket_collision",
+                "radius_grade_values": {"0": 0.0, "1": 0.5, "2": 1.0},
+                "rank_invariant_samples": [
+                    {"source_grade": [0, 0], "target_grade": [0, 1], "h0_rank": 1},
+                    {"source_grade": [0, 0], "target_grade": [1, 1], "h0_rank": 1},
+                ],
+                "boundary_monomials": {"d1": [{"monomial": "x_level", "monomial_exponent": [1, 0]}]},
+                "chain_presentation_diagnostics": {
+                    "ring": "F2[x_level,x_radius]",
+                    "real_free_resolution_certified": False,
+                    "resolution_status": "computed finite presentation; minimality not certified",
+                },
+            }
+        ),
+    )
     _write(row / "inference_audit.json", "{}")
     html_files = {
         "got_embedding_map_3d.html": _html(
@@ -277,8 +306,9 @@ def _row(root: Path, name: str) -> Path:
             "Graph-of-thought branching trajectory with observed NLL anchors",
             "Plotly.newPlot selected-complex-graph plotly_click open interactive reasoning-step complex page",
         ),
+        "got_nll_density_cloud_pca_3d.html": _html("3D PCA NLL density cloud", "Gaussian cloud actual model GoT state anchors not a model state Plotly.newPlot plotly.min.js"),
         "got_full_trajectory_complex.html": _html("Full graph-of-thought trajectory filtered simplicial complex", "Plotly.newPlot play filtration min-to-max Filtration radius model input model output filtration backend= simplicial-object-plot selected-complex-graph plotly_click"),
-        "got_full_trajectory_simplex_tree_3d.html": _html("Full graph-of-thought trajectory GUDHI simplex tree", "Plotly.newPlot simplex-tree inclusion"),
+        "got_full_trajectory_simplex_tree_3d.html": _html("Full graph-of-thought trajectory GUDHI SimplexTree face-coface poset", "Plotly.newPlot face-coface poset view not a literal trie layout"),
         "got_full_trajectory_complex_jensen_shannon.html": _html("Full graph-of-thought trajectory probability filtered simplicial complex", "Plotly.newPlot Jensen-Shannon probability filtered simplicial complex"),
         "got_full_trajectory_simplex_tree_3d_jensen_shannon.html": _html("Full graph-of-thought trajectory probability SimplexTree", "Plotly.newPlot Jensen-Shannon probability SimplexTree"),
         "reasoning_step_complex_maps/index.html": _html("Reasoning step filtered simplicial complex maps", "table"),
@@ -288,6 +318,7 @@ def _row(root: Path, name: str) -> Path:
         "analogical_memory_retrieval.html": _html("Analogical probability-matched correspondence filtered-complex certificate", "Plotly.newPlot query trajectory complex retrieved memory complex slider filters domain and codomain sliders vertex-only correspondences preserved 1-simplex map simplicial-object-plot selected-complex-graph plotly_click"),
         "analogical_memory_map_02.html": _html("Analogical probability-matched correspondence filtered-complex certificate", "Plotly.newPlot query trajectory complex retrieved memory complex slider filters domain and codomain sliders vertex-only correspondences preserved 1-simplex map simplicial-object-plot selected-complex-graph plotly_click"),
         "trajectory_persistence/persistence_barcode.html": _html("Trajectory persistence barcode", "Plotly.newPlot simplicial-object-plot selected-complex-graph plotly_click"),
+        "trajectory_persistence/two_parameter_bifiltration.html": _html("Trajectory 2-parameter persistence over F2[x_level,x_radius]", "Plotly.newPlot 2-parameter module fibers Miller-Sturmfels staircase H0 fiber rank"),
         "trajectory_persistence/persistence_module_betti.html": _html("Trajectory persistence Betti", "Plotly.newPlot 2D matrix decorative 3D simplicial-object-plot selected-complex-graph plotly_click"),
         "trajectory_persistence/persistence_representations.html": _html("Trajectory GUDHI persistence vectorization", "Plotly.newPlot Fast train/eval features"),
         "trajectory_persistence/persistence_landscapes.html": _html("Trajectory Actual GUDHI persistence landscape functions", "Plotly.newPlot lambda_1(t) not norm-only summaries"),

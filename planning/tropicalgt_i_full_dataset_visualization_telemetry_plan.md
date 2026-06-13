@@ -388,7 +388,7 @@ If either side lacks model probability vectors, finite Jensen-Shannon distances,
 - Test: `TropicalGT-I/tests/test_simplicial_visualization.py`
 - Validator: `TropicalGT-I/scripts/validate_interactive_audit_artifacts.py`
 
-- [ ] **Step 7.1: Write failing tests for real landscape functions**
+- [x] **Step 7.1: Write failing tests for real landscape functions**
 
 Extend persistence tests to assert landscape payload/HTML reports actual `lambda_k(t)` samples, backend provenance, interval counts, homology dimension, and unavailable diagnostics when no real landscape can be computed:
 ```python
@@ -452,7 +452,7 @@ assert payload["nodes"][0]["embedding_source"] == "model graph_state"
 
 Keep PCA from model graph-state embeddings, but add branch/depth styling, explicit parent-child arrows, chosen/best terminal path emphasis, and collapse diagnostics. If PCA stress or duplicate-coordinate ratio is poor, show that warning prominently and avoid overclaiming geometric separation.
 
-- [ ] **Step 8.5: Write failing tests for SimplexTree correctness and readability**
+- [x] **Step 8.5: Write failing tests for SimplexTree correctness and readability**
 
 Assert all Euclidean and Jensen-Shannon simplex-tree pages, including
 per-reasoning-step simplex trees, include dimension counts, backend provenance,
@@ -680,3 +680,12 @@ Stage only intended files, exclude unrelated files, commit, push `tropicalgt-i-i
 - Patched `run_multi_inference_audits.py` so `--audit-preset full` preserves caller sampling temperature/exploration and defaults to stochastic actions instead of silently forcing deterministic sampling.
 - Focused tests passed: GoT NLL visualization, analogical memory visualization, and full-audit preset contract.
 - Launched refreshed CPU-side model-backed browser QA from the active latest checkpoint with full audit depth/width/branch, stochastic actions, GUDHI, memory top-k 8, and no GPU contention with live training. Output root is recorded in `/tmp/tropicalgt_takeover_out.txt`.
+
+### 2026-06-13 08:12:59 UTC Focused Artifact Contract Update
+
+- [x] Require `F2[x_level,x_radius]` bifiltration HTML and JSON in the interactive artifact validator.
+- [x] Require exact level/radius grade metadata, sorted min-to-max radius grades, rank-invariant samples with 2D grades, and uncertified-chain diagnostics to stay explicitly non-resolution unless a CAS certificate is present.
+- [x] Add model-backed 3D PCA NLL density-cloud page with explicit disclosure that Gaussian cloud points are not model states.
+- [ ] Replace the current dense bifiltration/free-chain visual layout with a clearer Miller-Sturmfels staircase plus Macaulay2-style tables once a real CAS-backed resolution path is available.
+- [ ] Add tests for persistence-landscape-weighted analogical retrieval once memory-quality threshold fixtures are stable.
+

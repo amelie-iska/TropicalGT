@@ -16,8 +16,9 @@ import numpy as np
 REQUIRED_HTML = {
     "embedding_map": ("got_embedding_map_3d.html", ("Graph-of-thought embedding-space trajectory map", "actual graph_state PCA")),
     "trajectory_nll": ("got_trajectory_pca_3d.html", ("Graph-of-thought branching trajectory", "observed NLL anchors")),
+    "trajectory_nll_density": ("got_nll_density_cloud_pca_3d.html", ("3D PCA NLL density cloud", "Gaussian cloud", "actual model GoT state anchors", "not a model state")),
     "full_complex": ("got_full_trajectory_complex.html", ("Full graph-of-thought trajectory filtered simplicial complex", "play filtration", "filtration backend=")),
-    "full_simplex_tree": ("got_full_trajectory_simplex_tree_3d.html", ("Full graph-of-thought trajectory GUDHI simplex tree", "simplex-tree inclusion")),
+    "full_simplex_tree": ("got_full_trajectory_simplex_tree_3d.html", ("Full graph-of-thought trajectory GUDHI SimplexTree face-coface poset", "face-coface poset view", "not a literal trie layout")),
     "probability_complex": ("got_full_trajectory_complex_jensen_shannon.html", ("probability filtered simplicial complex", "Jensen-Shannon")),
     "probability_simplex_tree": ("got_full_trajectory_simplex_tree_3d_jensen_shannon.html", ("probability", "SimplexTree", "Jensen-Shannon")),
     "step_complex_index": ("reasoning_step_complex_maps/index.html", ("Reasoning step filtered simplicial complex maps",)),
@@ -26,6 +27,7 @@ REQUIRED_HTML = {
     "analogical_index": ("analogical_memory_topk_index.html", ("Analogical top-k probability correspondences",)),
     "analogical_map": ("analogical_memory_map_02.html", ("Analogical", "probability-matched correspondence", "filtered-complex certificate")),
     "trajectory_barcode": ("trajectory_persistence/persistence_barcode.html", ("Trajectory", "barcode")),
+    "trajectory_bifiltration": ("trajectory_persistence/two_parameter_bifiltration.html", ("Trajectory 2-parameter persistence over F2[x_level,x_radius]", "2-parameter module fibers", "Miller-Sturmfels staircase", "H0 fiber rank")),
     "trajectory_betti": ("trajectory_persistence/persistence_module_betti.html", ("Trajectory", "Betti", "2D matrix", "decorative 3D")),
     "trajectory_representations": ("trajectory_persistence/persistence_representations.html", ("Trajectory", "GUDHI persistence vectorization", "Fast train", "eval features")),
     "trajectory_landscapes": ("trajectory_persistence/persistence_landscapes.html", ("Trajectory", "Actual GUDHI persistence landscape functions", "lambda_1(t)", "not norm-only summaries")),
@@ -40,6 +42,7 @@ REQUIRED_JSON = {
     "inference_audit": "inference_audit.json",
     "tropical_support_payload": "tropical_support_payload.json",
     "graphcg_payload": "graphcg_direction_cosines_payload.json",
+    "trajectory_bifiltration_payload": "trajectory_level_radius_bifiltration.json",
 }
 
 
@@ -289,6 +292,7 @@ def validate_row(row_dir: Path, *, min_candidates: int = 8, min_depth: int = 2, 
     manifest = _read_json(row_dir / REQUIRED_JSON["step_manifest"]) if (row_dir / REQUIRED_JSON["step_manifest"]).exists() else {}
     support_payload = _read_json(row_dir / REQUIRED_JSON["tropical_support_payload"]) if (row_dir / REQUIRED_JSON["tropical_support_payload"]).exists() else {}
     graphcg_payload = _read_json(row_dir / REQUIRED_JSON["graphcg_payload"]) if (row_dir / REQUIRED_JSON["graphcg_payload"]).exists() else {}
+    bifiltration_payload = _read_json(row_dir / REQUIRED_JSON["trajectory_bifiltration_payload"]) if (row_dir / REQUIRED_JSON["trajectory_bifiltration_payload"]).exists() else {}
 
     candidates = [row for row in scaling.get("candidates", []) if isinstance(row, dict)]
     nodes = [row for row in payload.get("nodes", []) if isinstance(row, dict)]
@@ -300,6 +304,42 @@ def validate_row(row_dir: Path, *, min_candidates: int = 8, min_depth: int = 2, 
     for edge in edges:
         source = str(edge.get("source", ""))
         branch_counts[source] = branch_counts.get(source, 0) + 1
+
+
+    _assert(bifiltration_payload.get("available") is True, errors, "trajectory bifiltration payload is unavailable")
+    _assert(bifiltration_payload.get("coefficient_ring") == "F2[x_level,x_radius]", errors, "trajectory bifiltration is not over F2[x_level,x_radius]")
+    _assert(int(_finite_float(bifiltration_payload.get("num_parameters"), 0.0)) == 2, errors, "trajectory bifiltration is not 2-parameter")
+    parameters = bifiltration_payload.get("parameters", [])
+    parameter_names = [str(row.get("name")) for row in parameters if isinstance(row, dict)] if isinstance(parameters, list) else []
+    _assert(parameter_names == ["trajectory_level", "radius"], errors, "trajectory bifiltration parameters are not trajectory_level and radius")
+    grid_axes = bifiltration_payload.get("grid_axes", [])
+    levels_axis = grid_axes[0] if isinstance(grid_axes, list) and len(grid_axes) >= 1 and isinstance(grid_axes[0], list) else []
+    radius_axis = grid_axes[1] if isinstance(grid_axes, list) and len(grid_axes) >= 2 and isinstance(grid_axes[1], list) else []
+    bif_levels = bifiltration_payload.get("levels", [])
+    bif_radii = bifiltration_payload.get("radii", [])
+    _assert(isinstance(bif_levels, list) and len(bif_levels) >= 1, errors, "trajectory bifiltration has no level grades")
+    _assert(isinstance(bif_radii, list) and len(bif_radii) >= 1, errors, "trajectory bifiltration has no radius grades")
+    _assert(levels_axis == list(range(len(bif_levels))), errors, "trajectory bifiltration level grid axis does not match level grades")
+    _assert(radius_axis == list(range(len(bif_radii))), errors, "trajectory bifiltration radius grid axis does not match radius grades")
+    _assert(bifiltration_payload.get("radius_grade_policy") == "exact_sorted_radius_grid_index_no_bucket_collision", errors, "trajectory bifiltration radius grades are not exact sorted radius-grid indices")
+    _assert(all(_finite_float(radius, float("nan")) >= 0.0 for radius in bif_radii), errors, "trajectory bifiltration contains negative radius grades")
+    _assert(all(_finite_float(bif_radii[i], float("nan")) <= _finite_float(bif_radii[i + 1], float("nan")) for i in range(max(0, len(bif_radii) - 1))), errors, "trajectory bifiltration radius grades are not sorted min-to-max")
+    rank_samples = bifiltration_payload.get("rank_invariant_samples", [])
+    _assert(isinstance(rank_samples, list) and len(rank_samples) > 0, errors, "trajectory bifiltration has no rank invariant samples")
+    for rank_sample in rank_samples[: min(16, len(rank_samples))] if isinstance(rank_samples, list) else []:
+        if not isinstance(rank_sample, dict):
+            errors.append("trajectory bifiltration rank invariant sample is not an object")
+            continue
+        _assert(isinstance(rank_sample.get("source_grade"), list) and len(rank_sample.get("source_grade", [])) == 2, errors, "rank invariant sample missing 2D source grade")
+        _assert(isinstance(rank_sample.get("target_grade"), list) and len(rank_sample.get("target_grade", [])) == 2, errors, "rank invariant sample missing 2D target grade")
+        _assert(_finite_float(rank_sample.get("h0_rank"), -1.0) >= 0.0, errors, "rank invariant sample has negative H0 rank")
+    boundary = bifiltration_payload.get("boundary_monomials", {})
+    diagnostics = bifiltration_payload.get("chain_presentation_diagnostics", {})
+    _assert(isinstance(boundary, dict) and bool(boundary), errors, "trajectory bifiltration is missing boundary monomial data")
+    _assert(isinstance(diagnostics, dict), errors, "trajectory bifiltration is missing chain-presentation diagnostics")
+    if isinstance(diagnostics, dict):
+        _assert(diagnostics.get("ring") == "F2[x_level,x_radius]", errors, "chain-presentation diagnostics have the wrong ring")
+        _assert(diagnostics.get("real_free_resolution_certified") is not True, errors, "validator expected uncertified chain presentation, but payload claims a real free resolution without CAS validation")
 
     _assert(len(candidates) >= min_candidates, errors, f"candidate count {len(candidates)} < {min_candidates}")
     _assert(len(edges) >= max(0, len(candidates) - 1), errors, f"edge count {len(edges)} is smaller than candidate tree count {len(candidates) - 1}")

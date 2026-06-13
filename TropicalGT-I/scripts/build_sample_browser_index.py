@@ -27,12 +27,13 @@ class ArtifactSpec(NamedTuple):
 
 PRIMARY_ARTIFACTS: tuple[ArtifactSpec, ...] = (
     ArtifactSpec("GoT observed NLL PCA anchors", "got_trajectory_pca_3d.html", "NLL"),
+    ArtifactSpec("GoT NLL density cloud (3D PCA)", "got_nll_density_cloud_pca_3d.html", "density"),
     ArtifactSpec("Embedding map", "got_embedding_map_3d.html", "PCA"),
     ArtifactSpec("Full radius complex", "got_full_trajectory_complex.html", "radius"),
-    ArtifactSpec("Full radius simplex tree", "got_full_trajectory_simplex_tree_3d.html", "tree"),
+    ArtifactSpec("Full radius SimplexTree poset", "got_full_trajectory_simplex_tree_3d.html", "tree"),
     ArtifactSpec("Probability complex", "got_full_trajectory_complex_jensen_shannon.html", "prob"),
     ArtifactSpec(
-        "Probability simplex tree",
+        "Probability SimplexTree poset",
         "got_full_trajectory_simplex_tree_3d_jensen_shannon.html",
         "tree",
     ),
@@ -40,7 +41,7 @@ PRIMARY_ARTIFACTS: tuple[ArtifactSpec, ...] = (
     ArtifactSpec("Analogical many-map overview", "analogical_memory_retrieval.html", "many"),
     ArtifactSpec("Analogical top-k index", "analogical_memory_topk_index.html", "top-k"),
     ArtifactSpec("Persistence barcode", "trajectory_persistence/persistence_barcode.html", "bars"),
-    ArtifactSpec("2-parameter F2[x,y] bifiltration", "trajectory_persistence/two_parameter_bifiltration.html", "2-param"),
+    ArtifactSpec("2-parameter F2[x_level,x_radius] bifiltration", "trajectory_persistence/two_parameter_bifiltration.html", "2-param"),
     ArtifactSpec("Persistence Betti/chain presentation", "trajectory_persistence/persistence_module_betti.html", "betti"),
     ArtifactSpec("Persistence vector representations", "trajectory_persistence/persistence_representations.html", "vector"),
     ArtifactSpec("Persistence landscape lambda_k(t)", "trajectory_persistence/persistence_landscapes.html", "land"),

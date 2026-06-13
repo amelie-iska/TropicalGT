@@ -184,3 +184,22 @@ The algebra repair target now includes Macaulay2/research-style Betti tables, mu
 - Relabeled browser/table output from `free-res similarity` to `chain-presentation similarity` unless a future CAS backend attaches an explicit free-resolution certificate. The legacy JSON key remains only as a deprecated alias for compatibility.
 - Kept the GUDHI persistence-landscape page as a separate artifact; renamed the GoT page link to `GoT observed NLL PCA anchors` so the two uses of “landscape” are not conflated.
 - Focused tests passed after the patch: `test_algebraic_persistence.py`, `test_simplicial_visualization.py`, `test_interactive_artifact_validator.py`, and `test_metric_provenance.py`.
+
+
+## 2026-06-13 07:37:49 UTC - Browser-Verified NLL Density Cloud And Artifact Contract
+
+- Added `got_nll_density_cloud_pca_3d.html` as a separate GoT visualization from the sparse observed-NLL anchor page. The density cloud is computed deterministically from actual model-evaluated `graph_state` PCA anchors and measured raw NLL values. Gaussian cloud samples are explicitly marked as visualization-only local support, not additional model states; only the large labeled markers are real GoT states.
+- Updated the sample browser index to expose `GoT NLL density cloud (3D PCA)` for each sample while keeping the GUDHI persistence-landscape artifact separate. This keeps the overloaded word "landscape" out of the GoT link label and preserves the real persistence-landscape page.
+- Renamed SimplexTree visualization labels to `SimplexTree face-coface poset` and documented that the displayed 3D page is a face/coface poset view, not a literal trie layout. The exact `gudhi.SimplexTree` payload remains the source of truth.
+- Strengthened `validate_interactive_audit_artifacts.py` so generated bundles must include the density-cloud page and the corrected SimplexTree face-coface wording. The latest `TropicalGT-I/outputs/multi_sample_browser/latest` bundle passed validation for all three sample rows.
+- Browser QA at `http://127.0.0.1:8990/sample_000/got_nll_density_cloud_pca_3d.html` confirmed a rendered Plotly figure with visible local raw-NLL color scale, actual GoT state anchors, trajectory edges, and the explicit "not a model state" density-cloud hover contract.
+
+## 2026-06-13 08:12:59 UTC - Strict Bifiltration And Density-Cloud Artifact Contract
+
+- Kept the live full-dataset training run alive; no process restart or checkpoint mutation in this repair pass.
+- Tightened the browser artifact validator so every nonempty sample must include `trajectory_persistence/two_parameter_bifiltration.html` and `trajectory_level_radius_bifiltration.json`.
+- Validator now rejects missing/ambiguous 2-parameter persistence metadata: coefficient ring must be `F2[x_level,x_radius]`, parameter names must be `trajectory_level` and `radius`, radii must be finite nonnegative sorted min-to-max, grid axes must match levels/radii, rank-invariant samples must carry 2D grades, and chain-presentation diagnostics must not claim a real free resolution without a CAS certificate.
+- Added the sample-browser entry `2-parameter F2[x_level,x_radius] bifiltration` and kept persistence landscapes separate from NLL/energy landscapes because the term is overloaded but both views are mathematically distinct and useful.
+- Added a 3D PCA NLL density-cloud artifact generated from actual GoT graph-state PCA anchors and measured raw NLL values. The Gaussian cloud is explicitly visualization-only local mass around actual embeddings; cloud points are not treated as model states.
+- Browser QA passed on the current served bundle at `http://127.0.0.1:8990`: sample index includes the bifiltration and density-cloud pages; direct bifiltration page renders the `F2[x_level,x_radius]` lattice; direct density-cloud page renders actual-state anchors plus local NLL cloud. Remaining visual issue: the bifiltration page is mathematically backed but still visually dense and needs a cleaner Miller-Sturmfels-style research layout.
+

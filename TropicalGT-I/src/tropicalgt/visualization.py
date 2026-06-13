@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections import Counter, defaultdict, deque
 from pathlib import Path
+import hashlib
 import html
 import json
 import math
@@ -459,7 +460,7 @@ def write_got_trajectory_visualization(scaling_report: dict[str, object], output
         pca[:, 1],
         nll_plot_z,
         nll_values,
-        name="Sparse observed-state NLL anchor mesh",
+        name="Observed-state NLL anchor mesh",
     )
     nll_surface_meta.update(
         {
@@ -494,7 +495,7 @@ def write_got_trajectory_visualization(scaling_report: dict[str, object], output
     }
     if nll_surface is not None:
         fig.add_trace(nll_surface)
-    fig.add_trace(_nll_anchor_trace(pca[:, 0], pca[:, 1], nll_plot_z, nll_values, name="NLL surface anchors"))
+    fig.add_trace(_nll_anchor_trace(pca[:, 0], pca[:, 1], nll_plot_z, nll_values, name="model-evaluated GoT NLL anchors"))
     for idx, row in enumerate(candidates):
         parent = row.get("parent")
         if isinstance(parent, str) and parent in id_to_idx:
@@ -732,6 +733,19 @@ def write_got_trajectory_visualization(scaling_report: dict[str, object], output
             pca_report,
         )
     )
+    extra_paths.update(
+        _write_got_nll_density_cloud_map(
+            output_dir,
+            candidates,
+            ids,
+            id_to_idx,
+            pca,
+            nll_values,
+            hover,
+            inferred_levels,
+            pca_report,
+        )
+    )
     extra_paths.update(_write_full_trajectory_complex_map(scaling_report, output_dir))
     extra_paths.update(_write_reasoning_step_complex_maps(candidates, output_dir))
     return {"got_trajectory_3d": str(path), "got_payloads": str(payload_path), **extra_paths}
@@ -858,6 +872,230 @@ def _write_got_embedding_map(
     return {"got_embedding_map_3d": str(path), "got_embedding_map_payloads": str(payload_path)}
 
 
+def _stable_density_seed(pca: np.ndarray, nll_values: np.ndarray) -> int:
+    rounded = np.round(np.asarray(pca, dtype=float), 6)
+    rounded_nll = np.round(np.asarray(nll_values, dtype=float), 6)
+    digest = hashlib.sha256(rounded.tobytes() + rounded_nll.tobytes()).digest()
+    return int.from_bytes(digest[:8], "little", signed=False) % (2**32 - 1)
+
+
+def _gaussian_nll_density_cloud(
+    pca: np.ndarray,
+    nll_values: np.ndarray,
+    *,
+    max_samples: int = 2600,
+) -> tuple[dict[str, np.ndarray] | None, dict[str, object]]:
+    points = np.asarray(pca, dtype=float)
+    nll = np.asarray(nll_values, dtype=float).reshape(-1)
+    finite = np.isfinite(points).all(axis=1) & np.isfinite(nll)
+    points = points[finite]
+    nll = nll[finite]
+    if points.shape[0] == 0:
+        return None, {"available": False, "reason": "no finite PCA/NLL anchors"}
+    if points.shape[0] == 1:
+        sigma = 0.08
+    else:
+        diffs = points[:, None, :] - points[None, :, :]
+        distances = np.linalg.norm(diffs, axis=-1)
+        positive = distances[distances > 1e-12]
+        span = float(np.max(np.ptp(points, axis=0))) if points.size else 1.0
+        sigma = float(max(np.quantile(positive, 0.25) * 0.38 if positive.size else 0.0, span * 0.035, 1e-5))
+    sample_count = int(min(max_samples, max(360, 110 * points.shape[0])))
+    rng = np.random.default_rng(_stable_density_seed(points, nll))
+    anchor_idx = rng.integers(0, points.shape[0], size=sample_count)
+    noise = rng.normal(loc=0.0, scale=sigma, size=(sample_count, 3))
+    cloud = points[anchor_idx] + noise
+    d2 = np.sum((cloud[:, None, :] - points[None, :, :]) ** 2, axis=-1)
+    weights = np.exp(-0.5 * d2 / max(sigma * sigma, 1e-12))
+    denom = np.sum(weights, axis=1)
+    denom = np.where(denom <= 1e-12, 1.0, denom)
+    local_nll = (weights @ nll) / denom
+    density = denom / float(points.shape[0])
+    nearest = np.argmin(d2, axis=1)
+    nearest_distance = np.sqrt(np.min(d2, axis=1))
+    return {
+        "points": cloud,
+        "local_nll": local_nll,
+        "density": density,
+        "nearest": nearest.astype(int),
+        "nearest_distance": nearest_distance,
+        "anchor_idx": anchor_idx.astype(int),
+    }, {
+        "available": True,
+        "source": "actual model-evaluated graph_state PCA anchors and measured raw NLL values",
+        "support_samples_are_not_model_states": True,
+        "sample_count": sample_count,
+        "anchor_count": int(points.shape[0]),
+        "sigma": sigma,
+        "kernel": "isotropic Gaussian in 3D PCA coordinates",
+        "local_nll_rule": "kernel-weighted mean of measured NLL at actual GoT states",
+        "render_contract": "Gaussian cloud points are not model states; they visualize local NLL density around actual embedding vectors, while only large labeled markers are model states",
+        "nll_min": float(np.min(nll)),
+        "nll_max": float(np.max(nll)),
+    }
+
+
+def _write_got_nll_density_cloud_map(
+    output_dir: Path,
+    candidates: list[dict[str, object]],
+    ids: list[str],
+    id_to_idx: dict[str, int],
+    pca: np.ndarray,
+    nll_values: np.ndarray,
+    hover: list[str],
+    inferred_levels: np.ndarray,
+    pca_report: dict[str, object],
+) -> dict[str, str]:
+    path = output_dir / "got_nll_density_cloud_pca_3d.html"
+    payload_path = output_dir / "got_nll_density_cloud_payload.json"
+    cloud, cloud_meta = _gaussian_nll_density_cloud(pca, nll_values)
+    if cloud is None:
+        _write_dark_empty(path, "No finite model GoT embeddings/NLL anchors available for the 3D PCA NLL density cloud.")
+        payload_path.write_text(json.dumps({"available": False, "density_cloud": cloud_meta}, indent=2), encoding="utf-8")
+        return {"got_nll_density_cloud_pca_3d": str(path), "got_nll_density_cloud_payload": str(payload_path)}
+
+    fig = go.Figure()
+    cloud_points = cloud["points"]
+    nearest = cloud["nearest"]
+    fig.add_trace(
+        go.Scatter3d(
+            x=cloud_points[:, 0],
+            y=cloud_points[:, 1],
+            z=cloud_points[:, 2],
+            mode="markers",
+            marker=dict(
+                size=2.25,
+                color=cloud["local_nll"],
+                colorscale="Plasma",
+                opacity=0.18,
+                showscale=True,
+                colorbar=dict(title="local raw NLL", x=1.03, y=0.48, len=0.62, thickness=16),
+            ),
+            customdata=np.column_stack([cloud["local_nll"], cloud["density"], cloud["nearest_distance"], nearest]),
+            hovertemplate=(
+                "NLL density cloud sample<br>"
+                "PC1=%{x:.3f}<br>PC2=%{y:.3f}<br>PC3=%{z:.3f}<br>"
+                "kernel local raw NLL=%{customdata[0]:.6f}<br>"
+                "Gaussian density mass=%{customdata[1]:.4g}<br>"
+                "nearest actual state distance=%{customdata[2]:.4g}<br>"
+                "nearest actual state index=%{customdata[3]:.0f}<br>"
+                "not a model state; density around actual embeddings<extra></extra>"
+            ),
+            name="NLL density cloud around actual GoT embeddings",
+        )
+    )
+    for idx, row in enumerate(candidates):
+        parent = row.get("parent")
+        if isinstance(parent, str) and parent in id_to_idx:
+            j = id_to_idx[parent]
+            action = _edge_action_label(row)
+            raw_delta = float(nll_values[idx] - nll_values[j])
+            fig.add_trace(
+                go.Scatter3d(
+                    x=[float(pca[j, 0]), float(pca[idx, 0])],
+                    y=[float(pca[j, 1]), float(pca[idx, 1])],
+                    z=[float(pca[j, 2]), float(pca[idx, 2])],
+                    mode="lines",
+                    line=dict(color=_action_color(action), width=5),
+                    hovertext=(
+                        f"{html.escape(parent)} -> {html.escape(ids[idx])}<br>"
+                        f"action={html.escape(action)}<br>"
+                        f"parent raw NLL={float(nll_values[j]):.6f}<br>"
+                        f"child raw NLL={float(nll_values[idx]):.6f}<br>"
+                        f"delta child-parent={raw_delta:+.6g}"
+                    ),
+                    hoverinfo="text",
+                    showlegend=False,
+                    name=f"GoT edge:{action}",
+                )
+            )
+    fig.add_trace(
+        go.Scatter3d(
+            x=pca[:, 0],
+            y=pca[:, 1],
+            z=pca[:, 2],
+            mode="markers+text",
+            marker=dict(
+                size=9,
+                color=nll_values,
+                colorscale="Plasma",
+                showscale=False,
+                line=dict(width=1.4, color="#f8fafc"),
+            ),
+            text=[_state_plot_label(row, idx, int(inferred_levels[idx])) for idx, row in enumerate(candidates)],
+            textposition="top center",
+            hovertext=[
+                text
+                + f"<br><b>density-cloud role</b>: actual model GoT state anchor"
+                + f"<br><b>raw NLL</b>: {float(nll_values[idx]):.6f}"
+                + f"<br><b>PC coords</b>: ({pca[idx,0]:.4g}, {pca[idx,1]:.4g}, {pca[idx,2]:.4g})"
+                for idx, text in enumerate(hover)
+            ],
+            hoverinfo="text",
+            customdata=np.arange(len(candidates), dtype=int),
+            name="actual model GoT state anchors",
+        )
+    )
+    fig.update_layout(
+        template="plotly_dark",
+        title=(
+            "3D PCA NLL density cloud around graph-of-thought embeddings"
+            "<br><sup>Gaussian cloud points are not model states. They are visualization-only local mass around actual model graph_state vectors; "
+            "color is kernel-weighted measured NLL, and labeled markers are the only model states.</sup>"
+        ),
+        scene=dict(
+            xaxis_title="PC1(graph_state)",
+            yaxis_title="PC2(graph_state)",
+            zaxis_title="PC3(graph_state)",
+            aspectmode="cube",
+            camera=dict(eye=dict(x=1.55, y=-1.65, z=1.08)),
+        ),
+        margin=dict(t=108, r=72, b=36, l=36),
+        legend=dict(orientation="h", x=0.02, y=1.0, xanchor="left", yanchor="bottom"),
+    )
+    fig.add_annotation(
+        text=(
+            "actual PCA distance corr="
+            f"{float(pca_report.get('pairwise_distance_correlation', 0.0)):.3f}; "
+            f"stress={float(pca_report.get('normalized_stress', 0.0)):.3f}; "
+            f"density sigma={float(cloud_meta.get('sigma', 0.0)):.4g}"
+        ),
+        x=0,
+        y=1.04,
+        xref="paper",
+        yref="paper",
+        showarrow=False,
+        align="left",
+        font=dict(size=12, color="#bae6fd"),
+        bgcolor="rgba(15,23,42,0.88)",
+        bordercolor="rgba(125,211,252,0.42)",
+        borderwidth=1,
+    )
+    _write_plotly_dark_html(path, fig, "3D PCA NLL density cloud around actual GoT embeddings")
+    payload = {
+        "available": True,
+        "density_cloud": cloud_meta,
+        "nodes": [
+            {
+                "record_id": ids[idx],
+                "parent": candidates[idx].get("parent"),
+                "level": int(inferred_levels[idx]),
+                "path": candidates[idx].get("path", []),
+                "pca": {"pc1": float(pca[idx, 0]), "pc2": float(pca[idx, 1]), "pc3": float(pca[idx, 2])},
+                "nll": float(nll_values[idx]),
+            }
+            for idx in range(len(candidates))
+        ],
+        "edges": [
+            {"source": row.get("parent"), "target": ids[idx], "action": _edge_action_label(row), "nll_delta": float(nll_values[idx] - nll_values[id_to_idx[row.get("parent")]])}
+            for idx, row in enumerate(candidates)
+            if isinstance(row.get("parent"), str) and row.get("parent") in id_to_idx
+        ],
+    }
+    payload_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+    return {"got_nll_density_cloud_pca_3d": str(path), "got_nll_density_cloud_payload": str(payload_path)}
+
+
 def _write_full_trajectory_complex_map(scaling_report: dict[str, object], output_dir: Path) -> dict[str, str]:
     candidates = [row for row in scaling_report.get("candidates", []) if isinstance(row, dict)]
     obj = scaling_report.get("trajectory_filtered_simplicial_object")
@@ -892,8 +1130,8 @@ def _write_full_trajectory_complex_map(scaling_report: dict[str, object], output
     _write_simplex_tree_3d_map(
         tree_path,
         obj,
-        title="Full graph-of-thought trajectory GUDHI simplex tree",
-        subtitle="3D inclusion/Hasse diagram of the canonical SimplexTree; hover reveals simplex, filtration, and source metadata.",
+        title="Full graph-of-thought trajectory GUDHI SimplexTree face-coface poset",
+        subtitle="3D face-coface poset view computed from the canonical GUDHI SimplexTree; hover reveals simplex, filtration, and source metadata.",
     )
     result = {
         "got_full_trajectory_complex": str(path),
@@ -911,8 +1149,8 @@ def _write_full_trajectory_complex_map(scaling_report: dict[str, object], output
         _write_simplex_tree_3d_map(
             probability_tree_path,
             probability_obj,
-            title="Full graph-of-thought trajectory probability SimplexTree",
-            subtitle="Canonical SimplexTree for the Jensen-Shannon probability filtration.",
+            title="Full graph-of-thought trajectory probability SimplexTree face-coface poset",
+            subtitle="Face-coface poset view of the canonical SimplexTree for the Jensen-Shannon probability filtration.",
         )
         payload["probability_filtered_simplicial_object"] = probability_obj
     else:
@@ -1231,7 +1469,7 @@ def _write_reasoning_step_complex_maps(candidates: list[dict[str, object]], outp
         _write_simplex_tree_3d_map(
             tree_path,
             obj,
-            title=f"Reasoning step GUDHI simplex tree: q{idx}",
+            title=f"Reasoning step GUDHI SimplexTree face-coface poset: q{idx}",
             subtitle=f"record_id={record_id}; level={row.get('level')}; path={row.get('path', [])}",
         )
         rows.append(
@@ -1482,6 +1720,7 @@ def _write_simplex_tree_3d_map(path: Path, obj: dict[str, object], title: str, s
         title=(
             f"{title}<br><sup>{html.escape(subtitle)} | backend={html.escape(str(tree.get('backend', 'json')))} "
             f"| displayed={len(node_keys)}/{int(tree.get('num_simplices', len(simplex_rows)) or len(simplex_rows))} "
+            f"| face-coface poset view, not a literal trie layout "
             f"| V={summary.get('num_vertices', 0)}, E={summary.get('num_edges', 0)}, T={summary.get('num_two_simplices', 0)}"
             + (" | truncated for browser performance" if truncated else "")
             + "</sup>"
@@ -1489,7 +1728,7 @@ def _write_simplex_tree_3d_map(path: Path, obj: dict[str, object], title: str, s
         scene=dict(
             xaxis_title="filtration value",
             yaxis_title="simplex dimension",
-            zaxis_title="simplex-tree sibling order",
+            zaxis_title="face-coface ordering coordinate",
             aspectmode="manual",
             aspectratio=dict(x=1.45, y=0.75, z=1.0),
             camera=dict(eye=dict(x=1.45, y=-1.75, z=1.15)),
@@ -2979,7 +3218,7 @@ def write_two_parameter_bifiltration_visualization(
     fig.update_layout(
         template="plotly_dark",
         title=dict(
-            text=f"{html.escape(title)}<br><sup>{html.escape(subtitle)}</sup>",
+            text=f"{html.escape(title, quote=False)}<br><sup>{html.escape(subtitle, quote=False)}</sup>",
             x=0.02,
         ),
         height=1260,
