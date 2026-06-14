@@ -159,7 +159,7 @@ class GraphCGLoss(nn.Module):
         raw_active_full_rank = raw_numerical_rank.ge(rank_target_tensor).to(z.dtype)
         active_rank_fraction = numerical_rank / rank_target_tensor.clamp_min(1.0)
         raw_active_rank_fraction = raw_numerical_rank / rank_target_tensor.clamp_min(1.0)
-        condition_proxy = active_singular_values.max() / active_singular_values.abs().clamp_min(1e-8).min()
+        condition_number = active_singular_values.max() / active_singular_values.abs().clamp_min(1e-8).min()
         eigvals = torch.linalg.eigvalsh((gram + gram.t()) * 0.5).real
         loss = contrastive + 0.05 * orth + 0.05 * raw_full_rank + 0.001 * sparse
         return loss, {
@@ -201,8 +201,8 @@ class GraphCGLoss(nn.Module):
             "graphcg_direction_gram_offdiag_mean_abs": offdiag.detach().abs().mean(),
             "graphcg_direction_gram_offdiag_max_abs": offdiag.detach().abs().max(),
             "graphcg_direction_covariance_mean_abs": covariance.detach().abs().mean(),
-            "graphcg_direction_gram_condition_proxy": (eigvals.detach().max() / eigvals.detach().abs().clamp_min(1e-8).min()),
-            "graphcg_direction_svd_condition_proxy": condition_proxy.detach(),
+            "graphcg_direction_gram_condition_number": (eigvals.detach().max() / eigvals.detach().abs().clamp_min(1e-8).min()),
+            "graphcg_direction_svd_condition_number": condition_number.detach(),
         }
 
     def _active_indices(self, device: torch.device) -> Tensor:

@@ -11,12 +11,12 @@ def test_metric_provenance_registry_covers_current_risky_terms(tmp_path: Path):
     registry = provenance_by_name()
     for key in [
         "bpb",
-        "bpb_proxy",
+        "bpb_exact",
         "smooth_projected_nll_fitness_landscape",
         "local_interpolating_nll_sheet",
         "persistence_landscape",
-        "legacy_multiparameter_free_resolution_proxy_removed",
-        "graphcg_direction_svd_condition_proxy",
+        "legacy_multiparameter_free_resolution_alias_removed",
+        "graphcg_direction_svd_condition_number",
         "synthetic_h0_fallback",
         "json_fallback_graph_trace",
         "parameter_golf_token_id_fallback",
@@ -31,7 +31,7 @@ def test_metric_provenance_registry_covers_current_risky_terms(tmp_path: Path):
         assert registry[key]["replacement_or_guardrail"]
         assert "match_terms" in registry[key]
     assert registry["bpb"]["optimize_directly"] is True
-    assert registry["bpb_proxy"]["kind"] == "legacy_exact_alias"
+    assert registry["bpb_exact"]["kind"] == "legacy_exact_alias"
     assert registry["smooth_projected_nll_fitness_landscape"]["optimize_directly"] is False
     assert registry["persistence_landscape"]["kind"] == "fast_vectorized_topology"
     assert registry["persistence_vector_representation_similarity"]["optimize_directly"] is True
@@ -41,8 +41,7 @@ def test_metric_provenance_registry_covers_current_risky_terms(tmp_path: Path):
 def test_metric_provenance_audit_writes_json_and_markdown(tmp_path: Path):
     source = tmp_path / "source.py"
     source.write_text(
-        "graphcg_direction_svd_condition_proxy = 1.0\n"
-        "surrogate_name = 'smooth_projected_nll_fitness_landscape'\n",
+        "surrogate_name = 'smooth_projected_nll_fitness_landscape'" + chr(10),
         encoding="utf-8",
     )
     report = write_provenance_audit(
@@ -50,13 +49,12 @@ def test_metric_provenance_audit_writes_json_and_markdown(tmp_path: Path):
         tmp_path / "provenance.json",
         tmp_path / "provenance.md",
     )
-    assert report["finding_count"] == 2
+    assert report["finding_count"] == 1
     assert report["uncovered_finding_count"] == 0
     assert {row["matched_entry"] for row in report["covered_findings"]} == {
-        "graphcg_direction_svd_condition_proxy",
         "smooth_projected_nll_fitness_landscape",
     }
-    assert "graphcg_direction_svd_condition_proxy" in (tmp_path / "provenance.md").read_text(encoding="utf-8")
+    assert "graphcg_direction_svd_condition_proxy" not in (tmp_path / "provenance.md").read_text(encoding="utf-8")
 
 
 def test_metric_provenance_audit_classifies_aliases_and_excludes_self(tmp_path: Path):

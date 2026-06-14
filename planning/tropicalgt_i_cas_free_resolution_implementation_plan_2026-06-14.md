@@ -536,3 +536,48 @@ No TropicalGT-I metric, loss, visualization, analogical map, persistence module,
 Use "one dimensional cone" or "one dimensional cones" as the preferred fan-theoretic language whenever the intended object is a cone of a fan or a cone-indexed filtration datum. Use singular or plural according to ordinary grammar.
 
 _Last updated: 2026-06-14T15:34:45+00:00_
+
+
+## 2026-06-14 CAS Backend Update: Generator-ID Boundaries And Existing Sage/Singular Environments
+
+Sequential CAS item completed in the no-proxy lane:
+
+- Confirmed the repository is on `tropicalgt-i-real-cas-no-proxy-20260614`; local and remote branch sets contain `main`, `tropicalgt-i-implementation`, and `tropicalgt-i-real-cas-no-proxy-20260614`.
+- Confirmed active training run `tropicalgt_i_pg_bpb_step0_full24b_b55_v11_bpb_5k_gate` is alive under PID `2448854` during this pass.
+- Backend inventory on the remote machine:
+  - `M2`: not installed in PATH or `/home/iska/miniconda3/envs/tropicalgt-cas/bin`.
+  - Sage: usable through `/home/iska/miniconda3/envs/tropicalgt-sage/bin/python` with `sage.all`; the packaged `sage` command exists but does not support the `--python` invocation used by the first probe.
+  - Singular: usable through `/home/iska/miniconda3/envs/tropicalgt-cas/bin/Singular` and `/home/iska/miniconda3/envs/tropicalgt-sage/bin/Singular`.
+  - GUDHI: available in `tokengt`; `multipers`: unavailable.
+- Fixed a real CAS adapter bug: direct `source_generator_id` / `target_generator_id` boundary rows with an `exponent` field were previously canonicalized as empty simplices with exponent `[0,0]`. They now preserve generator IDs and monomial exponents in the presentation matrix.
+- Added Sage discovery through `/home/iska/miniconda3/envs/tropicalgt-sage/bin/python`, so real total-graded Sage output can be consumed when applicable.
+- Added correct Macaulay2 invocation shape (`M2 --script <file>`) for when `M2` becomes available.
+- Tightened Singular parsing: a Singular exactness run with no nonzero parsed free modules is not renderable as a resolution; flags remain false and the report explains that no renderable free-resolution summary was parsed.
+- Removed remaining active `free_resolution` / `free_resolution_similarity` aliases from chain-presentation diagnostics and analogical comparison output. Chain diagnostics now stay under chain-presentation names unless a CAS certificate exists.
+
+Validated with:
+
+```bash
+PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_algebraic_persistence.py TropicalGT-I/tests/test_metric_provenance.py -q
+# 15 passed
+```
+
+Live CAS smoke after the fix:
+
+- Input module over `F2[x_level,x_radius]` with one degree-zero generator and two degree-one generators mapped by `x_level` and `x_radius`.
+- Sage returned a real total-graded free resolution with ranks `[1,2,1]`.
+- The report sets `total_graded_resolution_certified=True` and `safe_to_render_as_total_graded_resolution=True`.
+- The report keeps `multigraded_free_resolution_certified=False`, `safe_to_render_as_multigraded_free_resolution=False`, and `safe_to_render_as_real_free_resolution=False` for the requested persistence-module interpretation.
+- This is the intended distinction: real total-graded CAS evidence is allowed under its actual grading, but it is not a multigraded `F2[x_level,x_radius]` persistence-module resolution.
+
+Next linear CAS item: implement Macaulay2/Sage/Singular multigraded extraction only when the backend can emit multidegree shifts, differential matrices, and an exactness/minimality certificate. If no backend emits that, the artifact remains unavailable rather than approximated.
+
+## 2026-06-14 Active Metric Name Cleanup
+
+Sequential no-proxy item completed after the CAS generator-boundary fix:
+
+- Renamed the exact BPB compatibility field from `bpb_proxy` to `bpb_exact`; it is now an exact alias/name for the leaderboard BPB computation, not a proxy-labelled metric.
+- Renamed GraphCG spectral diagnostics from `graphcg_direction_*_condition_proxy` to `graphcg_direction_*_condition_number`; these are direct condition-number diagnostics computed from Gram/SVD spectra, not proxy objectives.
+- Updated diagnostics, training metric emission, visualization metric priority lists, and tests to use the clean names.
+- Kept the provenance scanner able to detect stale retired labels, but active training/eval metric outputs no longer emit those proxy-named fields.
+- Validation: `PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_algebraic_persistence.py TropicalGT-I/tests/test_metric_provenance.py TropicalGT-I/tests/test_losses_and_model.py TropicalGT-I/tests/test_training_metrics.py -q` returned `30 passed`.

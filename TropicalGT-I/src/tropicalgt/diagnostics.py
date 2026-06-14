@@ -183,7 +183,7 @@ def graphcg_diagnostics(model, graph_state: torch.Tensor, top_k: int = 3) -> dic
         "singular_values": [float(v) for v in singular_values.tolist()],
         "singular_min": float(active.min()),
         "singular_max": float(active.max()),
-        "svd_condition_proxy": float(active.max() / active.min().clamp_min(1e-8)),
+        "svd_condition_number": float(active.max() / active.min().clamp_min(1e-8)),
         "top_directions": top,
         "projection_scores": [
             [{"direction": int(idx), "cosine": float(value)} for idx, value in enumerate(row.tolist())]

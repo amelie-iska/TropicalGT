@@ -159,7 +159,7 @@ WANDB_PRIORITY_GROUPS: tuple[tuple[str, tuple[str, ...]], ...] = (
             "graphcg_direction_numerical_rank",
             "graphcg_direction_singular_min",
             "graphcg_direction_singular_max",
-            "graphcg_direction_svd_condition_proxy",
+            "graphcg_direction_svd_condition_number",
         ),
     ),
     (
@@ -552,7 +552,7 @@ def train(config_path: str | Path, resume_from: str | Path | None = None, max_st
                 metrics_last["mim_enabled"] = 0.0
             metrics_last["ppl"] = float(math.exp(min(metrics_last.get("nll", metrics_last["loss"]), 20)))
             metrics_last.update(batch_bpb_metrics(metrics_last.get("nll", metrics_last["loss"]), y, graph_batch, _records, graph_bpb_side_weight))
-            metrics_last["bpb_proxy"] = metrics_last["bpb"]
+            metrics_last["bpb_exact"] = metrics_last["bpb"]
             metrics_last["step"] = step
             elapsed = max(time.perf_counter() - step_started, 1e-9)
             token_count = int((y != 0).sum().item())
@@ -1285,7 +1285,7 @@ def evaluate_model(
     report: dict[str, Any] = {
         "nll": nll,
         "ppl": math.exp(min(nll, 20)),
-        "bpb_proxy": bpb["bpb"],
+        "bpb_exact": bpb["bpb"],
         "batches": batches,
         "tokens": total_tokens,
         "graph_tokens": graph_token_total,

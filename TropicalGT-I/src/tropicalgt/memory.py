@@ -691,7 +691,6 @@ def _compact_free_resolution(value: dict[str, Any]) -> dict[str, Any]:
         "resolution_status": value.get("resolution_status"),
         "not_a_free_resolution": value.get("not_a_free_resolution", True),
         "certificate_attached": value.get("certificate_attached", False),
-        "deprecated_alias_for": value.get("deprecated_alias_for"),
         "field": value.get("field"),
         "free_chain_modules": value.get("free_chain_modules", []),
         "monomial_labeled_boundary_entry_counts": value.get("monomial_labeled_boundary_entry_counts", {}),

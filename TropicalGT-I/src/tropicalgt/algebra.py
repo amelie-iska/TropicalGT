@@ -329,7 +329,6 @@ def compute_level_radius_bifiltration_report(
     }
     chain_report = _multigraded_free_resolution_report(report)
     report["chain_presentation_diagnostics"] = chain_report
-    report["free_resolution"] = {**chain_report, "deprecated_alias_for": "chain_presentation_diagnostics"}
     return report
 
 
@@ -382,7 +381,6 @@ def _two_parameter_module_report(
     }
     chain_report = _multigraded_free_resolution_report(report)
     report["chain_presentation_diagnostics"] = chain_report
-    report["free_resolution"] = {**chain_report, "deprecated_alias_for": "chain_presentation_diagnostics"}
     return report
 
 

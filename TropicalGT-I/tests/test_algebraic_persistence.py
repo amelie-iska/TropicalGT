@@ -1,7 +1,7 @@
 import torch
 
 from tropicalgt.algebra import compute_level_radius_bifiltration_report, compute_topological_algebra_report, summarize_algebra_reports
-from tropicalgt.cas_free_resolution import try_compute_real_free_resolution
+from tropicalgt.cas_free_resolution import canonicalize_module, try_compute_real_free_resolution
 from tropicalgt.data import FixtureGraphDataset
 from tropicalgt.model import TropicalGTConfig, TropicalGTModel
 from tropicalgt.records import GraphRecord
@@ -87,6 +87,54 @@ def test_real_cas_free_resolution_smoke_when_backend_available():
         assert ungraded["not_multigraded"] is True
 
 
+def test_cas_canonicalization_preserves_generator_id_boundaries():
+    module = {
+        "coefficient_ring": "F2[x_level,x_radius]",
+        "chain_module_generators": [
+            {"generator_id": "c0_v0", "simplex": ["v0"], "homological_degree": 0, "multidegree": [0, 0]},
+            {"generator_id": "c1_e1", "simplex": ["v0", "v1"], "homological_degree": 1, "multidegree": [1, 0]},
+            {"generator_id": "c1_e2", "simplex": ["v0", "v2"], "homological_degree": 1, "multidegree": [0, 1]},
+        ],
+        "boundary_monomials": {
+            "d1": [
+                {"source_generator_id": "c1_e1", "target_generator_id": "c0_v0", "exponent": [1, 0]},
+                {"source_generator_id": "c1_e2", "target_generator_id": "c0_v0", "exponent": [0, 1]},
+            ]
+        },
+    }
+    schema = canonicalize_module(module)
+    entries = schema["presentation_matrix"]["entries"]
+    assert entries == [
+        {"row": 0, "col": 0, "exponent": [1, 0], "monomial": "x_level"},
+        {"row": 0, "col": 1, "exponent": [0, 1], "monomial": "x_radius"},
+    ]
+
+
+def test_real_cas_total_graded_output_is_not_multigraded_for_generator_id_boundary():
+    module = {
+        "coefficient_ring": "F2[x_level,x_radius]",
+        "chain_module_generators": [
+            {"generator_id": "c0_v0", "simplex": ["v0"], "homological_degree": 0, "multidegree": [0, 0]},
+            {"generator_id": "c1_e1", "simplex": ["v0", "v1"], "homological_degree": 1, "multidegree": [1, 0]},
+            {"generator_id": "c1_e2", "simplex": ["v0", "v2"], "homological_degree": 1, "multidegree": [0, 1]},
+        ],
+        "boundary_monomials": {
+            "d1": [
+                {"source_generator_id": "c1_e1", "target_generator_id": "c0_v0", "exponent": [1, 0]},
+                {"source_generator_id": "c1_e2", "target_generator_id": "c0_v0", "exponent": [0, 1]},
+            ]
+        },
+    }
+    real = try_compute_real_free_resolution(module, timeout_s=90)
+    _assert_real_resolution_guard(real, "F2[x_level,x_radius]")
+    if real["available"] and real.get("backend") == "sage":
+        assert real["total_graded_resolution_certified"] is True
+        assert real["safe_to_render_as_total_graded_resolution"] is True
+        assert real["multigraded_free_resolution_certified"] is False
+        assert real["safe_to_render_as_multigraded_free_resolution"] is False
+        assert [row["rank"] for row in real["free_resolution_summary"]["free_modules"]] == [1, 2, 1]
+
+
 def test_topological_algebra_report_has_multiparameter_data():
     record = FixtureGraphDataset(1)[0]
     filtered = build_filtered_simplicial_object(record)
@@ -103,7 +151,7 @@ def test_topological_algebra_report_has_multiparameter_data():
         assert reps["summary"]["topological_vector_l2_norm"] >= 0.0
         assert any(row.get("method") == "Landscape" for row in reps["decision_policy"])
     assert "commutative_algebra" in report
-    assert "multiparameter_free_resolution_proxy" not in report["commutative_algebra"]
+    assert "multiparameter_free_resolution_legacy_alias" not in report["commutative_algebra"]
     chain = report["commutative_algebra"]["multiparameter_chain_presentation_diagnostics"]
     assert chain["ring"] == "F2[x_filtration,x_dimension,x_position]"
     assert chain["free_chain_modules"]

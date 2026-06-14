@@ -120,18 +120,28 @@ def canonicalize_module(module: dict[str, Any]) -> dict[str, Any]:
         generators.append(row)
         id_by_simplex[simplex] = str(generator_id)
 
+    generator_ids = {str(row["generator_id"]) for row in generators}
     boundaries = []
     for idx, entry in enumerate(_iter_boundary_entries(module.get("boundary_monomials", []) or [])):
         source_simplex = tuple(str(v) for v in entry.get("source_simplex", []))
         target_face = tuple(str(v) for v in entry.get("target_face", []))
-        exponent = _nonnegative_tuple(entry.get("monomial_exponent", []), len(variables), "boundary monomial exponent")
+        source_generator_id = entry.get("source_generator_id")
+        target_generator_id = entry.get("target_generator_id")
+        if source_generator_id is None:
+            source_generator_id = id_by_simplex.get(source_simplex)
+        if target_generator_id is None:
+            target_generator_id = id_by_simplex.get(target_face)
+        source_generator_id = str(source_generator_id) if source_generator_id is not None else None
+        target_generator_id = str(target_generator_id) if target_generator_id is not None else None
+        exponent_value = entry.get("monomial_exponent", entry.get("exponent", []))
+        exponent = _nonnegative_tuple(exponent_value, len(variables), "boundary monomial exponent")
         boundaries.append(
             {
-                "boundary_id": str(entry.get("boundary_id") or _safe_id("d", [idx, *source_simplex, "to", *target_face, *exponent])),
+                "boundary_id": str(entry.get("boundary_id") or _safe_id("d", [idx, source_generator_id, "to", target_generator_id, *source_simplex, *target_face, *exponent])),
                 "source_simplex": list(source_simplex),
                 "target_face": list(target_face),
-                "source_generator_id": id_by_simplex.get(source_simplex),
-                "target_generator_id": id_by_simplex.get(target_face),
+                "source_generator_id": source_generator_id if source_generator_id in generator_ids else None,
+                "target_generator_id": target_generator_id if target_generator_id in generator_ids else None,
                 "monomial_exponent": exponent,
                 "monomial": _monomial_from_exponent(exponent, variables),
                 "sign": int(entry.get("sign", 1) or 1) % 2,
@@ -679,12 +689,13 @@ def _parse_ungraded_betti_table(text: str, *, backend: str) -> dict[str, Any]:
         if int(rank) != 0
     ]
     return {
-        "available": True,
+        "available": bool(free_modules),
         "backend": backend,
         "grading": "ungraded_total_betti_ranks",
         "matrix": matrix,
         "homological_column_ranks": column_ranks,
         "free_modules": free_modules,
+        "reason": "CAS Betti table had no nonzero free-module ranks after parsing." if not free_modules else "",
         "total_rank": int(sum(column_ranks)),
         "not_multigraded": True,
         "safe_for_multigraded_claims": False,
@@ -735,7 +746,9 @@ def _run_tagged_cas_script(
         with open(path, "w", encoding="utf-8") as handle:
             handle.write(script)
         command = [executable, path]
-        if name == "Singular":
+        if name == "M2":
+            command = [executable, "--script", path]
+        elif name == "Singular":
             command = [executable, "-q", path]
         try:
             proc = subprocess.run(command, text=True, capture_output=True, timeout=timeout_s, check=False)
@@ -799,7 +812,9 @@ def _candidate_executable(name: str) -> str | None:
         "Singular": [home / "miniconda3" / "envs" / "tropicalgt-cas" / "bin" / "Singular"],
         "M2": [home / "macaulay2" / "bin" / "M2"],
         "sage": [
+            home / "miniconda3" / "envs" / "tropicalgt-sage" / "bin" / "python",
             home / "miniconda3" / "envs" / "tropicalgt-sage" / "bin" / "sage",
+            home / "miniconda3" / "envs" / "tropicalgt-cas" / "bin" / "python",
             home / "miniconda3" / "envs" / "tropicalgt-cas" / "bin" / "sage",
         ],
     }

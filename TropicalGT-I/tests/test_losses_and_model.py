@@ -40,7 +40,7 @@ def test_graphcg_loss_reports_full_rank_terms():
         "graphcg_direction_rank_target",
         "graphcg_direction_singular_min",
         "graphcg_direction_singular_max",
-        "graphcg_direction_svd_condition_proxy",
+        "graphcg_direction_svd_condition_number",
         "graphcg_raw_full_rank_penalty",
         "graphcg_raw_numerical_rank",
         "graphcg_raw_effective_rank",

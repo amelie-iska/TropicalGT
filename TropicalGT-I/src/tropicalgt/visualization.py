@@ -5226,7 +5226,7 @@ def _analogical_pair_figure(
         f"<b>codomain memory {idx + 1}</b>: {html.escape(str(row.get('memory_id', idx)))}"
         f"<br>retrieval={float(row.get('retrieval_score', 0.0)):.4f}"
         f"<br>persistent homology similarity={sim['persistent_homology_similarity']:.4f}"
-        f"<br>chain-presentation diagnostic similarity={float(sim.get('chain_presentation_similarity', sim.get('free_resolution_similarity', 0.0))):.4f}"
+        f"<br>chain-presentation diagnostic similarity={float(sim.get('chain_presentation_similarity', 0.0)):.4f}"
         f"<br>commutative-algebra similarity={sim.get('commutative_algebra_similarity', 0.0):.4f}"
         f"<br>persistence-landscape L2 similarity={sim.get('persistence_landscape_l2_similarity', 0.0):.4f}"
         f"<br>persistence-landscape cosine={sim.get('persistence_landscape_cosine', 0.0):.4f}"
@@ -5354,7 +5354,7 @@ def _analogical_quality_table_trace(
         ("vector-family contribution", f"{float(sim.get('persistence_vector_score_contribution', 0.0)):.4f}"),
         ("retrieval weights", html.escape(str(sim.get('retrieval_weights', {})))),
         ("PH similarity", f"{float(sim.get('persistent_homology_similarity', 0.0)):.4f}"),
-        ("chain-presentation similarity", f"{float(sim.get('chain_presentation_similarity', sim.get('free_resolution_similarity', 0.0))):.4f}"),
+        ("chain-presentation similarity", f"{float(sim.get('chain_presentation_similarity', 0.0)):.4f}"),
         ("comm-algebra similarity", f"{float(sim.get('commutative_algebra_similarity', 0.0)):.4f}"),
         ("persistence-landscape L2 sim", f"{float(sim.get('persistence_landscape_l2_similarity', 0.0)):.4f}"),
         ("persistence-landscape cosine", f"{float(sim.get('persistence_landscape_cosine', 0.0)):.4f}"),
@@ -5429,7 +5429,7 @@ def _analogical_pair_traces(
         f"<br>memory_id={html.escape(str(row.get('memory_id', idx)))}"
         f"<br>retrieval={float(row.get('retrieval_score', 0.0)):.4f}"
         f"<br>PH similarity={sim['persistent_homology_similarity']:.4f}"
-        f"<br>chain-presentation diagnostic similarity={float(sim.get('chain_presentation_similarity', sim.get('free_resolution_similarity', 0.0))):.4f}"
+        f"<br>chain-presentation diagnostic similarity={float(sim.get('chain_presentation_similarity', 0.0)):.4f}"
         f"<br>derived/algebraic similarity={sim['derived_algebraic_similarity']:.4f}"
         f"<br>coarse signature cosine={sim['derived_signature_similarity']:.4f}"
     )
@@ -5631,7 +5631,7 @@ def _simplicial_map_traces(
             f"<br>2-simplex preservation={float(sim_map.get('two_simplex_preservation_rate', 0.0)):.4f}"
             f"<br>displayed map edges={len(map_rows)}/{raw_map_count} top-scoring vertex maps"
             f"<br>PH similarity={sim['persistent_homology_similarity']:.4f}"
-            f"<br>chain-presentation diagnostic similarity={float(sim.get('chain_presentation_similarity', sim.get('free_resolution_similarity', 0.0))):.4f}"
+            f"<br>chain-presentation diagnostic similarity={float(sim.get('chain_presentation_similarity', 0.0)):.4f}"
             f"<br>commutative-algebra similarity={sim.get('commutative_algebra_similarity', 0.0):.4f}"
             f"<br>derived/algebraic similarity={sim['derived_algebraic_similarity']:.4f}<br>coarse signature cosine={sim['derived_signature_similarity']:.4f}"
             f"<br><br><b>domain vertex</b><br>{q_summary}"
@@ -5681,7 +5681,7 @@ def _write_analogical_topk_index(path: Path, pair_pages: list[dict[str, object]]
             f"<td>{float(report.get('persistence_landscape_score_contribution', 0.0)):.4f}</td>"
             f"<td>{float(report.get('persistence_vector_score_contribution', 0.0)):.4f}</td>"
             f"<td>{float(report.get('persistent_homology_similarity', 0.0)):.4f}</td>"
-            f"<td>{float(report.get('chain_presentation_similarity', report.get('free_resolution_similarity', 0.0))):.4f}</td>"
+            f"<td>{float(report.get('chain_presentation_similarity', 0.0)):.4f}</td>"
             f"<td>{float(report.get('commutative_algebra_similarity', 0.0)):.4f}</td>"
             f"<td>{float(report.get('persistence_landscape_l2_similarity', 0.0)):.4f}</td>"
             f"<td>{float(report.get('persistence_landscape_cosine', 0.0)):.4f}</td>"
@@ -5883,7 +5883,7 @@ def _add_simplicial_map_traces(
             f"<br>edge preservation={float(sim_map.get('edge_preservation_rate', 0.0)):.4f}"
             f"<br>2-simplex preservation={float(sim_map.get('two_simplex_preservation_rate', 0.0)):.4f}"
             f"<br>PH similarity={sim['persistent_homology_similarity']:.4f}"
-            f"<br>chain-presentation diagnostic similarity={float(sim.get('chain_presentation_similarity', sim.get('free_resolution_similarity', 0.0))):.4f}"
+            f"<br>chain-presentation diagnostic similarity={float(sim.get('chain_presentation_similarity', 0.0)):.4f}"
             f"<br>commutative-algebra similarity={sim.get('commutative_algebra_similarity', 0.0):.4f}"
             f"<br>derived/algebraic similarity={sim['derived_algebraic_similarity']:.4f}<br>coarse signature cosine={sim['derived_signature_similarity']:.4f}"
         )
@@ -5990,7 +5990,6 @@ def _topological_similarity_summary(query_topology: dict[str, object], memory_to
         "signature_similarity": float(row.get("signature_similarity", 0.0)),
         "derived_signature_similarity": float(sig_sim),
         "chain_presentation_similarity": float(free_sim),
-        "free_resolution_similarity": float(free_sim),  # deprecated alias: this is a chain-presentation diagnostic unless a CAS certificate is attached.
         "persistent_homology_similarity": float(ph_sim),
         "commutative_algebra_similarity": float(ca_sim),
         "persistence_landscape_vector_available": float(1.0 if landscape_report.get("available") else 0.0),
@@ -6892,14 +6891,14 @@ def write_metric_visualizations(history: list[dict[str, float]], output_dir: str
         "graphcg_direction_gram_offdiag_mean_abs",
         "graphcg_direction_gram_offdiag_max_abs",
         "graphcg_direction_covariance_mean_abs",
-        "graphcg_direction_gram_condition_proxy",
+        "graphcg_direction_gram_condition_number",
         "graphcg_full_rank",
         "graphcg_direction_effective_rank",
         "graphcg_direction_numerical_rank",
         "graphcg_direction_rank_target",
         "graphcg_direction_singular_min",
         "graphcg_direction_singular_max",
-        "graphcg_direction_svd_condition_proxy",
+        "graphcg_direction_svd_condition_number",
         "graphcg_full_rank_penalty",
         "graphcg_raw_full_rank_penalty",
         "graphcg_full_rank_possible",
