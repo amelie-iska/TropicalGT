@@ -76,7 +76,7 @@ def probe_cas_backends() -> dict[str, Any]:
         )
     return {
         "backends": backends,
-        "preferred_order": ["M2", "Singular", "sage"],
+        "preferred_order": ["M2", "sage", "Singular"],
         "python_modules": {
             "sageall": module_available("sageall"),
             "sage": module_available("sage"),
@@ -214,18 +214,6 @@ def try_compute_real_free_resolution(module: dict[str, Any], *, timeout_s: float
         attempts.append(result.get("attempt", {}))
         if result.get("available"):
             return _certified_result(module_schema, result, attempts)
-    singular = _candidate_executable("Singular")
-    if singular:
-        result = _run_tagged_cas_script(
-            name="Singular",
-            executable=singular,
-            script=build_singular_script(module_schema),
-            suffix=".sing",
-            timeout_s=timeout_s,
-        )
-        attempts.append(result.get("attempt", {}))
-        if result.get("available"):
-            return _certified_result(module_schema, result, attempts)
     sage = _candidate_executable("sage")
     if sage:
         result = _run_tagged_cas_script(
@@ -233,6 +221,18 @@ def try_compute_real_free_resolution(module: dict[str, Any], *, timeout_s: float
             executable=sage,
             script=build_sage_python_script(module_schema),
             suffix=".sage.py",
+            timeout_s=timeout_s,
+        )
+        attempts.append(result.get("attempt", {}))
+        if result.get("available"):
+            return _certified_result(module_schema, result, attempts)
+    singular = _candidate_executable("Singular")
+    if singular:
+        result = _run_tagged_cas_script(
+            name="Singular",
+            executable=singular,
+            script=build_singular_script(module_schema),
+            suffix=".sing",
             timeout_s=timeout_s,
         )
         attempts.append(result.get("attempt", {}))
@@ -343,19 +343,144 @@ def build_singular_script(module_schema: dict[str, Any]) -> str:
 
 def build_sage_python_script(module_schema: dict[str, Any]) -> str:
     payload = canonical_json(module_schema)
-    return "\n".join(
-        [
-            "# TropicalGT Sage bridge stub. It returns no certificate until a Sage free-resolution backend is wired.",
-            "import json",
-            f"module_schema = json.loads({payload!r})",
-            "print('TROPICALGT_RESOLUTION_BEGIN')",
-            "print('backend=Sage')",
-            "print('exactness_certified=false')",
-            "print('minimality_certified=false')",
-            "print('TROPICALGT_RESOLUTION_END')",
-        ]
-    )
+    script = r"""
+# TropicalGT Sage bridge for certified total-graded free resolutions.
+import json
+from sage.all import GF, PolynomialRing
 
+module_schema = json.loads(__PAYLOAD__)
+pmat = module_schema.get("presentation_matrix", {})
+rows = int(pmat.get("rows", 0))
+cols = int(pmat.get("cols", 0))
+entries = pmat.get("entries", [])
+variables = list(module_schema.get("variables", ["x_level", "x_radius"]))
+
+
+def emit_failure(message):
+    print("TROPICALGT_RESOLUTION_BEGIN")
+    print("backend=sage")
+    print("exactness_certified=false")
+    print("minimality_certified=false")
+    print("certificate_error=" + str(message).replace("\n", " "))
+    print("presentation_shape=" + str(rows) + "x" + str(cols))
+    print("TROPICALGT_RESOLUTION_END")
+
+
+def poly_from_exponent(R, gens, exponent):
+    term = R(1)
+    for gen, power in zip(gens, exponent):
+        term *= gen ** int(power)
+    return term
+
+
+try:
+    R = PolynomialRing(GF(2), tuple(variables), order="degrevlex")
+    gens = R.gens()
+    if rows <= 0:
+        emit_failure("no degree-zero free module rows in the presentation")
+        raise SystemExit(2)
+    if cols <= 0:
+        summary = {
+            "available": True,
+            "backend": "sage",
+            "grading": "total_graded_betti_ranks",
+            "betti_by_homological_and_total_degree": {"0": {"0": int(rows)}},
+            "free_modules": [{"homological_degree": 0, "total_degree": 0, "rank": int(rows), "display": "F_0 contains S^%d" % int(rows)}],
+            "not_multigraded": True,
+            "safe_for_multigraded_claims": False,
+            "interpretation": "Sage certified a trivial free cokernel with no relations. This is real, but not multigraded data.",
+        }
+        print("TROPICALGT_RESOLUTION_BEGIN")
+        print("backend=sage")
+        print("exactness_certified=true")
+        print("minimality_certified=true")
+        print("certificate_type=Sage trivial free module cokernel with no relations")
+        print("presentation_shape=" + str(rows) + "x" + str(cols))
+        print("total_graded_betti_json=" + json.dumps(summary, sort_keys=True))
+        print("differentials_json=[]")
+        print("sage_resolution_text=S^%d <-- 0" % rows)
+        print("TROPICALGT_RESOLUTION_END")
+        raise SystemExit(0)
+    if rows != 1:
+        emit_failure("Sage adapter certifies only one-row cokernel presentations S/I; multi-row module cokernels require Macaulay2 or Singular")
+        raise SystemExit(2)
+
+    polys = [R(0) for _ in range(cols)]
+    for entry in entries:
+        row = int(entry.get("row", 0))
+        col = int(entry.get("col", 0))
+        if row == 0 and 0 <= col < cols:
+            polys[col] += poly_from_exponent(R, gens, entry.get("exponent", []))
+    ideal_polys = [poly for poly in polys if poly != 0]
+    if not ideal_polys:
+        emit_failure("one-row presentation has no nonzero ideal generators")
+        raise SystemExit(2)
+
+    ideal = R.ideal(ideal_polys)
+    resolution = ideal.graded_free_resolution()
+    max_i = max(4, cols + len(variables) + 4)
+    betti = {}
+    for i in range(max_i):
+        row = resolution.betti(i)
+        if row:
+            betti[str(i)] = {str(int(deg)): int(rank) for deg, rank in sorted(row.items()) if int(rank) != 0}
+    free_modules = []
+    for i_text, row in sorted(betti.items(), key=lambda item: int(item[0])):
+        i = int(i_text)
+        for deg_text, rank in sorted(row.items(), key=lambda item: int(item[0])):
+            deg = int(deg_text)
+            free_modules.append({
+                "homological_degree": i,
+                "total_degree": deg,
+                "rank": int(rank),
+                "display": "F_%d contains S(-%d)^%d" % (i, deg, int(rank)),
+            })
+
+    differentials = []
+    for i in range(1, max_i):
+        try:
+            matrix = resolution.matrix(i)
+        except Exception:
+            continue
+        nrows = int(matrix.nrows())
+        ncols = int(matrix.ncols())
+        if nrows == 0 and ncols == 0:
+            continue
+        matrix_entries = []
+        for r in range(nrows):
+            for c in range(ncols):
+                value = matrix[r, c]
+                if value != 0:
+                    matrix_entries.append({"row": int(r), "column": int(c), "entry": str(value)})
+        differentials.append({"homological_degree": int(i), "rows": nrows, "cols": ncols, "entries": matrix_entries})
+
+    summary = {
+        "available": True,
+        "backend": "sage",
+        "grading": "total_graded_betti_ranks",
+        "betti_by_homological_and_total_degree": betti,
+        "free_modules": free_modules,
+        "not_multigraded": True,
+        "safe_for_multigraded_claims": False,
+        "interpretation": "Sage certified a minimal total-graded free resolution of S/I for the one-row cokernel presentation. This is a real resolution, but it is not a multigraded F2[x,y] resolution.",
+    }
+    print("TROPICALGT_RESOLUTION_BEGIN")
+    print("backend=sage")
+    print("exactness_certified=true")
+    print("minimality_certified=true")
+    print("certificate_type=Sage graded_free_resolution of the one-row cokernel ideal quotient")
+    print("presentation_shape=" + str(rows) + "x" + str(cols))
+    print("total_graded_betti_json=" + json.dumps(summary, sort_keys=True))
+    print("differentials_json=" + json.dumps(differentials, sort_keys=True))
+    print("sage_resolution_text=" + str(resolution).replace("\n", "; "))
+    print("TROPICALGT_RESOLUTION_END")
+except SystemExit:
+    raise
+except Exception as exc:
+    emit_failure(type(exc).__name__ + ": " + str(exc))
+    raise SystemExit(2)
+"""
+    return script.replace("__PAYLOAD__", repr(payload)).strip() + "\n"
 
 def _certified_result(module_schema: dict[str, Any], backend_result: dict[str, Any], attempts: list[dict[str, Any]]) -> dict[str, Any]:
     parsed = backend_result.get("parsed", {})
@@ -372,7 +497,14 @@ def _certified_result(module_schema: dict[str, Any], backend_result: dict[str, A
     backend = str(parsed.get("backend", backend_result.get("backend")))
     betti_text = str(parsed.get("betti_table", "") or "")
     singular_resolution_text = str(parsed.get("singular_resolution_text", "") or "")
+    sage_total_graded = _parse_json_dict(parsed.get("total_graded_betti_json"))
+    sage_differentials = _parse_json_list(parsed.get("differentials_json"))
+    sage_resolution_text = str(parsed.get("sage_resolution_text", "") or "")
     structured_betti = _parse_ungraded_betti_table(betti_text, backend=backend)
+    if sage_total_graded.get("available"):
+        sage_total_graded.setdefault("safe_for_multigraded_claims", False)
+        sage_total_graded.setdefault("not_multigraded", True)
+        structured_betti = _ungraded_from_total_graded_betti(sage_total_graded, backend=backend)
     presentation_shape = _parse_presentation_shape(parsed.get("presentation_shape"))
     unit_entries = _parse_int_or_none(parsed.get("unit_entries"))
     return {
@@ -393,10 +525,13 @@ def _certified_result(module_schema: dict[str, Any], backend_result: dict[str, A
         "cas_artifacts": {
             "betti_table_text": betti_text,
             "betti_table_ungraded": structured_betti,
+            "betti_table_total_graded": sage_total_graded,
+            "differentials": sage_differentials,
             "singular_resolution_text": singular_resolution_text,
+            "sage_resolution_text": sage_resolution_text,
             "raw_tagged_output": backend_result.get("tagged_output", ""),
         },
-        "free_resolution_summary": structured_betti,
+        "free_resolution_summary": sage_total_graded if sage_total_graded.get("available") else structured_betti,
         "certificate_attached": True,
         "real_free_resolution_certified": True,
         "exactness_certified": exact,
@@ -405,6 +540,63 @@ def _certified_result(module_schema: dict[str, Any], backend_result: dict[str, A
     }
 
 
+
+def _parse_json_dict(value: Any) -> dict[str, Any]:
+    if not value:
+        return {}
+    if isinstance(value, dict):
+        return value
+    try:
+        parsed = json.loads(str(value))
+    except Exception:
+        return {}
+    return parsed if isinstance(parsed, dict) else {}
+
+
+def _parse_json_list(value: Any) -> list[Any]:
+    if not value:
+        return []
+    if isinstance(value, list):
+        return value
+    try:
+        parsed = json.loads(str(value))
+    except Exception:
+        return []
+    return parsed if isinstance(parsed, list) else []
+
+
+def _ungraded_from_total_graded_betti(total_graded: dict[str, Any], *, backend: str) -> dict[str, Any]:
+    rows = total_graded.get("betti_by_homological_and_total_degree", {})
+    if not isinstance(rows, dict):
+        rows = {}
+    column_ranks: dict[int, int] = {}
+    for homological_degree, row in rows.items():
+        if not isinstance(row, dict):
+            continue
+        degree = int(homological_degree)
+        column_ranks[degree] = sum(int(rank) for rank in row.values())
+    free_modules = [
+        {
+            "homological_degree": degree,
+            "rank": rank,
+            "display": f"F_{degree} = S^{rank}" if rank != 1 else f"F_{degree} = S",
+            "grading": "total_graded_rank_aggregated",
+            "multidegree_shifts_available": False,
+        }
+        for degree, rank in sorted(column_ranks.items())
+        if rank != 0
+    ]
+    return {
+        "available": bool(free_modules),
+        "backend": backend,
+        "grading": "total_graded_betti_ranks_aggregated_by_homological_degree",
+        "homological_column_ranks": [rank for _, rank in sorted(column_ranks.items())],
+        "free_modules": free_modules,
+        "total_rank": int(sum(column_ranks.values())),
+        "not_multigraded": True,
+        "safe_for_multigraded_claims": False,
+        "interpretation": "Aggregated from a certified Sage total-graded free resolution. It is real, but it is not a multigraded Betti table.",
+    }
 
 def _parse_ungraded_betti_table(text: str, *, backend: str) -> dict[str, Any]:
     """Parse CAS Betti text as ungraded homological ranks only.
@@ -562,7 +754,10 @@ def _candidate_executable(name: str) -> str | None:
     candidates = {
         "Singular": [home / "miniconda3" / "envs" / "tropicalgt-cas" / "bin" / "Singular"],
         "M2": [home / "macaulay2" / "bin" / "M2"],
-        "sage": [home / "miniconda3" / "envs" / "tropicalgt-cas" / "bin" / "sage"],
+        "sage": [
+            home / "miniconda3" / "envs" / "tropicalgt-sage" / "bin" / "sage",
+            home / "miniconda3" / "envs" / "tropicalgt-cas" / "bin" / "sage",
+        ],
     }
     for path in candidates.get(name, []):
         if path.exists() and os.access(path, os.X_OK):
