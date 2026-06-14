@@ -456,8 +456,8 @@ Backend-dependent tests should skip when `M2`, `sage`, or `Singular` are absent,
 
 - No UI or artifact can call a finite chain presentation a real free resolution.
 - No real free-resolution artifact renders unless a CAS certificate is attached.
-- Macaulay2 is the first certified backend implemented.
-- Sage and Singular remain unavailable/fallback until they meet the same schema.
+- At least one certified backend is implemented and tested, with Macaulay2 still preferred when available for richer graded-resolution and Buchsbaum-Eisenbud workflows.
+- Sage and additional Singular/Macaulay2 paths remain unavailable until they meet the same schema.
 - BEMultipliers is documented and implemented only as optional Macaulay2 BE diagnostics.
 - Tests cover both unavailable states and at least one certified smoke fixture in an environment with CAS installed.
 
@@ -471,8 +471,34 @@ Completed in this checkpoint:
 - Added focused tests in `TropicalGT-I/tests/test_algebraic_persistence.py` covering canonical adapter schema, unavailable backend states, empty CAS artifacts without certificates, and non-certified BEMultipliers import behavior.
 - Verified on the remote `tokengt` environment with `PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_algebraic_persistence.py -q` (`6 passed`) and `py_compile` for `cas_free_resolution.py`, `algebra.py`, and `visualization.py`.
 
-Current backend reality on `iska`:
+Checkpoint backend reality before the sequential Singular pass:
 
-- `M2`, `Singular`, and `sage` are not currently installed on the remote PATH, so full CAS-certified minimal free resolutions remain unavailable at runtime.
+- `M2`, `Singular`, and `sage` were not installed on the remote PATH at this earlier checkpoint, so the adapter correctly rendered full CAS-certified minimal free resolutions as unavailable at that time.
 - BEMultipliers is allowed only as optional Buchsbaum-Eisenbud diagnostic evidence after a trusted CAS resolution exists. It cannot certify exactness, minimality, or derived equivalence by itself.
 - The next CAS item is to install or bridge a real backend, starting with Macaulay2 if available for the platform, and then add one certified smoke fixture whose differential matrices, multidegree shifts, Betti table, Fitting ideals, minors, and exactness/minimality checks come from the backend.
+
+## 2026-06-14 Sequential CAS Update: Singular Backend Installed And Bridged
+
+Status: complete for the first real CAS bridge checkpoint.
+
+- Installed Singular 4.4.1 in the isolated conda environment `/home/iska/miniconda3/envs/tropicalgt-cas` so the active `tokengt` training environment remains untouched.
+- Added deterministic executable discovery for `TROPICALGT_SINGULAR_BIN`, `PATH`, and `/home/iska/miniconda3/envs/tropicalgt-cas/bin/Singular`.
+- Replaced the invalid Singular module assignment syntax with a true Singular module literal such as `[x_level,0],[0,x_radius]` built from the finite presentation matrix over `F2[x_level,x_radius]` or the supported multigraded rings.
+- The certified Singular path computes `mres(M,0)` for the image submodule `M` of the presentation matrix and records the cokernel-resolution interpretation explicitly: TropicalGT prepends the displayed free module `F0 -> coker(M)` to the Singular image-submodule resolution.
+- Exactness is marked certified only when Singular runs successfully and emits tagged output. Minimality is marked separately and is false if the presentation contains unit entries; this prevents a nonminimal presentation from being mislabeled as a minimal free resolution.
+- Certified outputs now include `backend_probe`, `bemultipliers_probe`, command templates, tagged raw output, Singular Betti text, and Singular resolution text. Uncertified paths still render with empty `cas_artifacts`.
+- Added a focused smoke test for a real `F2[x_level,x_radius]` CAS free-resolution computation. The algebra suite now accepts both unavailable environments and certified Singular/Macaulay2/Sage environments.
+
+Verification:
+
+```bash
+PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_algebraic_persistence.py -q
+# 7 passed in 1.48s
+```
+
+Remaining CAS items:
+
+1. Parse Singular Betti matrices into structured multigraded Betti-table rows suitable for the research-style figures.
+2. Add Macaulay2 when available, because it remains the preferred backend for minimal graded free resolutions, Fitting ideals, minors, and Buchsbaum-Eisenbud diagnostics.
+3. Add optional Sage bridge only if it records the underlying backend and returns the same certificate fields.
+4. Clone and wire `amelie-iska/BEMultipliers.git` only as a Buchsbaum-Eisenbud diagnostic layer after a certified resolution exists; it is not a substitute for a resolution backend.

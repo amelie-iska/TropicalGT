@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+from collections import Counter
 import json
 import os
+from pathlib import Path
 import shutil
 import subprocess
 import tempfile
@@ -63,7 +65,7 @@ def module_available(name: str) -> bool:
 def probe_cas_backends() -> dict[str, Any]:
     backends = []
     for name in ("M2", "Singular", "sage"):
-        executable = shutil.which(name)
+        executable = _candidate_executable(name)
         backends.append(
             {
                 "name": name,
@@ -200,7 +202,7 @@ def try_compute_real_free_resolution(module: dict[str, Any], *, timeout_s: float
         return unavailable_real_resolution(module, status="invalid_grading", error=str(exc))
 
     attempts: list[dict[str, Any]] = []
-    m2 = shutil.which("M2")
+    m2 = _candidate_executable("M2")
     if m2:
         result = _run_tagged_cas_script(
             name="M2",
@@ -212,7 +214,7 @@ def try_compute_real_free_resolution(module: dict[str, Any], *, timeout_s: float
         attempts.append(result.get("attempt", {}))
         if result.get("available"):
             return _certified_result(module_schema, result, attempts)
-    singular = shutil.which("Singular")
+    singular = _candidate_executable("Singular")
     if singular:
         result = _run_tagged_cas_script(
             name="Singular",
@@ -224,7 +226,7 @@ def try_compute_real_free_resolution(module: dict[str, Any], *, timeout_s: float
         attempts.append(result.get("attempt", {}))
         if result.get("available"):
             return _certified_result(module_schema, result, attempts)
-    sage = shutil.which("sage")
+    sage = _candidate_executable("sage")
     if sage:
         result = _run_tagged_cas_script(
             name="sage",
@@ -284,24 +286,57 @@ def build_singular_script(module_schema: dict[str, Any]) -> str:
     entries = pmat.get("entries", [])
     rows = int(pmat.get("rows", 0))
     cols = int(pmat.get("cols", 0))
-    assignments = ["module M;"]
-    for entry in entries:
-        row = int(entry["row"]) + 1
-        col = int(entry["col"]) + 1
-        monomial = _singular_monomial(entry["exponent"], variables)
-        assignments.append(f"M[{row},{col}]={monomial};")
-    return "\n".join(
-        [
-            "// TropicalGT certified resolution probe generated from model audit data",
-            f"ring r = 2,({','.join(variables)}),dp;",
-            *assignments,
-            "resolution R = mres(M,0);",
+    unit_entries = sum(1 for entry in entries if all(int(power) == 0 for power in entry.get("exponent", [])))
+    module_literal = _singular_module_literal(entries, rows=rows, cols=cols, variables=variables)
+    if rows <= 0:
+        body = [
             "print(\"TROPICALGT_RESOLUTION_BEGIN\");",
             "print(\"backend=Singular\");",
             "print(\"exactness_certified=false\");",
             "print(\"minimality_certified=false\");",
+            "print(\"certificate_error=no degree-zero free module rows in the presentation\");",
             f"print(\"presentation_shape={rows}x{cols}\");",
             "print(\"TROPICALGT_RESOLUTION_END\");",
+        ]
+    elif cols <= 0:
+        body = [
+            "print(\"TROPICALGT_RESOLUTION_BEGIN\");",
+            "print(\"backend=Singular\");",
+            "print(\"exactness_certified=true\");",
+            "print(\"minimality_certified=true\");",
+            "print(\"certificate_type=trivial free module cokernel with no relations\");",
+            f"print(\"presentation_shape={rows}x{cols}\");",
+            "print(\"betti_table_begin\");",
+            f"print(\"{rows}\");",
+            "print(\"betti_table_end\");",
+            "print(\"TROPICALGT_RESOLUTION_END\");",
+        ]
+    else:
+        body = [
+            f"module M = {module_literal};",
+            "resolution R = mres(M,0);",
+            "print(\"TROPICALGT_RESOLUTION_BEGIN\");",
+            "print(\"backend=Singular\");",
+            "print(\"exactness_certified=true\");",
+            f"print(\"minimality_certified={'false' if unit_entries else 'true'}\");",
+            "print(\"certificate_type=Singular mres image-submodule resolution prepended to the displayed cokernel presentation\");",
+            f"print(\"presentation_shape={rows}x{cols}\");",
+            f"print(\"unit_entries={unit_entries}\");",
+            "print(\"betti_table_begin\");",
+            "print(betti(R));",
+            "print(\"betti_table_end\");",
+            "print(\"singular_resolution_text_begin\");",
+            "print(R);",
+            "print(\"singular_resolution_text_end\");",
+            "print(\"TROPICALGT_RESOLUTION_END\");",
+        ]
+    return "\n".join(
+        [
+            "// TropicalGT certified resolution probe generated from model audit data.",
+            "// Singular mres resolves the image submodule M; TropicalGT prepends",
+            "// the displayed free module F0 -> coker(M) to obtain the cokernel resolution.",
+            f"ring r = 2,({','.join(variables)}),dp;",
+            *body,
         ]
     )
 
@@ -343,9 +378,13 @@ def _certified_result(module_schema: dict[str, Any], backend_result: dict[str, A
         "input_sha256": module_schema["input_sha256"],
         "module_summary": _module_summary(module_schema),
         "backend_attempts": attempts,
+        "backend_probe": probe_cas_backends(),
+        "bemultipliers_probe": probe_bemultipliers(),
+        "command_templates": cas_command_templates(module_schema),
         "backend": parsed.get("backend", backend_result.get("backend")),
         "cas_artifacts": {
             "betti_table_text": parsed.get("betti_table", ""),
+            "singular_resolution_text": parsed.get("singular_resolution_text", ""),
             "raw_tagged_output": backend_result.get("tagged_output", ""),
         },
         "certificate_attached": True,
@@ -406,8 +445,38 @@ def _parse_tagged_output(stdout: str) -> dict[str, str] | None:
         if "=" in line:
             key, value = line.split("=", 1)
             parsed[key.strip()] = value.strip()
+    for key in ("betti_table", "singular_resolution_text"):
+        nested = _extract_tagged_block(block, f"{key}_begin", f"{key}_end")
+        if nested is not None:
+            parsed[key] = nested
     return parsed
 
+
+def _extract_tagged_block(text: str, begin: str, end: str) -> str | None:
+    if begin not in text or end not in text:
+        return None
+    return text.split(begin, 1)[1].split(end, 1)[0].strip()
+
+
+def _candidate_executable(name: str) -> str | None:
+    env_name = f"TROPICALGT_{name.upper()}_BIN"
+    if os.environ.get(env_name):
+        candidate = os.environ[env_name]
+        if os.path.exists(candidate) and os.access(candidate, os.X_OK):
+            return candidate
+    found = shutil.which(name)
+    if found:
+        return found
+    home = Path.home()
+    candidates = {
+        "Singular": [home / "miniconda3" / "envs" / "tropicalgt-cas" / "bin" / "Singular"],
+        "M2": [home / "macaulay2" / "bin" / "M2"],
+        "sage": [home / "miniconda3" / "envs" / "tropicalgt-cas" / "bin" / "sage"],
+    }
+    for path in candidates.get(name, []):
+        if path.exists() and os.access(path, os.X_OK):
+            return str(path)
+    return None
 
 
 def _iter_boundary_entries(boundary_monomials: Any) -> list[dict[str, Any]]:
@@ -501,6 +570,25 @@ def _m2_monomial(exponent: list[int], variables: list[str]) -> str:
 
 def _singular_monomial(exponent: list[int], variables: list[str]) -> str:
     return _monomial_from_exponent(exponent, variables)
+
+
+def _singular_module_literal(entries: list[dict[str, Any]], *, rows: int, cols: int, variables: list[str]) -> str:
+    terms: dict[tuple[int, int], Counter[str]] = {}
+    for entry in entries:
+        row = int(entry["row"])
+        col = int(entry["col"])
+        if row < 0 or row >= rows or col < 0 or col >= cols:
+            continue
+        monomial = _singular_monomial(entry["exponent"], variables)
+        terms.setdefault((row, col), Counter())[monomial] += 1
+    column_literals: list[str] = []
+    for col in range(cols):
+        row_literals: list[str] = []
+        for row in range(rows):
+            cell_terms = [term for term, count in sorted(terms.get((row, col), {}).items()) if count % 2]
+            row_literals.append("+".join(cell_terms) if cell_terms else "0")
+        column_literals.append("[" + ",".join(row_literals) + "]")
+    return ",".join(column_literals) if column_literals else "0"
 
 
 def _backend_version(executable: str | None) -> str | None:

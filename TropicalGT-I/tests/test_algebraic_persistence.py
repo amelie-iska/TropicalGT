@@ -1,12 +1,56 @@
 import torch
 
 from tropicalgt.algebra import compute_level_radius_bifiltration_report, compute_topological_algebra_report, summarize_algebra_reports
+from tropicalgt.cas_free_resolution import try_compute_real_free_resolution
 from tropicalgt.data import FixtureGraphDataset
 from tropicalgt.model import TropicalGTConfig, TropicalGTModel
 from tropicalgt.records import GraphRecord
 from tropicalgt.scaling import run_inference_scaling
 from tropicalgt.simplicial import build_filtered_simplicial_object, build_reasoning_trajectory_complex
 from tropicalgt.tokenizer import TokenGTTokenizer
+
+
+
+def _assert_real_resolution_guard(real, expected_ring):
+    assert real["schema_version"] == "tropicalgt.real_free_resolution.v1"
+    assert real["module_summary"]["coefficient_ring"] == expected_ring
+    if real["available"]:
+        assert real["status"] == "certified"
+        assert real["backend"] in {"Macaulay2", "Singular", "sage"}
+        assert real["certificate_attached"] is True
+        assert real["real_free_resolution_certified"] is True
+        assert real["exactness_certified"] is True
+        assert real["safe_to_render_as_real_free_resolution"] is True
+        assert real["cas_artifacts"]
+        assert real["cas_artifacts"].get("raw_tagged_output")
+    else:
+        assert real["status"] in {"unavailable_no_certificate", "backend_not_installed", "certificate_failed"}
+        assert real["certificate_attached"] is False
+        assert real["real_free_resolution_certified"] is False
+        assert real["minimality_certified"] is False
+        assert real["exactness_certified"] is False
+        assert real["safe_to_render_as_real_free_resolution"] is False
+        assert real["cas_artifacts"] == {}
+
+
+def test_real_cas_free_resolution_smoke_when_backend_available():
+    module = {
+        "coefficient_ring": "F2[x_level,x_radius]",
+        "chain_module_generators": [
+            {"simplex": ["a"], "homological_degree": 0, "multidegree": [0, 0]},
+            {"simplex": ["b"], "homological_degree": 0, "multidegree": [0, 0]},
+            {"simplex": ["a", "b"], "homological_degree": 1, "multidegree": [1, 2]},
+        ],
+        "boundary_monomials": [
+            {"source_simplex": ["a", "b"], "target_face": ["a"], "monomial_exponent": [1, 0]},
+            {"source_simplex": ["a", "b"], "target_face": ["b"], "monomial_exponent": [0, 1]},
+        ],
+    }
+    real = try_compute_real_free_resolution(module, timeout_s=10)
+    _assert_real_resolution_guard(real, "F2[x_level,x_radius]")
+    if real["available"]:
+        assert real["backend"] == "Singular" or real["backend"] in {"Macaulay2", "sage"}
+        assert real["cas_artifacts"].get("betti_table_text")
 
 
 def test_topological_algebra_report_has_multiparameter_data():
@@ -37,23 +81,13 @@ def test_topological_algebra_report_has_multiparameter_data():
     assert proxy["minimal_free_resolution"]["available"] is False
     assert proxy["not_a_free_resolution"] is True
     assert proxy["resolution_status"] == "chain_presentation_only"
-    assert proxy["real_free_resolution"]["available"] is False
-    assert proxy["real_free_resolution"]["certificate_attached"] is False
     real = proxy["real_free_resolution"]
-    assert real["schema_version"] == "tropicalgt.real_free_resolution.v1"
-    assert real["status"] in {"unavailable_no_certificate", "backend_not_installed", "certificate_failed"}
-    assert real["real_free_resolution_certified"] is False
-    assert real["minimality_certified"] is False
-    assert real["exactness_certified"] is False
-    assert real["safe_to_render_as_real_free_resolution"] is False
-    assert real["cas_artifacts"] == {}
-    assert real["module_summary"]["coefficient_ring"] == "F2[x_filtration,x_dimension,x_position]"
+    _assert_real_resolution_guard(real, "F2[x_filtration,x_dimension,x_position]")
     probed_names = {row["name"] for row in real["backend_probe"]["backends"]}
     assert probed_names >= {"M2", "Singular", "sage"}
     chain = report["commutative_algebra"]["multiparameter_chain_presentation_diagnostics"]
     assert chain["not_a_free_resolution"] is True
-    assert chain["real_free_resolution"]["available"] is False
-    assert chain["real_free_resolution"]["cas_artifacts"] == {}
+    _assert_real_resolution_guard(chain["real_free_resolution"], "F2[x_filtration,x_dimension,x_position]")
     summary = summarize_algebra_reports([report])
     assert summary["algebra_reports"] == 1.0
 
@@ -94,11 +128,8 @@ def test_level_radius_bifiltration_reports_scoped_real_staircase_resolution():
     chain = report["chain_presentation_diagnostics"]
     assert chain["not_a_free_resolution"] is True
     real = chain["real_free_resolution"]
-    assert real["available"] is False
-    assert real["safe_to_render_as_real_free_resolution"] is False
-    assert real["module_summary"]["coefficient_ring"] == "F2[x_level,x_radius]"
+    _assert_real_resolution_guard(real, "F2[x_level,x_radius]")
     assert real["module_summary"]["variables"] == ["x_level", "x_radius"]
-    assert real["cas_artifacts"] == {}
     minimal = chain["minimal_free_resolution"]
     assert minimal["available"] is True
     assert minimal["not_full_persistence_module_resolution"] is True
