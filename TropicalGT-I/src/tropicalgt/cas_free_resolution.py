@@ -189,9 +189,15 @@ def unavailable_real_resolution(
         "command_templates": templates,
         "certificate_attached": False,
         "real_free_resolution_certified": False,
+        "total_graded_resolution_certified": False,
+        "ungraded_resolution_certified": False,
+        "multigraded_free_resolution_certified": False,
         "exactness_certified": False,
         "minimality_certified": False,
         "safe_to_render_as_real_free_resolution": False,
+        "safe_to_render_as_total_graded_resolution": False,
+        "safe_to_render_as_multigraded_free_resolution": False,
+        "render_warning": "No certified CAS free resolution is available for this module.",
     }
 
 
@@ -507,6 +513,38 @@ def _certified_result(module_schema: dict[str, Any], backend_result: dict[str, A
         structured_betti = _ungraded_from_total_graded_betti(sage_total_graded, backend=backend)
     presentation_shape = _parse_presentation_shape(parsed.get("presentation_shape"))
     unit_entries = _parse_int_or_none(parsed.get("unit_entries"))
+    free_resolution_summary = sage_total_graded if sage_total_graded.get("available") else structured_betti
+    variables = list(module_schema.get("variables", []))
+    expects_multigrading = len(variables) > 1
+    total_graded_certified = bool(exact and sage_total_graded.get("available"))
+    ungraded_certified = bool(exact and structured_betti.get("available") and not total_graded_certified)
+    multigraded_certified = bool(
+        exact
+        and free_resolution_summary.get("available")
+        and free_resolution_summary.get("safe_for_multigraded_claims") is True
+        and free_resolution_summary.get("not_multigraded") is not True
+    )
+    safe_total = bool(total_graded_certified)
+    safe_multigraded = bool(multigraded_certified)
+    safe_real = bool(
+        exact
+        and free_resolution_summary.get("available")
+        and (safe_multigraded or (not expects_multigrading and (safe_total or ungraded_certified)))
+    )
+    if safe_multigraded:
+        render_warning = "CAS returned a certified multigraded free resolution for the requested persistence-module grading."
+    elif safe_total:
+        render_warning = (
+            "CAS returned a certified total-graded free resolution. It is real CAS output, "
+            "but it is not a multigraded F2[x_level,x_radius] persistence-module resolution."
+        )
+    elif ungraded_certified:
+        render_warning = (
+            "CAS returned a certified ungraded free-resolution summary. It is real CAS output, "
+            "but it is not a multigraded persistence-module resolution."
+        )
+    else:
+        render_warning = "CAS exactness was certified, but no renderable free-resolution summary was parsed."
     return {
         "schema_version": SCHEMA_VERSION,
         "available": True,
@@ -531,12 +569,18 @@ def _certified_result(module_schema: dict[str, Any], backend_result: dict[str, A
             "sage_resolution_text": sage_resolution_text,
             "raw_tagged_output": backend_result.get("tagged_output", ""),
         },
-        "free_resolution_summary": sage_total_graded if sage_total_graded.get("available") else structured_betti,
+        "free_resolution_summary": free_resolution_summary,
         "certificate_attached": True,
-        "real_free_resolution_certified": True,
+        "real_free_resolution_certified": bool(exact and free_resolution_summary.get("available")),
+        "total_graded_resolution_certified": total_graded_certified,
+        "ungraded_resolution_certified": ungraded_certified,
+        "multigraded_free_resolution_certified": multigraded_certified,
         "exactness_certified": exact,
         "minimality_certified": minimal,
-        "safe_to_render_as_real_free_resolution": True,
+        "safe_to_render_as_real_free_resolution": safe_real,
+        "safe_to_render_as_total_graded_resolution": safe_total,
+        "safe_to_render_as_multigraded_free_resolution": safe_multigraded,
+        "render_warning": render_warning,
     }
 
 

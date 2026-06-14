@@ -140,12 +140,12 @@ PROVENANCE_REGISTRY: tuple[ProvenanceEntry, ...] = (
         match_terms=("persistence_vector_representation_similarity", "persistence_vector_aggregate_similarity", "gudhi.representations.vector_methods"),
     ),
     ProvenanceEntry(
-        name="multiparameter_free_resolution_proxy",
-        kind="algebra_proxy",
+        name="legacy_multiparameter_free_resolution_proxy_removed",
+        kind="removed_legacy_alias",
         surface="topological algebra report",
         optimize_directly=False,
-        description="Multigraded free-chain and boundary-monomial report over the displayed finite multi-filtered complex.",
-        replacement_or_guardrail="Label as nonminimal proxy; minimal free resolutions require optional CAS/backend.",
+        description="Removed legacy alias for finite chain-presentation diagnostics; it must not be emitted by current topological-algebra reports.",
+        replacement_or_guardrail="Use multiparameter_chain_presentation_diagnostics for exact finite-chain data and nested real_free_resolution certificate fields for CAS-certified resolutions.",
         match_terms=("multiparameter_free_resolution_proxy", "free-resolution proxy", "free_resolution_proxy"),
     ),
     ProvenanceEntry(

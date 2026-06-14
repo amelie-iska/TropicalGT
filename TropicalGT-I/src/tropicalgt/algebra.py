@@ -97,14 +97,13 @@ def compute_topological_algebra_report(
             "dg_commutative_algebra": dgca,
             "two_parameter_chain_presentation_diagnostics": two_parameter_chain,
             "multiparameter_chain_presentation_diagnostics": multiparameter_chain,
-            "two_parameter_free_resolution": {**two_parameter_chain, "deprecated_alias_for": "two_parameter_chain_presentation_diagnostics"},
-            "multiparameter_free_resolution_proxy": {**multiparameter_chain, "deprecated_alias_for": "multiparameter_chain_presentation_diagnostics"},
             "notes": [
                 "Boundary syzygies are F2 nullspaces of displayed boundary maps.",
                 "Taylor ranks are nonminimal upper bounds for the displayed Stanley-Reisner generators.",
                 "Hochster Betti data is exact on the bounded vertex subset named in the report.",
-                "Two-parameter chain modules and monomial boundary labels are exact for the displayed finite bifiltered complex over F2[x_filtration,x_dimension].",
-                "Three-parameter chain modules and monomial boundary labels are exact for the displayed finite multi-filtered complex over F2[x_filtration,x_dimension,x_position].",
+                "Two-parameter chain modules and monomial boundary labels are exact finite-chain diagnostics for the displayed bifiltered complex over F2[x_filtration,x_dimension].",
+                "Three-parameter chain modules and monomial boundary labels are exact finite-chain diagnostics for the displayed multi-filtered complex over F2[x_filtration,x_dimension,x_position].",
+                "Free-resolution claims are emitted only by real CAS backends through the nested real_free_resolution certificate fields.",
             ],
         }
     return report
@@ -540,18 +539,26 @@ def _real_free_resolution_backend_report(module: dict[str, Any]) -> dict[str, An
             "backend_attempts": [],
             "certificate_attached": False,
             "real_free_resolution_certified": False,
+            "total_graded_resolution_certified": False,
+            "ungraded_resolution_certified": False,
+            "multigraded_free_resolution_certified": False,
             "minimality_certified": False,
             "exactness_certified": False,
             "safe_to_render_as_real_free_resolution": False,
+            "safe_to_render_as_total_graded_resolution": False,
+            "safe_to_render_as_multigraded_free_resolution": False,
+            "render_warning": "CAS adapter import failed; no real free-resolution output is available.",
         }
 
     report = try_compute_real_free_resolution(module)
     report.setdefault(
         "claim_guard",
-        "Render as a real free resolution only when available, certificate_attached, "
-        "real_free_resolution_certified, exactness_certified, and "
-        "safe_to_render_as_real_free_resolution are all true. Minimality requires "
-        "minimality_certified as well.",
+        "Render as a multigraded F2[x_level,x_radius] persistence-module free resolution "
+        "only when available, certificate_attached, real_free_resolution_certified, "
+        "exactness_certified, multigraded_free_resolution_certified, and "
+        "safe_to_render_as_multigraded_free_resolution are all true. Total-graded or "
+        "ungraded CAS output may be shown only under its actual grading. Minimality "
+        "requires minimality_certified as well.",
     )
     return report
 

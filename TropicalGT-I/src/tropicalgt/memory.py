@@ -569,8 +569,6 @@ def _topology_quality(topology: dict[str, Any]) -> dict[str, Any]:
     chain_keys = (
         "two_parameter_chain_presentation_diagnostics",
         "multiparameter_chain_presentation_diagnostics",
-        "two_parameter_free_resolution",
-        "multiparameter_free_resolution_proxy",
     )
     has_chain = any(isinstance(ca.get(key), dict) and bool(ca.get(key)) for key in chain_keys)
     has_real = False
@@ -578,7 +576,11 @@ def _topology_quality(topology: dict[str, Any]) -> dict[str, Any]:
         value = ca.get(key)
         if isinstance(value, dict):
             real = value.get("real_free_resolution") if isinstance(value.get("real_free_resolution"), dict) else {}
-            if bool(real.get("available")) and bool(real.get("certificate_attached")):
+            if (
+                real.get("safe_to_render_as_multigraded_free_resolution") is True
+                and real.get("multigraded_free_resolution_certified") is True
+                and real.get("exactness_certified") is True
+            ):
                 has_real = True
                 break
     return {
@@ -670,8 +672,6 @@ def _compact_commutative_algebra(ca: dict[str, Any]) -> dict[str, Any]:
     for key in (
         "two_parameter_chain_presentation_diagnostics",
         "multiparameter_chain_presentation_diagnostics",
-        "two_parameter_free_resolution",
-        "multiparameter_free_resolution_proxy",
         "taylor_resolution_upper_bound",
     ):
         value = ca.get(key)
@@ -1098,8 +1098,7 @@ def _commutative_algebra_signature_values(topology: dict[str, Any]) -> list[floa
         "two_parameter_chain_presentation_diagnostics",
         "multiparameter_chain_presentation_diagnostics",
     )
-    legacy_keys = ("two_parameter_free_resolution", "multiparameter_free_resolution_proxy")
-    keys = chain_keys if any(isinstance(ca.get(key), dict) for key in chain_keys) else legacy_keys
+    keys = chain_keys
     for key in keys:
         fr = ca.get(key, {}) if isinstance(ca.get(key), dict) else {}
         for row in fr.get("free_chain_modules", []) if isinstance(fr.get("free_chain_modules"), list) else []:

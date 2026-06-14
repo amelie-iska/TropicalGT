@@ -15,7 +15,7 @@ def test_metric_provenance_registry_covers_current_risky_terms(tmp_path: Path):
         "smooth_projected_nll_fitness_landscape",
         "local_interpolating_nll_sheet",
         "persistence_landscape",
-        "multiparameter_free_resolution_proxy",
+        "legacy_multiparameter_free_resolution_proxy_removed",
         "graphcg_direction_svd_condition_proxy",
         "synthetic_h0_fallback",
         "json_fallback_graph_trace",

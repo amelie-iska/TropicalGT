@@ -961,12 +961,18 @@ def _toy_topology(intervals):
             "summary": {"landscape_l2_norm": 0.4},
         },
         "commutative_algebra": {
-            "multiparameter_free_resolution_proxy": {
+            "multiparameter_chain_presentation_diagnostics": {
                 "ring": "F2[x_filtration,x_dimension,x_position]",
                 "free_chain_modules": [
                     {"homological_degree": 0, "rank": 2},
                     {"homological_degree": 1, "rank": 1},
                 ],
+                "real_free_resolution": {
+                    "available": False,
+                    "safe_to_render_as_multigraded_free_resolution": False,
+                    "multigraded_free_resolution_certified": False,
+                    "exactness_certified": False,
+                },
             }
         },
     }

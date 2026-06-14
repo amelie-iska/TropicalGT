@@ -4731,24 +4731,59 @@ def _derived_signature_line(topology: dict[str, object]) -> str:
     return f"derived signature: betti={betti} finitePH={finite} infinitePH={infinite} multiparameter_grid={grid}"
 
 
-def _free_resolution_line(topology: dict[str, object]) -> str:
-    modules = _free_resolution_modules(topology)
-    ranks = [f"F{int(row.get('homological_degree', 0))}:{int(row.get('rank', row.get('rank_upper_bound', 0)))}" for row in modules[:6]]
+def _chain_presentation_reports(topology: dict[str, object]) -> list[dict[str, object]]:
     ca = topology.get("commutative_algebra", {}) if isinstance(topology, dict) else {}
-    chain_report = ca.get("multiparameter_chain_presentation_diagnostics") if isinstance(ca.get("multiparameter_chain_presentation_diagnostics"), dict) else None
-    if chain_report is None:
-        chain_report = ca.get("multiparameter_free_resolution_proxy", {}) if isinstance(ca.get("multiparameter_free_resolution_proxy"), dict) else {}
-    ring = chain_report.get("ring", "F2[x_filtration,x_dimension,x_position]")
-    minimal = chain_report.get("minimal_free_resolution", {}) if isinstance(chain_report.get("minimal_free_resolution"), dict) else {}
-    if minimal.get("available"):
-        resolution = minimal.get("resolution", {}) if isinstance(minimal.get("resolution"), dict) else {}
-        modules = resolution.get("free_modules", []) if isinstance(resolution.get("free_modules"), list) else []
-        module_line = ", ".join(str(row.get("display", row.get("name", "F_i"))) for row in modules[:4] if isinstance(row, dict))
-        return (
-            f"scoped real staircase resolution over {resolution.get('ring', ring)}: {module_line}; "
-            "ambient chain presentation is still not a full persistence-module free resolution"
-        )
-    return f"real free resolution unavailable; chain-presentation diagnostics over {ring}: " + (", ".join(ranks) if ranks else "no displayed chain modules")
+    reports: list[dict[str, object]] = []
+    for key in (
+        "two_parameter_chain_presentation_diagnostics",
+        "multiparameter_chain_presentation_diagnostics",
+    ):
+        value = ca.get(key)
+        if isinstance(value, dict):
+            reports.append(value)
+    return reports
+
+
+def _certified_multigraded_resolution_modules(topology: dict[str, object]) -> list[dict[str, object]]:
+    for report in _chain_presentation_reports(topology):
+        real = report.get("real_free_resolution") if isinstance(report.get("real_free_resolution"), dict) else {}
+        if not (
+            real.get("safe_to_render_as_multigraded_free_resolution") is True
+            and real.get("multigraded_free_resolution_certified") is True
+            and real.get("exactness_certified") is True
+        ):
+            continue
+        summary = real.get("free_resolution_summary") if isinstance(real.get("free_resolution_summary"), dict) else {}
+        modules = summary.get("free_modules", []) if isinstance(summary.get("free_modules"), list) else []
+        if modules:
+            return [row for row in modules if isinstance(row, dict)]
+    return []
+
+
+def _free_resolution_line(topology: dict[str, object]) -> str:
+    modules = _certified_multigraded_resolution_modules(topology)
+    if modules:
+        ranks = [f"F{int(row.get('homological_degree', 0))}:{int(row.get('rank', row.get('rank_upper_bound', 0)))}" for row in modules[:6]]
+        return "CAS-certified multigraded free resolution over the persistence-module ring: " + ", ".join(ranks)
+
+    statuses: list[str] = []
+    chain_ranks: list[str] = []
+    for report in _chain_presentation_reports(topology):
+        ring = str(report.get("ring", "F2[x_level,x_radius]"))
+        real = report.get("real_free_resolution") if isinstance(report.get("real_free_resolution"), dict) else {}
+        if real.get("safe_to_render_as_total_graded_resolution") is True:
+            statuses.append(f"real total-graded CAS resolution available over {ring}; multigraded persistence-module resolution unavailable")
+        elif real.get("ungraded_resolution_certified") is True:
+            statuses.append(f"real ungraded CAS resolution available over {ring}; multigraded persistence-module resolution unavailable")
+        elif real.get("available"):
+            statuses.append(str(real.get("render_warning") or f"CAS resolution not safe to render as multigraded over {ring}"))
+        else:
+            statuses.append(f"multigraded free resolution unavailable over {ring}; CAS backend needed")
+        for row in report.get("free_chain_modules", []) if isinstance(report.get("free_chain_modules"), list) else []:
+            if isinstance(row, dict):
+                chain_ranks.append(f"C{int(row.get('homological_degree', 0))}:{int(row.get('rank', row.get('rank_upper_bound', 0)))}")
+    diagnostic = "; exact finite-chain diagnostics: " + ", ".join(chain_ranks[:6]) if chain_ranks else ""
+    return "; ".join(statuses[:2]) + diagnostic
 
 
 def _persistence_representation_line(topology: dict[str, object]) -> str:
@@ -4766,16 +4801,13 @@ def _persistence_representation_line(topology: dict[str, object]) -> str:
 
 
 def _free_resolution_modules(topology: dict[str, object]) -> list[dict[str, object]]:
-    ca = topology.get("commutative_algebra", {}) if isinstance(topology, dict) else {}
-    chain_report = ca.get("multiparameter_chain_presentation_diagnostics") if isinstance(ca.get("multiparameter_chain_presentation_diagnostics"), dict) else None
-    if chain_report is None:
-        chain_report = ca.get("multiparameter_free_resolution_proxy", {}) if isinstance(ca.get("multiparameter_free_resolution_proxy"), dict) else {}
-    modules = chain_report.get("free_chain_modules", []) if isinstance(chain_report, dict) else []
-    if modules:
-        return [row for row in modules if isinstance(row, dict)]
-    taylor = ca.get("taylor_resolution_upper_bound", {}) if isinstance(ca.get("taylor_resolution_upper_bound"), dict) else {}
-    ranks = taylor.get("ranks", []) if isinstance(taylor, dict) else []
-    return [row for row in ranks if isinstance(row, dict)]
+    """Return only CAS-certified multigraded free-resolution modules.
+
+    Exact finite-chain modules and Taylor bounds are intentionally excluded so
+    downstream analogical/free-resolution similarity cannot silently use them as
+    substitutes for a persistence-module free resolution.
+    """
+    return _certified_multigraded_resolution_modules(topology)
 
 
 def write_graphcg_trajectory_visualization(scaling_report: dict[str, object], output_dir: str | Path) -> dict[str, str]:
@@ -6605,8 +6637,7 @@ def _commutative_algebra_numeric_vector(topology: dict[str, object], length: int
         "two_parameter_chain_presentation_diagnostics",
         "multiparameter_chain_presentation_diagnostics",
     )
-    legacy_keys = ("two_parameter_free_resolution", "multiparameter_free_resolution_proxy")
-    keys = chain_keys if any(isinstance(ca.get(key), dict) for key in chain_keys) else legacy_keys
+    keys = chain_keys
     for key in keys:
         fr = ca.get(key, {}) if isinstance(ca.get(key), dict) else {}
         for row in fr.get("free_chain_modules", []) if isinstance(fr.get("free_chain_modules"), list) else []:

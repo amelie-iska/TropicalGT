@@ -14,24 +14,51 @@ from tropicalgt.tokenizer import TokenGTTokenizer
 def _assert_real_resolution_guard(real, expected_ring):
     assert real["schema_version"] == "tropicalgt.real_free_resolution.v1"
     assert real["module_summary"]["coefficient_ring"] == expected_ring
+    for key in (
+        "real_free_resolution_certified",
+        "total_graded_resolution_certified",
+        "ungraded_resolution_certified",
+        "multigraded_free_resolution_certified",
+        "safe_to_render_as_real_free_resolution",
+        "safe_to_render_as_total_graded_resolution",
+        "safe_to_render_as_multigraded_free_resolution",
+    ):
+        assert key in real
     if real["available"]:
         assert real["status"] == "certified"
         assert real["backend"] in {"Macaulay2", "Singular", "sage"}
         assert real["certificate_attached"] is True
         assert real["real_free_resolution_certified"] is True
         assert real["exactness_certified"] is True
-        assert real["safe_to_render_as_real_free_resolution"] is True
         assert real["cas_artifacts"]
         assert real["cas_artifacts"].get("raw_tagged_output")
-        assert real["cas_artifacts"].get("betti_table_ungraded", {}).get("not_multigraded") is True
-        assert real["free_resolution_summary"].get("safe_for_multigraded_claims") is False
+        summary = real["free_resolution_summary"]
+        if summary.get("safe_for_multigraded_claims") is True:
+            assert real["multigraded_free_resolution_certified"] is True
+            assert real["safe_to_render_as_multigraded_free_resolution"] is True
+        else:
+            assert real["multigraded_free_resolution_certified"] is False
+            assert real["safe_to_render_as_multigraded_free_resolution"] is False
+            assert "not a multigraded" in real.get("render_warning", "")
+            if expected_ring == "F2[x_level,x_radius]":
+                assert real["safe_to_render_as_real_free_resolution"] is False
+        if real["total_graded_resolution_certified"]:
+            assert real["safe_to_render_as_total_graded_resolution"] is True
+            assert summary.get("not_multigraded") is True
+        if real["cas_artifacts"].get("betti_table_ungraded", {}).get("available"):
+            assert real["cas_artifacts"].get("betti_table_ungraded", {}).get("not_multigraded") is True
     else:
         assert real["status"] in {"unavailable_no_certificate", "backend_not_installed", "certificate_failed"}
         assert real["certificate_attached"] is False
         assert real["real_free_resolution_certified"] is False
+        assert real["total_graded_resolution_certified"] is False
+        assert real["ungraded_resolution_certified"] is False
+        assert real["multigraded_free_resolution_certified"] is False
         assert real["minimality_certified"] is False
         assert real["exactness_certified"] is False
         assert real["safe_to_render_as_real_free_resolution"] is False
+        assert real["safe_to_render_as_total_graded_resolution"] is False
+        assert real["safe_to_render_as_multigraded_free_resolution"] is False
         assert real["cas_artifacts"] == {}
 
 
@@ -76,23 +103,23 @@ def test_topological_algebra_report_has_multiparameter_data():
         assert reps["summary"]["topological_vector_l2_norm"] >= 0.0
         assert any(row.get("method") == "Landscape" for row in reps["decision_policy"])
     assert "commutative_algebra" in report
-    proxy = report["commutative_algebra"]["multiparameter_free_resolution_proxy"]
-    assert proxy["ring"] == "F2[x_filtration,x_dimension,x_position]"
-    assert proxy["free_chain_modules"]
-    assert proxy["determinantal_ideals"]["available"] is True
-    assert proxy["fitting_ideals"]["available"] is True
-    assert proxy["buchsbaum_eisenbud"]["available"] is True
-    assert "maps" in proxy["determinantal_ideals"]
-    assert "maps" in proxy["fitting_ideals"]
-    assert "rank_exactness_checks" in proxy["buchsbaum_eisenbud"]
-    assert proxy["minimal_free_resolution"]["available"] is False
-    assert proxy["not_a_free_resolution"] is True
-    assert proxy["resolution_status"] == "chain_presentation_only"
-    real = proxy["real_free_resolution"]
+    assert "multiparameter_free_resolution_proxy" not in report["commutative_algebra"]
+    chain = report["commutative_algebra"]["multiparameter_chain_presentation_diagnostics"]
+    assert chain["ring"] == "F2[x_filtration,x_dimension,x_position]"
+    assert chain["free_chain_modules"]
+    assert chain["determinantal_ideals"]["available"] is True
+    assert chain["fitting_ideals"]["available"] is True
+    assert chain["buchsbaum_eisenbud"]["available"] is True
+    assert "maps" in chain["determinantal_ideals"]
+    assert "maps" in chain["fitting_ideals"]
+    assert "rank_exactness_checks" in chain["buchsbaum_eisenbud"]
+    assert chain["minimal_free_resolution"]["available"] is False
+    assert chain["not_a_free_resolution"] is True
+    assert chain["resolution_status"] == "chain_presentation_only"
+    real = chain["real_free_resolution"]
     _assert_real_resolution_guard(real, "F2[x_filtration,x_dimension,x_position]")
     probed_names = {row["name"] for row in real["backend_probe"]["backends"]}
     assert probed_names >= {"M2", "Singular", "sage"}
-    chain = report["commutative_algebra"]["multiparameter_chain_presentation_diagnostics"]
     assert chain["not_a_free_resolution"] is True
     _assert_real_resolution_guard(chain["real_free_resolution"], "F2[x_filtration,x_dimension,x_position]")
     summary = summarize_algebra_reports([report])
