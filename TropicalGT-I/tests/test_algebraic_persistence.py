@@ -23,6 +23,8 @@ def _assert_real_resolution_guard(real, expected_ring):
         assert real["safe_to_render_as_real_free_resolution"] is True
         assert real["cas_artifacts"]
         assert real["cas_artifacts"].get("raw_tagged_output")
+        assert real["cas_artifacts"].get("betti_table_ungraded", {}).get("not_multigraded") is True
+        assert real["free_resolution_summary"].get("safe_for_multigraded_claims") is False
     else:
         assert real["status"] in {"unavailable_no_certificate", "backend_not_installed", "certificate_failed"}
         assert real["certificate_attached"] is False
@@ -51,6 +53,11 @@ def test_real_cas_free_resolution_smoke_when_backend_available():
     if real["available"]:
         assert real["backend"] == "Singular" or real["backend"] in {"Macaulay2", "sage"}
         assert real["cas_artifacts"].get("betti_table_text")
+        ungraded = real["cas_artifacts"]["betti_table_ungraded"]
+        assert ungraded["available"] is True
+        assert ungraded["homological_column_ranks"][:2] == [2, 1]
+        assert [row["display"] for row in ungraded["free_modules"][:2]] == ["F_0 = S^2", "F_1 = S"]
+        assert ungraded["not_multigraded"] is True
 
 
 def test_topological_algebra_report_has_multiparameter_data():

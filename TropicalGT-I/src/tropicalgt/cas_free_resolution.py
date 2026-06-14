@@ -369,6 +369,12 @@ def _certified_result(module_schema: dict[str, Any], backend_result: dict[str, A
             reason="CAS backend ran, but did not return an exactness certificate.",
             attempts=attempts,
         )
+    backend = str(parsed.get("backend", backend_result.get("backend")))
+    betti_text = str(parsed.get("betti_table", "") or "")
+    singular_resolution_text = str(parsed.get("singular_resolution_text", "") or "")
+    structured_betti = _parse_ungraded_betti_table(betti_text, backend=backend)
+    presentation_shape = _parse_presentation_shape(parsed.get("presentation_shape"))
+    unit_entries = _parse_int_or_none(parsed.get("unit_entries"))
     return {
         "schema_version": SCHEMA_VERSION,
         "available": True,
@@ -381,12 +387,16 @@ def _certified_result(module_schema: dict[str, Any], backend_result: dict[str, A
         "backend_probe": probe_cas_backends(),
         "bemultipliers_probe": probe_bemultipliers(),
         "command_templates": cas_command_templates(module_schema),
-        "backend": parsed.get("backend", backend_result.get("backend")),
+        "backend": backend,
+        "presentation_shape": presentation_shape,
+        "unit_entries": unit_entries,
         "cas_artifacts": {
-            "betti_table_text": parsed.get("betti_table", ""),
-            "singular_resolution_text": parsed.get("singular_resolution_text", ""),
+            "betti_table_text": betti_text,
+            "betti_table_ungraded": structured_betti,
+            "singular_resolution_text": singular_resolution_text,
             "raw_tagged_output": backend_result.get("tagged_output", ""),
         },
+        "free_resolution_summary": structured_betti,
         "certificate_attached": True,
         "real_free_resolution_certified": True,
         "exactness_certified": exact,
@@ -394,6 +404,87 @@ def _certified_result(module_schema: dict[str, Any], backend_result: dict[str, A
         "safe_to_render_as_real_free_resolution": True,
     }
 
+
+
+def _parse_ungraded_betti_table(text: str, *, backend: str) -> dict[str, Any]:
+    """Parse CAS Betti text as ungraded homological ranks only.
+
+    Singular's ``betti(resolution)`` output here certifies ranks in each
+    homological degree, but it does not include multidegree shifts. Those shifts
+    must come from a graded Macaulay2/Sage computation before the result can be
+    rendered as a multigraded minimal free resolution over F2[x,y].
+    """
+    rows: list[list[int]] = []
+    for line in str(text or "").splitlines():
+        values = [int(piece) for piece in line.replace("|", " ").split() if _is_int_literal(piece)]
+        if values:
+            rows.append(values)
+    if not rows:
+        return {
+            "available": False,
+            "backend": backend,
+            "grading": "ungraded",
+            "reason": "CAS Betti text contained no integer rank table.",
+            "not_multigraded": True,
+            "safe_for_multigraded_claims": False,
+        }
+    width = max(len(row) for row in rows)
+    matrix = [row + [0] * (width - len(row)) for row in rows]
+    column_ranks = [sum(row[col] for row in matrix) for col in range(width)]
+    free_modules = [
+        {
+            "homological_degree": degree,
+            "rank": int(rank),
+            "display": f"F_{degree} = S^{int(rank)}" if int(rank) != 1 else f"F_{degree} = S",
+            "grading": "ungraded_total_rank",
+            "multidegree_shifts_available": False,
+        }
+        for degree, rank in enumerate(column_ranks)
+        if int(rank) != 0
+    ]
+    return {
+        "available": True,
+        "backend": backend,
+        "grading": "ungraded_total_betti_ranks",
+        "matrix": matrix,
+        "homological_column_ranks": column_ranks,
+        "free_modules": free_modules,
+        "total_rank": int(sum(column_ranks)),
+        "not_multigraded": True,
+        "safe_for_multigraded_claims": False,
+        "interpretation": (
+            "Certified CAS output parsed as ungraded Betti ranks by homological degree. "
+            "It is figure-ready as an ungraded rank table, but it does not certify multidegree shifts, "
+            "Fitting ideals, minors, or Buchsbaum-Eisenbud diagnostics."
+        ),
+    }
+
+
+def _is_int_literal(value: str) -> bool:
+    value = value.strip()
+    return bool(value) and (value.isdigit() or (value.startswith("-") and value[1:].isdigit()))
+
+
+def _parse_presentation_shape(value: Any) -> list[int] | None:
+    if value is None:
+        return None
+    text = str(value).strip()
+    if "x" not in text:
+        return None
+    left, right = text.split("x", 1)
+    try:
+        return [int(left), int(right)]
+    except ValueError:
+        return None
+
+
+def _parse_int_or_none(value: Any) -> int | None:
+    if value is None:
+        return None
+    try:
+        return int(str(value).strip())
+    except ValueError:
+        return None
 
 def _run_tagged_cas_script(
     *,
