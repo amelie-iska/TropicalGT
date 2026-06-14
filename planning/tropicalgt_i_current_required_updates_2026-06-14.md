@@ -4,7 +4,7 @@ This checklist merges the browser/photo review, the current active training stat
 
 ## 1. Active Training and BPB Priority
 
-- Keep `tropicalgt_i_pg_bpb_step0_full24b_b54_v10_bpb_5k_gate` alive until at least step 5K unless it crashes or produces nonfinite/invalid losses. Current tracked PID at launch: `2154851`; W&B run id at launch: `nw0bo45u`; run URL: `https://wandb.ai/amelie-iska-math/TropicalGT-I/runs/nw0bo45u`. The run is configured for >10B token slots, batch 54, BPB target `<1.12` by 5K, meet-in-the-middle decoding, causal forward/reverse decoding for DAGs, ROAR for cyclic/noncausal graphs, and low-weight BPB-gated advanced objectives.
+- Keep `tropicalgt_i_pg_bpb_step0_full24b_b54_v10_bpb_5k_gate` alive until at least step 5K unless it crashes or produces nonfinite/invalid losses. Current detached relaunch PID at last check: `2195134`; W&B run id: `e3qevo1u`; run URL: `https://wandb.ai/amelie-iska-math/TropicalGT-I/runs/e3qevo1u`. The run is configured for >10B token slots, batch 54, BPB target `<1.12` by 5K, meet-in-the-middle decoding, causal forward/reverse decoding for DAGs, ROAR for cyclic/noncausal graphs, and low-weight BPB-gated advanced objectives.
 - Do not restart before 5K merely because early metrics are noisy. Review at 5K, then restart/resume only if BPB and diagnostics justify a new hyperparameter setting.
 - Preserve BPB and graph-BPB as primary optimization and promotion gates.
 - Use advanced auxiliaries only when they are zero-default or BPB-gated and ablated: tropical support, GFlowNet GoT rewards, GraphCG, persistence/landscape diagnostics, chart-bundle transports, tropical toric active-cell agreement, and memory retrieval.
@@ -163,3 +163,12 @@ Remaining CAS items:
 2. Add Macaulay2 when available, because it remains the preferred backend for minimal graded free resolutions, Fitting ideals, minors, and Buchsbaum-Eisenbud diagnostics.
 3. Add optional Sage bridge only if it records the underlying backend and returns the same certificate fields.
 4. Clone and wire `amelie-iska/BEMultipliers.git` only as a Buchsbaum-Eisenbud diagnostic layer after a certified resolution exists; it is not a substitute for a resolution backend.
+
+
+## 2026-06-14 Sequential CAS Update: BEMultipliers Repository Inspection
+
+- Active replacement run snapshot after detached relaunch: `tropicalgt_i_pg_bpb_step0_full24b_b54_v10_bpb_5k_gate`, PID `2195134`, W&B id `e3qevo1u`, URL `https://wandb.ai/amelie-iska-math/TropicalGT-I/runs/e3qevo1u`. The run reached step 250 after relaunch and remained alive at the previous check; continue the 5K gate unless it crashes or emits nonfinite/invalid losses.
+- `external/BEMultipliers` was cloned and inspected from `amelie-iska/BEMultipliers.git` at commit `d0b55d7c2cb879acc27df533d0117c98a98e463d`; `BuchsbaumEisenbudMultipliers.m2` hash is `562d3c2879e6a306a2b39ff1c9ad7b23689d953757f498abe294161a3eac00b7`.
+- BEMultipliers exports `aMultiplier`, `cMultiplier`, `ComputeRanks`, and `exteriorDuality`, and operates on Macaulay2 `ChainComplex` values. It currently cannot run because Macaulay2 is unavailable on the remote machine.
+- Important guardrail: BEMultipliers has no built-in safety checks and must never be treated as a resolution backend. It can only annotate a separately certified Macaulay2 free resolution with Buchsbaum-Eisenbud multiplier diagnostics.
+- Immediate next CAS work item: provision/bridge Macaulay2 or an equivalent certified backend, then add a smoke probe and renderer for real Betti tables, differential matrices, multidegree shifts, Fitting ideals, minors, and BE diagnostics.

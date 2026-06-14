@@ -502,3 +502,20 @@ Remaining CAS items:
 2. Add Macaulay2 when available, because it remains the preferred backend for minimal graded free resolutions, Fitting ideals, minors, and Buchsbaum-Eisenbud diagnostics.
 3. Add optional Sage bridge only if it records the underlying backend and returns the same certificate fields.
 4. Clone and wire `amelie-iska/BEMultipliers.git` only as a Buchsbaum-Eisenbud diagnostic layer after a certified resolution exists; it is not a substitute for a resolution backend.
+
+
+## 2026-06-14 Sequential CAS Update: BEMultipliers Cloned And Inspected
+
+Status: complete for repository inspection; not executable as a backend on this machine until Macaulay2 is installed.
+
+- Cloned `https://github.com/amelie-iska/BEMultipliers.git` into `external/BEMultipliers` for local inspection. The external directory is gitignored, so this checkpoint records the inspected package metadata instead of staging the cloned source tree.
+- Inspected commit `d0b55d7c2cb879acc27df533d0117c98a98e463d`. The main package file is `BuchsbaumEisenbudMultipliers.m2` with SHA256 `562d3c2879e6a306a2b39ff1c9ad7b23689d953757f498abe294161a3eac00b7`.
+- The package exports `aMultiplier`, `cMultiplier`, `ComputeRanks`, and `exteriorDuality`. Its method signatures consume Macaulay2 `ChainComplex` objects, for example `aMultiplier(ZZ, ChainComplex)` and `cMultiplier(ZZ, ZZ, ChainComplex)`.
+- The package source explicitly warns that no safety checks are implemented. TropicalGT-I must therefore perform its own input checks, exactness checks, minimality checks, ring/degree checks, and output validation before rendering Buchsbaum-Eisenbud multiplier information as evidence.
+- Since `M2`/Macaulay2 is currently unavailable on the remote machine, BEMultipliers cannot be loaded or smoke-tested yet. It remains an optional diagnostic layer after a certified Macaulay2 resolution exists; it is not a substitute for `res`, `syz`, `betti`, Fitting ideals, minors, or derived-equivalence evidence.
+
+Next CAS item after this checkpoint:
+
+1. Provision or bridge Macaulay2 so the existing BEMultipliers package can be loaded against a known certified `ChainComplex`.
+2. Add a guarded Macaulay2 probe that records package source path, commit/hash, Macaulay2 version, package load status, and a small `koszul vars A` smoke result.
+3. Keep BE multiplier outputs in a separate `buchsbaum_eisenbud_diagnostics` block and refuse to set `real_free_resolution_certified`, `exactness_certified`, or `minimality_certified` from BEMultipliers alone.
