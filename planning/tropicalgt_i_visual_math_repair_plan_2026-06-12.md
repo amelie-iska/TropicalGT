@@ -12,9 +12,11 @@
 
 ## Current Live-Run Reset
 
-- [ ] Stop the existing `train_full_dataset_pg_bpb_step0_full24b_b44` run because it was launched before the latest memory-quality and visualization contract fixes.
-- [ ] Start a fresh step-0 run from a new config with a BPB-first objective, lower auxiliary/certificate pressure, stochastic/deeper GoT audit sampling, and enough batch size to keep RTX 4090 VRAM above 18GB without OOM.
-- [ ] Keep W&B and periodic artifacts active, but do not stage checkpoints, data, W&B run state, or browser export directories.
+- [ ] Stop the existing active run only after the replacement command and config are ready. Current target to replace: `train_full_dataset_pg_bpb_step0_full24b_b48_v3_250viz`, PID observed as `1625054` on 2026-06-13.
+- [ ] Start a fresh step-0 run from a new BPB-first config with OpenAI Parameter-Golf BPB and graph-BPB as the controlling metrics, while keeping tropical ring attention, long-context graph-token training, GFlowNet GoT search, GraphCG, persistence/vector topology, memory retrieval, meet-in-the-middle toggles, and ROAR available as auxiliary mechanisms.
+- [ ] Retune auxiliary weights so they support BPB rather than dominate it: reduce or gate certificate/tropical penalties when they rise, keep GraphCG full-rank diagnostics but low-pressure, keep memory retrieval quality-gated, and log all advanced objectives as ablation signals.
+- [ ] Use hybrid graph-structured training data: OAI Parameter-Golf rows encoded as graphs plus HuggingFace/GoT/CoT/ToT graph-structured rows, with causal DAG decoding when available and ROAR/random-order decoding for cyclic or noncausal graphs.
+- [ ] Keep W&B and periodic artifacts active every 250 steps, keep RTX 4090 VRAM utilization high without OOM, and do not stage checkpoints, data, W&B run state, or browser export directories.
 
 ## Defect Inventory From Browser and Photo Annotations
 
@@ -22,9 +24,12 @@
 - [ ] **Extraneous duplicate selected complex panels:** Remove static duplicate bottom panels. A selected-complex panel may appear only as a click/tap inspector tied to a specific node/simplex and must say which reasoning step or token generated it.
 - [ ] **Radius filtration direction:** Sliders must move min-to-max left-to-right and begin as a disjoint cloud of 0-simplices, then add edges and faces as radius grows. Every edge/face must come from GUDHI SimplexTree filtration values or the recorded model-probability Jensen-Shannon filtration.
 - [ ] **Directed causal/order overlays:** Full trajectory complexes and probability complexes must render dotted directed edges for causal DAG order, decoding order, and forward/reverse meet-in-the-middle directions when present. Non-causal or cyclic graphs must use ROAR/random-order metadata instead.
+- [ ] **Line semantics across all simplicial objects:** Dotted lines are reserved for decoding/causal/order metadata. Solid lines and filled faces are reserved for radius-filtered simplices and must appear/disappear only through the radius/reasoning/decoding-step slider contract.
 - [ ] **NLL/fitness landscape:** The GoT NLL page must not call a sparse triangulation an energy landscape. A valid landscape needs either model-evaluated local anchors around the trajectory or a clearly labeled observed-anchor interpolation with uncertainty. Trajectory points must lie on the surface when projected in `(PC1, PC2, NLL)` coordinates.
+- [ ] **NLL density cloud continuity:** Repair `got_nll_density_cloud_pca_3d.html` so Gaussian neighborhoods around actual 3D PCA graph-state/token embeddings form a continuous local NLL density/fitness field. Generated Gaussian support vectors are interpolation samples only and must not be rendered as extra model states; show actual model vertices and trajectory/dotted decoding edges separately.
 - [ ] **Simplex tree plot is not a connected trie/Hasse diagram:** Replace the current disconnected vertical stripes with a connected graph whose nodes are simplices and whose directed edges are immediate face-to-coface inclusions from the GUDHI simplex tree. Coordinates must encode simplex dimension, filtration value, and trie sibling order without inventing disconnected components.
 - [ ] **2-parameter persistence over `F2[x_level,x_radius]`:** Replace the surface-only view with a lattice/staircase module view. Use bidegrees `(level, radius_bin)`; display vector-space ranks on grid cells, horizontal/vertical multiplication maps, minimal generator candidates, adjacent lcm syzygy candidates, and Hilbert/rank invariant summaries.
+- [ ] **2-parameter module-fiber plot defect:** Repair `trajectory_persistence/persistence_module_betti.html` / module-fiber views that currently render as flat or degenerate yellow/blue sheets. The figure must show actual `F2[x_level,x_radius]` grid fibers, ranks/Betti values, east/north structure maps, generator/syzygy markers, and a Miller-Sturmfels staircase or monomial-lattice interpretation when applicable; no decorative rank plane is acceptable.
 - [ ] **Macaulay2-style free resolutions and derived objects:** Add research-figure renderings for finite graded chain/free-resolution data: Betti tables with homological degree columns and multidegree rows, free modules such as `F_0 = ⊕ S(-a_i,-b_i)`, differentials as sparse monomial matrices over `F2[x_level,x_radius]`, staircase/lcm syzygy diagrams, and chain-map/derived-morphism diagrams between query and memory objects. If exact minimality or derived equivalence is not certified, label the figure as a computed candidate/witness rather than a proof.
 - [ ] **Miller-Sturmfels staircase model:** The `k[x,y]` view should follow Chapter 3.1's staircase diagram for monomial ideals in two variables: minimal generators form an antichain, the staircase separates occupied/unoccupied monomial regions, adjacent lcms identify first syzygies, and Hilbert-series/rank summaries come from inclusion-exclusion over the staircase. Do not present non-minimal or heuristic signatures as exact minimal free resolutions.
 - [ ] **Free resolutions and derived similarity overclaiming:** If PH similarity or free-resolution similarity is zero, derived/algebraic similarity must not be high. Rename any coarse vector cosine to `signature cosine`; reserve `derived/algebraic similarity` for conservative checks over Betti tables, multigraded generators/syzygies, rank invariants, and chain-map/simplicial-map preservation.
@@ -141,3 +146,76 @@
 - Analogical maps are only called simplicial maps when preservation checks pass; otherwise they are correspondences with explicit failure diagnostics.
 - Browser artifacts are visibly more readable: no jammed labels, no overlapping colorbars, no duplicate static panels.
 - A fresh step-0 training run is alive with tuned BPB-first hyperparameters and >18GB VRAM usage without OOM.
+
+## Paper-Theory Workstream
+
+- [x] A dedicated subagent reviewed `references/2405.03505v1.pdf` and `references/2009.03030v2.pdf` in full.
+- [x] Updated `TropicalGT-I/assets/tropicalgt_neurips_research_paper.tex` with tropical vector-bundle and toric-embedding background, definitions, theorem/proposition material, examples, and pseudocode connecting those papers to BPB-oriented TropicalGT-I training.
+- [x] Developed implementable training techniques from that theory: monomial chart transports, cocycle defects, matroid flat-rank defects, tropical toric max-linear embedding regularization, chart BPB consistency, and transported persistence-landscape memory metrics.
+- [x] Created `planning/tropicalgt_i_vector_bundle_toric_embedding_training_plan.md` describing implementation hooks, losses, metrics, visualizations, tests, W&B telemetry, inference outputs, and research risks.
+- [ ] Fold the subagent findings into code/configs after review: chart ids, monomial transport heads, toric active rows, BPB promotion gates, and persistence-landscape memory metrics are still implementation tasks.
+
+
+
+### Step-0 BPB-Focused Restart Evidence (2026-06-14)
+
+- Previous run reviewed: `train_full_dataset_pg_bpb_step0_full24b_b48_v3_250viz`, W&B `8wi645zu`. Recent validation remained above the `<1.18` BPB target around steps 21000--22750 (`bpb` roughly 1.202--1.216), and periodic interactive artifact generation was disabled in the v3 config.
+- New run config: `TropicalGT-I/configs/train_full_dataset_pg_bpb_step0_full24b_b52_v4_bpb_restart.json`.
+- New run name: `tropicalgt_i_pg_bpb_step0_full24b_b52_v4_bpb_restart`; W&B run id `ml3j81za`.
+- Restart policy: step 0, batch size 52, sequence length 1024, max steps 454455, configured token slots 24,198,819,840, meeting the full-dataset token-slot guard with a 23,552-token ceiling margin.
+- Active-training intent: BPB and graph-BPB are primary; advanced methods remain active or observable but have lower auxiliary weights. Periodic interactive artifacts are enabled every 250 steps with one model-output sample bundle. Meet-in-the-middle decoding is enabled with tiny symmetric-KL/reverse-NLL auxiliary weights and `max_records=2` to avoid destabilizing BPB.
+- VRAM target: the initial run occupies about 21.6GB/24.6GB, satisfying the requested >18GB utilization without targeting OOM.
+
+
+
+### Integration Update: v5 Restart, Paper Workstream, and Remaining CAS/Visualization Repairs (2026-06-14)
+
+- Paper/theory sidecar status: Avicenna completed the requested review of `references/2405.03505v1.pdf` and `references/2009.03030v2.pdf`, updated `TropicalGT-I/assets/tropicalgt_neurips_research_paper.tex`, and wrote `planning/tropicalgt_i_vector_bundle_toric_embedding_training_plan.md`. The paper now contains a TropicalGT chart-bundle definition, tropical toric embedding definition, monomial transport principle, matroid-filtration compatibility theorem, BPB chart-consistency proposition, proof sketches, examples, and pseudocode. Remaining paper risk: the remote has no LaTeX engine on PATH, so full compilation is still pending.
+- Training status: v4 `tropicalgt_i_pg_bpb_step0_full24b_b52_v4_bpb_restart` crashed at the first periodic audit because full reasoning audit required `graph_token_trace_complete` for every generated reasoning step. That crash is a visualization/artifact completeness failure, not a model OOM. The replacement v5 config is `TropicalGT-I/configs/train_full_dataset_pg_bpb_step0_full24b_b52_v5_bpb_restart.json`, W&B run `pah6uswd`, PID `1982070`, using about 21.6GB VRAM. The v5 config keeps strict model-output artifacts but changes missing trace behavior to render unavailable/diagnostic instead of crashing the BPB run.
+- Periodic-artifact status: v5 emitted `periodic/step_00000250` with reasoning, GraphCG, metrics, and validation report artifacts. It currently emits the lighter periodic training audit, not the full sample-browser catalog with all richer pages. Required repair: periodic evaluation should produce or link the same sample-based catalog at every 250 steps while keeping the training loop alive.
+- Browser QA status: `127.0.0.1:8990/browser_index.html` is visible and points at the richer sample-based browser catalog. The catalog distinguishes `GoT observed NLL PCA anchors`, `GoT NLL density cloud (3D PCA)`, `Persistence landscape lambda_k(t)`, `2-parameter F2[x_level,x_radius] bifiltration`, `Full radius SimplexTree poset`, `Probability SimplexTree poset`, GraphCG, and tropical support. Current code repairs make the simplex-tree view connected through a root/prefix backbone and add a Gaussian NLL density cloud, but further visual polish and validation remain required.
+- NLL visualization repairs still required: the 3D PCA density cloud should look more like a continuous electron-density/fitness field around actual model embedding vertices, with support samples rendered only as interpolation density and never as extra reasoning states. The sparse triangulated NLL surface must remain diagnostic/legend-only unless model-evaluated local anchors make a true surface.
+- Simplicial repairs still required: all radius-filtered views need dotted causal/decoding-order overlays and solid radius-gated simplices. Every reasoning step must own a distinct model-derived complex. Sliders must begin at the disjoint vertex cloud and grow min-to-max.
+- CAS methodology required for real resolutions: use Macaulay2 `res`, `syz`, `betti`, `mingens`, `fittingIdeal`, `minors`, `KustinMiller::resBE`, and `MultiplierIdeals` where applicable; use SageMath/Singular for polynomial ideals and syzygies when M2 is unavailable; evaluate `amelie-iska/BEMultipliers.git` only as an optional Buchsbaum-Eisenbud multiplier backend, not as a substitute for a certified minimal free resolution. If no backend emits a certificate, render `unavailable_no_certificate` and show chain-presentation diagnostics only.
+- 2-parameter module repair still required: compute actual `F2[x_level,x_radius]` grid fibers `K_(level,radius)`, east/north structure maps, rank invariant samples, Betti surfaces, staircase generator candidates, adjacent-lcm syzygy candidates, and downloadable JSON. The rendered figure should resemble a multigraded module/staircase research figure rather than a decorative sheet.
+- Derived/analogical repair still required: analogical retrieval must use model-predicted probability vectors and Jensen-Shannon assignments, then validate vertex, edge, face, and filtration preservation before calling anything a simplicial map. Derived/algebraic similarity must be conservative and consistent with PH, rank-invariant, chain-map, and real-resolution evidence; high derived similarity with zero resolution similarity is disallowed unless explicitly labeled as a different coarse signature metric.
+- Vector-bundle/toric implementation tasks now queued: add chart ids and overlaps, `MonomialTransportHead`, `BundleMatroidHead`, `ToricEmbeddingHead`, zero-default coefficients, W&B metrics, chart-overlap browser panels, and BPB/graph-BPB promotion gates. These should remain auxiliary and must not be promoted if validation BPB or graph-BPB regresses.
+
+### Paper-Theory Repair Addendum
+
+- [ ] Add the vector-bundle ablation matrix to the active repair goal: zero auxiliary, telemetry-only, transport-only, matroid/ray-only, toric/GraphCG-only, memory-landscape-only, chart-BPB-only, and full-stack variants, each gated by validation BPB/graph-BPB and read-only artifact checks.
+- [ ] Fold the vector-bundle paper sidecar into the active repair checklist: chart ids, monomial transport ids, toric active rows, ray-filtration flat defects, GraphCG-toric agreement, and transported persistence-landscape metrics must be emitted as model-backed audit payload fields.
+- [ ] Add BPB/graph-BPB promotion gates for every new vector-bundle or toric auxiliary. The browser may display the diagnostics before promotion, but decoding/training acceptance must remain BPB-first.
+- [ ] Add tests that distinguish real GUDHI persistence landscape `lambda_k(t)` vectors from GoT NLL/fitness/density fields and prove unavailable landscapes are not converted to zero vectors.
+- [ ] Keep paper claims conservative in code/docs: monomial transports and matroid/ray filtrations are mathematically motivated regularizers unless the implementation constructs an actual tropical toric variety or tropical scheme.
+
+## 2026-06-14 Main-Agent Status Addendum: v6 Restart, Paper Sidecar, and Density Repair
+
+### Training restart and crash repair
+- Fixed the step-250 periodic validation crash in `TropicalGT-I/src/tropicalgt/run.py` by constructing `AnalogicalMemoryQualityGate` inside `_run_periodic_validation_round` before memory storage/retrieval diagnostics are computed.
+- Launched fresh BPB-oriented run `tropicalgt_i_pg_bpb_step0_full24b_b54_v6_bpb_restart` from step 0 with config `TropicalGT-I/configs/train_full_dataset_pg_bpb_step0_full24b_b54_v6_bpb_restart.json`.
+- v6 changes: batch size 54, lower BPB-competing auxiliary weights, stricter analogical-memory quality thresholds, fresh memory bank under the v6 output tree, active periodic visual audits every 250 steps.
+- Training must remain alive; at each periodic boundary verify that interactive artifacts are produced without synthetic replacement.
+
+### Paper sidecar integration
+- Avicenna reviewed `references/2405.03505v1.pdf` and `references/2009.03030v2.pdf` and updated `TropicalGT-I/assets/tropicalgt_neurips_research_paper.tex` plus `planning/tropicalgt_i_vector_bundle_toric_embedding_training_plan.md`.
+- Implementation hooks now required by the paper sidecar: tropical vector-bundle chart ids on graph tokens, tropical toric embedding features, ray-filtration defects, chart-transition penalties, GraphCG/tropical-toric agreement, and BPB/graph-BPB ablations for these terms.
+- These additions are theory-backed training ideas only until code paths expose exact metrics and tests; do not log them as active losses before implementation.
+
+### NLL / energy-density visualization repair
+- The NLL density page must render only actual model GoT state anchors as model states.
+- Gaussian support samples are hidden by default and must never be labeled as reasoning states.
+- The visible density layer is a Gaussian support field plus translucent NLL-colored neighborhoods centered at actual 3D PCA GoT embeddings.
+- Remaining visual work: improve camera defaults, expose optional 2D surface only when it covers the local trajectory neighborhood, and show dotted decoding/causal edges over the same PCA coordinate frame.
+
+### CAS / real free-resolution policy
+- Real free resolutions remain unavailable unless a certified CAS backend (Macaulay2, Sage, Singular, or verified equivalent) returns differentials, multidegree shifts, exactness/minimality checks, and Betti table data.
+- `BEMultipliers` may be used for Buchsbaum-Eisenbud diagnostics but is not by itself a generic free-resolution backend.
+- Until CAS certification exists, figures must render unavailable/certificate diagnostics rather than proxy free resolutions.
+
+### Immediate remaining visual defects
+- Simplex-tree pages still need a genuine connected trie/face-coface-poset view instead of disconnected columns.
+- 2-parameter module pages must show an honest `(level, radius)` lattice/grid with fiber ranks, structure-map diagnostics, and downloadable JSON.
+- Analogical maps must compare probability-vector complexes with Jensen-Shannon assignment and must explain any non-preserved edges/faces instead of reporting high derived similarity with zero free-resolution support.
+- Tropical support heatmaps need grouped labels, top-support summaries, margin profile readability, and collapse diagnostics without jammed axes.
+

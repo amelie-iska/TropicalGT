@@ -519,34 +519,110 @@ def _multigraded_free_resolution_report(module: dict[str, Any]) -> dict[str, Any
 
 
 def _real_free_resolution_backend_report(module: dict[str, Any]) -> dict[str, Any]:
+    ring = module.get("coefficient_ring")
+    variables = _ring_variable_names(str(ring or ""))
+    generators = module.get("chain_module_generators", [])
+    boundary_monomials = module.get("boundary_monomials", {})
     executable_backends = {
         "Macaulay2_M2": shutil.which("M2"),
         "SageMath_sage": shutil.which("sage"),
         "Singular": shutil.which("Singular"),
     }
-    python_backends = {
-        name: bool(importlib.util.find_spec(name))
-        for name in ("sageall", "sage", "sageconf")
-    }
-    multiparameter_backends = {"multipers": bool(importlib.util.find_spec("multipers"))}
-    candidate_backend_available = any(bool(path) for path in executable_backends.values()) or any(python_backends.values())
+    python_backends = {name: _module_available(name) for name in ("sageall", "sage", "sageconf")}
+    multiparameter_backends = {"multipers": _module_available("multipers")}
+    bemultipliers = _bemultipliers_backend_status()
+    backend_attempts = [
+        {
+            "name": "Macaulay2_M2",
+            "kind": "executable",
+            "command": "M2",
+            "available": bool(executable_backends["Macaulay2_M2"]),
+            "path": executable_backends["Macaulay2_M2"],
+        },
+        {
+            "name": "SageMath_sage",
+            "kind": "executable",
+            "command": "sage",
+            "available": bool(executable_backends["SageMath_sage"]),
+            "path": executable_backends["SageMath_sage"],
+        },
+        {
+            "name": "Singular",
+            "kind": "executable",
+            "command": "Singular",
+            "available": bool(executable_backends["Singular"]),
+            "path": executable_backends["Singular"],
+        },
+        {"name": "sage_python_modules", "kind": "python", "available": any(python_backends.values()), "modules": python_backends},
+        {"name": "BEMultipliers", "kind": "python_or_executable", "available": bool(bemultipliers.get("available")), "details": bemultipliers},
+    ]
+    free_resolution_backend_names = {"Macaulay2_M2", "SageMath_sage", "Singular", "sage_python_modules"}
+    candidate_backend_available = any(
+        bool(attempt.get("available"))
+        for attempt in backend_attempts
+        if str(attempt.get("name")) in free_resolution_backend_names
+    )
     certificate_attached = False
     return {
-        "available": bool(certificate_attached),
+        "schema_version": "tropicalgt.real_free_resolution.v1",
+        "status": "unavailable_no_certificate",
+        "available": False,
         "candidate_backend_available": bool(candidate_backend_available),
-        "ring": module.get("coefficient_ring"),
+        "ring": ring,
+        "backend": None,
+        "backend_attempts": backend_attempts,
         "allowed_backends": [
             "Macaulay2: res, syz, KustinMiller::resBE, MultiplierIdeals",
             "SageMath: syzygy_matrix, free_resolution, macaulay2 bridge",
             "Singular: std/syz/res via Sage or CLI",
             "BEMultipliers: https://github.com/amelie-iska/BEMultipliers.git for Buchsbaum-Eisenbud multiplier analyses",
         ],
+        "module_summary": {
+            "coefficient_ring": ring,
+            "variables": variables,
+            "generator_count": len(generators) if isinstance(generators, list) else 0,
+            "boundary_map_count": len(boundary_monomials) if isinstance(boundary_monomials, dict) else 0,
+        },
+        "cas_artifacts": {
+            "betti_table_rows": [],
+            "free_modules": [],
+            "differentials": [],
+            "determinantal_ideals": {},
+            "fitting_ideals": {},
+            "buchsbaum_eisenbud": {},
+        },
         "executable_backends": executable_backends,
         "python_backends": python_backends,
         "multiparameter_backends": multiparameter_backends,
+        "bemultipliers_backend": bemultipliers,
+        "be_multipliers_available": bool(bemultipliers.get("available")),
         "certificate_attached": certificate_attached,
+        "real_free_resolution_certified": False,
+        "minimality_certified": False,
+        "exactness_certified": False,
+        "safe_to_render_as_real_free_resolution": False,
+        "claim_guard": "Treat this as a real free resolution only when available, certificate_attached, real_free_resolution_certified, minimality_certified, and exactness_certified are all true.",
         "reason": "No Macaulay2/SageMath/Singular/BEMultipliers certificate is attached in the active tokengt environment; minimal free resolutions are therefore unavailable and must not be rendered or scored as real resolutions.",
         "multipers_note": "multipers is useful for multiparameter persistence invariants and signed measures, but it is not treated here as a certified minimal-free-resolution backend.",
+    }
+
+
+def _module_available(name: str) -> bool:
+    try:
+        return importlib.util.find_spec(name) is not None
+    except (ImportError, ValueError):
+        return False
+
+
+def _bemultipliers_backend_status() -> dict[str, Any]:
+    python_modules = {name: _module_available(name) for name in ("BEMultipliers", "bemultipliers")}
+    executable = shutil.which("BEMultipliers") or shutil.which("bemultipliers")
+    return {
+        "available": bool(executable or any(python_modules.values())),
+        "executable": executable,
+        "python_modules": python_modules,
+        "repository": "https://github.com/amelie-iska/BEMultipliers.git",
+        "purpose": "optional Buchsbaum-Eisenbud multiplier certification; not a minimal-free-resolution backend by itself",
     }
 
 

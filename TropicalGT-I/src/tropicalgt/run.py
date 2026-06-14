@@ -880,6 +880,7 @@ def _run_periodic_validation_round(
     periodic_memory_eligible = 0
     periodic_memory_rejected = 0
     periodic_memory_retrieved_count = 0
+    memory_quality_gate = AnalogicalMemoryQualityGate.from_config(cfg) if memory_bank is not None else None
     periodic_memory_landscape_weight = float(cfg.get("memory_retrieval_landscape_weight", 0.08) or 0.0)
     periodic_memory_vector_weight = float(cfg.get("memory_retrieval_vector_weight", cfg.get("memory_retrieval_persistence_vector_weight", 0.18)) or 0.0)
     periodic_memory_vector_available = 0

@@ -39,6 +39,18 @@ def test_topological_algebra_report_has_multiparameter_data():
     assert proxy["resolution_status"] == "chain_presentation_only"
     assert proxy["real_free_resolution"]["available"] is False
     assert proxy["real_free_resolution"]["certificate_attached"] is False
+    real = proxy["real_free_resolution"]
+    assert real["schema_version"] == "tropicalgt.real_free_resolution.v1"
+    assert real["status"] == "unavailable_no_certificate"
+    assert real["real_free_resolution_certified"] is False
+    assert real["minimality_certified"] is False
+    assert real["exactness_certified"] is False
+    assert real["safe_to_render_as_real_free_resolution"] is False
+    assert real["cas_artifacts"]["betti_table_rows"] == []
+    assert real["cas_artifacts"]["free_modules"] == []
+    assert real["module_summary"]["coefficient_ring"] == "F2[x_filtration,x_dimension,x_position]"
+    backend_names = {row["name"] for row in real["backend_attempts"]}
+    assert backend_names >= {"Macaulay2_M2", "SageMath_sage", "Singular", "BEMultipliers"}
     chain = report["commutative_algebra"]["multiparameter_chain_presentation_diagnostics"]
     assert chain["not_a_free_resolution"] is True
     assert chain["real_free_resolution"]["available"] is False
@@ -82,6 +94,12 @@ def test_level_radius_bifiltration_reports_scoped_real_staircase_resolution():
     assert report["radius_grade_values"] == {0: 0.0, 1: 0.3, 2: 0.6, 3: 0.7}
     chain = report["chain_presentation_diagnostics"]
     assert chain["not_a_free_resolution"] is True
+    real = chain["real_free_resolution"]
+    assert real["available"] is False
+    assert real["safe_to_render_as_real_free_resolution"] is False
+    assert real["module_summary"]["coefficient_ring"] == "F2[x_level,x_radius]"
+    assert real["module_summary"]["variables"] == ["x_level", "x_radius"]
+    assert real["cas_artifacts"]["differentials"] == []
     minimal = chain["minimal_free_resolution"]
     assert minimal["available"] is True
     assert minimal["not_full_persistence_module_resolution"] is True

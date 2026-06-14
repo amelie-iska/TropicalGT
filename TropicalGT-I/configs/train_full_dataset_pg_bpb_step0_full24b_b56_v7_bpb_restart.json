@@ -1,0 +1,233 @@
+{
+  "algebra_audit_interval": 10000,
+  "algebra_audit_limit": 1,
+  "audit_level": "topology",
+  "audit_max_simplices": 192,
+  "batch_size": 56,
+  "cache_shards": 1,
+  "certificate_weight": 2.5e-05,
+  "checkpoint_dir": "TropicalGT-I/checkpoints",
+  "checkpoint_every": 1000,
+  "chunk_shuffle": true,
+  "chunk_shuffle_seed": 1729,
+  "configured_to_available_ratio_target": 1.0000009732715511,
+  "data_root": "TropicalGT-I/data/toricgt/curated_hf_shards",
+  "device": "auto",
+  "final_interactive_artifacts_enabled": true,
+  "fixture_size": 8,
+  "full_dataset_available_token_slots": 24198796288,
+  "full_dataset_configured_token_slots": 24198819840,
+  "gflownet_weight": 0.003,
+  "grad_clip": 0.7,
+  "graph_autoregressive_decoding": true,
+  "graph_bpb_side_weight": 1.0,
+  "graphcg_weight": 0.0025,
+  "hybrid_data": {
+    "enabled": true,
+    "seed": 1729,
+    "sources": [
+      {
+        "kind": "parquet",
+        "name": "tropicalgt_hf_reasoning",
+        "required": true,
+        "root": "TropicalGT-I/data/toricgt/curated_hf_shards",
+        "weight": 0.7
+      },
+      {
+        "allow_token_id_fallback": false,
+        "fallback_roots": [
+          "external/parameter-golf/data/datasets/fineweb10B_sp1024"
+        ],
+        "kind": "parameter_golf_bin",
+        "max_graph_chunks": 64,
+        "name": "openai_parameter_golf",
+        "required": true,
+        "root": "external/oai-parameter-golf/data/datasets/fineweb10B_sp1024",
+        "tokenizer_fallback_paths": [
+          "external/parameter-golf/data/tokenizers/fineweb_1024_bpe.model"
+        ],
+        "tokenizer_path": "external/oai-parameter-golf/data/tokenizers/fineweb_1024_bpe.model",
+        "weight": 0.3,
+        "window_tokens": 1025
+      }
+    ]
+  },
+  "hybrid_source_requirements": {
+    "openai_parameter_golf": {
+      "min_files": 195,
+      "min_raw_tokens": 19473201340
+    },
+    "tropicalgt_hf_reasoning": {
+      "min_examples": 4633582,
+      "min_files": 117
+    }
+  },
+  "hyperparameter_intent": "BPB-first v7 step-0 restart after the prior v6 PID died near the first periodic audit: batch 56 to use additional 4090 VRAM without aiming for OOM, lr 1.8e-4, lower auxiliary/certificate pressure, real-only 250-step audits retained, memory storage remains quality-gated, and advanced metrics are logged as diagnostics/regularizers rather than allowed to dominate NLL/BPB.",
+  "inference_memory_retrieve_top_k": 8,
+  "inference_scaling": {
+    "branch_factor": 6,
+    "depth": 10,
+    "sampling_exploration": 0.3,
+    "sampling_seed": 1729,
+    "sampling_temperature": 1.2,
+    "stochastic_actions": true,
+    "width": 16
+  },
+  "keys_path": "keys.txt",
+  "learning_rate": 0.00018,
+  "lr": 0.00018,
+  "max_steps": 454455,
+  "meet_in_middle": {
+    "agreement_kind": "symmetric_kl",
+    "agreement_weight": 0.002,
+    "enabled": true,
+    "max_meet_points": 8,
+    "max_records": 2,
+    "mode": "shared_weight_reverse_pass",
+    "ngram_size": 4,
+    "reverse_model_path": "",
+    "reverse_nll_weight": 0.002,
+    "split_ratio": 0.5,
+    "verification_window": 4
+  },
+  "memory_bank_path": "TropicalGT-I/outputs/tropicalgt_i_pg_bpb_step0_full24b_b56_v7_bpb_restart/memory_bank/trajectory_memories.jsonl",
+  "memory_max_records": 64,
+  "memory_quality_min_margin_mean": 0.0015,
+  "memory_quality_min_nll_improvement": 0.05,
+  "memory_quality_min_probability_simplices": 8,
+  "memory_quality_min_probability_vertices": 8,
+  "memory_quality_require_probability_complex": true,
+  "memory_quality_require_topological_algebra": true,
+  "memory_records_per_audit": 1,
+  "memory_retrieval_landscape_weight": 0.08,
+  "memory_retrieval_vector_note": "Landscape-only similarity and the broader GUDHI vector-representation family are scored separately; when memory_retrieval_landscape_weight is positive, the vector-family channel excludes Landscape to avoid double counting and uses BettiCurve, Silhouette, Entropy, PersistenceLengths, TopologicalVector, and PersistenceImage when available.",
+  "memory_retrieval_vector_weight": 0.18,
+  "min_available_train_token_slots": 10000000000,
+  "min_training_token_slots": 24198796288,
+  "model": {
+    "certificate_weight": 0.00025,
+    "dim": 1760,
+    "gflownet_weight": 0.0045,
+    "graph_feature_dim": 48,
+    "graph_tropical_block_size": 32,
+    "graphcg_active_directions": 96,
+    "graphcg_num_directions": 1760,
+    "graphcg_weight": 0.003,
+    "hidden_dim": 1760,
+    "memory_dim": 220,
+    "num_actions": 8,
+    "sequence_tropical_block_size": 16,
+    "sequence_tropical_max_tokens": 48,
+    "sequence_tropical_weight": 0.035,
+    "use_sequence_tropical": true,
+    "wall_margin_threshold": 0.00035
+  },
+  "num_workers": 0,
+  "output_dir": "TropicalGT-I/outputs/tropicalgt_i_pg_bpb_step0_full24b_b56_v7_bpb_restart",
+  "parameter_golf_bpb_focus": true,
+  "parameter_golf_export": {
+    "cap_bytes": 16000000,
+    "size_checked_with": "TropicalGT-I/scripts/estimate_parameter_golf_export_size.py",
+    "target_utilization": "approximately 97 percent after int8+zlib export plus stripped code bytes"
+  },
+  "periodic_audit_level": "full",
+  "periodic_audit_max_simplices": 192,
+  "periodic_eval_details_limit": 1,
+  "periodic_got_record_pool": 32,
+  "periodic_interactive_artifacts_enabled": true,
+  "periodic_memory_retrieve_top_k": 8,
+  "periodic_ph_backend": "gudhi",
+  "periodic_viz_branch_factor": 6,
+  "periodic_viz_exploration_rate": 0.35,
+  "periodic_viz_got_examples": 1,
+  "periodic_viz_got_record_pool": 8,
+  "periodic_viz_got_scaling": true,
+  "periodic_viz_limit": 1,
+  "periodic_viz_sample_temperature": 1.25,
+  "periodic_viz_scale_allow_stop": false,
+  "periodic_viz_scale_branch_factor": 5,
+  "periodic_viz_scale_depth": 10,
+  "periodic_viz_scale_diverse_actions": true,
+  "periodic_viz_scale_sampling_exploration": 0.35,
+  "periodic_viz_scale_sampling_temperature": 1.25,
+  "periodic_viz_scale_stochastic_actions": true,
+  "periodic_viz_scale_width": 16,
+  "ph_backend": "gudhi",
+  "require_data": true,
+  "required_hybrid_sources": [
+    "tropicalgt_hf_reasoning",
+    "openai_parameter_golf"
+  ],
+  "restart_policy": {
+    "restart_from_step_zero": true,
+    "reason": "v6 PID was not alive and the GPU was idle; user requires an always-active run. v7 restarts from step zero with BPB-first hyperparameters while preserving real-only periodic visualization/audit policy.",
+    "source_run_reviewed": "tropicalgt_i_pg_bpb_step0_full24b_b54_v6_bpb_restart",
+    "changes": [
+      "batch size 54 -> 56 for available VRAM headroom",
+      "learning rate set consistently to 1.8e-4",
+      "lower top-level auxiliary weights so BPB/NLL remain primary",
+      "keep 250-step periodic validation and visualization audits",
+      "keep memory quality gates and no synthetic fallback artifacts",
+      "reduce audit max simplices 256 -> 192 to avoid periodic audit stalls while retaining topology diagnostics"
+    ]
+  },
+  "run_name": "tropicalgt_i_pg_bpb_step0_full24b_b56_v7_bpb_restart",
+  "seed": 1729,
+  "seq_len": 1024,
+  "sequence_tropical_weight": 0.03,
+  "shuffle": false,
+  "shuffle_rows_within_chunk": false,
+  "tokengt": {
+    "feature_dim": 48,
+    "graph_token": true,
+    "max_edges": 128,
+    "max_nodes": 64,
+    "node_id_dim": 16
+  },
+  "train_limit": null,
+  "val_limit": 64,
+  "validation_every_steps": 250,
+  "visualization_every_steps": 250,
+  "viz_got_record_pool": 64,
+  "viz_got_scaling": true,
+  "viz_limit": 16,
+  "viz_scale_allow_stop": false,
+  "viz_scale_branch_factor": 6,
+  "viz_scale_depth": 10,
+  "viz_scale_diverse_actions": true,
+  "viz_scale_sampling_exploration": 0.3,
+  "viz_scale_sampling_temperature": 1.2,
+  "viz_scale_stochastic_actions": true,
+  "viz_scale_width": 16,
+  "viz_topological_algebra": true,
+  "wandb": {
+    "enabled": true,
+    "html_artifact_limit": 0,
+    "log_interactive_artifacts": false,
+    "mode": "online",
+    "project": "TropicalGT-I"
+  },
+  "wandb_html_artifact_limit": 0,
+  "wandb_html_max_bytes": 5000000,
+  "wandb_log_interactive_artifacts": false,
+  "wandb_name": "tropicalgt_i_pg_bpb_step0_full24b_b56_v7_bpb_restart",
+  "weight_decay": 0.03,
+  "interactive_artifacts_require_complete_reasoning_steps": false,
+  "viz_require_complete_reasoning_steps": false,
+  "periodic_viz_require_complete_reasoning_steps": false,
+  "require_complete_reasoning_steps": false,
+  "strict_model_output_artifacts": true,
+  "artifact_missing_trace_policy": "render_unavailable_or_diagnostic_without_synthetic_replacement",
+  "change_log": [
+    {
+      "version": "v5",
+      "reason": "v4 crashed at step 250 because graph_token_trace_complete was treated as fatal in periodic full audit; v5 keeps real model-output visual audits alive and reports incomplete traces as a repair defect.",
+      "restart_from": "step_0"
+    },
+    {
+      "version": "v6",
+      "reason": "fix periodic memory_quality_gate crash and restart from step 0 with BPB-oriented batch/lr/auxiliary adjustments",
+      "restart_from": "step_0"
+    }
+  ]
+}

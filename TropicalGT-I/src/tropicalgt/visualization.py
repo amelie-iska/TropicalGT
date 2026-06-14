@@ -458,12 +458,68 @@ def write_got_trajectory_visualization(scaling_report: dict[str, object], output
     microstep_entries: list[dict[str, object]] = []
     microsteps_by_candidate: dict[int, list[dict[str, object]]] = {}
     fig = go.Figure()
+    energy_anchor_coords = pca[:, :3]
+    trajectory_plot_z = pca[:, 2]
+    density_cloud, density_cloud_meta = _gaussian_nll_density_cloud(energy_anchor_coords, nll_values, max_samples=4200)
+    density_cloud_meta.update(
+        {
+            "coordinate_space": "actual 3D PCA coordinates of model graph-state embeddings (PC1, PC2, PC3); raw NLL is color/density metadata",
+            "separate_true_3d_pca_density_page": "got_nll_density_cloud_pca_3d.html",
+        }
+    )
+    if density_cloud is not None:
+        volume_trace, volume_meta = _gaussian_density_volume_trace(
+            energy_anchor_coords,
+            nll_values,
+            float(density_cloud_meta.get("sigma", 0.0) or 0.0),
+            name="translucent NLL density field",
+        )
+        density_cloud_meta["density_volume"] = volume_meta
+        if volume_trace is not None:
+            fig.add_trace(volume_trace)
+        density_points = density_cloud["points"]
+        fig.add_trace(
+            go.Scatter3d(
+                x=density_points[:, 0],
+                y=density_points[:, 1],
+                z=density_points[:, 2],
+                mode="markers",
+                marker=dict(
+                    size=2.0,
+                    color=density_cloud["local_nll"],
+                    colorscale="Plasma",
+                    opacity=0.08,
+                    showscale=False,
+                ),
+                customdata=np.column_stack(
+                    [
+                        density_cloud["local_nll"],
+                        density_cloud["density"],
+                        density_cloud["nearest_distance"],
+                        density_cloud["nearest"],
+                    ]
+                ),
+                hovertemplate=(
+                    "NLL density sample around actual GoT embedding anchor<br>"
+                    "PC1=%{x:.3f}<br>PC2=%{y:.3f}<br>PC3=%{z:.3f}<br>"
+                    "kernel local raw NLL=%{customdata[0]:.6f}<br>"
+                    "Gaussian density mass=%{customdata[1]:.4g}<br>"
+                    "nearest actual state distance=%{customdata[2]:.4g}<br>"
+                    "nearest actual state index=%{customdata[3]:.0f}<br>"
+                    "not a model state; visualization-only Gaussian neighborhood around actual embedding anchors<extra></extra>"
+                ),
+                name="continuous NLL density around actual embeddings",
+                showlegend=True,
+            )
+        )
+    else:
+        density_cloud_meta = {"available": False, "reason": "no finite PCA/NLL anchors"}
     nll_surface, nll_surface_meta = _nll_triangulated_surface_trace(
         pca[:, 0],
         pca[:, 1],
         nll_plot_z,
         nll_values,
-        name="Observed-state NLL anchor mesh",
+        name="Sparse observed-state anchor mesh diagnostic",
     )
     nll_surface_meta.update(
         {
@@ -481,7 +537,7 @@ def write_got_trajectory_visualization(scaling_report: dict[str, object], output
             "model_state_anchor_count": int(len(candidates)),
             "rendered_microsteps_are_nll_surface_anchors": False,
             "rendered_microsteps_policy": "disabled; only model-evaluated GoT states are plotted as trajectory points",
-            "surface_contact_contract": "every rendered GoT state marker and trajectory edge endpoint uses plot.z/plot.z_surface read from the displayed NLL energy surface",
+            "surface_contact_contract": "disabled for the main trajectory page: rendered GoT state marker and edge endpoint z values are actual PC3 coordinates; raw NLL is encoded by color/hover and Gaussian density metadata",
             "trajectory_point_surface_residual_max": 0.0,
             "raw_nll_z_residual_max": float(np.nanmax(np.abs(nll_plot_z - raw_nll_plot_z))) if nll_plot_z.size else 0.0,
             "surface_projection": surface_projection_meta,
@@ -497,8 +553,12 @@ def write_got_trajectory_visualization(scaling_report: dict[str, object], output
         "reason": "disabled_by_default_not_model_evaluated",
     }
     if nll_surface is not None:
+        nll_surface.visible = "legendonly"
+        nll_surface.opacity = 0.18
         fig.add_trace(nll_surface)
-    fig.add_trace(_nll_anchor_trace(pca[:, 0], pca[:, 1], nll_plot_z, nll_values, name="model-evaluated GoT NLL anchors"))
+    density_blob_count = _add_gaussian_nll_blob_meshes(fig, energy_anchor_coords, nll_values, float(density_cloud_meta.get("sigma", 0.0) or 0.0))
+    density_cloud_meta["nll_gaussian_blob_count"] = int(density_blob_count)
+    fig.add_trace(_nll_anchor_trace(pca[:, 0], pca[:, 1], trajectory_plot_z, nll_values, name="model-evaluated GoT NLL anchors"))
     for idx, row in enumerate(candidates):
         parent = row.get("parent")
         if isinstance(parent, str) and parent in id_to_idx:
@@ -507,9 +567,9 @@ def write_got_trajectory_visualization(scaling_report: dict[str, object], output
             raw_delta = float(nll_values[idx] - nll_values[j])
             improvement_label = "improved" if raw_delta < 0 else ("flat" if abs(raw_delta) <= 1e-12 else "regressed")
             chain = [
-                {"x": float(pca[j, 0]), "y": float(pca[j, 1]), "z": float(nll_plot_z[j]), "label": str(parent)},
+                {"x": float(pca[j, 0]), "y": float(pca[j, 1]), "z": float(trajectory_plot_z[j]), "label": str(parent)},
                 *microsteps_by_candidate.get(idx, []),
-                {"x": float(pca[idx, 0]), "y": float(pca[idx, 1]), "z": float(nll_plot_z[idx]), "label": ids[idx]},
+                {"x": float(pca[idx, 0]), "y": float(pca[idx, 1]), "z": float(trajectory_plot_z[idx]), "label": ids[idx]},
             ]
             fig.add_trace(
                 go.Scatter3d(
@@ -522,7 +582,7 @@ def write_got_trajectory_visualization(scaling_report: dict[str, object], output
                     hovertext=(
                         f"{parent} -> {ids[idx]}<br>"
                         f"action={html.escape(action)}<br>"
-                        f"surface-contact=endpoint z values are read from the displayed NLL mesh<br>"
+                        f"PCA-edge=endpoint z values are actual PC3 graph-state coordinates; NLL is color/hover metadata<br>"
                         f"parent raw NLL={float(nll_values[j]):.6f}<br>"
                         f"child raw NLL={float(nll_values[idx]):.6f}<br>"
                         f"delta child-parent={raw_delta:+.6g} ({improvement_label})"
@@ -557,7 +617,7 @@ def write_got_trajectory_visualization(scaling_report: dict[str, object], output
         go.Scatter3d(
             x=pca[:, 0],
             y=pca[:, 1],
-            z=nll_plot_z,
+            z=trajectory_plot_z,
             mode="markers+text",
             marker=dict(
                 size=[8.0 + min(12.0, 2.6 * math.log1p(float(count))) for count in pca_multiplicity],
@@ -585,11 +645,11 @@ def write_got_trajectory_visualization(scaling_report: dict[str, object], output
     )
     fig.update_layout(
         template="plotly_dark",
-        title="Graph-of-thought branching trajectory with observed NLL anchors",
+        title="Graph-of-thought branching trajectory with Gaussian NLL density cloud",
         scene=dict(
             xaxis_title="PC1",
             yaxis_title="PC2",
-            zaxis_title="projected NLL / fitness energy",
+            zaxis_title="PC3(graph_state embedding)",
             aspectmode="cube",
             camera=dict(eye=dict(x=1.52, y=-1.72, z=1.18)),
         ),
@@ -601,7 +661,7 @@ def write_got_trajectory_visualization(scaling_report: dict[str, object], output
                 "embedding-state collapse diagnostic: "
                 f"{int(pca_report.get('unique_embeddings_rounded8', len(candidates)))}/{len(candidates)} unique graph_state vectors; "
                 f"max multiplicity={int(pca_report.get('max_embedding_multiplicity_rounded8', 1))}<br>"
-                "coordinates are actual PCA; duplicate states are aggregated for the surface and retained as original anchor markers"
+                "coordinates are actual PCA; duplicate states are retained as original model-evaluated anchors"
             ),
             x=0,
             y=1.035,
@@ -620,8 +680,8 @@ def write_got_trajectory_visualization(scaling_report: dict[str, object], output
         fig.add_annotation(
             text=(
                 "NLL field diagnostic: raw range="
-                f"{raw_nll_range:.6g}; z-axis shows centered NLL scaled by {nll_plot_scale:.1f}.<br>"
-                "Visible layers: observed model-evaluated GoT-state anchors and their sparse exact anchor mesh; no dense latent-space NLL field, microstep, or surrogate NLL anchors."
+                f"{raw_nll_range:.6g}; z-axis is actual PC3, not NLL height.<br>"
+                "Visible layers: Gaussian density around actual GoT embeddings plus exact model-evaluated anchors; sparse NLL anchor mesh is legend-only diagnostic."
             ),
             x=0,
             y=0.985,
@@ -671,12 +731,12 @@ def write_got_trajectory_visualization(scaling_report: dict[str, object], output
                 "plot": {
                     "x": float(pca[idx, 0]),
                     "y": float(pca[idx, 1]),
-                    "z": float(nll_plot_z[idx]),
-                    "z_surface": float(nll_plot_z[idx]),
+                    "z": float(trajectory_plot_z[idx]),
+                    "z_surface": None,
                     "z_centered_scaled_nll": float(nll_plot_z[idx]),
                     "raw_centered_scaled_nll": float(raw_nll_plot_z[idx]),
                     "raw_nll": float(nll_values[idx]),
-                    "touches_nll_surface": True,
+                    "touches_nll_surface": False,
                 },
                 "reasoning_step_index": int(step_page_links[idx]["reasoning_step_index"]),
                 "step_complex_href": step_page_links[idx]["step_complex_href"],
@@ -717,6 +777,7 @@ def write_got_trajectory_visualization(scaling_report: dict[str, object], output
             else {}
             for idx in range(len(candidates))
         ],
+        "nll_density_cloud": density_cloud_meta,
         "nll_surface": nll_surface_meta,
         "nll_progress": nll_progress,
     }
@@ -938,6 +999,167 @@ def _gaussian_nll_density_cloud(
     }
 
 
+def _nll_blob_color(value: float, vmin: float, vmax: float) -> str:
+    """Small Plasma-like ramp without adding a dependency to renderer hot paths."""
+    if not math.isfinite(value):
+        return "rgba(148,163,184,0.20)"
+    t = 0.5 if vmax <= vmin else (float(value) - float(vmin)) / max(float(vmax) - float(vmin), 1e-12)
+    t = max(0.0, min(1.0, t))
+    stops = [
+        (0.00, (49, 16, 129)),
+        (0.28, (126, 34, 206)),
+        (0.52, (236, 72, 153)),
+        (0.75, (245, 158, 11)),
+        (1.00, (254, 240, 138)),
+    ]
+    for (t0, c0), (t1, c1) in zip(stops, stops[1:]):
+        if t <= t1:
+            u = 0.0 if t1 <= t0 else (t - t0) / (t1 - t0)
+            rgb = tuple(int(round(c0[i] + u * (c1[i] - c0[i]))) for i in range(3))
+            return f"rgba({rgb[0]},{rgb[1]},{rgb[2]},0.34)"
+    r, g, b = stops[-1][1]
+    return f"rgba({r},{g},{b},0.34)"
+
+
+def _add_gaussian_nll_blob_meshes(fig: go.Figure, points: np.ndarray, nll: np.ndarray, sigma: float) -> int:
+    """Add translucent ellipsoid blobs centered at actual model states only."""
+    points = np.asarray(points, dtype=float)
+    nll = np.asarray(nll, dtype=float).reshape(-1)
+    finite = np.isfinite(points).all(axis=1) & np.isfinite(nll)
+    points = points[finite]
+    nll = nll[finite]
+    if points.shape[0] == 0:
+        return 0
+    # Ellipsoid radii come from the displayed PCA spread and the same Gaussian
+    # bandwidth used for the density computation.  These are visual kernels around
+    # real states, not additional states or model samples.
+    spread = np.maximum(np.std(points, axis=0), 1e-5)
+    radius = np.maximum(spread * 0.09, float(sigma) * 1.15)
+    u = np.linspace(0, 2 * np.pi, 18)
+    v = np.linspace(0, np.pi, 10)
+    uu, vv = np.meshgrid(u, v)
+    unit = np.column_stack([
+        np.cos(uu).ravel() * np.sin(vv).ravel(),
+        np.sin(uu).ravel() * np.sin(vv).ravel(),
+        np.cos(vv).ravel(),
+    ])
+    faces_i: list[int] = []
+    faces_j: list[int] = []
+    faces_k: list[int] = []
+    nu = len(u)
+    nv = len(v)
+    for a in range(nv - 1):
+        for b in range(nu - 1):
+            p00 = a * nu + b
+            p01 = a * nu + b + 1
+            p10 = (a + 1) * nu + b
+            p11 = (a + 1) * nu + b + 1
+            faces_i.extend([p00, p01])
+            faces_j.extend([p10, p10])
+            faces_k.extend([p11, p11])
+    vmin = float(np.min(nll))
+    vmax = float(np.max(nll))
+    added = 0
+    for idx, center in enumerate(points):
+        coords = center[None, :] + unit * radius[None, :]
+        fig.add_trace(
+            go.Mesh3d(
+                x=coords[:, 0],
+                y=coords[:, 1],
+                z=coords[:, 2],
+                i=faces_i,
+                j=faces_j,
+                k=faces_k,
+                color=_nll_blob_color(float(nll[idx]), vmin, vmax),
+                opacity=0.30,
+                name="NLL Gaussian neighborhood" if idx == 0 else "NLL Gaussian neighborhood",
+                showlegend=(idx == 0),
+                hovertemplate=(
+                    "NLL Gaussian neighborhood around actual state<br>"
+                    f"state index={idx}<br>"
+                    f"raw NLL={float(nll[idx]):.6f}<br>"
+                    "kernel is visual support only; center is the model state<extra></extra>"
+                ),
+            )
+        )
+        added += 1
+    return added
+
+
+def _gaussian_density_volume_trace(
+    anchor_points: np.ndarray,
+    nll_values: np.ndarray,
+    sigma: float,
+    *,
+    name: str,
+    grid_size: int = 28,
+) -> tuple[go.Volume | None, dict[str, object]]:
+    points = np.asarray(anchor_points, dtype=float)
+    nll = np.asarray(nll_values, dtype=float).reshape(-1)
+    finite = np.isfinite(points).all(axis=1) & np.isfinite(nll)
+    points = points[finite]
+    nll = nll[finite]
+    if points.shape[0] == 0 or not math.isfinite(float(sigma)) or float(sigma) <= 0:
+        return None, {"available": False, "reason": "no finite anchors or invalid sigma"}
+    if points.shape[0] < 2:
+        return None, {"available": False, "reason": "at least two anchors required for a meaningful density volume"}
+    span = np.ptp(points, axis=0)
+    pad = np.maximum(span * 0.12, float(sigma) * 2.4)
+    mins = np.min(points, axis=0) - pad
+    maxs = np.max(points, axis=0) + pad
+    axes = [np.linspace(float(mins[d]), float(maxs[d]), int(grid_size)) for d in range(3)]
+    gx, gy, gz = np.meshgrid(axes[0], axes[1], axes[2], indexing="ij")
+    grid = np.column_stack([gx.ravel(), gy.ravel(), gz.ravel()])
+    d2 = np.sum((grid[:, None, :] - points[None, :, :]) ** 2, axis=-1)
+    weights = np.exp(-0.5 * d2 / max(float(sigma) * float(sigma), 1e-12))
+    density = np.sum(weights, axis=1) / float(points.shape[0])
+    density_max = float(np.max(density)) if density.size else 0.0
+    if density_max <= 1e-12:
+        return None, {"available": False, "reason": "zero density field"}
+    density_norm = density / density_max
+    local_nll = (weights @ nll) / np.maximum(np.sum(weights, axis=1), 1e-12)
+    positive = density_norm[density_norm > 1e-8]
+    # Render the visible volume only inside a genuine Gaussian support around the
+    # actual model anchors.  The scalar shown by the volume is kernel-smoothed NLL,
+    # so the object reads as an NLL density/fitness cloud rather than a triangulated
+    # simplex sheet or a scatter of fake states.
+    density_floor = float(np.quantile(positive, 0.24)) if positive.size else 0.04
+    density_floor = max(min(density_floor, 0.26), 0.012)
+    trace = go.Volume(
+        x=grid[:, 0],
+        y=grid[:, 1],
+        z=grid[:, 2],
+        value=density_norm,
+        isomin=density_floor,
+        isomax=1.0,
+        opacity=0.34,
+        surface_count=26,
+        colorscale=[[0.0, "#0f172a"], [0.30, "#1d4ed8"], [0.62, "#22d3ee"], [1.0, "#facc15"]],
+        showscale=False,
+        customdata=local_nll,
+        opacityscale=[[0.0, 0.0], [density_floor, 0.045], [0.35, 0.14], [0.70, 0.30], [1.0, 0.46]],
+        hovertemplate=(
+            "Gaussian support density around actual anchors<br>"
+            "x=%{x:.3f}<br>y=%{y:.3f}<br>z=%{z:.3f}<br>"
+            "normalized Gaussian support=%{value:.4f}<br>"
+            "kernel local raw NLL=%{customdata:.6f}<br>"
+            "continuous visualization field; not a model state<extra></extra>"
+        ),
+        name=name,
+        showlegend=True,
+    )
+    return trace, {
+        "available": True,
+        "grid_size": int(grid_size),
+        "grid_points": int(grid.shape[0]),
+        "sigma": float(sigma),
+        "density_floor": density_floor,
+        "value": "normalized Gaussian density support around actual anchors",
+        "color": "density shell color; raw NLL is shown by translucent anchor blobs and hover",
+        "support_samples_are_not_model_states": True,
+    }
+
+
 def _write_got_nll_density_cloud_map(
     output_dir: Path,
     candidates: list[dict[str, object]],
@@ -958,6 +1180,18 @@ def _write_got_nll_density_cloud_map(
         return {"got_nll_density_cloud_pca_3d": str(path), "got_nll_density_cloud_payload": str(payload_path)}
 
     fig = go.Figure()
+    volume_trace, volume_meta = _gaussian_density_volume_trace(
+        pca,
+        nll_values,
+        float(cloud_meta.get("sigma", 0.0) or 0.0),
+        name="translucent 3D Gaussian density field",
+    )
+    cloud_meta["density_volume"] = volume_meta
+    if volume_trace is not None:
+        fig.add_trace(volume_trace)
+    cloud_meta["nll_gaussian_blob_count"] = _add_gaussian_nll_blob_meshes(
+        fig, pca, nll_values, float(cloud_meta.get("sigma", 0.0) or 0.0)
+    )
     cloud_points = cloud["points"]
     nearest = cloud["nearest"]
     fig.add_trace(
@@ -967,12 +1201,11 @@ def _write_got_nll_density_cloud_map(
             z=cloud_points[:, 2],
             mode="markers",
             marker=dict(
-                size=2.25,
+                size=1.55,
                 color=cloud["local_nll"],
                 colorscale="Plasma",
-                opacity=0.18,
-                showscale=True,
-                colorbar=dict(title="local raw NLL", x=1.03, y=0.48, len=0.62, thickness=16),
+                opacity=0.10,
+                showscale=False,
             ),
             customdata=np.column_stack([cloud["local_nll"], cloud["density"], cloud["nearest_distance"], nearest]),
             hovertemplate=(
@@ -984,7 +1217,8 @@ def _write_got_nll_density_cloud_map(
                 "nearest actual state index=%{customdata[3]:.0f}<br>"
                 "not a model state; density around actual embeddings<extra></extra>"
             ),
-            name="NLL density cloud around actual GoT embeddings",
+            name="audit samples from the Gaussian NLL field (hidden by default)",
+            visible="legendonly",
         )
     )
     for idx, row in enumerate(candidates):
@@ -1019,7 +1253,7 @@ def _write_got_nll_density_cloud_map(
             z=pca[:, 2],
             mode="markers+text",
             marker=dict(
-                size=9,
+                size=10,
                 color=nll_values,
                 colorscale="Plasma",
                 showscale=False,
@@ -1041,10 +1275,15 @@ def _write_got_nll_density_cloud_map(
     )
     fig.update_layout(
         template="plotly_dark",
-        title=(
-            "3D PCA NLL density cloud around graph-of-thought embeddings"
-            "<br><sup>Gaussian cloud points are not model states. They are visualization-only local mass around actual model graph_state vectors; "
-            "color is kernel-weighted measured NLL, and labeled markers are the only model states.</sup>"
+        title=dict(
+            text=(
+                "3D PCA NLL density around actual GoT embeddings"
+                "<br><sup>Gaussian neighborhoods are rendered around actual model states only; audit samples stay hidden.</sup>"
+            ),
+            x=0.02,
+            y=0.975,
+            xanchor="left",
+            yanchor="top",
         ),
         scene=dict(
             xaxis_title="PC1(graph_state)",
@@ -1053,8 +1292,8 @@ def _write_got_nll_density_cloud_map(
             aspectmode="cube",
             camera=dict(eye=dict(x=1.55, y=-1.65, z=1.08)),
         ),
-        margin=dict(t=108, r=72, b=36, l=36),
-        legend=dict(orientation="h", x=0.02, y=1.0, xanchor="left", yanchor="bottom"),
+        margin=dict(t=178, r=150, b=42, l=42),
+        legend=dict(orientation="v", x=0.015, y=0.91, xanchor="left", yanchor="top", bgcolor="rgba(2,6,23,0.76)", bordercolor="rgba(125,211,252,0.25)", borderwidth=1, font=dict(size=11)),
     )
     fig.add_annotation(
         text=(
@@ -1064,7 +1303,7 @@ def _write_got_nll_density_cloud_map(
             f"density sigma={float(cloud_meta.get('sigma', 0.0)):.4g}"
         ),
         x=0,
-        y=1.04,
+        y=1.01,
         xref="paper",
         yref="paper",
         showarrow=False,
@@ -1722,70 +1961,173 @@ def _write_simplex_tree_3d_map(path: Path, obj: dict[str, object], title: str, s
     simplex_rows: dict[tuple[str, ...], dict[str, object]] = {
         tuple(sorted(str(vertex) for vertex in (row.get("simplex") or []))): row for row in simplices
     }
-    by_dim: dict[int, list[tuple[str, ...]]] = defaultdict(list)
-    for key, row in simplex_rows.items():
-        by_dim[int(row.get("dimension", len(key) - 1))].append(key)
+    if not simplex_rows:
+        _write_dark_empty(path, f"{title}: no canonical simplices available.")
+        return
+
+    vertex_rows = [row for key, row in simplex_rows.items() if len(key) == 1]
+    edge_rows = [row for key, row in simplex_rows.items() if len(key) == 2]
+    vertex_labels = sorted(str((row.get("simplex") or [""])[0]) for row in vertex_rows)
+    coords3, _projected2, layout_report = _simplicial_pca3_radius_layout(vertex_labels, vertex_rows, edge_rows, 900, 720)
+    if not coords3:
+        coords3 = {label: (0.5, 0.5, 0.5) for label in vertex_labels}
+
+    filtrations = [float(row.get("filtration", 0.0) or 0.0) for row in simplex_rows.values()]
+    f_min = min(filtrations) if filtrations else 0.0
+    f_span = max(max(filtrations) - f_min, 1e-9) if filtrations else 1.0
+
+    root_key: tuple[str, ...] = tuple()
     positions: dict[tuple[str, ...], tuple[float, float, float]] = {}
-    for dim, keys in by_dim.items():
-        ordered = sorted(keys, key=lambda key: (float(simplex_rows[key].get("filtration", 0.0) or 0.0), _simplex_key(key)))
-        denom = max(len(ordered) - 1, 1)
-        for idx, key in enumerate(ordered):
-            filt = float(simplex_rows[key].get("filtration", 0.0) or 0.0)
-            positions[key] = (filt, float(dim), float(idx / denom))
-    edge_x: list[float | None] = []
-    edge_y: list[float | None] = []
-    edge_z: list[float | None] = []
-    edge_hover: list[str | None] = []
     for key, row in simplex_rows.items():
-        if len(key) <= 1:
+        dim = int(row.get("dimension", len(key) - 1))
+        base = [coords3[v] for v in key if v in coords3]
+        if base:
+            arr = np.asarray(base, dtype=float)
+            bary = arr.mean(axis=0)
+        else:
+            # Invalid/truncated simplex: expose missing-coordinate issue in hover instead of fabricating vertices.
+            bary = np.asarray([0.5, 0.5, 0.5], dtype=float)
+        filt = float(row.get("filtration", 0.0) or 0.0)
+        f_unit = (filt - f_min) / f_span
+        positions[key] = (
+            float(bary[0]),
+            float(bary[1] + 0.105 * dim),
+            float(bary[2] + 0.155 * dim + 0.075 * f_unit),
+        )
+    if vertex_labels:
+        center = np.asarray([coords3[v] for v in vertex_labels if v in coords3], dtype=float).mean(axis=0)
+        positions[root_key] = (float(center[0]), float(center[1] - 0.18), float(center[2] - 0.18))
+    else:
+        positions[root_key] = (0.5, 0.32, 0.32)
+
+    def _edge_trace_data(edge_pairs: list[tuple[tuple[str, ...], tuple[str, ...], str]]) -> tuple[list[float | None], list[float | None], list[float | None], list[str | None]]:
+        ex: list[float | None] = []
+        ey: list[float | None] = []
+        ez: list[float | None] = []
+        eh: list[str | None] = []
+        for source, target, label in edge_pairs:
+            if source not in positions or target not in positions:
+                continue
+            ax, ay, az = positions[source]
+            bx, by, bz = positions[target]
+            ex.extend([ax, bx, None])
+            ey.extend([ay, by, None])
+            ez.extend([az, bz, None])
+            eh.extend([label, label, None])
+        return ex, ey, ez, eh
+
+    hasse_pairs: list[tuple[tuple[str, ...], tuple[str, ...], str]] = []
+    for key, row in simplex_rows.items():
+        dim = int(row.get("dimension", len(key) - 1))
+        if len(key) == 1:
+            hasse_pairs.append(
+                (
+                    root_key,
+                    key,
+                    f"<b>empty-simplex cover</b><br>vertex={html.escape(_simplex_key(key))}"
+                    f"<br>filtration={float(row.get('filtration', 0.0) or 0.0):.6g}",
+                )
+            )
             continue
         for face in combinations(key, len(key) - 1):
             face_key = tuple(sorted(face))
             if face_key not in positions:
                 continue
-            ax, ay, az = positions[face_key]
-            bx, by, bz = positions[key]
-            label = (
-                f"<b>simplex-tree inclusion</b><br>"
-                f"face={html.escape(_simplex_key(face_key))}<br>"
-                f"coface={html.escape(_simplex_key(key))}<br>"
-                f"coface filtration={float(row.get('filtration', 0.0) or 0.0):.6g}"
+            hasse_pairs.append(
+                (
+                    face_key,
+                    key,
+                    f"<b>actual face-to-coface cover</b>"
+                    f"<br>face={html.escape(_simplex_key(face_key))}"
+                    f"<br>coface={html.escape(_simplex_key(key))}"
+                    f"<br>coface dimension={dim}"
+                    f"<br>coface filtration={float(row.get('filtration', 0.0) or 0.0):.6g}",
+                )
             )
-            edge_x.extend([ax, bx, None])
-            edge_y.extend([ay, by, None])
-            edge_z.extend([az, bz, None])
-            edge_hover.extend([label, label, None])
-    node_keys = list(simplex_rows)
+    hasse_x, hasse_y, hasse_z, hasse_hover = _edge_trace_data(hasse_pairs)
+
+    prefix_pairs: list[tuple[tuple[str, ...], tuple[str, ...], str]] = []
+    for key, row in simplex_rows.items():
+        if len(key) <= 1:
+            parent = root_key
+        else:
+            parent = tuple(key[:-1])
+            if parent not in positions:
+                parent = root_key
+        prefix_pairs.append(
+            (
+                parent,
+                key,
+                f"<b>SimplexTree trie prefix link</b><br>parent={html.escape(_simplex_key(parent) if parent else '{}')}"
+                f"<br>child={html.escape(_simplex_key(key))}"
+                f"<br>child filtration={float(row.get('filtration', 0.0) or 0.0):.6g}",
+            )
+        )
+    prefix_x, prefix_y, prefix_z, prefix_hover = _edge_trace_data(prefix_pairs)
+
+    node_keys = sorted(simplex_rows, key=lambda key: (len(key), float(simplex_rows[key].get("filtration", 0.0) or 0.0), _simplex_key(key)))
     node_x = [positions[key][0] for key in node_keys]
     node_y = [positions[key][1] for key in node_keys]
     node_z = [positions[key][2] for key in node_keys]
     node_dim = [int(simplex_rows[key].get("dimension", len(key) - 1)) for key in node_keys]
-    node_hover = []
+    node_filtration = [float(simplex_rows[key].get("filtration", 0.0) or 0.0) for key in node_keys]
+    node_hover: list[str] = []
     for key in node_keys:
         row = simplex_rows[key]
+        faces = []
+        if len(key) > 1:
+            faces = [_simplex_key(tuple(sorted(face))) for face in combinations(key, len(key) - 1)]
         node_hover.append(
             f"<b>{html.escape(_simplex_key(key))}</b>"
             f"<br>dimension={int(row.get('dimension', len(key) - 1))}"
             f"<br>filtration={float(row.get('filtration', 0.0) or 0.0):.6g}"
+            f"<br>poset covers from faces={html.escape(', '.join(faces[:6])) if faces else '{}'}"
             f"<br>type={html.escape(str(row.get('type', 'simplex')))}"
             f"<br>source={html.escape(str(row.get('filtration_source', 'gudhi.SimplexTree')))}"
             + (f"<br>embedding distance={float(row.get('embedding_distance')):.6g}" if isinstance(row.get("embedding_distance"), (int, float)) else "")
             + (f"<br>reasoning transition={bool(row.get('reasoning_transition'))}" if row.get("reasoning_transition") is not None else "")
             + (f"<br>{_vertex_readable_summary(row, include_output=True)}" if int(row.get("dimension", -1)) == 0 else "")
         )
+
     fig = go.Figure()
-    link_count = len(edge_x) // 3
     fig.add_trace(
         go.Scatter3d(
-            x=edge_x,
-            y=edge_y,
-            z=edge_z,
+            x=hasse_x,
+            y=hasse_y,
+            z=hasse_z,
             mode="lines",
-            line=dict(width=1.0, color="rgba(125,211,252,0.18)"),
-            hovertext=edge_hover,
+            line=dict(width=1.65, color="rgba(94,234,212,0.46)"),
+            hovertext=hasse_hover,
             hoverinfo="text",
-            name=f"face-to-coface links ({link_count})",
-            visible="legendonly" if link_count > 360 else True,
+            name=f"actual face-to-coface covers ({len(hasse_pairs)})",
+        )
+    )
+    if prefix_pairs:
+        fig.add_trace(
+            go.Scatter3d(
+                x=prefix_x,
+                y=prefix_y,
+                z=prefix_z,
+                mode="lines",
+                line=dict(width=1.0, color="rgba(251,191,36,0.20)", dash="dot"),
+                hovertext=prefix_hover,
+                hoverinfo="text",
+                name=f"optional sorted-label trie prefix links ({len(prefix_pairs)})",
+                visible="legendonly",
+            )
+        )
+    fig.add_trace(
+        go.Scatter3d(
+            x=[positions[root_key][0]],
+            y=[positions[root_key][1]],
+            z=[positions[root_key][2]],
+            mode="markers+text",
+            marker=dict(size=10, color="#f472b6", line=dict(color="#fff7ed", width=1.1), opacity=0.78),
+            text=["empty"],
+            textposition="top center",
+            hovertext=["<b>empty simplex</b><br>mathematical root of the simplex tree; covers every 0-simplex"],
+            hoverinfo="text",
+            name="empty simplex",
         )
     )
     fig.add_trace(
@@ -1795,13 +2137,15 @@ def _write_simplex_tree_3d_map(path: Path, obj: dict[str, object], title: str, s
             z=node_z,
             mode="markers",
             marker=dict(
-                size=[9 if dim == 0 else 7 if dim == 1 else 5 for dim in node_dim],
+                size=[10 if dim == 0 else 7 if dim == 1 else 5 for dim in node_dim],
                 color=node_dim,
                 colorscale=[[0, "#5eead4"], [0.5, "#60a5fa"], [1.0, "#facc15"]],
                 showscale=True,
                 colorbar=dict(title="dim", x=1.04, y=0.74, len=0.42, thickness=14),
-                line=dict(color="#e8eef8", width=0.8),
+                line=dict(color="#e8eef8", width=0.75),
+                opacity=0.92,
             ),
+            customdata=np.asarray(node_filtration, dtype=float),
             hovertext=node_hover,
             hoverinfo="text",
             name="simplices",
@@ -1814,24 +2158,22 @@ def _write_simplex_tree_3d_map(path: Path, obj: dict[str, object], title: str, s
         title=(
             f"{title}<br><sup>{html.escape(subtitle)} | backend={html.escape(str(tree.get('backend', 'json')))} "
             f"| displayed={len(node_keys)}/{int(tree.get('num_simplices', len(simplex_rows)) or len(simplex_rows))} "
-            f"| face-coface poset view, not a literal trie layout "
+            f"| layout=model-embedding barycentric face/coface poset; {html.escape(layout_report)} "
             f"| V={summary.get('num_vertices', 0)}, E={summary.get('num_edges', 0)}, T={summary.get('num_two_simplices', 0)}"
             + (" | truncated for browser performance" if truncated else "")
             + "</sup>"
         ),
         scene=dict(
-            xaxis_title="filtration value",
-            yaxis_title="simplex dimension",
-            zaxis_title="face-coface ordering coordinate",
-            aspectmode="manual",
-            aspectratio=dict(x=1.45, y=0.75, z=1.0),
-            camera=dict(eye=dict(x=1.45, y=-1.75, z=1.15)),
+            xaxis_title="embedding barycenter PC/MDS-1",
+            yaxis_title="embedding barycenter PC/MDS-2 + dimension lift",
+            zaxis_title="embedding barycenter PC/MDS-3 + filtration/dim lift",
+            aspectmode="cube",
+            camera=dict(eye=dict(x=1.62, y=-1.7, z=1.24)),
         ),
-        legend=dict(orientation="h", x=0.02, y=1.03, xanchor="left", yanchor="bottom", font=dict(size=10)),
-        margin=dict(t=118, l=0, r=96, b=24),
+        legend=dict(orientation="v", x=0.01, y=0.91, xanchor="left", yanchor="top", font=dict(size=10), bgcolor="rgba(2,6,23,0.72)", bordercolor="rgba(125,211,252,0.22)", borderwidth=1),
+        margin=dict(t=176, l=0, r=112, b=28),
     )
     _write_plotly_dark_html(path, fig, title)
-
 
 def _simplex_key(simplex: object) -> str:
     if isinstance(simplex, tuple):
@@ -1979,7 +2321,13 @@ def _complex_slider_traces(
             continue
         source = str(overlay_edge.get("source", ""))
         target = str(overlay_edge.get("target", ""))
-        if source not in coords3 or target not in coords3:
+        if source not in coords3 or target not in coords3 or source not in visible or target not in visible:
+            continue
+        try:
+            overlay_filtration = float(overlay_edge.get("filtration", overlay_edge.get("radius", 0.0)) or 0.0)
+        except (TypeError, ValueError):
+            overlay_filtration = 0.0
+        if _is_radius_filtration_complex(obj) and overlay_filtration > threshold + 1e-12:
             continue
         sx, sy, sz = coords3[source]
         tx, ty, tz = coords3[target]
@@ -3214,28 +3562,83 @@ def write_two_parameter_bifiltration_visualization(
         rows=3,
         cols=2,
         specs=[
-            [{"type": "scene"}, {"type": "xy"}],
+            [{"type": "scene", "rowspan": 1}, {"type": "xy"}],
             [{"type": "table"}, {"type": "table"}],
             [{"type": "table"}, {"type": "table"}],
         ],
         subplot_titles=(
-            "2-parameter module fibers on the (level, radius) lattice",
-            "Miller-Sturmfels staircase / monomial generator diagram",
-            "Multigraded chain-rank table (not a resolution)",
-            "Free chain modules over S = F2[x_level,x_radius]",
-            "Differential matrices d_i: F_i -> F_{i-1}",
-            "Certificates, Fitting/Buchsbaum-Eisenbud diagnostics",
+            "F2[x_level,x_radius] fiber ranks",
+            "Staircase diagnostics",
+            "Chain ranks (not a resolution)",
+            "Free chain modules over S",
+            "Differentials d_i",
+            "CAS certificates / Fitting / BE diagnostics",
         ),
-        horizontal_spacing=0.08,
-        vertical_spacing=0.12,
+        row_heights=[0.48, 0.25, 0.27],
+        horizontal_spacing=0.12,
+        vertical_spacing=0.14,
     )
 
+    rank_note = "no nonempty fiber rows"
     if rows:
-        levels = sorted({int(r.get("level", 0) or 0) for r in rows})
-        radius_grades = sorted({int(r.get("radius_grade", r.get("radius", 0)) or 0) for r in rows})
-        beta0_lookup = {(int(r.get("level", 0) or 0), int(r.get("radius_grade", r.get("radius", 0)) or 0)): int(r.get("beta", {}).get("0", r.get("beta", {}).get(0, 0)) or 0) for r in rows if isinstance(r.get("beta", {}), Mapping)}
-        beta1_lookup = {(int(r.get("level", 0) or 0), int(r.get("radius_grade", r.get("radius", 0)) or 0)): int(r.get("beta", {}).get("1", r.get("beta", {}).get(1, 0)) or 0) for r in rows if isinstance(r.get("beta", {}), Mapping)}
-        for label, lookup, color in (("H0 fiber rank", beta0_lookup, "#4fe3d3"), ("H1 fiber rank", beta1_lookup, "#78a7ff")):
+        def _fiber_grade(row: Mapping[str, Any]) -> tuple[int, int]:
+            grade = row.get("grade")
+            if isinstance(grade, Sequence) and not isinstance(grade, (str, bytes)) and len(grade) >= 2:
+                return int(grade[0] or 0), int(grade[1] or 0)
+            return int(row.get("level", 0) or 0), int(row.get("radius_grade", row.get("radius", 0)) or 0)
+
+        def _fiber_beta(row: Mapping[str, Any], dim: int) -> int:
+            beta = row.get("betti", row.get("beta", {}))
+            if isinstance(beta, Mapping):
+                return int(beta.get(str(dim), beta.get(dim, 0)) or 0)
+            return 0
+
+        levels = sorted({_fiber_grade(r)[0] for r in rows if isinstance(r, Mapping)})
+        radius_grades = sorted({_fiber_grade(r)[1] for r in rows if isinstance(r, Mapping)})
+        beta0_lookup = {_fiber_grade(r): _fiber_beta(r, 0) for r in rows if isinstance(r, Mapping)}
+        beta1_lookup = {_fiber_grade(r): _fiber_beta(r, 1) for r in rows if isinstance(r, Mapping)}
+        level_grid, radius_grid = np.meshgrid(np.asarray(levels, dtype=float), np.asarray(radius_grades, dtype=float), indexing="ij")
+        z0 = np.asarray([[float(beta0_lookup.get((lvl, rg), 0)) for rg in radius_grades] for lvl in levels], dtype=float)
+        z1 = np.asarray([[float(beta1_lookup.get((lvl, rg), 0)) for rg in radius_grades] for lvl in levels], dtype=float)
+        if z0.size:
+            rank_note = (
+                f"grid={len(levels)} x-levels x {len(radius_grades)} radius grades; "
+                f"H0 range {float(np.nanmin(z0)):.0f}-{float(np.nanmax(z0)):.0f}; "
+                f"H1 range {float(np.nanmin(z1)):.0f}-{float(np.nanmax(z1)):.0f}"
+            )
+            fig.add_trace(
+                go.Surface(
+                    x=level_grid,
+                    y=radius_grid,
+                    z=z0,
+                    surfacecolor=z0,
+                    colorscale=[[0.0, "#06233f"], [0.45, "#22d3ee"], [1.0, "#fef08a"]],
+                    opacity=0.76,
+                    showscale=True,
+                    colorbar=dict(title="H0 fiber rank", x=0.455, y=0.805, len=0.22, thickness=10),
+                    name="H0 fiber-rank surface",
+                    hovertemplate="x_level=%{x}<br>x_radius=%{y}<br>beta_0=%{z}<extra></extra>",
+                ),
+                row=1,
+                col=1,
+            )
+        if np.max(z1) > 0:
+            fig.add_trace(
+                go.Surface(
+                    x=level_grid,
+                    y=radius_grid,
+                    z=z1,
+                    surfacecolor=z1,
+                    colorscale=[[0.0, "#1e1b4b"], [0.55, "#818cf8"], [1.0, "#f9a8d4"]],
+                    opacity=0.52,
+                    showscale=False,
+                    name="H1 fiber-rank surface",
+                    hovertemplate="x_level=%{x}<br>x_radius=%{y}<br>beta_1=%{z}<extra></extra>",
+                ),
+                row=1,
+                col=1,
+            )
+        for label, lookup, color in (("H0 fiber-rank lattice samples", beta0_lookup, "#4fe3d3"), ("H1 fiber-rank lattice samples", beta1_lookup, "#78a7ff")):
             xs: List[int] = []
             ys: List[int] = []
             zs: List[int] = []
@@ -3253,10 +3656,10 @@ def write_two_parameter_bifiltration_visualization(
                     x=xs,
                     y=ys,
                     z=zs,
-                    mode="markers+lines",
+                    mode="markers",
                     name=label,
-                    marker=dict(size=4, color=color, opacity=0.92),
-                    line=dict(color=color, width=4),
+                    marker=dict(size=3.8, color=color, opacity=0.95),
+                    line=dict(color=color, width=2),
                     text=hover,
                     hovertemplate="%{text}<extra></extra>",
                 ),
@@ -3339,6 +3742,24 @@ def write_two_parameter_bifiltration_visualization(
             col=2,
         )
 
+    fig.add_annotation(
+        text=(
+            f"<b>Computed bifiltration:</b> {html.escape(rank_note)}<br>"
+            "Lattice points are H_i(K_(level,radius)); gold edges are structure maps.<br>"
+            "Tables are diagnostics unless CAS marks a certified free resolution."
+        ),
+        xref="paper",
+        yref="paper",
+        x=0.015,
+        y=1.04,
+        showarrow=False,
+        align="left",
+        font=dict(size=12, color="#c9f7ff"),
+        bgcolor="rgba(5,9,20,0.88)",
+        bordercolor="rgba(94,234,212,0.38)",
+        borderwidth=1,
+    )
+
     headers, columns = _m2_betti_columns(m2)
     fig.add_trace(_table_trace(headers, columns), row=2, col=1)
     headers, columns = _m2_free_module_columns(m2)
@@ -3355,21 +3776,36 @@ def write_two_parameter_bifiltration_visualization(
     fig.update_layout(
         template="plotly_dark",
         title=dict(
-            text=f"{html.escape(title, quote=False)}<br><sup>{html.escape(subtitle, quote=False)}</sup>",
+            text="2-parameter F2[x_level,x_radius] persistence module<br><sup>Actual grid fibers, structure maps, and certificate-gated algebra diagnostics.</sup>",
             x=0.02,
+            font=dict(size=20),
         ),
-        height=1260,
-        margin=dict(l=52, r=42, t=132, b=62),
-        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="left", x=0.0),
+        height=1620,
+        margin=dict(l=82, r=230, t=240, b=92),
+        legend=dict(
+            orientation="v",
+            yanchor="top",
+            y=0.99,
+            xanchor="left",
+            x=1.015,
+            font=dict(size=10),
+            bgcolor="rgba(5,9,20,0.72)",
+            bordercolor="rgba(148,163,184,0.22)",
+            borderwidth=1,
+        ),
     )
+    fig.update_annotations(font_size=12, align="left")
     fig.update_scenes(
         xaxis_title="x_level grade",
         yaxis_title="x_radius grade",
-        zaxis_title="module fiber rank",
+        zaxis_title="fiber rank beta_i",
         bgcolor="#050914",
-        xaxis=dict(gridcolor="#315c86"),
-        yaxis=dict(gridcolor="#315c86"),
-        zaxis=dict(gridcolor="#315c86"),
+        aspectmode="manual",
+        aspectratio=dict(x=1.15, y=1.0, z=0.55),
+        camera=dict(eye=dict(x=1.55, y=-1.72, z=1.08)),
+        xaxis=dict(gridcolor="#315c86", zerolinecolor="#6ee7f9"),
+        yaxis=dict(gridcolor="#315c86", zerolinecolor="#6ee7f9"),
+        zaxis=dict(gridcolor="#315c86", zerolinecolor="#6ee7f9"),
     )
     fig.update_xaxes(title_text="x_level", row=1, col=2, gridcolor="#203d5e")
     fig.update_yaxes(title_text="x_radius", row=1, col=2, gridcolor="#203d5e")
@@ -6817,7 +7253,7 @@ def _action_color(action: str) -> str:
     return colors.get(action, "#94a3b8")
 
 
-def _write_plotly_dark_html(path: Path, fig: go.Figure, title: str, panel_items: list[dict[str, object]] | None = None, show_filtration_slider: bool = False) -> None:
+def _write_plotly_dark_html(path: Path, fig: go.Figure, title: str, panel_items: list[dict[str, object]] | None = None, show_filtration_slider: bool = False, show_selected_complex_panel: bool = False) -> None:
     existing_margin = fig.layout.margin.to_plotly_json() if fig.layout.margin else {}
     top_margin = max(int(existing_margin.get("t", 0) or 0), 78)
     fig.update_layout(
@@ -6853,13 +7289,18 @@ def _write_plotly_dark_html(path: Path, fig: go.Figure, title: str, panel_items:
         else ""
     )
     layout_class = "layout has-panel" if has_panel else "layout no-panel"
+    selected_complex_panel_html = (
+        '<div class="simplicial-object-plot" id="simplicial-plot" aria-label="interactive selected filtered simplicial complex"></div>'
+        if show_selected_complex_panel
+        else '<div class="panel-note">Hover or click a point in the main plot to inspect the exact filtered simplicial object payload. The duplicate secondary 3D complex panel is disabled on this page.</div>'
+    )
     panel_html = (
         f"""
     <aside class="panel" aria-live="polite">
       <h1 id="simplicial-title">{html.escape(initial["title"])}</h1>
       <div class="summary" id="simplicial-summary">{initial["summary"]}</div>
       {controls_html}
-      <div class="simplicial-object-plot" id="simplicial-plot" aria-label="interactive selected filtered simplicial complex"></div>
+      {selected_complex_panel_html}
       <details class="static-preview">
 	        <summary>Static SVG fallback preview from the same filtered-complex payload</summary>
 	        <div class="simplicial-object-panel" id="simplicial-svg">{initial["svg"]}</div>
@@ -6964,6 +7405,16 @@ def _write_plotly_dark_html(path: Path, fig: go.Figure, title: str, panel_items:
       box-shadow: inset 0 0 0 1px rgba(255,255,255,0.03), 0 18px 36px rgba(0,0,0,0.24);
     }}
     .simplicial-object-panel svg {{ width: 100%; height: auto; display: block; }}
+    .panel-note {{
+      border: 1px solid rgba(94, 234, 212, 0.20);
+      background: rgba(7, 10, 18, 0.64);
+      border-radius: 8px;
+      padding: 10px;
+      color: var(--muted);
+      font-size: 11px;
+      line-height: 1.45;
+      margin-bottom: 12px;
+    }}
     .simplicial-object-plot {{
       width: 100%;
       height: min(48vh, 460px);
