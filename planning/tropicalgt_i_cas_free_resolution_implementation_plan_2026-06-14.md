@@ -519,3 +519,20 @@ Next CAS item after this checkpoint:
 1. Provision or bridge Macaulay2 so the existing BEMultipliers package can be loaded against a known certified `ChainComplex`.
 2. Add a guarded Macaulay2 probe that records package source path, commit/hash, Macaulay2 version, package load status, and a small `koszul vars A` smoke result.
 3. Keep BE multiplier outputs in a separate `buchsbaum_eisenbud_diagnostics` block and refuse to set `real_free_resolution_certified`, `exactness_certified`, or `minimality_certified` from BEMultipliers alone.
+
+## Added CAS/Tropical Survey Targets
+
+1. Macaulay2 `Tropical`: use tropical cycles/fans for audited tropical geometry diagnostics: `tropicalVariety`, `BergmanFan`, `fan`, `rays`, `cones`, `maxCones`, `isBalanced`, `isPure`, `isSimplicial`, `stableIntersection`, and `isTropicalBasis`.
+2. Sage tropical varieties and tropical multivariate polynomials: use Newton-polytope and tropical-polynomial arithmetic to build exact model-derived tropicalization checks and toric embedding diagnostics.
+3. `1710.10651v2.pdf`: review before adding any training theorem or implementation hook tied to toric/tropical embeddings.
+4. Maclagan-style toric embeddings: investigate embedding the transformer graph-state/tropical-attention coordinate system into a toric variety using monomial coordinates, Newton polytopes, fan data, and one dimensional cones; distinguish certified constructions from visualization/probe diagnostics.
+
+_Last updated: 2026-06-14T15:27:54+00:00_
+
+## Real Implementations Only Policy
+
+No TropicalGT-I metric, loss, visualization, analogical map, persistence module, free resolution, derived comparison, tropical-cycle diagnostic, or CAS artifact should be presented as a mathematical object unless it is computed from the actual model outputs, graph states, embeddings, probabilities, simplex trees, bifiltrations, or certified CAS/backend output that define that object. Temporary placeholders, synthetic fallback objects, mock charts, fabricated simplices, and convenience stand-ins are not acceptable. When a requested object cannot yet be computed, the artifact must render an explicit unavailable/uncertified state and the training metric must either be disabled or logged under an audit-only unavailable flag. Finite chain-presentation diagnostics may be shown only as chain diagnostics, never as free resolutions. Total-graded or ungraded CAS output may be shown as real CAS output only under its actual grading; it must not be advertised as a multigraded `F2[x_level,x_radius]` free resolution unless the backend certifies that multigraded structure.
+
+Use "one dimensional cone" or "one dimensional cones" as the preferred fan-theoretic language whenever the intended object is a cone of a fan or a cone-indexed filtration datum. Use singular or plural according to ordinary grammar.
+
+_Last updated: 2026-06-14T15:34:45+00:00_
