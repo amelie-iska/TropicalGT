@@ -821,6 +821,21 @@ def _bivariate_staircase_resolution_from_points(
     hilbert_terms.extend({"sign": -1, "bidegree": row["bidegree"], "monomial": row["monomial"]} for row in generator_rows)
     hilbert_terms.extend({"sign": 1, "bidegree": row["lcm_bidegree"], "monomial": row["lcm_monomial"]} for row in syzygy_rows)
 
+    ambient_one_dimensional_cones = [
+        {
+            "name": f"rho_{variables[0]}",
+            "primitive_generator": [1, 0],
+            "variable": variables[0],
+            "monoid_generator": _multi_monomial_named((1, 0), variables),
+        },
+        {
+            "name": f"rho_{variables[1]}",
+            "primitive_generator": [0, 1],
+            "variable": variables[1],
+            "monoid_generator": _multi_monomial_named((0, 1), variables),
+        },
+    ]
+
     return {
         "available": True,
         "ideal_name": ideal_name,
@@ -831,6 +846,23 @@ def _bivariate_staircase_resolution_from_points(
         "object_resolved": f"S/{ideal_name}",
         "ideal_generators": generator_rows,
         "minimal_generators": generator_rows,
+        "toric_exponent_chart": {
+            "semigroup": "N^2",
+            "coordinate_ring": f"F2[{variables[0]},{variables[1]}]",
+            "ambient_one_dimensional_cones": ambient_one_dimensional_cones,
+            "staircase_corner_bidegrees": [row["bidegree"] for row in generator_rows],
+            "interpretation": (
+                "The bivariate monomial ideal is computed in the affine toric chart whose coordinate "
+                "semigroup is N^2. The coordinate axes are the ambient one dimensional cone(s); the "
+                "minimal generator bidegrees are staircase corners in this semigroup, and adjacent "
+                "least-common-multiple corners give the exact Hilbert-Burch syzygies."
+            ),
+        },
+        "one_dimensional_cone_language": {
+            "required_terminology": "one dimensional cone(s)",
+            "ambient_cone_count": len(ambient_one_dimensional_cones),
+            "applies_to": "the toric exponent chart of the two-variable polynomial ring, not an extra heuristic resolution",
+        },
         "adjacent_lcm_syzygies": syzygy_rows,
         "free_modules": free_modules,
         "betti_table_rows": betti_rows,
@@ -856,13 +888,14 @@ def _bivariate_staircase_resolution_from_points(
         "buchsbaum_eisenbud_diagnostics": {
             "minimality_certified": True,
             "exactness_certified": True,
-            "certificate": "two-variable monomial staircase resolution: adjacent lcm syzygies give the Hilbert-Burch/Miller-Sturmfels minimal resolution of S/I",
+            "certificate": "two-variable monomial staircase resolution: adjacent lcm syzygies in the affine toric exponent chart, with coordinate one dimensional cone(s), give the Hilbert-Burch/Miller-Sturmfels minimal resolution of S/I",
             "d1_d2_zero_over_F2": True,
             "grade_depth_requires_cas_for_general_determinantal_ideals": False,
         },
         "derived_category_note": (
             "This finite free complex is an actual object of D^b(gr-F2[x,y]) resolving the named quotient S/I. "
-            "Analogical derived comparisons may use this certificate only at the stated ideal scope."
+            "The toric exponent chart supplies the coordinate one dimensional cone(s) for the bidegree semigroup; "
+            "analogical derived comparisons may use this certificate only at the stated ideal scope."
         ),
     }
 

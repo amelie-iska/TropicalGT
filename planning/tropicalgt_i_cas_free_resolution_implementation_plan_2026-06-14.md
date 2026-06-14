@@ -581,3 +581,11 @@ Sequential no-proxy item completed after the CAS generator-boundary fix:
 - Updated diagnostics, training metric emission, visualization metric priority lists, and tests to use the clean names.
 - Kept the provenance scanner able to detect stale retired labels, but active training/eval metric outputs no longer emit those proxy-named fields.
 - Validation: `PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_algebraic_persistence.py TropicalGT-I/tests/test_metric_provenance.py TropicalGT-I/tests/test_losses_and_model.py TropicalGT-I/tests/test_training_metrics.py -q` returned `30 passed`.
+
+## 2026-06-14 Cleanup And Exact Bivariate Toric Certificate
+- Cleaned generated artifacts without touching source, data, secrets, or the active b55_v11 training run: stale outputs/smoke runs/checkpoints/local W&B runs removed; latest audit payload JSONs compressed and catalog links rewritten.
+- Current generated footprint after cleanup: `TropicalGT-I/outputs` 784MB, `TropicalGT-I/checkpoints` 4KB, local `wandb` 4.4MB, no generated files over 100MB.
+- Tightened the exact bivariate monomial staircase certificate: the scoped real resolution now records the affine toric exponent chart `Spec F2[x_level,x_radius]`, the semigroup `N^2`, and the coordinate one dimensional cone(s) that generate the chart.
+- The certificate remains deliberately scoped: it is a real Hilbert-Burch/Miller-Sturmfels minimal free resolution for the named two-variable staircase monomial ideal, not a fake full persistence-module free resolution.
+- Regression coverage: `PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_algebraic_persistence.py -q` passed with `9 passed`.
+

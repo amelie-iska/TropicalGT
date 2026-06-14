@@ -218,6 +218,13 @@ def test_level_radius_bifiltration_reports_scoped_real_staircase_resolution():
     assert minimal["scope"] == "auxiliary_two_variable_staircase_monomial_ideal"
     resolution = minimal["resolution"]
     assert resolution["ring"] == "F2[x_level,x_radius]"
+    assert resolution["toric_exponent_chart"]["semigroup"] == "N^2"
+    assert resolution["toric_exponent_chart"]["ambient_one_dimensional_cones"] == [
+        {"name": "rho_x_level", "primitive_generator": [1, 0], "variable": "x_level", "monoid_generator": "x_level"},
+        {"name": "rho_x_radius", "primitive_generator": [0, 1], "variable": "x_radius", "monoid_generator": "x_radius"},
+    ]
+    assert "one dimensional cone(s)" in resolution["toric_exponent_chart"]["interpretation"]
+    assert resolution["one_dimensional_cone_language"]["required_terminology"] == "one dimensional cone(s)"
     assert [row["display"] for row in resolution["free_modules"]] == [
         "F_0 = S",
         "F_1 = S(-2,1) + S(-1,2)",
@@ -232,7 +239,9 @@ def test_level_radius_bifiltration_reports_scoped_real_staircase_resolution():
         {"row": 1, "column": 0, "entry": "x_level", "exponent": [1, 0]},
     ]
     assert resolution["buchsbaum_eisenbud_diagnostics"]["exactness_certified"] is True
+    assert "one dimensional cone(s)" in resolution["buchsbaum_eisenbud_diagnostics"]["certificate"]
     assert "D^b(gr-F2[x,y])" in resolution["derived_category_note"]
+    assert "one dimensional cone(s)" in resolution["derived_category_note"]
 
 
 
