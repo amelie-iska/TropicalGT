@@ -9,12 +9,14 @@ This note reviews the two local references for the TropicalGT-I paper sidecar:
 
 The review uses the full `pdftotext -layout` extractions of both PDFs. The goal is to identify theorem-level material that can be transferred into TropicalGT-I without overstating what the neural model actually constructs.
 
+**Terminology: one dimension cone.** Following the fan language in tropical toric geometry, each one-dimensional cone of a fan is called a one dimension cone in these notes. The implementation notes therefore use one dimension cone filtrations, one dimension cone pairings, and one dimension cone probes for the objects that index Klyachko-style and Khan-Maclagan-style filtrations.
+
 ## Khan-Maclagan: Tropical Vector Bundles
 
 ### Core Definitions
 
-- A tropical toric reflexive sheaf on `trop(X_Sigma)` consists of a simple valuated matroid `M` of rank `r` on a ground set `G`, plus for each ray `rho_i` a decreasing family of flats `E^i(j)` of the underlying matroid. The filtrations are eventually `G` for low thresholds and empty for high thresholds.
-- A tropical toric vector bundle is a reflexive sheaf satisfying a Klyachko-style compatibility condition: for every maximal cone `sigma`, there is a multiset of characters and a matroid basis `B_sigma={w_u}` such that each ray filtration is recovered as the join of basis atoms whose ray pairing exceeds the threshold.
+- A tropical toric reflexive sheaf on `trop(X_Sigma)` consists of a simple valuated matroid `M` of rank `r` on a ground set `G`, plus for each one dimension cone `rho_i` a decreasing family of flats `E^i(j)` of the underlying matroid. The filtrations are eventually `G` for low thresholds and empty for high thresholds.
+- A tropical toric vector bundle is a reflexive sheaf satisfying a Klyachko-style compatibility condition: for every maximal cone `sigma`, there is a multiset of characters and a matroid basis `B_sigma={w_u}` such that each one dimension cone filtration is recovered as the join of basis atoms whose one dimension cone pairing exceeds the threshold.
 - The Cox-module construction presents a toric vector bundle as a graded module over the Cox ring; tropicalization uses bend congruences and produces Cox semimodule analogues.
 - Fibers of the tropical total space are tropical linear spaces associated to shifted valuated-matroid circuits.
 - Realizability is a genuine restriction: a tropical toric vector bundle may fail to come from a classical toric vector bundle either because the valuated matroid is not realizable or because the flat filtrations cannot come from vector-space filtrations.
@@ -30,7 +32,7 @@ The review uses the full `pdftotext -layout` extractions of both PDFs. The goal 
 ### Transfer to TropicalGT-I
 
 - Use valuated-matroid atoms for feature supports: graph-token support, GraphCG directions, persistence bins, and memory-landscape availability can be finite atoms.
-- Use ray filtrations as chart-local thresholded probes: endpoint incidence, tropical support margin, active GraphCG rays, persistence-bin activity, and memory-availability flags become ray-like scores.
+- Use one dimension cone filtrations as chart-local thresholded probes: endpoint incidence, tropical support margin, active GraphCG one dimension cone probes, persistence-bin activity, and memory-availability flags become one dimension cone-like scores.
 - Use basis-generated flat reconstruction as a regularizer: `bundle/flat_rank_defect` measures how close predicted chart filtrations are to basis-generated joins.
 - Use line-bundle shift intuition for transport shifts: monomial transports should contain both a permutation and tropical additive shifts.
 - Use stability language only as an audit heuristic unless the implementation verifies the needed modularity hypotheses.
@@ -63,9 +65,9 @@ The review uses the full `pdftotext -layout` extractions of both PDFs. The goal 
 ### Objects
 
 - TokenGT tropical atlas: charts over graph-token subsets, active tropical attention support cells, graph-of-thought states, GraphCG neighborhoods, persistence bins, and analogical-memory packets.
-- Bundle atoms: finite feature atoms representing graph-token support, ray probes, GraphCG directions, persistence summaries, and real GUDHI landscape vectors.
+- Bundle atoms: finite feature atoms representing graph-token support, one dimension cone probes, GraphCG directions, persistence summaries, and real GUDHI landscape vectors.
 - Monomial transport: a sparse permutation plus tropical shift between overlapping charts.
-- Ray filtration: a decreasing family of matroid flats induced by thresholding graph-token or direction probes.
+- One dimension cone filtration: a decreasing family of matroid flats induced by thresholding graph-token or direction probes.
 - Toric embedding: a small integer max-linear feature map whose active rows identify local normal-fan-like cells.
 
 ### Losses and Metrics
@@ -89,4 +91,4 @@ The review uses the full `pdftotext -layout` extractions of both PDFs. The goal 
 
 ## Implementation Handoff
 
-The paper-sidecar implementation should add zero-default auxiliary losses and read-only audit artifacts first. Promotion requires no regression in validation BPB, graph-BPB, certificate loss, or tropical wall-hit rate. Required code-level hooks include chart ids, overlap triples, monomial transport heads, toric active rows, ray-filtration flat defects, GraphCG-toric agreement, persistence-landscape availability masks, and browser labels distinguishing `lambda_k(t)` from NLL/fitness/density fields.
+The paper-sidecar implementation should add zero-default auxiliary losses and read-only audit artifacts first. Promotion requires no regression in validation BPB, graph-BPB, certificate loss, or tropical wall-hit rate. Required code-level hooks include chart ids, overlap triples, monomial transport heads, toric active rows, one dimension cone-filtration flat defects, GraphCG-toric agreement, persistence-landscape availability masks, and browser labels distinguishing `lambda_k(t)` from NLL/fitness/density fields.

@@ -3411,7 +3411,7 @@ def _m2_selected_staircase_resolution(m2: Mapping[str, Any]) -> Dict[str, Any]:
 
 def _m2_betti_columns(m2: Mapping[str, Any]) -> Tuple[List[str], List[List[str]]]:
     resolution = _m2_selected_staircase_resolution(m2)
-    rows = list((resolution.get("betti_table_rows") if resolution else m2.get("betti_table_rows", [])) or [])
+    rows = list((resolution.get("betti_table_rows") if resolution else []) or [])
     degrees = sorted({int(r.get("homological_degree", 0) or 0) for r in rows}) or [0]
     def _shift_display(row: Mapping[str, Any]) -> str:
         if row.get("shift_display") is not None:
@@ -3433,7 +3433,7 @@ def _m2_betti_columns(m2: Mapping[str, Any]) -> Tuple[List[str], List[List[str]]
 
 def _m2_free_module_columns(m2: Mapping[str, Any]) -> Tuple[List[str], List[List[str]]]:
     resolution = _m2_selected_staircase_resolution(m2)
-    modules = list((resolution.get("free_modules") if resolution else m2.get("free_modules", [])) or [])
+    modules = list((resolution.get("free_modules") if resolution else []) or [])
 
     def _module_order(item: Mapping[str, Any]) -> int:
         name = str(item.get("name", item.get("module", "F_0")))
@@ -3446,7 +3446,7 @@ def _m2_free_module_columns(m2: Mapping[str, Any]) -> Tuple[List[str], List[List
 
     modules = sorted([m for m in modules if isinstance(m, Mapping)], key=_module_order)
     if not modules:
-        return ["module", "rank", "display"], [["unavailable"], ["0"], ["no computed free-chain presentation"]]
+        return ["module", "rank", "display"], [["unavailable"], ["0"], ["no certified/scoped real free resolution; chain presentation intentionally not rendered as a resolution"]]
     display_label = "scoped monomial-ideal resolution display" if resolution else "chain-module display"
     return (
         ["module", "rank", display_label],
@@ -3460,9 +3460,9 @@ def _m2_free_module_columns(m2: Mapping[str, Any]) -> Tuple[List[str], List[List
 
 def _m2_differential_columns(m2: Mapping[str, Any], max_rows: int = 18) -> Tuple[List[str], List[List[str]]]:
     resolution = _m2_selected_staircase_resolution(m2)
-    differentials = list((resolution.get("differentials") if resolution else m2.get("differentials", [])) or [])[:max_rows]
+    differentials = list((resolution.get("differentials") if resolution else []) or [])[:max_rows]
     if not differentials:
-        return ["map", "shape", "rank", "matrix preview"], [["unavailable"], [""], [""], ["no differential matrices computed"]]
+        return ["map", "shape", "rank", "matrix preview"], [["unavailable"], [""], [""], ["no certified/scoped real resolution differentials; chain boundary matrices intentionally not rendered as resolution maps"]]
     maps: List[str] = []
     shapes: List[str] = []
     ranks: List[str] = []

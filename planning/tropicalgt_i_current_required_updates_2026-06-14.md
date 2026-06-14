@@ -4,10 +4,12 @@ This checklist merges the browser/photo review, the current active training stat
 
 ## 1. Active Training and BPB Priority
 
-- Keep `tropicalgt_i_pg_bpb_step0_full24b_b56_v7_bpb_restart` alive unless the user or the 5K-step review policy explicitly triggers another restart. Current tracked PID: `2084595`; W&B run id observed at launch: `3hm332al`; the run is configured for >10B token slots and is using the RTX 4090 with BPB/graph-BPB as promotion gates.
+- Keep `tropicalgt_i_pg_bpb_step0_full24b_b54_v10_bpb_5k_gate` alive until at least step 5K unless it crashes or produces nonfinite/invalid losses. Current tracked PID at launch: `2154851`; W&B run id at launch: `nw0bo45u`; run URL: `https://wandb.ai/amelie-iska-math/TropicalGT-I/runs/nw0bo45u`. The run is configured for >10B token slots, batch 54, BPB target `<1.12` by 5K, meet-in-the-middle decoding, causal forward/reverse decoding for DAGs, ROAR for cyclic/noncausal graphs, and low-weight BPB-gated advanced objectives.
+- Do not restart before 5K merely because early metrics are noisy. Review at 5K, then restart/resume only if BPB and diagnostics justify a new hyperparameter setting.
 - Preserve BPB and graph-BPB as primary optimization and promotion gates.
-- Use advanced auxiliaries only when they are zero-default, BPB-gated, and ablated: tropical support, GFlowNet GoT rewards, GraphCG, persistence/landscape diagnostics, chart-bundle transports, toric active-cell agreement, and memory retrieval.
-- Track step, VRAM, wall time, train/eval NLL, BPB, graph-BPB, certificate loss, tropical wall-hit rate, support entropy, GraphCG rank, and artifact-generation status.
+- Use advanced auxiliaries only when they are zero-default or BPB-gated and ablated: tropical support, GFlowNet GoT rewards, GraphCG, persistence/landscape diagnostics, chart-bundle transports, tropical toric active-cell agreement, and memory retrieval.
+- Track step, VRAM, wall time, train/eval NLL, BPB, graph-BPB, certificate loss, tropical wall-hit rate, support entropy, GraphCG rank, meet-in-the-middle agreement, ROAR/causal decoding path mix, and artifact-generation status.
+- After this v10 restart, the main implementation focus is CAS integration and utilization only until real free-resolution and derived-map reporting are wired, tested, and rendered.
 
 ## 2. Browser QA and Visual Evidence
 
@@ -107,14 +109,31 @@ This checklist merges the browser/photo review, the current active training stat
 ### Paper Workstream Status: Vector Bundles and Tropical Toric Embeddings
 
 - Subagent Avicenna reviewed `references/2405.03505v1.pdf` and `references/2009.03030v2.pdf` in full from extracted text and updated `TropicalGT-I/assets/tropicalgt_neurips_research_paper.tex`.
-- The new paper material introduces TropicalGT chart bundles, TokenGT tropical atlases, monomial tropical chart transports, ray-filtration atomization, tropical toric embeddings, matroid flat-defect objectives, GraphCG-toric agreement, chart-BPB consistency, and transported persistence-landscape memory metrics.
+- The new paper material introduces TropicalGT chart bundles, TokenGT tropical atlases, monomial tropical chart transports, one dimension cone-filtration atomization, tropical toric embeddings, matroid flat-defect objectives, GraphCG-toric agreement, chart-BPB consistency, and transported persistence-landscape memory metrics.
 - Implementation planning is in `planning/tropicalgt_i_vector_bundle_toric_embedding_training_plan.md`; the key rule is zero-default auxiliary coefficients with telemetry-only and active-loss ablations before any BPB promotion.
 - Remote LaTeX compilation remains blocked by missing `latexmk`, `pdflatex`, and `tectonic`; the current lightweight TeX environment-balance check passed.
 
 ## 15. Tests, Docs, and Paper
 
-- Add tests for zero-coefficient no-op logits, unavailable landscape masking, monomial projection one-hotness, cocycle identity, decreasing ray filtrations, finite atom-stability diagnostics, real-only free-resolution reporting, bifiltration availability, and browser label separation.
+- Add tests for zero-coefficient no-op logits, unavailable landscape masking, monomial projection one-hotness, cocycle identity, decreasing one dimension cone filtrations, finite atom-stability diagnostics, real-only free-resolution reporting, bifiltration availability, and browser label separation.
 - Update README with current training, eval, visualization, inference, W&B, and artifact commands.
 - Remove AI-generated filler language from `references/main.pdf` source and the TropicalGT-I paper source.
 - Recompile papers when a LaTeX engine is available.
 - Push only to non-main branch `tropicalgt-i-implementation`, excluding secrets, datasets, W&B runs, caches, checkpoints, and bulky artifacts.
+
+## 2026-06-14 v9 5K-Gated Restart Addendum
+
+- Deleted old post-v4 output runs and W&B local run directories, preserving `tropicalgt_i_pg_bpb_step0_full24b_b52_v4_bpb_restart` as the requested baseline lineage.
+- Removed old post-v4 restart configs and created `TropicalGT-I/configs/train_full_dataset_pg_bpb_step0_full24b_b54_v9_bpb_5k_gate.json` as the fresh run config.
+- v9 uses batch 54, learning rate `1.9e-4`, weight decay `0.022`, low-weight tropical/GFlowNet/GraphCG/certificate auxiliaries, memory quality threshold `0.05`, top-k memory retrieval `12`, and periodic real topology audits every 250 steps.
+- v9 restart policy: keep the run alive until step 5K unless the process crashes or emits nonfinite/invalid loss. The review gate at 5K should inspect BPB, graph-BPB, NLL, certificate loss, tropical wall/near-wall rates, GraphCG rank, GFlowNet reward, memory quality, meet-in-the-middle agreement, and artifact generation before any restart.
+- Current next-focus order: (1) CAS integration and real free-resolution reporting, (2) derived/analogical map consistency using probability-vector complexes and real resolution evidence, (3) browser rendering of CAS-certified Betti tables, differential matrices, Fitting ideals, minors, Buchsbaum-Eisenbud diagnostics, and derived-category notes.
+
+## 2026-06-14 v10 Training and CAS-Guard Addendum
+
+- v9 (`tropicalgt_i_pg_bpb_step0_full24b_b54_v9_bpb_5k_gate`, W&B `h4emzqgh`) reached the first periodic audit boundary and then failed because the full reasoning audit required complete per-step `graph_token_trace_complete` payloads for all sampled reasoning states. The run artifacts and v9 config were removed as part of the requested post-v4 cleanup.
+- Created and launched `TropicalGT-I/configs/train_full_dataset_pg_bpb_step0_full24b_b54_v10_bpb_5k_gate.json` with run name `tropicalgt_i_pg_bpb_step0_full24b_b54_v10_bpb_5k_gate`, PID `2154851`, and W&B id `nw0bo45u`.
+- v10 keeps the 5K minimum review gate, keeps BPB/graph-BPB as the primary objective, and changes periodic visualization failure policy from hard-crash-on-incomplete-trace to `record_incomplete_without_fabrication`. Missing model trace fields must render as unavailable/incomplete diagnostics, never fabricated graph states.
+- v10 config sets `periodic_viz_require_complete_reasoning_steps=false`, `viz_require_complete_reasoning_steps=false`, `interactive_artifacts_require_complete_reasoning_steps=false`, and `require_complete_reasoning_steps=false` only to prevent audit infrastructure from killing training. It does not authorize synthetic plot inputs.
+- CAS integration checkpoint: added `TropicalGT-I/src/tropicalgt/cas_free_resolution.py` as a strict real-only adapter boundary for modules over `F2[x_level,x_radius]`, `F2[x_filtration,x_dimension]`, and `F2[x_filtration,x_dimension,x_position]`. The adapter currently returns unavailable/probe states unless Macaulay2, Singular, Sage, or a certified backend is present.
+- Visualization guard checkpoint: `TropicalGT-I/src/tropicalgt/visualization.py` no longer silently falls back from missing certified resolution rows to chain-presentation rows in Macaulay2-style displays. Chain presentations can be rendered as diagnostics, but not as real free resolutions.

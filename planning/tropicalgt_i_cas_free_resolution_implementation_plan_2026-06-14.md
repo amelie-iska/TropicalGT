@@ -24,6 +24,22 @@
 - `_real_free_resolution_backend_report` already has the intended safety shell: schema `tropicalgt.real_free_resolution.v1`, `status="unavailable_no_certificate"`, backend probe metadata, empty `cas_artifacts`, and `safe_to_render_as_real_free_resolution=False`.
 - Current tests require unavailable-state guardrails and verify that `Macaulay2_M2`, `SageMath_sage`, `Singular`, and `BEMultipliers` appear as allowed/probed backends.
 
+## Implementation Status - 2026-06-14 Sequential CAS Pass
+
+- Added `TropicalGT-I/src/tropicalgt/cas_free_resolution.py` as the real-only CAS adapter boundary.
+- The adapter canonicalizes finite `F2[x_level,x_radius]`, `F2[x_filtration,x_dimension]`, and `F2[x_filtration,x_dimension,x_position]` chain-presentation data into stable backend-safe generator IDs, multidegrees, monomial boundary entries, a degree-one presentation matrix, and an `input_sha256` hash.
+- The adapter probes Macaulay2 (`M2`), Singular, Sage, and optional BEMultipliers availability, but reports `cas_artifacts: {}` and all certificate flags false unless an external CAS emits a tagged exactness certificate.
+- Integrated `_real_free_resolution_backend_report` with the adapter, replacing the old placeholder artifact arrays. This means missing CAS support is now rendered as unavailable, not as an empty Betti table or differential matrix that could be mistaken for a resolution.
+- Updated focused algebra tests so unavailable real-resolution states require `cas_artifacts == {}` and `safe_to_render_as_real_free_resolution == False`.
+- Verified in the remote `tokengt` environment with:
+
+```bash
+PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m py_compile TropicalGT-I/src/tropicalgt/cas_free_resolution.py TropicalGT-I/src/tropicalgt/algebra.py
+PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_algebraic_persistence.py -q
+```
+
+The current remote machine still has no `M2`, `Singular`, or `sage` executable, so real minimal free resolutions remain unavailable until a CAS backend is installed or bridged. This is intentional: only real CAS-certified resolutions may populate `cas_artifacts`.
+
 ## Current Remote Backend Probe Results
 
 Probe command used from `/home/iska/Documents/amelie/bio/TropicalGT`:
@@ -444,3 +460,19 @@ Backend-dependent tests should skip when `M2`, `sage`, or `Singular` are absent,
 - Sage and Singular remain unavailable/fallback until they meet the same schema.
 - BEMultipliers is documented and implemented only as optional Macaulay2 BE diagnostics.
 - Tests cover both unavailable states and at least one certified smoke fixture in an environment with CAS installed.
+
+## 2026-06-14 Implementation Checkpoint
+
+Completed in this checkpoint:
+
+- Added `TropicalGT-I/src/tropicalgt/cas_free_resolution.py` as the real-only CAS adapter boundary. It canonicalizes finite multigraded module presentations, records stable generator and matrix ids, computes a canonical `input_sha256`, and probes Macaulay2 (`M2`), Singular, Sage, and Python Sage/BEMultipliers import availability without inventing algebraic output.
+- Wired `TropicalGT-I/src/tropicalgt/algebra.py` so `_real_free_resolution_backend_report()` delegates to the CAS adapter and keeps the hard rendering contract: a page may render a real free resolution only when `available`, `certificate_attached`, `real_free_resolution_certified`, `exactness_certified`, and `safe_to_render_as_real_free_resolution` are all true. Minimality additionally requires `minimality_certified`.
+- Tightened `TropicalGT-I/src/tropicalgt/visualization.py` so missing certified/scoped resolution rows no longer fall back to finite chain-presentation rows inside Macaulay2-style Betti, free-module, or differential tables. The rendered state must be explicitly unavailable unless a certified CAS output or scoped monomial-ideal resolution is present.
+- Added focused tests in `TropicalGT-I/tests/test_algebraic_persistence.py` covering canonical adapter schema, unavailable backend states, empty CAS artifacts without certificates, and non-certified BEMultipliers import behavior.
+- Verified on the remote `tokengt` environment with `PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_algebraic_persistence.py -q` (`6 passed`) and `py_compile` for `cas_free_resolution.py`, `algebra.py`, and `visualization.py`.
+
+Current backend reality on `iska`:
+
+- `M2`, `Singular`, and `sage` are not currently installed on the remote PATH, so full CAS-certified minimal free resolutions remain unavailable at runtime.
+- BEMultipliers is allowed only as optional Buchsbaum-Eisenbud diagnostic evidence after a trusted CAS resolution exists. It cannot certify exactness, minimality, or derived equivalence by itself.
+- The next CAS item is to install or bridge a real backend, starting with Macaulay2 if available for the platform, and then add one certified smoke fixture whose differential matrices, multidegree shifts, Betti table, Fitting ideals, minors, and exactness/minimality checks come from the backend.

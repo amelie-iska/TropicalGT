@@ -1,15 +1,17 @@
 # TropicalGT-I Vector-Bundle and Toric-Embedding Training Plan
 
+**Terminology: one dimension cone.** In the fan-theoretic language used by the reviewed papers, the relevant one-dimensional cones are called one dimension cones in this plan. The implementation vocabulary is therefore one dimension cone-indexed filtrations, one dimension cone pairings, and one dimension cone probes.
+
 ## Summary of the Two Papers
 
-- Khan and Maclagan, `2405.03505v1.pdf`, define tropical toric vector bundles by a simple valuated matroid, a ground set of atoms, and ray-indexed decreasing filtrations by flats. The vector-bundle condition says that on each maximal cone the filtrations are generated from a matroid basis by thresholding ray pairings and taking joins of selected flats. They also describe Cox semimodule presentations, fibers as tropical linear spaces, realizability limits, direct sums, tensoring by line bundles, global sections via parliaments of polytopes, and stability/Harder-Narasimhan-style structures under extra hypotheses.
+- Khan and Maclagan, `2405.03505v1.pdf`, define tropical toric vector bundles by a simple valuated matroid, a ground set of atoms, and one dimension cone-indexed decreasing filtrations by flats. The vector-bundle condition says that on each maximal cone the filtrations are generated from a matroid basis by thresholding one dimension cone pairings and taking joins of selected flats. They also describe Cox semimodule presentations, fibers as tropical linear spaces, realizability limits, direct sums, tensoring by line bundles, global sections via parliaments of polytopes, and stability/Harder-Narasimhan-style structures under extra hypotheses.
 - Jun, Mincheva, and Tolliver, `2009.03030v2.pdf`, develop vector bundles on semiring and tropical schemes as locally free sheaves. For zero-sum-free semirings with only trivial idempotent pairs, bases of finite free modules are unique up to rescaling and permutation; invertible matrices are therefore monomial. They classify vector bundles by nonabelian `H^1(X, GL_n(O_X))`, prove splitting results in locally constrained irreducible cases, compare with topological and monoid-scheme vector bundles, and study lifting of line bundles.
 
 ## What Transfers to TropicalGT-I
 
 - Monomial chart transports transfer as a mathematically supported local form for invertible tropical-linear changes of hidden feature coordinates.
 - Valuated-matroid atoms and flat filtrations transfer as a finite compatibility language for chart-local feature supports, GraphCG directions, persistence bins, and memory atoms.
-- Toric ray filtrations transfer as a design pattern for small integer max-linear probes over TokenGT graph tokens and tropical ring attention supports.
+- Toric one dimension cone filtrations transfer as a design pattern for small integer max-linear probes over TokenGT graph tokens and tropical ring attention supports.
 - Fibers as tropical linear spaces transfer as an interpretation of chart-local feature packets, not as a claim that the neural hidden space is an algebraic vector bundle.
 - Stability and filtration language transfer as diagnostics for whether feature atoms split into independent pieces or concentrate in unstable subfamilies.
 
@@ -48,7 +50,7 @@ Use the theory of tropical vector bundles and vector bundles on tropical schemes
 
 - `bundle/transport_l1`: feature agreement under monomial transports on sampled TokenGT chart overlaps.
 - `bundle/cocycle_defect`: consistency of `T_ab`, `T_bc`, and `T_ac` on graph-token, GoT-prefix, or memory-overlap triples.
-- `bundle/flat_rank_defect`: matroid flat reconstruction error for active tropical attention supports, GraphCG ray probes, and persistence atoms.
+- `bundle/flat_rank_defect`: matroid flat reconstruction error for active tropical attention supports, GraphCG one dimension cone probes, and persistence atoms.
 - `toric/normal_fan_loss`: agreement between active max-linear toric rows and chart filtration cells.
 - `graphcg/toric_cell_agreement`: agreement between active GraphCG direction cones and toric active cells, with the existing full-rank barrier retained.
 - `gfn/bundle_reward`: optional GFlowNet reward shaping by transport, cocycle, and flat defects; promotion still depends on BPB and graph-BPB gates.
@@ -84,13 +86,24 @@ Ablations should use matched seeds and identical data windows whenever possible.
 | zero auxiliary | all new coefficients `0` | baseline BPB, graph-BPB, certificate loss, wall-hit rate | reference run |
 | telemetry only | coefficients `0`, artifact emission on | chart ids, toric rows, flat defects, landscape availability | logits and BPB must match zero auxiliary within tolerance |
 | transport only | `lambda_transport`, `lambda_cocycle` | `bundle/transport_l1`, `bundle/cocycle_defect`, `chart/overlap_count` | no BPB/graph-BPB regression |
-| matroid/ray only | `lambda_flat`, optional atom stability | `bundle/flat_rank_defect`, `bundle/basis_coverage`, `bundle/atom_stability_gap` | no BPB/graph-BPB regression and no certificate-loss spike |
+| matroid/one dimension cone only | `lambda_flat`, optional atom stability | `bundle/flat_rank_defect`, `bundle/basis_coverage`, `bundle/atom_stability_gap` | no BPB/graph-BPB regression and no certificate-loss spike |
 | toric/GraphCG only | `lambda_toric`, `lambda_graphcg_toric` | `toric/normal_fan_loss`, `graphcg/toric_cell_agreement`, full-rank spectra | no graph-BPB regression and GraphCG full-rank remains finite |
 | memory landscape only | `lambda_landscape` | landscape availability, transported L2/cosine, top-k columns | unavailable vectors remain unavailable; retrieval quality gate passes |
 | chart BPB consistency | `lambda_chart_bpb` | chart-local NLL gap, overlap count, validation BPB | text BPB improves or is unchanged |
 | full bundle stack | all selected coefficients | all above plus artifact-byte manifest | promote only if BPB, graph-BPB, certificate loss, and wall-hit gates pass |
 
 W&B keys should be namespaced as `bundle/*`, `toric/*`, `graphcg/*`, `chart/*`, `memory/*`, and `audit/*`. Inference artifacts must be read-only: enabling artifact emission should not alter logits, sampled actions, retrieval gates, or greedy decoding.
+
+
+## Paper Coverage Verification
+
+- Background theory: covered in `tropicalgt_neurips_research_paper.tex` under `Reference-theory background`, using Khan-Maclagan valuated-matroid/one dimension cone-filtration tropical toric bundles and Jun-Mincheva-Tolliver semiring-scheme monomial transition results.
+- Definitions: covered by `TropicalGT chart bundle`, `Tropical toric embedding of a reasoning state`, `One dimension cone-filtration atomization for graph tokens`, and `TokenGT tropical atlas`.
+- Theorem/proposition material: covered by monomial transport, matroid-filtration compatibility, BPB-oriented chart consistency, finite one dimension cone-filtration auditability, and metric-gated auxiliary geometry.
+- Examples: covered by the chart-consistency batch and transported persistence-landscape memory examples.
+- Pseudocode: covered by `vector_bundle_toric_step` and `promote_bundle_geometry`.
+- BPB/Parameter-Golf compatibility: covered by metric-facing implementation contract, Parameter-Golf accounting for bundle geometry, and the ablation/promotion matrix below.
+- Implementation readiness: remaining work is code-level only: chart metadata, transport heads, toric/one dimension cone heads, memory masks, telemetry, browser labels, and zero-coefficient no-op tests.
 
 ## Browser and Visualization Artifacts
 
@@ -140,9 +153,9 @@ W&B keys should be namespaced as `bundle/*`, `toric/*`, `graphcg/*`, `chart/*`, 
 
 ## Main-Agent Repair Checklist Addendum
 
-- Add paper-backed config flags and zero-default coefficients for monomial chart transports, ray-filtration flat defects, toric active-cell agreement, GraphCG-toric agreement, chart BPB consistency, and transported persistence-landscape metrics.
+- Add paper-backed config flags and zero-default coefficients for monomial chart transports, one dimension cone-filtration flat defects, toric active-cell agreement, GraphCG-toric agreement, chart BPB consistency, and transported persistence-landscape metrics.
 - Model hook: emit chart ids, active tropical support cells, toric active rows, GraphCG active directions, chart-local NLL, and overlap metadata from the TokenGT/tropical attention path without changing logits when all new coefficients are zero.
 - Memory hook: carry a real/unavailable flag for each GUDHI persistence-landscape vector and compute transported L2/cosine only when both query and memory vectors are present.
-- Visualization hook: expose chart id, transport id, ray-filtration flat defect, toric active cell, GraphCG-toric agreement, landscape availability, transported L2, and transported cosine in the browser; keep GoT NLL/fitness/density labels distinct from persistence landscape `lambda_k(t)`.
+- Visualization hook: expose chart id, transport id, one dimension cone-filtration flat defect, toric active cell, GraphCG-toric agreement, landscape availability, transported L2, and transported cosine in the browser; keep GoT NLL/fitness/density labels distinct from persistence landscape `lambda_k(t)`.
 - Gate promotion through validation BPB, graph-BPB, certificate loss, and tropical wall-hit rate. Treat all vector-bundle and toric objectives as auxiliary until matched ablations show benefit.
-- Tests to fold into the repair goal: zero-coefficient no-op logits, monomial projection one-hotness, cocycle identity on synthetic charts, decreasing ray filtrations, finite atom-stability diagnostics, unavailable landscape masking, top-k landscape columns, and read-only inference artifact emission.
+- Tests to fold into the repair goal: zero-coefficient no-op logits, monomial projection one-hotness, cocycle identity on synthetic charts, decreasing one dimension cone filtrations, finite atom-stability diagnostics, unavailable landscape masking, top-k landscape columns, and read-only inference artifact emission.
