@@ -23,6 +23,7 @@ from .memory import (
     persistence_vector_representation_similarity as _memory_persistence_vector_representation_similarity,
 )
 from .simplicial import build_embedding_radius_simplicial_object, build_reasoning_trajectory_complex
+from .algebra import _bivariate_staircase_resolution_from_points
 
 
 def collect_states(
@@ -3382,32 +3383,71 @@ def _m2_style_report_from_bifiltration(bifiltration: Mapping[str, Any]) -> Dict[
 
 
 def _cas_real_resolution_display(real: Mapping[str, Any]) -> Dict[str, Any]:
-    if not (
-        isinstance(real, Mapping)
-        and real.get("safe_to_render_as_multigraded_free_resolution") is True
-        and real.get("multigraded_free_resolution_certified") is True
-        and real.get("exactness_certified") is True
-    ):
+    """Return certified CAS output under the strongest grading it actually supports."""
+    if not (isinstance(real, Mapping) and real.get("available") is True and real.get("exactness_certified") is True):
         return {}
     summary = real.get("free_resolution_summary") if isinstance(real.get("free_resolution_summary"), Mapping) else {}
     artifacts = real.get("cas_artifacts") if isinstance(real.get("cas_artifacts"), Mapping) else {}
-    modules_in = summary.get("free_modules") if isinstance(summary.get("free_modules"), list) else []
+    is_multigraded = bool(
+        real.get("safe_to_render_as_multigraded_free_resolution") is True
+        and real.get("multigraded_free_resolution_certified") is True
+    )
+    is_total_graded = bool(
+        not is_multigraded
+        and real.get("safe_to_render_as_total_graded_resolution") is True
+        and real.get("total_graded_resolution_certified") is True
+    )
+    is_ungraded = bool(
+        not is_multigraded
+        and not is_total_graded
+        and real.get("ungraded_resolution_certified") is True
+    )
+    if not (is_multigraded or is_total_graded or is_ungraded):
+        return {}
+
+    if is_multigraded:
+        modules_in = summary.get("free_modules") if isinstance(summary.get("free_modules"), list) else []
+        scope = "certified_macaulay2_multigraded_cokernel_resolution"
+        object_resolved = "displayed F0/coker(d1) module from the bifiltration chain presentation"
+        not_full = False
+    else:
+        ungraded = artifacts.get("betti_table_ungraded") if isinstance(artifacts.get("betti_table_ungraded"), Mapping) else {}
+        modules_in = ungraded.get("free_modules") if isinstance(ungraded.get("free_modules"), list) else []
+        scope = "certified_total_graded_cas_resolution" if is_total_graded else "certified_ungraded_cas_resolution"
+        object_resolved = "CAS-certified resolution of the boundary-presentation module under the displayed non-multigraded grading"
+        not_full = True
+
     modules: List[Dict[str, Any]] = []
     betti_rows: List[Dict[str, Any]] = []
-    for idx, row in enumerate(modules_in):
-        if not isinstance(row, Mapping):
-            continue
-        hd = int(row.get("homological_degree", 0) or 0)
-        md = row.get("multidegree", [])
-        if not isinstance(md, Sequence) or isinstance(md, (str, bytes)):
-            md = []
-        md_list = [int(v) for v in list(md)[:2]]
-        while len(md_list) < 2:
-            md_list.append(0)
-        rank = int(row.get("rank", 1) or 1)
-        display = str(row.get("display") or f"F_{hd} contains S(-{md_list[0]},{md_list[1]})^{rank}")
-        modules.append({"module": f"F_{hd}", "name": f"F_{hd}", "degree": hd, "rank": rank, "display": display, "multidegree": md_list})
-        betti_rows.append({"homological_degree": hd, "multidegree": md_list, "shift_display": f"({md_list[0]},{md_list[1]})", "rank": rank, "multiplicity": rank})
+    if is_multigraded:
+        for idx, row in enumerate(modules_in):
+            if not isinstance(row, Mapping):
+                continue
+            hd = int(row.get("homological_degree", 0) or 0)
+            md = row.get("multidegree", [])
+            if not isinstance(md, Sequence) or isinstance(md, (str, bytes)):
+                md = []
+            md_list = [int(v) for v in list(md)[:2]]
+            while len(md_list) < 2:
+                md_list.append(0)
+            rank = int(row.get("rank", 1) or 1)
+            display = str(row.get("display") or f"F_{hd} contains S(-{md_list[0]},{md_list[1]})^{rank}")
+            modules.append({"module": f"F_{hd}", "name": f"F_{hd}", "degree": hd, "rank": rank, "display": display, "multidegree": md_list})
+            betti_rows.append({"homological_degree": hd, "multidegree": md_list, "shift_display": f"({md_list[0]},{md_list[1]})", "rank": rank, "multiplicity": rank})
+    else:
+        for idx, row in enumerate(modules_in):
+            if not isinstance(row, Mapping):
+                continue
+            name = str(row.get("name", row.get("module", f"F_{idx}")))
+            try:
+                hd = int(name.rsplit("_", 1)[1]) if "_" in name else int(row.get("homological_degree", idx) or idx)
+            except Exception:
+                hd = idx
+            rank = int(row.get("rank", row.get("multiplicity", 0)) or 0)
+            display = str(row.get("display") or f"{name} = S^{rank}")
+            modules.append({"module": name, "name": name, "degree": hd, "rank": rank, "display": display, "multidegree": []})
+            betti_rows.append({"homological_degree": hd, "multidegree": [], "shift_display": "ungraded", "rank": rank, "multiplicity": rank})
+
     diffs_in = artifacts.get("differentials") if isinstance(artifacts.get("differentials"), list) else summary.get("differentials", [])
     differentials: List[Dict[str, Any]] = []
     for row in diffs_in or []:
@@ -3424,9 +3464,9 @@ def _cas_real_resolution_display(real: Mapping[str, Any]) -> Dict[str, Any]:
     return {
         "available": bool(modules),
         "ring": real.get("coefficient_ring", "F2[x_level,x_radius]"),
-        "scope": "certified_macaulay2_multigraded_cokernel_resolution",
-        "object_resolved": "displayed F0/coker(d1) module from the bifiltration chain presentation",
-        "not_full_persistence_module_resolution": False,
+        "scope": scope,
+        "object_resolved": object_resolved,
+        "not_full_persistence_module_resolution": not_full,
         "betti_table_rows": betti_rows,
         "free_modules": modules,
         "differentials": differentials,
@@ -3435,11 +3475,11 @@ def _cas_real_resolution_display(real: Mapping[str, Any]) -> Dict[str, Any]:
         "buchsbaum_eisenbud_diagnostics": {
             "minimality_certified": bool(real.get("minimality_certified")),
             "exactness_certified": bool(real.get("exactness_certified")),
-            "certificate": str(real.get("render_warning", "Macaulay2 certified the multigraded free resolution.")),
+            "certificate": str(real.get("render_warning", "CAS certified the displayed resolution under its stated grading.")),
+            "grading_scope": "multigraded" if is_multigraded else ("total-graded" if is_total_graded else "ungraded"),
         },
         "cas_backend": real.get("backend"),
     }
-
 
 def _table_trace(headers: Sequence[str], columns: Sequence[Sequence[Any]]) -> go.Table:
     width = max((len(col) for col in columns), default=0)
@@ -3953,6 +3993,81 @@ def _write_two_parameter_bifiltration_staircase_html(
         legend=dict(orientation="h", y=1.02, x=0, font=dict(size=10)),
     )
 
+    def _staircase_resolution_html(dim: int, pts: Sequence[tuple[int, int]]) -> str:
+        variables = ["x_level", "x_radius"]
+        raw_pts = [(int(lvl), int(rg)) for lvl, rg in pts]
+        res = _bivariate_staircase_resolution_from_points(
+            raw_pts,
+            variables,
+            ideal_name=f"I_C{dim}",
+            source=f"actual C{dim} chain-generator bidegrees displayed in the staircase panel",
+            auxiliary=False,
+        )
+        positive_res = {}
+        if not res.get("available"):
+            positive_pts = [pnt for pnt in raw_pts if pnt != (0, 0) and (pnt[0] > 0 or pnt[1] > 0)]
+            positive_res = _bivariate_staircase_resolution_from_points(
+                positive_pts,
+                variables,
+                ideal_name=f"I_C{dim}_positive_event",
+                source=f"positive nonunit C{dim} bidegrees; the full ideal is unit, so this is a scoped event ideal",
+                auxiliary=True,
+            )
+        chosen = res if res.get("available") else positive_res
+        if not chosen.get("available"):
+            reason = html.escape(str(chosen.get("reason", res.get("reason", "no nontrivial bivariate monomial ideal"))))
+            return f"<div class='resolution-block unavailable'><h4>Exact bivariate monomial-ideal resolution</h4><p>{reason}</p></div>"
+
+        def _rows_table(headers: Sequence[str], rows: Sequence[Sequence[Any]], caption: str) -> str:
+            head = "".join(f"<th>{html.escape(str(h))}</th>" for h in headers)
+            body = []
+            for row in rows:
+                body.append("<tr>" + "".join(f"<td>{html.escape(str(cell))}</td>" for cell in row) + "</tr>")
+            return f"<div class='mini-table'><h5>{html.escape(caption)}</h5><table><thead><tr>{head}</tr></thead><tbody>{''.join(body)}</tbody></table></div>"
+
+        module_rows = [[m.get("name", ""), m.get("rank", ""), m.get("display", "")] for m in chosen.get("free_modules", []) if isinstance(m, Mapping)]
+        gen_rows = [[g.get("index", ""), tuple(g.get("bidegree", [])), g.get("monomial", "")] for g in chosen.get("minimal_generators", []) if isinstance(g, Mapping)]
+        syz_rows = [[r.get("index", ""), tuple(r.get("lcm_bidegree", [])), r.get("relation", "")] for r in chosen.get("adjacent_lcm_syzygies", []) if isinstance(r, Mapping)]
+        diff_rows = []
+        for d in chosen.get("differentials", []) if isinstance(chosen.get("differentials"), list) else []:
+            if not isinstance(d, Mapping):
+                continue
+            entries = d.get("entries") if isinstance(d.get("entries"), list) else []
+            preview = "; ".join(
+                f"({e.get('row')},{e.get('column')})={e.get('entry')}" for e in entries[:12] if isinstance(e, Mapping)
+            )
+            if len(entries) > 12:
+                preview += "; ..."
+            diff_rows.append([d.get("name", ""), d.get("display", ""), d.get("shape", ""), preview])
+        hilbert_terms = []
+        for term in chosen.get("hilbert_series_numerator_terms", []) if isinstance(chosen.get("hilbert_series_numerator_terms"), list) else []:
+            if isinstance(term, Mapping):
+                sign = "+" if int(term.get("sign", 1) or 1) > 0 else "-"
+                hilbert_terms.append(f"{sign}{term.get('monomial', '')}")
+        scope_note = ""
+        if chosen.get("scope") == "auxiliary_two_variable_staircase_monomial_ideal":
+            scope_note = "<p class='resolution-warning'>The full displayed ideal contains 1, hence S/I=0. The table below is the exact positive-event staircase resolution, kept separate from the full unit ideal.</p>"
+        cert = chosen.get("buchsbaum_eisenbud_diagnostics", {}) if isinstance(chosen.get("buchsbaum_eisenbud_diagnostics"), Mapping) else {}
+        toric = chosen.get("toric_exponent_chart", {}) if isinstance(chosen.get("toric_exponent_chart"), Mapping) else {}
+        cone_rows = [[c.get("name", ""), c.get("primitive_generator", ""), c.get("variable", "")] for c in toric.get("ambient_one_dimensional_cones", []) if isinstance(c, Mapping)]
+        return f"""
+        <div class='resolution-block'>
+          <h4>Miller-Sturmfels adjacent-LCM resolution of {html.escape(str(chosen.get('object_resolved', 'S/I')))}</h4>
+          <p class='resolution-note'>Exact bivariate monomial-ideal theorem over {html.escape(str(chosen.get('ring', 'F2[x_level,x_radius]')))}. Scope: {html.escape(str(chosen.get('scope', '')))}. This is not asserted to be the full persistence-module resolution.</p>
+          {scope_note}
+          <p class='complex-line'>0 &rarr; F<sub>2</sub> &rarr; F<sub>1</sub> &rarr; F<sub>0</sub> &rarr; {html.escape(str(chosen.get('object_resolved', 'S/I')))} &rarr; 0</p>
+          <div class='resolution-grid'>
+            {_rows_table(['module', 'rank', 'summands'], module_rows, 'free modules')}
+            {_rows_table(['i', 'bidegree', 'monomial'], gen_rows, 'minimal monomial generators')}
+            {_rows_table(['i', 'LCM bidegree', 'adjacent syzygy'], syz_rows or [['-', '-', 'principal ideal: no first syzygy']], 'adjacent LCM syzygies')}
+            {_rows_table(['map', 'display', 'shape', 'entries'], diff_rows, 'differentials over F2')}
+            {_rows_table(['one dimensional cone', 'primitive generator', 'variable'], cone_rows, 'ambient coordinate one dimensional cone(s)')}
+          </div>
+          <p class='hilbert-line'>Hilbert numerator terms: {html.escape(' '.join(hilbert_terms[:24]) or 'unavailable')}</p>
+          <p class='certificate-line'>{html.escape(str(cert.get('certificate', 'exact bivariate monomial staircase certificate')))}</p>
+        </div>
+        """
+
     def _svg_chain_staircase(dim: int, items: Sequence[tuple[int, int, int, str]], *, primary: bool = False) -> str:
         items = list(items)
         if not items:
@@ -4062,9 +4177,12 @@ def _write_two_parameter_bifiltration_staircase_html(
             )
 
         min_labels = []
+        show_labels = len(mins) <= (7 if primary else 4)
         for idx, (lvl, rg) in enumerate(mins, start=1):
+            if not show_labels:
+                continue
             min_labels.append(
-                f"<text x='{sx(rg) + 10:.2f}' y='{sy(lvl) - 12:.2f}' fill='#f8fafc' font-size='{14 if primary else 11}' font-weight='700'>m{idx}=({lvl},{rg})</text>"
+                f"<text x='{sx(rg) + 12:.2f}' y='{sy(lvl) - 12:.2f}' fill='#f8fafc' font-size='{13 if primary else 11}' font-weight='700'>g{idx}=({lvl},{rg})</text>"
             )
 
         x_ticks = []
@@ -4080,6 +4198,7 @@ def _write_two_parameter_bifiltration_staircase_html(
             trivial = "<p class='svg-note'>Principal shifted module: a single minimal bidegree generates one upward orthant. It is shown compactly because there is no nontrivial staircase.</p>"
         else:
             trivial = "<p class='svg-note'>Nontrivial Miller-Sturmfels staircase: the gold boundary is the minimal antichain of actual generator bidegrees; shaded orthants are generated over F2[x_level,x_radius], and the unshaded lattice points form the displayed quotient-basis complement S/I_C.</p>"
+        resolution_block = _staircase_resolution_html(dim, pts)
         return f"""
         <article class='{card_class}'>
           <h3>C{dim} shifted free module support over F2[x_level,x_radius]</h3>
@@ -4098,17 +4217,22 @@ def _write_two_parameter_bifiltration_staircase_html(
             {''.join(x_ticks)}
             {''.join(y_ticks)}
             {f"<polyline points='{boundary}' fill='none' stroke='#facc15' stroke-width='4.2' stroke-linejoin='round'/>" if boundary else ''}
-            <text x='{sx(max(1.0, x_axis_max * 0.72)):.2f}' y='{sy(max(1.0, y_axis_max * 0.62)):.2f}' fill='rgba(248,250,252,0.70)' font-size='{42 if primary else 24}' font-style='italic'>I_C{dim}</text>
-            <text x='{sx(max(1.0, min(x_axis_max - 1, x_axis_max * 0.16))):.2f}' y='{sy(max(1.0, min(y_axis_max - 1, y_axis_max * 0.28))):.2f}' fill='rgba(248,250,252,0.90)' font-size='{15 if primary else 11}'>basis of S/I_C{dim}</text>
+            <text x='{sx(max(1.0, x_axis_max * 0.72)):.2f}' y='{sy(max(1.0, y_axis_max * 0.62)):.2f}' fill='rgba(248,250,252,0.58)' font-size='{42 if primary else 24}' font-style='italic'>I_C{dim}</text>
             {''.join(gen_marks)}
             {''.join(min_labels)}
             <text x='{sx(x_axis_max)-6:.2f}' y='{sy(0)+46:.2f}' fill='#e2e8f0' font-size='17' text-anchor='end'>x_radius</text>
             <text x='{sx(0)-48:.2f}' y='{sy(y_axis_max)+8:.2f}' fill='#e2e8f0' font-size='17'>x_level</text>
-            <text x='{width-430}' y='{top+26}' fill='#e8f2ff' font-size='15'>minimal generators: {html.escape(str(mins[:6]))}</text>
-            <text x='{width-430}' y='{top+48}' fill='#cbd5e1' font-size='12'>small dim-colored points: dominated observed bidegrees ({dominated_count}), not extra generators</text>
-            <text x='{sx(x_axis_max)-8:.2f}' y='{sy(y_axis_max)+28:.2f}' fill='#cbd5e1' font-size='13' text-anchor='end'>shaded: generated submodule I_C{dim}</text>
-            <text x='{sx(1):.2f}' y='{sy(1)-14:.2f}' fill='#f8fafc' font-size='13'>white lattice: displayed quotient-basis complement ({basis_count} shown; {generated_lattice_count} generated-region points omitted)</text>
+            <g transform='translate({width-438},{top+18})'>
+              <rect x='-10' y='-18' width='406' height='88' rx='9' fill='rgba(3,7,18,0.66)' stroke='rgba(226,232,240,0.18)'/>
+              <rect x='0' y='0' width='20' height='13' fill='rgba(148,163,184,0.54)' stroke='rgba(226,232,240,0.44)'/>
+              <text x='30' y='12' fill='#e8f2ff' font-size='13'>generated submodule I_C{dim}</text>
+              <circle cx='10' cy='32' r='3.4' fill='#f8fafc'/>
+              <text x='30' y='36' fill='#e8f2ff' font-size='13'>quotient-basis lattice points: {basis_count}</text>
+              <line x1='0' y1='55' x2='22' y2='55' stroke='#facc15' stroke-width='4.2'/>
+              <text x='30' y='59' fill='#e8f2ff' font-size='13'>minimal antichain generators: {len(mins)}; dominated: {dominated_count}</text>
+            </g>
           </svg>
+          {resolution_block}
         </article>
         """
 
@@ -4166,11 +4290,20 @@ h1 {{ margin:0 0 10px; font-size:34px; line-height:1.08; }}
 .card-grid {{ display:grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap:18px; }}
 .staircase-grid {{ display:grid; grid-template-columns:1fr; gap:18px; }}
 .stair-card {{ border:1px solid rgba(94,234,212,.24); background:rgba(3,7,18,.76); border-radius:12px; padding:16px; overflow:auto; }}
-.stair-card svg {{ display:block; width:100%; min-width:860px; }}
+.stair-card svg {{ display:block; width:100%; min-width:860px; shape-rendering:geometricPrecision; }}
 .primary-staircase svg {{ min-width:1080px; }}
 .stair-card h3 {{ margin:0 0 6px; font-size:17px; color:#e8f2ff; }}
 .svg-note {{ margin:0 0 10px; color:#a7b8d1; font-size:13px; }}
 .formula {{ margin:0 0 10px; color:#fde68a; font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size:13px; }}
+.resolution-block {{ margin-top:14px; border:1px solid rgba(250,204,21,.28); background:rgba(12,10,4,.62); border-radius:10px; padding:12px; }}
+.resolution-block h4 {{ margin:0 0 8px; color:#fef3c7; font-size:15px; }}
+.resolution-note,.resolution-warning,.hilbert-line,.certificate-line {{ margin:7px 0; color:#cbd5e1; font-size:12px; line-height:1.42; }}
+.resolution-warning {{ color:#fde68a; }}
+.complex-line {{ margin:8px 0 10px; color:#e8f2ff; font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size:13px; }}
+.resolution-grid {{ display:grid; grid-template-columns:repeat(2, minmax(0,1fr)); gap:10px; }}
+.mini-table {{ overflow:auto; max-height:240px; border-radius:8px; }}
+.mini-table h5 {{ margin:0 0 5px; color:#bfdbfe; font-size:12px; text-transform:uppercase; letter-spacing:.05em; }}
+.mini-table table {{ font-size:11px; }}
 .primary-staircase {{ border-color:rgba(250,204,21,.42); box-shadow:0 0 0 1px rgba(250,204,21,.08), 0 18px 44px rgba(0,0,0,.28); }}
 .secondary-staircase {{ opacity:.92; }}
 .card {{ border:1px solid rgba(148,163,184,.22); background:rgba(7,17,31,.72); border-radius:12px; padding:14px; overflow:auto; max-height:520px; }}
@@ -4186,7 +4319,7 @@ td {{ background:#07111f; color:#d7e8ff; }}
 <main>
 <h1>Trajectory 2-parameter persistence over F2[x_level,x_radius]</h1>
 <p class='lede'>Actual 2-parameter module fibers and multigraded chain-generator bidegrees over F2[x_level,x_radius]. The first panel is the module figure: horizontal lattice coordinates are x_radius exponents, vertical lattice coordinates are x_level exponents, shaded orthants are generated submodules, and white lattice points are the displayed S/I_C basis complement. H0/H1 fiber-rank charts below are secondary diagnostics, not substitutes for the staircase module.</p>
-<div class='callout'><b>Computed bifiltration:</b> {html.escape(rank_note)}<br>The large gold/cyan/blue boundary points are minimal antichain generators; smaller dim-colored points are dominated observed bidegrees and are not treated as additional generators. White lattice points are displayed quotient-basis complements, colored cells/points are actual H1 fiber ranks. Adjacent structure maps persisted={len(bifiltration.get("structure_maps", [])) if isinstance(bifiltration, Mapping) else 0}. Tables are unavailable for resolutions unless the CAS certificate row says a real minimal free resolution is certified; diagnostic chain data is not substituted for a free resolution.</div>
+<div class='callout'><b>Computed bifiltration:</b> {html.escape(rank_note)}<br>The large gold/cyan/blue boundary points are minimal antichain generators; smaller dim-colored points are dominated observed bidegrees and are not treated as additional generators. White lattice points are displayed quotient-basis complements, colored cells/points are actual H1 fiber ranks. Adjacent structure maps persisted={len(bifiltration.get("structure_maps", [])) if isinstance(bifiltration, Mapping) else 0}. Staircase cards render exact two-variable monomial-ideal resolutions when the Miller-Sturmfels adjacent-LCM theorem applies. Lower CAS tables render only certified CAS output under its actual grading; diagnostic chain data is not substituted for a free resolution.</div>
 <section class='panel'><h2>Miller-Sturmfels bivariate free-chain staircases from actual generator bidegrees</h2><div class='staircase-grid'>{staircase_svgs}</div></section>
 <section class='panel'><h2>Secondary diagnostic: F2[x_level,x_radius] support and homology fiber ranks</h2>{chart1}</section>
 <section class='panel'><h2>Secondary diagnostic: fiber-rank lattice with H0/H1 layer offsets</h2>{chart2}</section>
