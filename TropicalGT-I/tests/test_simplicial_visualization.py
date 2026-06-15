@@ -57,8 +57,11 @@ def test_visualization_payload_contains_filtered_objects(tmp_path: Path):
         "source": "model_tropical_support_probabilities",
         "temperature": None,
     }
+    assert payload["filtered_simplicial_objects"][0]["simplex_tree"]["backend"] == "gudhi.SimplexTree"
+    assert payload["filtered_simplicial_objects"][0]["summary"]["simplex_tree_available"] is True
     probability_vertices = [row for row in payload["filtered_simplicial_objects"][0]["simplices"] if row["dimension"] == 0]
     assert probability_vertices and probability_vertices[0]["probability_source"] == "model_tropical_support_probabilities"
+    assert probability_vertices and probability_vertices[0]["gudhi_simplex_tree"] is True
     assert payload["embedding_filtered_simplicial_objects"][0]["summary"]["filtration_model"] == "model_graph_token_embedding_vietoris_rips_2_skeleton"
     assert payload["embedding_filtered_simplicial_objects"][0]["summary"]["embedding_source"] == "TropicalGTModel.graph_token_embeddings"
     assert payload["embedding_filtered_simplicial_objects"][0]["summary"]["probability_transform"] is None
@@ -897,6 +900,18 @@ def test_analogical_memory_visualization_rejects_non_trajectory_probability_fall
     assert maps["maps"] == []
 
 
+def test_analogical_memory_without_retrieval_emits_unavailable_surfaces(tmp_path: Path):
+    paths = write_analogical_memory_visualization({"bank_path": "", "retrieved": []}, tmp_path, query_context={})
+    maps = json.loads(Path(paths["analogical_simplicial_maps"]).read_text(encoding="utf-8"))
+    index_html = Path(paths["analogical_memory_topk_index_html"]).read_text(encoding="utf-8")
+    map_html = Path(paths["analogical_memory_map_02_html"]).read_text(encoding="utf-8")
+    assert maps == {"available": False, "reason": "no_non_self_model_memory", "maps": []}
+    assert "Analogical top-k probability correspondences" in index_html
+    assert "No retrieved memories" in index_html
+    assert "Analogical probability-matched correspondence filtered-complex certificate unavailable" in map_html
+    assert "No vertex assignment" in map_html
+
+
 def test_analogical_memory_without_query_probabilities_is_unavailable_not_fallback(tmp_path: Path):
     record = FixtureGraphDataset(1)[0]
     obj = build_filtered_simplicial_object(record)
@@ -920,6 +935,8 @@ def test_analogical_memory_without_query_probabilities_is_unavailable_not_fallba
     html = Path(paths["analogical_memory_retrieval_html"]).read_text(encoding="utf-8")
     maps = json.loads(Path(paths["analogical_simplicial_maps"]).read_text(encoding="utf-8"))
     assert maps == {"available": False, "reason": "missing_model_probability_query_complex", "maps": []}
+    assert "analogical_memory_topk_index_html" in paths
+    assert "analogical_memory_map_02_html" in paths
     assert "No model probability filtered query trajectory complex was available" in html
     assert "model_probability_jensen_shannon_assignment" not in html
 

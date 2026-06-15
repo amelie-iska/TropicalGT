@@ -338,10 +338,19 @@ def write_inference_audit_artifacts(
             paths["trajectory_level_radius_bifiltration"] = str(level_radius_path)
 
     memory = result.get("analogical_memory_retrieval") if isinstance(result, dict) else None
-    if isinstance(memory, dict):
-        memory_path = output_dir / "analogical_memory_retrieval.json"
-        memory_path.write_text(json.dumps(memory, indent=2), encoding="utf-8")
-        paths["analogical_memory_retrieval"] = str(memory_path)
+    if not isinstance(memory, dict):
+        memory = {
+            "available": False,
+            "reason": "memory_retrieval_not_configured",
+            "bank_path": "",
+            "bank_size": 0,
+            "records_added": 0,
+            "top_k": 0,
+            "retrieved": [],
+        }
+    memory_path = output_dir / "analogical_memory_retrieval.json"
+    memory_path.write_text(json.dumps(memory, indent=2), encoding="utf-8")
+    paths["analogical_memory_retrieval"] = str(memory_path)
 
     if render_html:
         if isinstance(scaling, dict):
@@ -547,6 +556,7 @@ def write_got_trajectory_visualization(scaling_report: dict[str, object], output
             "z_axis_label": f"observed-state NLL anchor z; raw centered NLL x {nll_plot_scale:g} retained separately",
             "raw_nll_range": float(np.nanmax(nll_values) - np.nanmin(nll_values)) if nll_values.size else 0.0,
             "exact_anchor_scope": "observed model-evaluated GoT states only",
+            "exact_anchor_layer": True,
             "actual_landscape_scope": "unavailable: this artifact shows only a sparse observed-state anchor mesh, not a dense model-evaluated landscape",
             "sparse_observed_anchor_layer": True,
             "dense_model_evaluated_field": False,
@@ -1006,6 +1016,8 @@ def _gaussian_nll_density_cloud(
         "available": True,
         "source": "actual model-evaluated graph_state PCA anchors and measured raw NLL values",
         "support_samples_are_not_model_states": True,
+        "exact_anchor_layer": True,
+        "exact_anchor_scope": "large labeled anchors are observed model-evaluated GoT states only",
         "sample_count": sample_count,
         "anchor_count": int(points.shape[0]),
         "sigma": sigma,
@@ -6183,19 +6195,7 @@ def write_analogical_memory_visualization(
     rows = [row for row in memory.get("retrieved", []) if isinstance(row, dict)]
     if not rows:
         reason = "No non-self model-probability analogical memories retrieved; no analogical correspondence certificate is rendered."
-        _write_dark_empty(path, reason)
-        map_path.write_text(
-            json.dumps(
-                {
-                    "available": False,
-                    "reason": "no_non_self_model_memory",
-                    "maps": [],
-                },
-                indent=2,
-            ),
-            encoding="utf-8",
-        )
-        return {"analogical_memory_retrieval_html": str(path), "analogical_simplicial_maps": str(map_path)}
+        return _write_analogical_unavailable_outputs(output_dir, path, map_path, reason, "no_non_self_model_memory")
     bank_records = _load_memory_bank_records(memory.get("bank_path", ""))
     enriched = [_enrich_memory_row(row, bank_records) for row in rows]
     query = query_context if isinstance(query_context, dict) else {}
@@ -6207,19 +6207,7 @@ def write_analogical_memory_visualization(
     query_topology = query.get("topological_algebra") if isinstance(query.get("topological_algebra"), dict) else {}
     if not query_complex:
         reason = "No model probability filtered query trajectory complex was available; analogical maps are not rendered without model probabilities."
-        _write_dark_empty(path, reason)
-        map_path.write_text(
-            json.dumps(
-                {
-                    "available": False,
-                    "reason": "missing_model_probability_query_complex",
-                    "maps": [],
-                },
-                indent=2,
-            ),
-            encoding="utf-8",
-        )
-        return {"analogical_memory_retrieval_html": str(path), "analogical_simplicial_maps": str(map_path)}
+        return _write_analogical_unavailable_outputs(output_dir, path, map_path, reason, "missing_model_probability_query_complex")
 
     enriched = [
         row
@@ -6228,20 +6216,7 @@ def write_analogical_memory_visualization(
     ]
     if not enriched:
         reason = "No model probability filtered codomain trajectory complex was available; analogical maps are not rendered without model probabilities."
-        _write_dark_empty(path, reason)
-        map_path.write_text(
-            json.dumps(
-                {
-                    "available": False,
-                    "reason": "missing_model_probability_codomain_complex",
-                    "query_complex_source": query_complex_source,
-                    "maps": [],
-                },
-                indent=2,
-            ),
-            encoding="utf-8",
-        )
-        return {"analogical_memory_retrieval_html": str(path), "analogical_simplicial_maps": str(map_path)}
+        return _write_analogical_unavailable_outputs(output_dir, path, map_path, reason, "missing_model_probability_codomain_complex", query_complex_source=query_complex_source)
 
     pair_pages: list[dict[str, object]] = []
     map_reports: list[dict[str, object]] = []
@@ -6789,6 +6764,46 @@ def _simplicial_map_traces(
             visible="legendonly",
         ),
     ]
+
+
+def _write_analogical_unavailable_outputs(
+    output_dir: Path,
+    retrieval_path: Path,
+    map_path: Path,
+    reason: str,
+    status: str,
+    *,
+    query_complex_source: str = "",
+) -> dict[str, str]:
+    _write_dark_empty(retrieval_path, reason)
+    index_path = output_dir / "analogical_memory_topk_index.html"
+    _write_analogical_topk_index(index_path, [], [])
+    map02_path = output_dir / "analogical_memory_map_02.html"
+    map02_path.write_text(
+        f"""<!doctype html>
+<html>
+<head><meta charset="utf-8"><title>Analogical probability-matched correspondence unavailable</title></head>
+<body style="margin:0;background:#090b12;color:#e8eef8;font-family:Inter,ui-sans-serif,system-ui,sans-serif;">
+  <main style="max-width:980px;margin:0 auto;padding:32px 24px;">
+    <h1>Analogical probability-matched correspondence filtered-complex certificate unavailable</h1>
+    <p>{html.escape(reason)}</p>
+    <p>No vertex assignment, filtered-complex certificate, simplex-tree map, chain map, or persistence-module morphism is fabricated for this rank slot.</p>
+  </main>
+</body>
+</html>
+""",
+        encoding="utf-8",
+    )
+    payload: dict[str, object] = {"available": False, "reason": status, "maps": []}
+    if query_complex_source:
+        payload["query_complex_source"] = query_complex_source
+    map_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+    return {
+        "analogical_memory_retrieval_html": str(retrieval_path),
+        "analogical_simplicial_maps": str(map_path),
+        "analogical_memory_topk_index_html": str(index_path),
+        "analogical_memory_map_02_html": str(map02_path),
+    }
 
 
 def _write_analogical_topk_index(path: Path, pair_pages: list[dict[str, object]], map_reports: list[dict[str, object]]) -> None:

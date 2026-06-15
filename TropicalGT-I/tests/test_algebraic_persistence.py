@@ -365,6 +365,9 @@ def test_reasoning_trajectory_complex_grows_by_level():
     assert level_one["summary"]["num_vertices"] == 2
     assert full["summary"]["num_vertices"] == 3
     assert full["summary"]["num_two_simplices"] == 1
+    assert full["simplex_tree"]["backend"] == "gudhi.SimplexTree"
+    assert full["summary"]["simplex_tree_available"] is True
+    assert all(simplex.get("gudhi_simplex_tree") for simplex in full["simplices"])
 
 
 def test_inference_scaling_emits_step_and_trajectory_algebra():
@@ -389,6 +392,7 @@ def test_inference_scaling_emits_step_and_trajectory_algebra():
     assert report["trajectory_topological_algebra"]["multiparameter_persistence"]["fiber_rank_profile"]
     assert report["trajectory_growth"]
     assert report["trajectory_level_radius_bifiltration"]["available"] is True
+    assert report["trajectory_level_radius_bifiltration"]["grid_fiber_provenance"]["all_growth_rows_have_gudhi_simplex_tree"] is True
     assert report["trajectory_level_radius_bifiltration"]["fiber_rank_profile"][0]["fiber_basis"]["total_basis_count"] >= 1
 
     light_report = run_inference_scaling(
@@ -409,6 +413,7 @@ def test_inference_scaling_emits_step_and_trajectory_algebra():
     assert light_report["trajectory_growth"]
     assert light_report["trajectory_level_radius_bifiltration"]["available"] is True
     assert light_report["trajectory_level_radius_bifiltration"]["coefficient_ring"] == "F2[x_level,x_radius]"
+    assert light_report["trajectory_level_radius_bifiltration"]["grid_fiber_provenance"]["all_growth_rows_have_gudhi_simplex_tree"] is True
     assert light_report["trajectory_level_radius_bifiltration"]["grid_fiber_provenance"]["object_key"] in {
         "filtered_simplicial_object",
         "probability_filtered_simplicial_object",

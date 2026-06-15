@@ -308,7 +308,7 @@ def build_embedding_radius_simplicial_object(
 
     simplices = vertices + one_simplices + two_simplices
     thresholds = sorted({float(s["filtration"]) for s in simplices})
-    return {
+    return _with_serialized_simplex_tree({
         "record_id": record.record_id,
         "available": True,
         "summary": {
@@ -340,7 +340,7 @@ def build_embedding_radius_simplicial_object(
         },
         "thresholds": thresholds,
         "simplices": simplices,
-    }
+    })
 
 
 def build_reasoning_trajectory_complex(
@@ -521,7 +521,7 @@ def build_reasoning_trajectory_complex(
     simplices = vertices + one_simplices + two_simplices
     thresholds = sorted({simplex["filtration"] for simplex in simplices})
     unavailable_reason = None if edge_distance_values else "unavailable_no_embedding_or_probability_radius_edges"
-    return {
+    return _with_serialized_simplex_tree({
         "record_id": "graph_of_thought_trajectory",
         "available": unavailable_reason is None,
         **({"reason": unavailable_reason} if unavailable_reason else {}),
@@ -555,7 +555,87 @@ def build_reasoning_trajectory_complex(
         },
         "thresholds": thresholds,
         "simplices": simplices,
-    }
+    })
+
+def _with_serialized_simplex_tree(obj: dict[str, Any]) -> dict[str, Any]:
+    """Attach a real GUDHI SimplexTree serialization to a finite complex.
+
+    The radius-complex builders produce JSON simplex rows for downstream
+    visualization and algebra. Canonicalizing those rows through GUDHI here
+    gives later bifiltration reports direct evidence that their fibers came
+    from an actual filtration-preserving simplex tree, rather than from an HTML
+    render-time convenience pass.
+    """
+
+    raw_simplices = [row for row in obj.get("simplices", []) if isinstance(row, dict) and row.get("simplex")]
+    if not raw_simplices:
+        return obj
+    try:
+        import gudhi  # type: ignore
+
+        labels = sorted({str(vertex) for row in raw_simplices for vertex in (row.get("simplex") or [])})
+        label_to_int = {label: idx for idx, label in enumerate(labels)}
+        int_to_label = {idx: label for label, idx in label_to_int.items()}
+        tree = gudhi.SimplexTree()
+        metadata: dict[tuple[str, ...], dict[str, Any]] = {}
+        for row in raw_simplices:
+            simplex = [str(vertex) for vertex in (row.get("simplex") or [])]
+            if not simplex:
+                continue
+            filtration = float(row.get("filtration", 0.0) or 0.0)
+            tree.insert([label_to_int[label] for label in simplex], filtration=filtration)
+            metadata[tuple(sorted(simplex))] = row
+        tree.make_filtration_non_decreasing()
+        canonical: list[dict[str, Any]] = []
+        thresholds: set[float] = set()
+        for simplex_ints, filtration in tree.get_filtration():
+            simplex = [int_to_label[int(vertex)] for vertex in simplex_ints]
+            key = tuple(sorted(simplex))
+            base = dict(metadata.get(key, {}))
+            base.update(
+                {
+                    "simplex": simplex,
+                    "dimension": len(simplex) - 1,
+                    "filtration": float(filtration),
+                    "gudhi_simplex_tree": True,
+                    "type": base.get("type", f"gudhi_dim_{len(simplex) - 1}"),
+                }
+            )
+            canonical.append(base)
+            thresholds.add(float(filtration))
+        summary = dict(obj.get("summary", {})) if isinstance(obj.get("summary"), dict) else {}
+        summary.update(
+            {
+                "num_vertices": sum(1 for row in canonical if int(row.get("dimension", -1)) == 0),
+                "num_edges": sum(1 for row in canonical if int(row.get("dimension", -1)) == 1),
+                "num_two_simplices": sum(1 for row in canonical if int(row.get("dimension", -1)) == 2),
+                "num_thresholds": len(thresholds),
+                "simplex_tree_backend": "gudhi.SimplexTree",
+                "simplex_tree_available": True,
+            }
+        )
+        return {
+            **obj,
+            "summary": summary,
+            "thresholds": sorted(thresholds),
+            "simplices": canonical,
+            "simplex_tree": {
+                "backend": "gudhi.SimplexTree",
+                "available": True,
+                "num_vertices": int(tree.num_vertices()),
+                "num_simplices": int(tree.num_simplices()),
+                "dimension": int(tree.dimension()),
+                "filtration_non_decreasing": True,
+            },
+        }
+    except Exception as exc:
+        serialized_obj = dict(obj)
+        serialized_obj["simplex_tree"] = {
+            "backend": "unavailable_gudhi_simplex_tree",
+            "available": False,
+            "error": f"{type(exc).__name__}: {exc}",
+        }
+        return serialized_obj
 
 
 def _trajectory_filtration(level: int, score: float, order: int) -> float:
