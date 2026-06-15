@@ -5,7 +5,18 @@ import math
 import torch
 
 from tropicalgt.data import FixtureGraphDataset, encode_bytes
-from tropicalgt.memory import AnalogicalMemoryBank, AnalogicalMemoryQualityGate, AnalogicalMemoryRecord, memory_quality_gate_summary, memory_records_from_scaling_report, persistence_landscape_vector_similarity, persistence_vector_representation_similarity, query_signature_from_report
+from tropicalgt.memory import (
+    AnalogicalMemoryBank,
+    AnalogicalMemoryQualityGate,
+    AnalogicalMemoryRecord,
+    memory_quality_gate_summary,
+    memory_records_from_scaling_report,
+    persistence_landscape_vector_similarity,
+    persistence_vector_representation_similarity,
+    probability_simplicial_map_diagnostics,
+    query_probability_complex_from_report,
+    query_signature_from_report,
+)
 from tropicalgt.metrics import batch_bpb_metrics, explicit_graph_json_bytes, graph_token_structural_bytes
 from tropicalgt.model import TropicalGTConfig, TropicalGTModel
 from tropicalgt.scaling import run_inference_scaling
@@ -103,7 +114,6 @@ def test_analogical_memory_bank_roundtrip_and_retrieval(tmp_path):
     assert source_bank.retrieve(query_embedding, query_signature, top_k=4, exclude_sources={"source-a", "source-b"}) == []
 
 
-
 def _landscape_topology(vector, *, extra_vectors=None):
     row = {
         "available": True,
@@ -141,6 +151,61 @@ def _memory_record(record_id, topology):
         metadata={"source": record_id, "trajectory_probability_topological_algebra": topology},
     )
 
+
+def _probability_complex(prefix, *, probabilities=None):
+    labels = [f"{prefix}0", f"{prefix}1", f"{prefix}2"]
+    probabilities = probabilities or [
+        [0.90, 0.08, 0.02],
+        [0.05, 0.90, 0.05],
+        [0.02, 0.08, 0.90],
+    ]
+    simplices = []
+    for index, (label, probs) in enumerate(zip(labels, probabilities)):
+        simplices.append(
+            {
+                "dimension": 0,
+                "label": label,
+                "simplex": [label],
+                "level": index,
+                "filtration": 0.0,
+                "probability": [float(value) for value in probs],
+                "probability_source": "model_logits_softmax",
+            }
+        )
+    for edge in ((0, 1), (0, 2), (1, 2)):
+        simplices.append({"dimension": 1, "simplex": [labels[edge[0]], labels[edge[1]]], "filtration": 0.25})
+    simplices.append({"dimension": 2, "simplex": labels, "filtration": 0.50})
+    return {
+        "available": True,
+        "summary": {
+            "filtration_model": "model_probability_jensen_shannon_vietoris_rips_2_skeleton",
+            "vertices": 3,
+            "simplices": len(simplices),
+        },
+        "simplices": simplices,
+    }
+
+
+def _probability_memory_record(record_id, probability_complex):
+    return AnalogicalMemoryRecord(
+        memory_id=f"mem-{record_id}",
+        record_id=record_id,
+        score=0.0,
+        nll=0.0,
+        embedding=[0.0, 0.0, 0.0],
+        signature_vector=[0.0, 0.0, 0.0],
+        trajectory_embeddings=[],
+        trajectory_edges=[],
+        trajectory_paths=[],
+        filtered_simplicial_object={"summary": {"simplices": 0}, "simplices": []},
+        probability_filtered_simplicial_object=probability_complex,
+        topological_algebra={},
+        derived_signature={},
+        metadata={
+            "source": record_id,
+            "trajectory_probability_filtered_simplicial_object": probability_complex,
+        },
+    )
 
 def test_analogical_memory_retrieval_uses_gudhi_vector_representation_family(tmp_path):
     query_topology = _landscape_topology(
@@ -262,6 +327,54 @@ def test_analogical_memory_retrieval_uses_persistence_landscape_vectors(tmp_path
     assert hits[0]["persistence_vector_score_contribution"] == 0.0
     assert hits[0]["persistence_landscape_overlap_dim"] == 5
 
+
+def test_probability_simplicial_map_diagnostics_certifies_filtered_chain_map():
+    query_complex = _probability_complex("q")
+    memory_complex = _probability_complex("m")
+    report = probability_simplicial_map_diagnostics(query_complex, memory_complex)
+    assert report["available"] is True
+    assert report["map_source"] == "model_probability_jensen_shannon_assignment"
+    assert report["simplex_tree_map_checked"] == 7
+    assert report["simplex_tree_map_preserved"] == 7
+    assert math.isclose(report["simplex_tree_map_preservation_rate"], 1.0)
+    assert report["chain_map_diagnostics"]["available"] is True
+    assert report["chain_map_diagnostics"]["boundary_commutation_certified"] is True
+    assert report["persistence_module_morphism_diagnostics"]["morphism_certified"] is True
+    wrapped = {"inference_scaling": {"trajectory_probability_filtered_simplicial_object": query_complex}}
+    assert query_probability_complex_from_report(wrapped) == query_complex
+
+
+def test_analogical_memory_retrieval_uses_probability_simplicial_map_weight(tmp_path):
+    query_complex = _probability_complex("q")
+    matching_complex = _probability_complex("m")
+    uniform_complex = _probability_complex("u", probabilities=[[1.0 / 3.0] * 3, [1.0 / 3.0] * 3, [1.0 / 3.0] * 3])
+    bank = AnalogicalMemoryBank(tmp_path / "probability_map_memory.jsonl", max_records=8)
+    bank.extend(
+        [
+            _probability_memory_record("uniform", uniform_complex),
+            _probability_memory_record("match", matching_complex),
+        ]
+    )
+    hits = bank.retrieve(
+        [0.0, 0.0, 0.0],
+        [0.0, 0.0, 0.0],
+        top_k=2,
+        embedding_weight=0.0,
+        signature_weight=0.0,
+        score_weight=0.0,
+        landscape_weight=0.0,
+        vector_representation_weight=0.0,
+        probability_map_weight=1.0,
+        diversity_weight=0.0,
+        query_probability_complex=query_complex,
+    )
+    assert [row["record_id"] for row in hits] == ["match", "uniform"]
+    assert hits[0]["probability_simplicial_map_available"] is True
+    assert hits[0]["probability_simplicial_map_source"] == "model_probability_jensen_shannon_assignment"
+    assert hits[0]["retrieval_weights"]["probability_simplicial_map_weight"] == 1.0
+    assert hits[0]["retrieval_score_components"]["probability_simplicial_map"] > hits[1]["retrieval_score_components"]["probability_simplicial_map"]
+    assert hits[0]["probability_simplicial_map_similarity"] > hits[1]["probability_simplicial_map_similarity"]
+    assert hits[0]["probability_simplicial_map"]["chain_map_diagnostics"]["safe_to_use_as_persistence_module_morphism"] is True
 
 
 def test_analogical_memory_quality_gate_rejects_low_quality_storage(tmp_path):

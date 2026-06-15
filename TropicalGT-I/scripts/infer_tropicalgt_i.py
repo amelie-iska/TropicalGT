@@ -11,7 +11,13 @@ import torch
 from tropicalgt.algebra import compute_topological_algebra_report
 from tropicalgt.decoding import meet_in_middle_batch
 from tropicalgt.diagnostics import gflownet_diagnostics, graphcg_diagnostics, record_diagnostics
-from tropicalgt.memory import AnalogicalMemoryBank, memory_records_from_scaling_report, query_signature_from_report, query_topology_from_report
+from tropicalgt.memory import (
+    AnalogicalMemoryBank,
+    memory_records_from_scaling_report,
+    query_probability_complex_from_report,
+    query_signature_from_report,
+    query_topology_from_report,
+)
 from tropicalgt.metrics import batch_bpb_metrics
 from tropicalgt.run import load_config, load_checkpoint, collate_records
 from tropicalgt.records import GraphRecord
@@ -99,6 +105,7 @@ def main() -> None:
     parser.add_argument("--memory-retrieve-top-k", type=int, default=0, help="Retrieve this many analogical memories")
     parser.add_argument("--memory-max-records", type=int, default=2048)
     parser.add_argument("--memory-landscape-weight", type=float, default=None, help="Weight for GUDHI persistence-landscape vector similarity during analogical memory retrieval")
+    parser.add_argument("--memory-probability-map-weight", type=float, default=None, help="Weight for certified probability-vector simplicial maps during analogical memory retrieval")
     parser.add_argument("--meet-in-middle", action="store_true", help="Enable graph-aware meet-in-the-middle reverse-pass diagnostics")
     parser.add_argument("--no-meet-in-middle", action="store_true", help="Disable meet-in-the-middle diagnostics even if enabled in config")
     args = parser.parse_args()
@@ -256,14 +263,18 @@ def main() -> None:
         if args.memory_retrieve_top_k > 0:
             embedding, signature = query_signature_from_report(result)
             query_topology = query_topology_from_report(result)
+            query_probability_complex = query_probability_complex_from_report(result)
             landscape_weight = float(args.memory_landscape_weight if args.memory_landscape_weight is not None else cfg.get("inference_memory_landscape_weight", cfg.get("memory_retrieval_landscape_weight", 0.18)) or 0.0)
+            probability_map_weight = float(args.memory_probability_map_weight if args.memory_probability_map_weight is not None else cfg.get("inference_memory_probability_map_weight", cfg.get("memory_retrieval_probability_map_weight", 0.20)) or 0.0)
             retrieved = bank.retrieve(
                 embedding,
                 signature,
                 top_k=args.memory_retrieve_top_k,
                 exclude_sources={current_source},
                 query_topology=query_topology,
+                query_probability_complex=query_probability_complex,
                 landscape_weight=landscape_weight,
+                probability_map_weight=probability_map_weight,
             )
         added = 0
         if args.memory_save and isinstance(result.get("inference_scaling"), dict):
@@ -278,7 +289,9 @@ def main() -> None:
             if args.memory_retrieve_top_k > 0 and not retrieved:
                 embedding, signature = query_signature_from_report(result)
                 query_topology = query_topology_from_report(result)
+                query_probability_complex = query_probability_complex_from_report(result)
                 landscape_weight = float(args.memory_landscape_weight if args.memory_landscape_weight is not None else cfg.get("inference_memory_landscape_weight", cfg.get("memory_retrieval_landscape_weight", 0.18)) or 0.0)
+                probability_map_weight = float(args.memory_probability_map_weight if args.memory_probability_map_weight is not None else cfg.get("inference_memory_probability_map_weight", cfg.get("memory_retrieval_probability_map_weight", 0.20)) or 0.0)
                 retrieved = bank.retrieve(
                     embedding,
                     signature,
@@ -286,13 +299,19 @@ def main() -> None:
                     exclude_sources={current_source},
                     exclude_memory_ids={record.memory_id for record in records},
                     query_topology=query_topology,
+                    query_probability_complex=query_probability_complex,
                     landscape_weight=landscape_weight,
+                    probability_map_weight=probability_map_weight,
                 )
         result["analogical_memory_retrieval"] = {
             "bank_path": str(bank.path),
             "bank_size": len(bank.records),
             "records_added": added,
             "top_k": args.memory_retrieve_top_k,
+            "retrieval_weights": {
+                "persistence_landscape_weight": float(locals().get("landscape_weight", 0.0)),
+                "probability_simplicial_map_weight": float(locals().get("probability_map_weight", 0.0)),
+            },
             "retrieved": retrieved,
         }
     if args.audit_output_dir:

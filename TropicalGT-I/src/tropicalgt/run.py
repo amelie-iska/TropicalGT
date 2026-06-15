@@ -24,7 +24,15 @@ from .data import (
 )
 from .decoding import meet_in_middle_batch, meet_in_middle_config
 from .diagnostics import describe_graph_tokens, record_diagnostics
-from .memory import AnalogicalMemoryBank, AnalogicalMemoryQualityGate, memory_quality_gate_summary, memory_records_from_scaling_report, query_signature_from_report, query_topology_from_report
+from .memory import (
+    AnalogicalMemoryBank,
+    AnalogicalMemoryQualityGate,
+    memory_quality_gate_summary,
+    memory_records_from_scaling_report,
+    query_probability_complex_from_report,
+    query_signature_from_report,
+    query_topology_from_report,
+)
 from .metrics import aggregate_bpb_metrics, batch_bpb_metrics, explicit_graph_json_bytes, graph_token_structural_bytes
 from .model import TropicalGTConfig, TropicalGTModel
 from .scaling import run_inference_scaling
@@ -954,11 +962,16 @@ def _run_periodic_validation_round(
     memory_quality_gate = AnalogicalMemoryQualityGate.from_config(cfg) if memory_bank is not None else None
     periodic_memory_landscape_weight = float(cfg.get("memory_retrieval_landscape_weight", 0.08) or 0.0)
     periodic_memory_vector_weight = float(cfg.get("memory_retrieval_vector_weight", cfg.get("memory_retrieval_persistence_vector_weight", 0.18)) or 0.0)
+    periodic_memory_probability_map_weight = float(cfg.get("memory_retrieval_probability_map_weight", 0.20) or 0.0)
     periodic_memory_vector_available = 0
+    periodic_memory_probability_map_available = 0
     periodic_memory_vector_component_counts: list[float] = []
     periodic_memory_vector_aggregate_similarities: list[float] = []
     periodic_memory_vector_score_contributions: list[float] = []
     periodic_memory_landscape_score_contributions: list[float] = []
+    periodic_memory_probability_map_score_contributions: list[float] = []
+    periodic_memory_probability_map_preservation_rates: list[float] = []
+    periodic_memory_probability_map_similarities: list[float] = []
     periodic_got_scaling_budgets: list[dict[str, Any]] = []
     periodic_got_scaling_failures: list[dict[str, Any]] = []
     if render_visualizations:
@@ -1073,6 +1086,7 @@ def _run_periodic_validation_round(
                     memory_added_this_round += len(records)
                     query_embedding, query_signature = query_signature_from_report(audit_result)
                     query_topology = query_topology_from_report(audit_result)
+                    query_probability_complex = query_probability_complex_from_report(audit_result)
                     retrieved = memory_bank.retrieve(
                         query_embedding,
                         query_signature,
@@ -1080,8 +1094,10 @@ def _run_periodic_validation_round(
                         exclude_sources={memory_source},
                         exclude_memory_ids={record.memory_id for record in records},
                         query_topology=query_topology,
+                        query_probability_complex=query_probability_complex,
                         landscape_weight=periodic_memory_landscape_weight,
                         vector_representation_weight=periodic_memory_vector_weight,
+                        probability_map_weight=periodic_memory_probability_map_weight,
                     )
                     periodic_memory_retrieved_count += len(retrieved)
                     for hit in retrieved:
@@ -1092,12 +1108,18 @@ def _run_periodic_validation_round(
                         periodic_memory_vector_aggregate_similarities.append(float(hit.get("persistence_vector_aggregate_similarity", 0.0) or 0.0))
                         periodic_memory_vector_score_contributions.append(float(hit.get("persistence_vector_score_contribution", 0.0) or 0.0))
                         periodic_memory_landscape_score_contributions.append(float(hit.get("persistence_landscape_score_contribution", 0.0) or 0.0))
+                        if bool(hit.get("probability_simplicial_map_available")):
+                            periodic_memory_probability_map_available += 1
+                        periodic_memory_probability_map_score_contributions.append(float(hit.get("probability_simplicial_map_score_contribution", 0.0) or 0.0))
+                        periodic_memory_probability_map_preservation_rates.append(float(hit.get("probability_simplicial_map_preservation_rate", 0.0) or 0.0))
+                        periodic_memory_probability_map_similarities.append(float(hit.get("probability_simplicial_map_similarity", 0.0) or 0.0))
                     audit_result["analogical_memory_retrieval"] = {
                         "bank_path": str(memory_bank.path),
                         "bank_size": len(memory_bank.records),
                         "records_added": len(records),
                         "quality_gate": gate_summary,
                         "retrieval_weights": {
+                            "probability_simplicial_map_weight": periodic_memory_probability_map_weight,
                             "persistence_landscape_weight": periodic_memory_landscape_weight,
                             "persistence_vector_weight": periodic_memory_vector_weight,
                             "persistence_vector_source": "gudhi.representations.vector_methods",
@@ -1125,12 +1147,17 @@ def _run_periodic_validation_round(
                 metrics["analogical_memory_retrieved_count"] = float(periodic_memory_retrieved_count)
                 metrics["analogical_memory_retrieval_landscape_weight"] = float(periodic_memory_landscape_weight)
                 metrics["analogical_memory_retrieval_vector_weight"] = float(periodic_memory_vector_weight)
+                metrics["analogical_memory_retrieval_probability_map_weight"] = float(periodic_memory_probability_map_weight)
                 if periodic_memory_retrieved_count > 0:
                     metrics["analogical_memory_vector_available_rate"] = float(periodic_memory_vector_available / max(periodic_memory_retrieved_count, 1))
                     metrics["analogical_memory_vector_component_count_mean"] = float(np.mean(periodic_memory_vector_component_counts)) if periodic_memory_vector_component_counts else 0.0
                     metrics["analogical_memory_vector_aggregate_similarity_mean"] = float(np.mean(periodic_memory_vector_aggregate_similarities)) if periodic_memory_vector_aggregate_similarities else 0.0
                     metrics["analogical_memory_vector_score_contribution_mean"] = float(np.mean(periodic_memory_vector_score_contributions)) if periodic_memory_vector_score_contributions else 0.0
                     metrics["analogical_memory_landscape_score_contribution_mean"] = float(np.mean(periodic_memory_landscape_score_contributions)) if periodic_memory_landscape_score_contributions else 0.0
+                    metrics["analogical_memory_probability_map_available_rate"] = float(periodic_memory_probability_map_available / max(periodic_memory_retrieved_count, 1))
+                    metrics["analogical_memory_probability_map_score_contribution_mean"] = float(np.mean(periodic_memory_probability_map_score_contributions)) if periodic_memory_probability_map_score_contributions else 0.0
+                    metrics["analogical_memory_probability_map_preservation_rate_mean"] = float(np.mean(periodic_memory_probability_map_preservation_rates)) if periodic_memory_probability_map_preservation_rates else 0.0
+                    metrics["analogical_memory_probability_map_similarity_mean"] = float(np.mean(periodic_memory_probability_map_similarities)) if periodic_memory_probability_map_similarities else 0.0
     report = {
         "step": step,
         "validation": str(eval_path),

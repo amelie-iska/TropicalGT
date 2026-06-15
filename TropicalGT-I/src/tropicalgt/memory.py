@@ -192,8 +192,10 @@ class AnalogicalMemoryBank:
         score_weight: float = 0.10,
         landscape_weight: float = 0.08,
         vector_representation_weight: float | None = None,
+        probability_map_weight: float = 0.20,
         diversity_weight: float = 0.18,
         query_topology: dict[str, Any] | None = None,
+        query_probability_complex: dict[str, Any] | None = None,
         exclude_record_ids: set[str] | None = None,
         exclude_memory_ids: set[str] | None = None,
         exclude_sources: set[str] | None = None,
@@ -209,6 +211,7 @@ class AnalogicalMemoryBank:
         query_embedding = _normalize(np.asarray(embedding, dtype=float))
         query_signature = _normalize(np.asarray(signature_vector, dtype=float))
         query_topology = query_topology if isinstance(query_topology, dict) else {}
+        query_probability_complex = query_probability_complex if isinstance(query_probability_complex, dict) else {}
         rows = []
         for record in self.records:
             trajectory_source = str(record.metadata.get("source", record.record_id)) if isinstance(record.metadata, dict) else record.record_id
@@ -237,13 +240,20 @@ class AnalogicalMemoryBank:
             vector_contribution = vector_weight * vector_sim if vector_report.get("available") else 0.0
             if legacy_vector_alias_mode and not vector_report.get("available") and landscape_report.get("available"):
                 vector_contribution = vector_weight * landscape_sim
-            retrieval_score = embedding_contribution + signature_contribution + quality_contribution + landscape_contribution + vector_contribution
+            trajectory_probability_complex = record_metadata.get("trajectory_probability_filtered_simplicial_object", {})
+            if not isinstance(trajectory_probability_complex, dict):
+                trajectory_probability_complex = {}
+            probability_map = probability_simplicial_map_diagnostics(query_probability_complex, trajectory_probability_complex)
+            probability_map_similarity = _probability_simplicial_map_similarity(probability_map)
+            probability_map_contribution = float(probability_map_weight) * probability_map_similarity
+            retrieval_score = embedding_contribution + signature_contribution + quality_contribution + landscape_contribution + vector_contribution + probability_map_contribution
             retrieval_score_components = {
                 "embedding": float(embedding_contribution),
                 "signature": float(signature_contribution),
                 "quality": float(quality_contribution),
                 "persistence_landscape": float(landscape_contribution),
                 "persistence_vector_family": float(vector_contribution),
+                "probability_simplicial_map": float(probability_map_contribution),
             }
             retrieval_weights = {
                 "embedding_weight": float(embedding_weight),
@@ -251,14 +261,13 @@ class AnalogicalMemoryBank:
                 "score_weight": float(score_weight),
                 "persistence_landscape_weight": float(landscape_only_weight),
                 "persistence_vector_weight": float(vector_weight),
+                "probability_simplicial_map_weight": float(probability_map_weight),
+                "probability_simplicial_map_source": "model_probability_jensen_shannon_assignment",
                 "persistence_vector_includes_landscape": bool(vector_includes_landscape),
                 "legacy_landscape_weight_alias_mode": bool(legacy_vector_alias_mode),
             }
             family = _record_family(record.record_id)
             signature_hash = _signature_hash(record.signature_vector)
-            trajectory_probability_complex = record_metadata.get("trajectory_probability_filtered_simplicial_object", {})
-            if not isinstance(trajectory_probability_complex, dict):
-                trajectory_probability_complex = {}
             rows.append(
                 {
                     "memory_id": record.memory_id,
@@ -273,6 +282,8 @@ class AnalogicalMemoryBank:
                     "retrieval_weights": retrieval_weights,
                     "persistence_landscape_score_contribution": float(landscape_contribution),
                     "persistence_vector_score_contribution": float(vector_contribution),
+                    "probability_simplicial_map_score_contribution": float(probability_map_contribution),
+                    "probability_simplicial_map_similarity": float(probability_map_similarity),
                     "embedding_similarity": float(emb_sim),
                     "signature_similarity": float(sig_sim),
                     "persistence_landscape_vector_similarity": landscape_report,
@@ -298,6 +309,10 @@ class AnalogicalMemoryBank:
                     "row_probability_filtered_simplicial_object": record.probability_filtered_simplicial_object,
                     "trajectory_probability_filtered_simplicial_object": trajectory_probability_complex,
                     "trajectory_probability_filtered_summary": trajectory_probability_complex.get("summary", {}),
+                    "probability_simplicial_map": probability_map,
+                    "probability_simplicial_map_available": bool(probability_map.get("available")),
+                    "probability_simplicial_map_source": probability_map.get("map_source", "none"),
+                    "probability_simplicial_map_preservation_rate": float(probability_map.get("simplex_tree_map_preservation_rate", 0.0) or 0.0),
                     "topological_algebra": record.topological_algebra,
                     "signature_vector": record.signature_vector,
                     "derived_signature": record.derived_signature,
@@ -306,6 +321,370 @@ class AnalogicalMemoryBank:
             )
         rows = _best_per_trajectory_source(rows)
         return _diverse_top_k(rows, top_k=max(int(top_k), 0), diversity_weight=float(diversity_weight))
+
+
+def probability_simplicial_map_diagnostics(query_obj: dict[str, Any] | None, memory_obj: dict[str, Any] | None, max_vertices: int = 54) -> dict[str, Any]:
+    """Certify the probability-vector vertex assignment as a filtered simplex-tree map when possible."""
+
+    query_vertices = _complex_vertex_records(query_obj or {})[:max_vertices]
+    memory_vertices = _complex_vertex_records(memory_obj or {})[:max_vertices]
+    if not query_vertices or not memory_vertices:
+        return _empty_probability_map(query_vertices, memory_vertices, "empty_domain_or_codomain")
+    q_probs = [_probability_feature_vector(row) for row in query_vertices]
+    m_probs = [_probability_feature_vector(row) for row in memory_vertices]
+    if not any(vec is not None for vec in q_probs) or not any(vec is not None for vec in m_probs):
+        return _empty_probability_map(query_vertices, memory_vertices, "unavailable_no_model_probability_vectors")
+    vertex_map = _probability_induced_vertex_assignment(query_vertices, memory_vertices, q_probs, m_probs)
+    mapping = {str(row["query_vertex"]): str(row["memory_vertex"]) for row in vertex_map}
+    q_filtration = _simplex_filtration_lookup(query_obj or {})
+    m_filtration = _simplex_filtration_lookup(memory_obj or {})
+    tree_report = _simplex_tree_map_report(query_obj or {}, memory_obj or {}, mapping, q_filtration, m_filtration)
+    checked = int(tree_report.get("checked_simplices", 0) or 0)
+    preserved = int(tree_report.get("preserved_simplices", 0) or 0)
+    rate = float(tree_report.get("preservation_rate", 0.0) or 0.0)
+    js_values = [float(row.get("jensen_shannon_distance", 0.0)) for row in vertex_map if row.get("jensen_shannon_distance") is not None]
+    costs = [float(row.get("assignment_cost", 0.0)) for row in vertex_map if row.get("assignment_cost") is not None]
+    available = bool(mapping and checked > 0 and checked == preserved and rate >= 0.999)
+    chain_map = _memory_chain_map_diagnostics(tree_report, available, mapping)
+    return {
+        "available": available,
+        "map_source": "model_probability_jensen_shannon_assignment",
+        "field": "F2",
+        "ring": "F2[x_level,x_radius]",
+        "probability_alignment": "zero_pad_to_common_token_index_feature_space_then_renormalize",
+        "displayed_domain_vertices": len(query_vertices),
+        "displayed_codomain_vertices": len(memory_vertices),
+        "vertex_map": vertex_map,
+        "jensen_shannon_distance_summary": _numeric_summary(js_values),
+        "assignment_cost_summary": _numeric_summary(costs),
+        "simplex_tree_map": tree_report,
+        "simplex_tree_map_checked": checked,
+        "simplex_tree_map_preserved": preserved,
+        "simplex_tree_map_preservation_rate": rate,
+        "is_filtered_simplicial_map": available,
+        "chain_map_diagnostics": chain_map,
+        "persistence_module_morphism_diagnostics": _memory_persistence_morphism_diagnostics(chain_map),
+        "interpretation": "Probability-vector analogical retrieval is geometrically realized only when the Jensen-Shannon vertex assignment extends to a filtration-preserving simplex-tree map.",
+    }
+
+
+def _probability_simplicial_map_similarity(report: dict[str, Any]) -> float:
+    if not isinstance(report, dict) or not report.get("available"):
+        return 0.0
+    rate = float(report.get("simplex_tree_map_preservation_rate", 0.0) or 0.0)
+    summary = report.get("jensen_shannon_distance_summary", {})
+    mean_js = float(summary.get("mean", 0.0) or 0.0) if isinstance(summary, dict) else 0.0
+    return float(max(0.0, min(1.0, rate)) / (1.0 + max(0.0, mean_js)))
+
+
+def _empty_probability_map(query_vertices: list[dict[str, Any]], memory_vertices: list[dict[str, Any]], reason: str) -> dict[str, Any]:
+    chain_map = _memory_unavailable_chain_map(reason)
+    return {
+        "available": False,
+        "map_source": "none",
+        "reason": reason,
+        "displayed_domain_vertices": len(query_vertices),
+        "displayed_codomain_vertices": len(memory_vertices),
+        "vertex_map": [],
+        "simplex_tree_map_checked": 0,
+        "simplex_tree_map_preserved": 0,
+        "simplex_tree_map_preservation_rate": 0.0,
+        "is_filtered_simplicial_map": False,
+        "chain_map_diagnostics": chain_map,
+        "persistence_module_morphism_diagnostics": _memory_persistence_morphism_diagnostics(chain_map),
+    }
+
+
+def _complex_vertex_records(obj: dict[str, Any]) -> list[dict[str, Any]]:
+    simplices = obj.get("simplices") if isinstance(obj, dict) else []
+    out: list[dict[str, Any]] = []
+    if not isinstance(simplices, list):
+        return out
+    for simplex in simplices:
+        if not isinstance(simplex, dict) or _simplex_dimension(simplex) != 0:
+            continue
+        labels = simplex.get("simplex") if isinstance(simplex.get("simplex"), list) else []
+        label = str(simplex.get("label") or simplex.get("vertex") or simplex.get("record_id") or (labels[0] if labels else ""))
+        if not label:
+            continue
+        out.append({**simplex, "label": label})
+    return out
+
+
+def _probability_feature_vector(vertex: dict[str, Any]) -> list[float] | None:
+    raw: Any = None
+    for key in ("probability", "model_probability_vector", "probability_vector"):
+        value = vertex.get(key)
+        if isinstance(value, list) and value:
+            raw = value
+            break
+    if not isinstance(raw, list) or not raw:
+        return None
+    vals: list[float] = []
+    for item in raw:
+        try:
+            value = float(item)
+        except (TypeError, ValueError):
+            return None
+        if not math.isfinite(value):
+            return None
+        vals.append(max(value, 0.0))
+    total = sum(vals)
+    if total <= 0.0:
+        return None
+    return [float(value / total) for value in vals]
+
+
+def _probability_induced_vertex_assignment(
+    query_vertices: list[dict[str, Any]],
+    memory_vertices: list[dict[str, Any]],
+    q_probs: list[list[float] | None],
+    m_probs: list[list[float] | None],
+) -> list[dict[str, Any]]:
+    costs = np.full((len(query_vertices), len(memory_vertices)), 1e6, dtype=float)
+    js_costs = np.full((len(query_vertices), len(memory_vertices)), math.inf, dtype=float)
+    for qi, q in enumerate(query_vertices):
+        for mi, m in enumerate(memory_vertices):
+            dist = _padded_jensen_shannon(q_probs[qi], m_probs[mi])
+            if dist is None:
+                continue
+            js_costs[qi, mi] = float(dist)
+            type_penalty = 0.05 if q.get("type") != m.get("type") else 0.0
+            level_penalty = 0.0
+            if q.get("level") is not None and m.get("level") is not None:
+                level_penalty = 0.01 * abs(float(q.get("level", 0.0) or 0.0) - float(m.get("level", 0.0) or 0.0))
+            costs[qi, mi] = float(dist + type_penalty + level_penalty)
+    pairs: list[tuple[int, int]] = []
+    try:
+        from scipy.optimize import linear_sum_assignment  # type: ignore
+
+        row_ind, col_ind = linear_sum_assignment(costs)
+        pairs = [(int(r), int(c)) for r, c in zip(row_ind, col_ind) if math.isfinite(float(costs[int(r), int(c)])) and costs[int(r), int(c)] < 1e5]
+    except Exception:
+        used: set[int] = set()
+        for qi in range(len(query_vertices)):
+            order = np.argsort(costs[qi])
+            for mi in order.tolist():
+                if mi not in used and math.isfinite(float(costs[qi, mi])) and costs[qi, mi] < 1e5:
+                    pairs.append((qi, int(mi)))
+                    used.add(int(mi))
+                    break
+    rows: list[dict[str, Any]] = []
+    for qi, mi in pairs:
+        cost = float(costs[qi, mi])
+        js_distance = float(js_costs[qi, mi])
+        rows.append(
+            {
+                "query_vertex": str(query_vertices[qi]["label"]),
+                "memory_vertex": str(memory_vertices[mi]["label"]),
+                "score": float(1.0 / (1.0 + cost)),
+                "assignment_cost": cost,
+                "jensen_shannon_distance": js_distance,
+                "map_source": "model_probability_jensen_shannon_assignment",
+                "query_probability_source": query_vertices[qi].get("probability_source"),
+                "memory_probability_source": memory_vertices[mi].get("probability_source"),
+            }
+        )
+    return rows
+
+
+def _padded_jensen_shannon(a: list[float] | None, b: list[float] | None) -> float | None:
+    if not a or not b:
+        return None
+    n = max(len(a), len(b))
+    pa = np.zeros(n, dtype=float)
+    pb = np.zeros(n, dtype=float)
+    pa[: len(a)] = np.asarray(a, dtype=float)
+    pb[: len(b)] = np.asarray(b, dtype=float)
+    pa = np.maximum(pa, 0.0)
+    pb = np.maximum(pb, 0.0)
+    sa = float(pa.sum())
+    sb = float(pb.sum())
+    if sa <= 0.0 or sb <= 0.0:
+        return None
+    pa = pa / sa
+    pb = pb / sb
+    mix = 0.5 * (pa + pb)
+    eps = 1e-12
+    mask_a = pa > 0.0
+    mask_b = pb > 0.0
+    kl_a = float(np.sum(pa[mask_a] * np.log(pa[mask_a] / np.maximum(mix[mask_a], eps))))
+    kl_b = float(np.sum(pb[mask_b] * np.log(pb[mask_b] / np.maximum(mix[mask_b], eps))))
+    return float(math.sqrt(max(0.0, 0.5 * (kl_a + kl_b))))
+
+
+def _simplex_filtration_lookup(obj: dict[str, Any]) -> dict[tuple[str, ...], float]:
+    out: dict[tuple[str, ...], float] = {}
+    simplices = obj.get("simplices") if isinstance(obj, dict) else []
+    if not isinstance(simplices, list):
+        return out
+    for simplex in simplices:
+        if not isinstance(simplex, dict):
+            continue
+        labels = simplex.get("simplex") if isinstance(simplex.get("simplex"), list) else []
+        if not labels and _simplex_dimension(simplex) == 0:
+            label = simplex.get("label") or simplex.get("vertex") or simplex.get("record_id")
+            labels = [label] if label else []
+        key = tuple(sorted(str(value) for value in labels if str(value) != ""))
+        if not key:
+            continue
+        try:
+            filtration = float(simplex.get("filtration", 0.0) or 0.0)
+        except (TypeError, ValueError):
+            filtration = 0.0
+        out[key] = min(out.get(key, filtration), filtration)
+    return out
+
+
+def _complex_simplices(obj: dict[str, Any], dim: int) -> list[tuple[str, ...]]:
+    out: list[tuple[str, ...]] = []
+    simplices = obj.get("simplices") if isinstance(obj, dict) else []
+    if not isinstance(simplices, list):
+        return out
+    for simplex in simplices:
+        if not isinstance(simplex, dict) or _simplex_dimension(simplex) != dim:
+            continue
+        labels = simplex.get("simplex") if isinstance(simplex.get("simplex"), list) else []
+        if not labels and dim == 0:
+            label = simplex.get("label") or simplex.get("vertex") or simplex.get("record_id")
+            labels = [label] if label else []
+        key = tuple(sorted(str(value) for value in labels if str(value) != ""))
+        if len(key) == dim + 1:
+            out.append(key)
+    return out
+
+
+def _simplex_tree_map_report(
+    query_obj: dict[str, Any],
+    memory_obj: dict[str, Any],
+    mapping: dict[str, str],
+    q_filtration: dict[tuple[str, ...], float],
+    m_filtration: dict[tuple[str, ...], float],
+    max_rows: int = 160,
+) -> dict[str, Any]:
+    rows: list[dict[str, Any]] = []
+    checked = 0
+    preserved = 0
+    missing = 0
+    positive_distortions: list[float] = []
+    dimension_counts: dict[str, dict[str, int]] = {}
+    for simplex in _complex_simplices(query_obj, 0) + _complex_simplices(query_obj, 1) + _complex_simplices(query_obj, 2):
+        if not simplex or any(vertex not in mapping for vertex in simplex):
+            continue
+        checked += 1
+        dim = len(simplex) - 1
+        image = tuple(sorted(set(str(mapping[vertex]) for vertex in simplex)))
+        domain_filtration = float(q_filtration.get(tuple(sorted(simplex)), 0.0))
+        exists = len(image) <= 1 or image in m_filtration
+        codomain_filtration = float(m_filtration.get(image, 0.0 if len(image) <= 1 else math.inf))
+        signed_distortion = codomain_filtration - domain_filtration if exists and math.isfinite(codomain_filtration) else math.inf
+        preserved_flag = bool(exists and math.isfinite(signed_distortion) and signed_distortion <= 1e-9)
+        if preserved_flag:
+            preserved += 1
+        elif not exists:
+            missing += 1
+        if math.isfinite(signed_distortion):
+            positive_distortions.append(float(max(0.0, signed_distortion)))
+        key = f"dim_{dim}"
+        bucket = dimension_counts.setdefault(key, {"checked": 0, "preserved": 0, "missing_codomain": 0})
+        bucket["checked"] += 1
+        bucket["preserved"] += int(preserved_flag)
+        bucket["missing_codomain"] += int(not exists)
+        if len(rows) < max_rows:
+            rows.append(
+                {
+                    "domain_simplex": list(simplex),
+                    "image_simplex": list(image),
+                    "dimension": int(dim),
+                    "domain_filtration": float(domain_filtration),
+                    "codomain_filtration": None if not math.isfinite(codomain_filtration) else float(codomain_filtration),
+                    "signed_filtration_distortion": None if not math.isfinite(signed_distortion) else float(signed_distortion),
+                    "preserved_in_simplex_tree": preserved_flag,
+                    "failure_reason": None if preserved_flag else ("missing_codomain_simplex" if not exists else "filtration_not_preserved"),
+                }
+            )
+    return {
+        "source": "finite simplex enumeration from probability filtered complexes",
+        "map_kind": "vertex_probability_assignment_extended_to_simplex_tree",
+        "checked_simplices": int(checked),
+        "preserved_simplices": int(preserved),
+        "missing_codomain_simplices": int(missing),
+        "preservation_rate": float(preserved / checked) if checked else 0.0,
+        "positive_filtration_distortion_summary": _numeric_summary(positive_distortions),
+        "dimension_counts": dimension_counts,
+        "rows": rows,
+    }
+
+
+def _memory_unavailable_chain_map(reason: str) -> dict[str, Any]:
+    return {
+        "available": False,
+        "field": "F2",
+        "source": "unavailable_no_filtered_simplicial_map",
+        "reason": reason,
+        "chain_map_certified": False,
+        "boundary_commutation_certified": False,
+        "filtration_nonincreasing": False,
+        "safe_to_use_as_persistence_module_morphism": False,
+    }
+
+
+def _memory_chain_map_diagnostics(simplex_tree_report: dict[str, Any], is_filtered_map: bool, mapping: dict[str, str]) -> dict[str, Any]:
+    checked = int(simplex_tree_report.get("checked_simplices", 0) or 0)
+    preserved = int(simplex_tree_report.get("preserved_simplices", 0) or 0)
+    rate = float(simplex_tree_report.get("preservation_rate", 0.0) or 0.0)
+    available = bool(is_filtered_map and checked > 0 and preserved == checked and rate >= 0.999)
+    if not available:
+        return {
+            **_memory_unavailable_chain_map("filtered_simplicial_map_failed_or_unchecked"),
+            "checked_simplices": checked,
+            "preserved_simplices": preserved,
+            "simplex_tree_map_preservation_rate": rate,
+            "domain_vertices_mapped": len(mapping),
+            "simplex_tree_dimension_counts": simplex_tree_report.get("dimension_counts", {}),
+        }
+    return {
+        "available": True,
+        "field": "F2",
+        "source": "finite_filtered_simplicial_map_linear_extension",
+        "chain_map_certified": True,
+        "boundary_commutation_certified": True,
+        "filtration_nonincreasing": True,
+        "domain_vertices_mapped": len(mapping),
+        "checked_simplices": checked,
+        "preserved_simplices": preserved,
+        "simplex_tree_map_preservation_rate": rate,
+        "simplex_tree_dimension_counts": simplex_tree_report.get("dimension_counts", {}),
+        "chain_groups": simplex_tree_report.get("dimension_counts", {}),
+        "safe_to_use_as_persistence_module_morphism": True,
+    }
+
+
+def _memory_persistence_morphism_diagnostics(chain_map: dict[str, Any]) -> dict[str, Any]:
+    available = bool(chain_map.get("available") and chain_map.get("safe_to_use_as_persistence_module_morphism"))
+    return {
+        "available": available,
+        "ring": "F2[x_level,x_radius]",
+        "source": "filtered_chain_map" if available else "unavailable_no_filtered_chain_map",
+        "morphism_certified": available,
+        "free_resolution_required": False,
+        "safe_for_derived_equivalence_claim": False,
+        "reason": None if available else chain_map.get("reason", "chain map unavailable"),
+    }
+
+
+def _numeric_summary(values: list[float]) -> dict[str, Any]:
+    finite = [float(value) for value in values if math.isfinite(float(value))]
+    if not finite:
+        return {"count": 0, "min": None, "max": None, "mean": None, "std": None}
+    arr = np.asarray(finite, dtype=float)
+    return {
+        "count": int(arr.size),
+        "min": float(np.min(arr)),
+        "max": float(np.max(arr)),
+        "mean": float(np.mean(arr)),
+        "std": float(np.std(arr)),
+    }
 
 
 def _tail_jsonl_lines(
@@ -422,7 +801,6 @@ def memory_records_from_scaling_report(
             )
         )
     return records
-
 
 
 def memory_quality_gate_summary(
@@ -750,6 +1128,18 @@ def query_topology_from_report(result: dict[str, Any]) -> dict[str, Any]:
             return candidate
     return {}
 
+
+def query_probability_complex_from_report(result: dict[str, Any]) -> dict[str, Any]:
+    scaling = result.get("inference_scaling", {}) if isinstance(result, dict) else {}
+    best = scaling.get("best", {}) if isinstance(scaling, dict) else {}
+    for candidate in (
+        scaling.get("trajectory_probability_filtered_simplicial_object") if isinstance(scaling, dict) else None,
+        best.get("probability_filtered_simplicial_object") if isinstance(best, dict) else None,
+        result.get("probability_filtered_simplicial_object") if isinstance(result, dict) else None,
+    ):
+        if isinstance(candidate, dict):
+            return candidate
+    return {}
 
 def persistence_landscape_vector(topology: dict[str, Any], max_dimension: int | None = None) -> dict[int, np.ndarray]:
     if not isinstance(topology, dict):
@@ -1087,7 +1477,6 @@ def signature_vector(topology: dict[str, Any], length: int = 32) -> list[float]:
     if len(values) < length:
         values.extend([0.0] * (length - len(values)))
     return values[:length]
-
 
 
 def _commutative_algebra_signature_values(topology: dict[str, Any]) -> list[float]:
