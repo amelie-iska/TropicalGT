@@ -105,6 +105,16 @@ def test_real_cas_free_resolution_disabled_by_environment(monkeypatch):
     assert real["command_templates"]["macaulay2"]
 
 
+def test_bemultipliers_probe_reports_local_macaulay2_loader():
+    probe = cas_free_resolution.probe_bemultipliers()
+    assert probe["is_resolution_backend"] is False
+    assert probe["execution_policy"].startswith("load only after a CAS-certified free resolution")
+    assert "macaulay2_loader" in probe
+    if probe["local_macaulay2_package"]:
+        assert probe["macaulay2_loader"].startswith('load "')
+        assert probe["local_macaulay2_package"].endswith("BuchsbaumEisenbudMultipliers.m2")
+
+
 def test_real_cas_free_resolution_caches_deterministic_unavailable_probe(tmp_path, monkeypatch):
     monkeypatch.setenv("TROPICALGT_CAS_FREE_RESOLUTION_CACHE_DIR", str(tmp_path / "cas-cache"))
     monkeypatch.setattr(cas_free_resolution, "_candidate_executable", lambda name: None)

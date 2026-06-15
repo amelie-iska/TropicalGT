@@ -95,15 +95,38 @@ def probe_cas_backends() -> dict[str, Any]:
 
 
 def probe_bemultipliers() -> dict[str, Any]:
+    package_path = _local_bemultipliers_package_path()
+    m2_executable = _candidate_executable("M2")
+    loader = f'load "{package_path}"' if package_path else 'needsPackage "BuchsbaumEisenbudMultipliers"'
     return {
         "role": "optional_buchsbaum_eisenbud_diagnostics_after_certified_resolution",
         "available_python_modules": {
             "BEMultipliers": module_available("BEMultipliers"),
             "bemultipliers": module_available("bemultipliers"),
         },
+        "local_macaulay2_package": str(package_path) if package_path else None,
+        "macaulay2_executable": m2_executable,
+        "macaulay2_loader": loader,
+        "macaulay2_loadable": bool(package_path and m2_executable),
+        "execution_policy": "load only after a CAS-certified free resolution and bounded multiplier request; never substitute multiplier output for a free-resolution certificate",
         "repository": "https://github.com/amelie-iska/BEMultipliers.git",
         "is_resolution_backend": False,
     }
+
+
+def _local_bemultipliers_package_path() -> Path | None:
+    repo_root = Path(__file__).resolve().parents[3]
+    candidates = [
+        repo_root / "external" / "BEMultipliers" / "BuchsbaumEisenbudMultipliers.m2",
+        Path.cwd() / "external" / "BEMultipliers" / "BuchsbaumEisenbudMultipliers.m2",
+    ]
+    for raw in os.environ.get("TROPICALGT_BEMULTIPLIERS_PATH", "").split(os.pathsep):
+        if raw:
+            candidates.insert(0, Path(raw))
+    for candidate in candidates:
+        if candidate.is_file():
+            return candidate.resolve()
+    return None
 
 
 def canonicalize_module(module: dict[str, Any]) -> dict[str, Any]:
