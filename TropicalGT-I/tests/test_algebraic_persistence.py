@@ -1,3 +1,5 @@
+import sys
+
 import torch
 
 import tropicalgt.cas_free_resolution as cas_free_resolution
@@ -49,7 +51,18 @@ def _assert_real_resolution_guard(real, expected_ring):
         if real["cas_artifacts"].get("betti_table_ungraded", {}).get("available"):
             assert real["cas_artifacts"].get("betti_table_ungraded", {}).get("not_multigraded") is True
     else:
-        assert real["status"] in {"unavailable_no_certificate", "backend_not_installed", "certificate_failed", "disabled_by_environment"}
+        assert real["status"] in {
+            "unavailable_no_certificate",
+            "backend_not_installed",
+            "certificate_failed",
+            "disabled_by_environment",
+            "complexity_guard",
+            "timeout",
+            "parse_error",
+            "backend_error",
+            "unsupported_ring",
+            "invalid_grading",
+        }
         assert real["certificate_attached"] is False
         assert real["real_free_resolution_certified"] is False
         assert real["total_graded_resolution_certified"] is False
@@ -108,6 +121,59 @@ def test_real_cas_free_resolution_caches_deterministic_unavailable_probe(tmp_pat
     assert second["cache"]["enabled"] is True
     assert second["cache"]["hit"] is True
     assert second["cache"]["key"] == first["cache"]["key"]
+
+
+def test_real_cas_free_resolution_complexity_guard_caches_deterministic_skip(tmp_path, monkeypatch):
+    monkeypatch.setenv("TROPICALGT_CAS_FREE_RESOLUTION_CACHE_DIR", str(tmp_path / "cas-cache"))
+    monkeypatch.setenv("TROPICALGT_CAS_MAX_PRESENTATION_CELLS", "4")
+    monkeypatch.setenv("TROPICALGT_CAS_MAX_DETERMINANT_ORDER", "2")
+    monkeypatch.setattr(cas_free_resolution, "_candidate_executable", lambda name: "/bin/false")
+    module = {
+        "coefficient_ring": "F2[x_level,x_radius]",
+        "chain_module_generators": [
+            {"generator_id": "v0", "simplex": ["v0"], "homological_degree": 0, "multidegree": [0, 0]},
+            {"generator_id": "v1", "simplex": ["v1"], "homological_degree": 0, "multidegree": [0, 0]},
+            {"generator_id": "v2", "simplex": ["v2"], "homological_degree": 0, "multidegree": [0, 0]},
+            {"generator_id": "e0", "simplex": ["v0", "v1"], "homological_degree": 1, "multidegree": [1, 0]},
+            {"generator_id": "e1", "simplex": ["v1", "v2"], "homological_degree": 1, "multidegree": [0, 1]},
+            {"generator_id": "e2", "simplex": ["v0", "v2"], "homological_degree": 1, "multidegree": [1, 1]},
+        ],
+        "boundary_monomials": {
+            "d1": [
+                {"source_generator_id": "e0", "target_generator_id": "v0", "exponent": [1, 0]},
+                {"source_generator_id": "e0", "target_generator_id": "v1", "exponent": [1, 0]},
+                {"source_generator_id": "e1", "target_generator_id": "v1", "exponent": [0, 1]},
+                {"source_generator_id": "e1", "target_generator_id": "v2", "exponent": [0, 1]},
+                {"source_generator_id": "e2", "target_generator_id": "v0", "exponent": [1, 1]},
+                {"source_generator_id": "e2", "target_generator_id": "v2", "exponent": [1, 1]},
+            ]
+        },
+    }
+    first = cas_free_resolution.try_compute_real_free_resolution(module, timeout_s=1)
+    second = cas_free_resolution.try_compute_real_free_resolution(module, timeout_s=1)
+    _assert_real_resolution_guard(first, "F2[x_level,x_radius]")
+    _assert_real_resolution_guard(second, "F2[x_level,x_radius]")
+    assert first["status"] == "complexity_guard"
+    assert "complexity limits" in first["reason"]
+    assert {attempt["status"] for attempt in first["backend_attempts"]} == {"skipped_complexity_guard"}
+    assert all(attempt["presentation_shape"] == [3, 3] for attempt in first["backend_attempts"])
+    assert first["cache"]["written"] is True
+    assert second["cache"]["hit"] is True
+
+
+def test_tagged_cas_script_timeout_records_bounded_attempt():
+    result = cas_free_resolution._run_tagged_cas_script(
+        name="python",
+        executable=sys.executable,
+        script="import time\nprint('starting slow CAS probe', flush=True)\ntime.sleep(30)\n",
+        suffix=".py",
+        timeout_s=0.1,
+    )
+    assert result["available"] is False
+    attempt = result["attempt"]
+    assert attempt["status"] == "timeout"
+    assert attempt["timeout_s"] == 0.1
+    assert attempt["stdout_tail"]
 
 
 def test_real_cas_free_resolution_smoke_when_backend_available():

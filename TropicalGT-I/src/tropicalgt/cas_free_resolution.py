@@ -5,6 +5,7 @@ import json
 import os
 from pathlib import Path
 import shutil
+import signal
 import subprocess
 import tempfile
 from dataclasses import dataclass
@@ -31,7 +32,11 @@ UNAVAILABLE_STATUSES = {
     "parse_error",
     "certificate_failed",
     "disabled_by_environment",
+    "complexity_guard",
 }
+
+DEFAULT_CAS_MAX_PRESENTATION_CELLS = 4096
+DEFAULT_CAS_MAX_DETERMINANT_ORDER = 8
 
 
 @dataclass(frozen=True)
@@ -243,42 +248,110 @@ def try_compute_real_free_resolution(module: dict[str, Any], *, timeout_s: float
     attempts: list[dict[str, Any]] = []
     m2 = _candidate_executable("M2")
     if m2:
-        result = _run_tagged_cas_script(
-            name="M2",
-            executable=m2,
-            script=build_macaulay2_script(module_schema),
-            suffix=".m2",
-            timeout_s=timeout_s,
-        )
-        attempts.append(result.get("attempt", {}))
-        if result.get("available"):
-            return _cache_and_annotate(_certified_result(module_schema, result, attempts), cache_context)
+        guard = _cas_backend_complexity_guard("M2", module_schema)
+        if guard is not None:
+            attempts.append(guard)
+        else:
+            result = _run_tagged_cas_script(
+                name="M2",
+                executable=m2,
+                script=build_macaulay2_script(module_schema),
+                suffix=".m2",
+                timeout_s=timeout_s,
+            )
+            attempts.append(result.get("attempt", {}))
+            if result.get("available"):
+                return _cache_and_annotate(_certified_result(module_schema, result, attempts), cache_context)
     sage = _candidate_executable("sage")
     if sage:
-        result = _run_tagged_cas_script(
-            name="sage",
-            executable=sage,
-            script=build_sage_python_script(module_schema),
-            suffix=".sage.py",
-            timeout_s=timeout_s,
-        )
-        attempts.append(result.get("attempt", {}))
-        if result.get("available"):
-            return _cache_and_annotate(_certified_result(module_schema, result, attempts), cache_context)
+        guard = _cas_backend_complexity_guard("sage", module_schema)
+        if guard is not None:
+            attempts.append(guard)
+        else:
+            result = _run_tagged_cas_script(
+                name="sage",
+                executable=sage,
+                script=build_sage_python_script(module_schema),
+                suffix=".sage.py",
+                timeout_s=timeout_s,
+            )
+            attempts.append(result.get("attempt", {}))
+            if result.get("available"):
+                return _cache_and_annotate(_certified_result(module_schema, result, attempts), cache_context)
     singular = _candidate_executable("Singular")
     if singular:
-        result = _run_tagged_cas_script(
-            name="Singular",
-            executable=singular,
-            script=build_singular_script(module_schema),
-            suffix=".sing",
-            timeout_s=timeout_s,
-        )
-        attempts.append(result.get("attempt", {}))
-        if result.get("available"):
-            return _cache_and_annotate(_certified_result(module_schema, result, attempts), cache_context)
-    status = "backend_not_installed" if not attempts else "certificate_failed"
-    return _cache_and_annotate(unavailable_real_resolution(module, status=status, attempts=attempts), cache_context)
+        guard = _cas_backend_complexity_guard("Singular", module_schema)
+        if guard is not None:
+            attempts.append(guard)
+        else:
+            result = _run_tagged_cas_script(
+                name="Singular",
+                executable=singular,
+                script=build_singular_script(module_schema),
+                suffix=".sing",
+                timeout_s=timeout_s,
+            )
+            attempts.append(result.get("attempt", {}))
+            if result.get("available"):
+                return _cache_and_annotate(_certified_result(module_schema, result, attempts), cache_context)
+    status, reason = _final_unavailable_status_and_reason(attempts)
+    return _cache_and_annotate(unavailable_real_resolution(module, status=status, reason=reason, attempts=attempts), cache_context)
+
+
+def _env_int(name: str, default: int) -> int:
+    raw = os.environ.get(name)
+    if raw is None or raw == "":
+        return default
+    try:
+        return int(raw)
+    except ValueError:
+        return default
+
+
+def _cas_backend_complexity_guard(name: str, module_schema: dict[str, Any]) -> dict[str, Any] | None:
+    pmat = module_schema.get("presentation_matrix", {})
+    rows = int(pmat.get("rows", 0) or 0)
+    cols = int(pmat.get("cols", 0) or 0)
+    if rows <= 0 or cols <= 0:
+        return None
+    cells = rows * cols
+    determinant_order = min(rows, cols)
+    max_cells = _env_int("TROPICALGT_CAS_MAX_PRESENTATION_CELLS", DEFAULT_CAS_MAX_PRESENTATION_CELLS)
+    max_order = _env_int("TROPICALGT_CAS_MAX_DETERMINANT_ORDER", DEFAULT_CAS_MAX_DETERMINANT_ORDER)
+    reasons: list[str] = []
+    if max_cells > 0 and cells > max_cells:
+        reasons.append(f"presentation has {cells} matrix cells, above limit {max_cells}")
+    if name in {"M2", "Singular"} and max_order > 0 and determinant_order > max_order:
+        reasons.append(f"determinantal order {determinant_order} is above exact-minor limit {max_order}")
+    if not reasons:
+        return None
+    return {
+        "backend": name,
+        "status": "skipped_complexity_guard",
+        "presentation_shape": [rows, cols],
+        "presentation_cells": cells,
+        "determinantal_order": determinant_order,
+        "limits": {
+            "max_presentation_cells": max_cells,
+            "max_determinant_order": max_order,
+        },
+        "reason": "; ".join(reasons),
+    }
+
+
+def _final_unavailable_status_and_reason(attempts: list[dict[str, Any]]) -> tuple[str, str | None]:
+    if not attempts:
+        return "backend_not_installed", None
+    statuses = {str(attempt.get("status", "")) for attempt in attempts if attempt}
+    if statuses and statuses <= {"skipped_complexity_guard"}:
+        reasons = sorted({str(attempt.get("reason", "")) for attempt in attempts if attempt.get("reason")})
+        reason = "CAS presentation exceeded configured complexity limits before a certified backend run was safe."
+        if reasons:
+            reason += " " + " | ".join(reasons)
+        return "complexity_guard", reason
+    if "timeout" in statuses and statuses <= {"timeout", "skipped_complexity_guard"}:
+        return "timeout", "CAS backend timed out before producing a certificate; guarded attempts were not substituted as resolutions."
+    return "certificate_failed", None
 
 
 def cas_command_templates(module_schema: dict[str, Any]) -> dict[str, str]:
@@ -1158,7 +1231,7 @@ def _result_cacheable(result: dict[str, Any]) -> bool:
     status = str(result.get("status", ""))
     if status == "certified":
         return bool(result.get("certificate_attached") and result.get("exactness_certified"))
-    return status in {"backend_not_installed", "certificate_failed", "unsupported_ring", "invalid_grading"}
+    return status in {"backend_not_installed", "certificate_failed", "unsupported_ring", "invalid_grading", "complexity_guard"}
 
 def _run_tagged_cas_script(
     *,
@@ -1178,12 +1251,32 @@ def _run_tagged_cas_script(
         elif name == "Singular":
             command = [executable, "-q", path]
         try:
-            proc = subprocess.run(command, text=True, capture_output=True, timeout=timeout_s, check=False)
-        except subprocess.TimeoutExpired:
-            return {"available": False, "attempt": {"backend": name, "status": "timeout", "executable": executable}}
+            proc = subprocess.Popen(
+                command,
+                text=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                start_new_session=True,
+            )
         except Exception as exc:
             return {"available": False, "attempt": {"backend": name, "status": "backend_error", "error": str(exc), "executable": executable}}
-    parsed = _parse_tagged_output(proc.stdout)
+        try:
+            stdout, stderr = proc.communicate(timeout=timeout_s)
+        except subprocess.TimeoutExpired:
+            stdout, stderr = _terminate_cas_process_group(proc)
+            return {
+                "available": False,
+                "attempt": {
+                    "backend": name,
+                    "status": "timeout",
+                    "executable": executable,
+                    "timeout_s": timeout_s,
+                    "pid": proc.pid,
+                    "stdout_tail": stdout[-800:],
+                    "stderr_tail": stderr[-800:],
+                },
+            }
+    parsed = _parse_tagged_output(stdout)
     ok = proc.returncode == 0 and parsed is not None
     return {
         "available": ok,
@@ -1196,10 +1289,31 @@ def _run_tagged_cas_script(
             "status": "ran" if ok else "parse_error",
             "returncode": proc.returncode,
             "executable": executable,
-            "stderr_tail": proc.stderr[-800:],
+            "stderr_tail": stderr[-800:],
         },
     }
 
+
+def _terminate_cas_process_group(proc: subprocess.Popen[str]) -> tuple[str, str]:
+    stdout = ""
+    stderr = ""
+    try:
+        os.killpg(proc.pid, signal.SIGTERM)
+    except ProcessLookupError:
+        pass
+    except Exception:
+        proc.terminate()
+    try:
+        stdout, stderr = proc.communicate(timeout=2.0)
+    except subprocess.TimeoutExpired:
+        try:
+            os.killpg(proc.pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+        except Exception:
+            proc.kill()
+        stdout, stderr = proc.communicate()
+    return stdout or "", stderr or ""
 
 def _parse_tagged_output(stdout: str) -> dict[str, str] | None:
     start = "TROPICALGT_RESOLUTION_BEGIN"
