@@ -823,6 +823,82 @@ def train(config_path: str | Path, resume_from: str | Path | None = None, max_st
     return report
 
 
+def _cfg_bool(value: Any, default: bool = False) -> bool:
+    if isinstance(value, bool):
+        return value
+    if value is None:
+        return default
+    lowered = str(value).strip().lower()
+    if lowered in {"1", "true", "yes", "on"}:
+        return True
+    if lowered in {"0", "false", "no", "off"}:
+        return False
+    return default
+
+
+def _cfg_int(cfg: dict[str, Any], keys: tuple[str, ...], default: int) -> int:
+    for key in keys:
+        if key in cfg and cfg.get(key) is not None:
+            try:
+                return int(cfg[key])
+            except (TypeError, ValueError):
+                break
+    return int(default)
+
+
+def _periodic_got_failure_policy(cfg: dict[str, Any]) -> str:
+    return str(cfg.get("periodic_viz_failure_policy", "")).strip().lower()
+
+
+def _periodic_got_scaling_budget(cfg: dict[str, Any]) -> dict[str, Any]:
+    requested_depth = max(_cfg_int(cfg, ("periodic_viz_scale_depth", "viz_scale_depth"), 3), 0)
+    requested_width = max(_cfg_int(cfg, ("periodic_viz_scale_width", "viz_scale_width"), 4), 1)
+    requested_branch_factor = max(_cfg_int(cfg, ("periodic_viz_scale_branch_factor", "viz_scale_branch_factor"), 3), 1)
+    training_safe_bounds = _cfg_bool(
+        cfg.get("periodic_viz_got_training_safe_bounds"),
+        default=_periodic_got_failure_policy(cfg) == "record_incomplete_without_fabrication",
+    )
+    max_depth = max(_cfg_int(cfg, ("periodic_viz_got_max_depth",), 3), 0)
+    max_width = max(_cfg_int(cfg, ("periodic_viz_got_max_width",), 4), 1)
+    max_branch_factor = max(_cfg_int(cfg, ("periodic_viz_got_max_branch_factor",), 3), 1)
+    effective_depth = min(requested_depth, max_depth) if training_safe_bounds else requested_depth
+    effective_width = min(requested_width, max_width) if training_safe_bounds else requested_width
+    effective_branch_factor = min(requested_branch_factor, max_branch_factor) if training_safe_bounds else requested_branch_factor
+    return {
+        "training_safe_bounds": bool(training_safe_bounds),
+        "requested_depth": requested_depth,
+        "requested_width": requested_width,
+        "requested_branch_factor": requested_branch_factor,
+        "effective_depth": effective_depth,
+        "effective_width": effective_width,
+        "effective_branch_factor": effective_branch_factor,
+        "bounded_for_training_survivability": bool(
+            training_safe_bounds
+            and (
+                effective_depth != requested_depth
+                or effective_width != requested_width
+                or effective_branch_factor != requested_branch_factor
+            )
+        ),
+        "projected_requested_candidate_scores": int(1 + requested_depth * requested_width),
+        "projected_effective_candidate_scores": int(1 + effective_depth * effective_width),
+        "policy": _periodic_got_failure_policy(cfg),
+        "interpretation": "Periodic in-training GoT audits may downshift requested search breadth/depth; offline/final audits can still use the full requested budget.",
+    }
+
+
+def _periodic_got_budget_metrics(budget: dict[str, Any]) -> dict[str, float]:
+    return {
+        "periodic_got_scaling_requested_depth": float(budget.get("requested_depth", 0)),
+        "periodic_got_scaling_requested_width": float(budget.get("requested_width", 0)),
+        "periodic_got_scaling_requested_branch_factor": float(budget.get("requested_branch_factor", 0)),
+        "periodic_got_scaling_effective_depth": float(budget.get("effective_depth", 0)),
+        "periodic_got_scaling_effective_width": float(budget.get("effective_width", 0)),
+        "periodic_got_scaling_effective_branch_factor": float(budget.get("effective_branch_factor", 0)),
+        "periodic_got_scaling_bounded_for_training": float(bool(budget.get("bounded_for_training_survivability", False))),
+    }
+
+
 def _run_periodic_validation_round(
     *,
     model: TropicalGTModel,
@@ -883,6 +959,8 @@ def _run_periodic_validation_round(
     periodic_memory_vector_aggregate_similarities: list[float] = []
     periodic_memory_vector_score_contributions: list[float] = []
     periodic_memory_landscape_score_contributions: list[float] = []
+    periodic_got_scaling_budgets: list[dict[str, Any]] = []
+    periodic_got_scaling_failures: list[dict[str, Any]] = []
     if render_visualizations:
         vis_paths.update(
             {
@@ -904,6 +982,9 @@ def _run_periodic_validation_round(
         vis_paths.update({f"metrics_{key}": value for key, value in write_metric_visualizations(history, step_dir / "metrics").items()})
         vis_paths.update({f"graphcg_{key}": value for key, value in write_graphcg_training_visualizations(model, step_dir / "graphcg").items()})
         if bool(cfg.get("periodic_viz_got_scaling", cfg.get("viz_got_scaling", False))) and len(val_ds) > 0:
+            got_budget = _periodic_got_scaling_budget(cfg)
+            periodic_got_scaling_budgets.append(got_budget)
+            metrics.update(_periodic_got_budget_metrics(got_budget))
             audit_records = _select_got_audit_records(
                 val_ds,
                 count=int(cfg.get("periodic_viz_got_examples", 3)),
@@ -911,37 +992,63 @@ def _run_periodic_validation_round(
                 seed=seed + step,
             )
             for example_idx, (record_idx, audit_record) in enumerate(audit_records):
-                scaling = run_inference_scaling(
-                    model,
-                    audit_record,
-                    tokenizer,
-                    seq_len,
-                    device,
-                    depth=int(cfg.get("periodic_viz_scale_depth", cfg.get("viz_scale_depth", 3))),
-                    width=int(cfg.get("periodic_viz_scale_width", cfg.get("viz_scale_width", 4))),
-                    branch_factor=int(cfg.get("periodic_viz_scale_branch_factor", cfg.get("viz_scale_branch_factor", 3))),
-                    trace_limit=int(cfg.get("viz_trace_limit", 24)),
-                    audit_level=audit_level,
-                    ph_backend=ph_backend,
-                    audit_max_simplices=audit_max_simplices,
-                    allow_stop=bool(cfg.get("periodic_viz_scale_allow_stop", cfg.get("viz_scale_allow_stop", False))),
-                    diverse_actions=bool(cfg.get("periodic_viz_scale_diverse_actions", cfg.get("viz_scale_diverse_actions", True))),
-                    stochastic_actions=bool(cfg.get("periodic_viz_scale_stochastic_actions", cfg.get("viz_scale_stochastic_actions", False))),
-                    sampling_temperature=float(cfg.get("periodic_viz_scale_sampling_temperature", cfg.get("viz_scale_sampling_temperature", 1.0))),
-                    sampling_exploration=float(cfg.get("periodic_viz_scale_sampling_exploration", cfg.get("viz_scale_sampling_exploration", 0.0))),
-                    sampling_seed=int(cfg.get("periodic_viz_scale_sampling_seed", seed + step + example_idx)),
-                    require_complete_reasoning_steps=_interactive_viz_require_complete_steps(
-                        cfg,
-                        "periodic_viz_require_complete_reasoning_steps",
-                        "viz_require_complete_reasoning_steps",
-                        "interactive_artifacts_require_complete_reasoning_steps",
-                    ),
-                )
+                example_dir = step_dir / "got_audit" if example_idx == 0 else step_dir / "got_audit" / f"example_{example_idx:02d}"
+                prefix = "got_audit" if example_idx == 0 else f"got_audit_example_{example_idx:02d}"
+                sampling_seed = int(cfg.get("periodic_viz_scale_sampling_seed", seed + step + example_idx))
+                try:
+                    scaling = run_inference_scaling(
+                        model,
+                        audit_record,
+                        tokenizer,
+                        seq_len,
+                        device,
+                        depth=int(got_budget["effective_depth"]),
+                        width=int(got_budget["effective_width"]),
+                        branch_factor=int(got_budget["effective_branch_factor"]),
+                        trace_limit=int(cfg.get("viz_trace_limit", 24)),
+                        audit_level=audit_level,
+                        ph_backend=ph_backend,
+                        audit_max_simplices=audit_max_simplices,
+                        allow_stop=bool(cfg.get("periodic_viz_scale_allow_stop", cfg.get("viz_scale_allow_stop", False))),
+                        diverse_actions=bool(cfg.get("periodic_viz_scale_diverse_actions", cfg.get("viz_scale_diverse_actions", True))),
+                        stochastic_actions=bool(cfg.get("periodic_viz_scale_stochastic_actions", cfg.get("viz_scale_stochastic_actions", False))),
+                        sampling_temperature=float(cfg.get("periodic_viz_scale_sampling_temperature", cfg.get("viz_scale_sampling_temperature", 1.0))),
+                        sampling_exploration=float(cfg.get("periodic_viz_scale_sampling_exploration", cfg.get("viz_scale_sampling_exploration", 0.0))),
+                        sampling_seed=sampling_seed,
+                        require_complete_reasoning_steps=_interactive_viz_require_complete_steps(
+                            cfg,
+                            "periodic_viz_require_complete_reasoning_steps",
+                            "viz_require_complete_reasoning_steps",
+                            "interactive_artifacts_require_complete_reasoning_steps",
+                        ),
+                    )
+                    metrics["periodic_got_scaling_available"] = 1.0
+                except Exception as exc:
+                    if _periodic_got_failure_policy(cfg) != "record_incomplete_without_fabrication":
+                        raise
+                    unavailable = {
+                        "available": False,
+                        "status": "unavailable_periodic_got_scaling_failed",
+                        "reason": "Periodic GoT scaling failed inside the training loop; no proxy artifact was substituted.",
+                        "error_type": type(exc).__name__,
+                        "error": str(exc),
+                        "audit_seed_record_index": record_idx,
+                        "audit_seed_record_id": getattr(audit_record, "record_id", ""),
+                        "periodic_got_scaling_budget": got_budget,
+                    }
+                    example_dir.mkdir(parents=True, exist_ok=True)
+                    unavailable_path = example_dir / "got_audit_unavailable.json"
+                    unavailable_path.write_text(json.dumps(unavailable, indent=2), encoding="utf-8")
+                    vis_paths[f"{prefix}_unavailable_json"] = str(unavailable_path)
+                    periodic_got_scaling_failures.append(unavailable)
+                    metrics["periodic_got_scaling_available"] = 0.0
+                    continue
                 audit_result: dict[str, Any] = {
                     "inference_scaling": scaling,
                     "topological_algebra": scaling.get("best", {}).get("topological_algebra"),
                     "audit_seed_record_index": record_idx,
                     "audit_seed_record_id": audit_record.record_id,
+                    "periodic_got_scaling_budget": got_budget,
                 }
                 if memory_bank is not None:
                     memory_source = f"periodic:{run_name}:step{step}:record{record_idx}"
@@ -998,8 +1105,6 @@ def _run_periodic_validation_round(
                         "top_k": int(cfg.get("periodic_memory_retrieve_top_k", 5)),
                         "retrieved": retrieved,
                     }
-                example_dir = step_dir / "got_audit" if example_idx == 0 else step_dir / "got_audit" / f"example_{example_idx:02d}"
-                prefix = "got_audit" if example_idx == 0 else f"got_audit_example_{example_idx:02d}"
                 vis_paths.update(
                     {
                         f"{prefix}_{key}": value
@@ -1039,6 +1144,8 @@ def _run_periodic_validation_round(
         "memory_quality_candidates_seen": periodic_memory_candidates_seen,
         "memory_quality_eligible": periodic_memory_eligible,
         "memory_quality_rejected": periodic_memory_rejected,
+        "periodic_got_scaling_budgets": periodic_got_scaling_budgets,
+        "periodic_got_scaling_failures": periodic_got_scaling_failures,
     }
     report_path = step_dir / "periodic_validation_artifacts.json"
     report_path.write_text(json.dumps(report, indent=2), encoding="utf-8")

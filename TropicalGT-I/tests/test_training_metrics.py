@@ -253,6 +253,126 @@ def test_periodic_got_visualization_requires_complete_steps_by_default(tmp_path:
     assert report["visualizations"]["got_audit_audit"].endswith("audit.html")
 
 
+def test_periodic_got_visualization_bounds_training_safe_failure_policy(tmp_path: Path, monkeypatch):
+    import tropicalgt.run as run_mod
+
+    captured = {}
+    monkeypatch.setattr(run_mod, "evaluate_model", lambda *args, **kwargs: {"nll": 1.0, "bpb": 1.0})
+    monkeypatch.setattr(run_mod, "write_reasoning_visualizations", lambda *args, **kwargs: {})
+    monkeypatch.setattr(run_mod, "write_metric_visualizations", lambda *args, **kwargs: {})
+    monkeypatch.setattr(run_mod, "write_graphcg_training_visualizations", lambda *args, **kwargs: {})
+    monkeypatch.setattr(run_mod, "_select_got_audit_records", lambda *args, **kwargs: [(0, types.SimpleNamespace(record_id="audit-record"))])
+
+    def fake_scaling(*args, **kwargs):
+        captured.update(kwargs)
+        return {"enabled": True, "best": {}, "candidates": []}
+
+    def fake_artifacts(result, output_dir, render_html):
+        path = Path(output_dir) / "audit.html"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(result), encoding="utf-8")
+        return {"audit": str(path)}
+
+    monkeypatch.setattr(run_mod, "run_inference_scaling", fake_scaling)
+    monkeypatch.setattr(run_mod, "write_inference_audit_artifacts", fake_artifacts)
+
+    report = run_mod._run_periodic_validation_round(
+        model=object(),
+        val_ds=[object()],
+        tokenizer=object(),
+        seq_len=1,
+        batch_size=1,
+        device=torch.device("cpu"),
+        out_dir=tmp_path,
+        cfg={
+            "periodic_viz_got_scaling": True,
+            "periodic_viz_failure_policy": "record_incomplete_without_fabrication",
+            "periodic_viz_scale_depth": 12,
+            "periodic_viz_scale_width": 18,
+            "periodic_viz_scale_branch_factor": 6,
+        },
+        history=[],
+        step=10,
+        seed=1729,
+        graph_bpb_side_weight=1.0,
+        graph_autoregressive=True,
+        run_name="periodic-test",
+        memory_bank=None,
+        memory_records_added=0,
+        render_visualizations=True,
+        details_limit=1,
+        viz_limit=1,
+        audit_level="none",
+        ph_backend="none",
+        audit_max_simplices=8,
+    )
+
+    assert captured["depth"] == 3
+    assert captured["width"] == 4
+    assert captured["branch_factor"] == 3
+    budget = report["periodic_got_scaling_budgets"][0]
+    assert budget["requested_depth"] == 12
+    assert budget["requested_width"] == 18
+    assert budget["requested_branch_factor"] == 6
+    assert budget["bounded_for_training_survivability"] is True
+    assert report["metrics"]["periodic_got_scaling_bounded_for_training"] == 1.0
+    assert report["metrics"]["periodic_got_scaling_available"] == 1.0
+
+
+def test_periodic_got_visualization_records_unavailable_on_failure_policy(tmp_path: Path, monkeypatch):
+    import tropicalgt.run as run_mod
+
+    monkeypatch.setattr(run_mod, "evaluate_model", lambda *args, **kwargs: {"nll": 1.0, "bpb": 1.0})
+    monkeypatch.setattr(run_mod, "write_reasoning_visualizations", lambda *args, **kwargs: {})
+    monkeypatch.setattr(run_mod, "write_metric_visualizations", lambda *args, **kwargs: {})
+    monkeypatch.setattr(run_mod, "write_graphcg_training_visualizations", lambda *args, **kwargs: {})
+    monkeypatch.setattr(run_mod, "_select_got_audit_records", lambda *args, **kwargs: [(0, types.SimpleNamespace(record_id="audit-record"))])
+
+    def fake_scaling(*args, **kwargs):
+        raise RuntimeError("periodic audit blew budget")
+
+    monkeypatch.setattr(run_mod, "run_inference_scaling", fake_scaling)
+
+    report = run_mod._run_periodic_validation_round(
+        model=object(),
+        val_ds=[object()],
+        tokenizer=object(),
+        seq_len=1,
+        batch_size=1,
+        device=torch.device("cpu"),
+        out_dir=tmp_path,
+        cfg={
+            "periodic_viz_got_scaling": True,
+            "periodic_viz_failure_policy": "record_incomplete_without_fabrication",
+            "periodic_viz_scale_depth": 12,
+            "periodic_viz_scale_width": 18,
+            "periodic_viz_scale_branch_factor": 6,
+        },
+        history=[],
+        step=10,
+        seed=1729,
+        graph_bpb_side_weight=1.0,
+        graph_autoregressive=True,
+        run_name="periodic-test",
+        memory_bank=None,
+        memory_records_added=0,
+        render_visualizations=True,
+        details_limit=1,
+        viz_limit=1,
+        audit_level="none",
+        ph_backend="none",
+        audit_max_simplices=8,
+    )
+
+    assert report["metrics"]["periodic_got_scaling_available"] == 0.0
+    assert report["periodic_got_scaling_failures"][0]["available"] is False
+    assert report["periodic_got_scaling_failures"][0]["status"] == "unavailable_periodic_got_scaling_failed"
+    unavailable_path = Path(report["visualizations"]["got_audit_unavailable_json"])
+    assert unavailable_path.exists()
+    payload = json.loads(unavailable_path.read_text(encoding="utf-8"))
+    assert payload["reason"].endswith("no proxy artifact was substituted.")
+
+
 def test_validation_wandb_logs_only_new_eval_scalars(tmp_path: Path, monkeypatch):
     import tropicalgt.run as run_mod
 
