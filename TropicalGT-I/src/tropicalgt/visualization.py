@@ -6449,6 +6449,9 @@ def _analogical_quality_table_trace(
         ("base retrieval", f"{float(sim.get('base_retrieval_score', 0.0)):.4f}"),
         ("landscape contribution", f"{float(sim.get('persistence_landscape_score_contribution', 0.0)):.4f}"),
         ("vector-family contribution", f"{float(sim.get('persistence_vector_score_contribution', 0.0)):.4f}"),
+        ("probability-map contribution", f"{float(sim.get('probability_simplicial_map_score_contribution', 0.0)):.4f}"),
+        ("probability-map similarity", f"{float(sim.get('probability_simplicial_map_similarity', 0.0)):.4f}"),
+        ("retrieval probability map", f"{float(sim.get('probability_simplicial_map_preservation_rate', 0.0)):.4f} via {html.escape(str(sim.get('probability_simplicial_map_source', 'none')))}"),
         ("retrieval weights", html.escape(str(sim.get('retrieval_weights', {})))),
         ("PH similarity", f"{float(sim.get('persistent_homology_similarity', 0.0)):.4f}"),
         ("chain-presentation similarity", f"{float(sim.get('chain_presentation_similarity', 0.0)):.4f}"),
@@ -6854,9 +6857,9 @@ def _write_analogical_topk_index(path: Path, pair_pages: list[dict[str, object]]
 <body>
   <main>
 	    <h1>Analogical top-k probability correspondences</h1>
-	    <p>Each row opens one query-to-memory vertex assignment with a finite filtered-complex certificate. The NLL/fitness landscape and the GUDHI persistence landscape are different objects: this table reports the persistence-landscape vector plus the wider vectorized GUDHI family (Landscape, BettiCurve, Silhouette, Entropy, PersistenceLengths, TopologicalVector, PersistenceImage). These are real cached vectors; the cosine/L2 comparisons are differentiable with respect to those vectors, while this HTML does not claim autograd through GUDHI diagram vectorization. Unavailable vectors stay zero rather than being fabricated. Edge, face, and filtration preservation can fail and are reported on the rank page.</p>
+	    <p>Each row opens one query-to-memory vertex assignment with a finite filtered-complex certificate. The NLL/fitness landscape and the GUDHI persistence landscape are different objects: this table reports the persistence-landscape vector plus the wider vectorized GUDHI family (Landscape, BettiCurve, Silhouette, Entropy, PersistenceLengths, TopologicalVector, PersistenceImage) and the retrieval-side probability-map score contribution. These are real cached vectors and finite probability-complex certificates; the cosine/L2 comparisons are differentiable with respect to those vectors, while this HTML does not claim autograd through GUDHI diagram vectorization. Unavailable vectors stay zero rather than being fabricated. Edge, face, and filtration preservation can fail and are reported on the rank page.</p>
 	    <table>
-	      <thead><tr><th>rank</th><th>correspondence</th><th>retrieval</th><th>landscape contrib.</th><th>vector contrib.</th><th>PH</th><th>chain pres.</th><th>comm. alg.</th><th>persistence-landscape L2 sim</th><th>persistence-landscape cosine</th><th>vector aggregate</th><th>vector methods</th><th>derived/algebraic</th><th>coarse signature</th><th>simplex-tree map</th><th>edge certificate</th></tr></thead>
+	      <thead><tr><th>rank</th><th>correspondence</th><th>retrieval</th><th>landscape contrib.</th><th>vector contrib.</th><th>PH</th><th>chain pres.</th><th>comm. alg.</th><th>persistence-landscape L2 sim</th><th>persistence-landscape cosine</th><th>vector aggregate</th><th>vector methods</th><th>prob-map contrib.</th><th>prob-map sim</th><th>prob-map preserved</th><th>prob-map source</th><th>derived/algebraic</th><th>coarse signature</th><th>simplex-tree map</th><th>edge certificate</th></tr></thead>
       <tbody>{body}</tbody>
     </table>
   </main>
@@ -7121,6 +7124,11 @@ def _topological_similarity_summary(query_topology: dict[str, object], memory_to
         "base_retrieval_score": float(row.get("base_retrieval_score", 0.0)),
         "persistence_landscape_score_contribution": float(row.get("persistence_landscape_score_contribution", 0.0)),
         "persistence_vector_score_contribution": float(row.get("persistence_vector_score_contribution", 0.0)),
+        "probability_simplicial_map_score_contribution": float(row.get("probability_simplicial_map_score_contribution", 0.0)),
+        "probability_simplicial_map_similarity": float(row.get("probability_simplicial_map_similarity", 0.0)),
+        "probability_simplicial_map_preservation_rate": float(row.get("probability_simplicial_map_preservation_rate", 0.0)),
+        "probability_simplicial_map_available": float(1.0 if row.get("probability_simplicial_map_available") else 0.0),
+        "probability_simplicial_map_source": str(row.get("probability_simplicial_map_source", "none")),
         "retrieval_score_components": row.get("retrieval_score_components", {}) if isinstance(row.get("retrieval_score_components"), dict) else {},
         "retrieval_weights": retrieval_weights,
         "embedding_similarity": float(row.get("embedding_similarity", 0.0)),

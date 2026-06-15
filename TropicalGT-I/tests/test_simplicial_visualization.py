@@ -750,16 +750,23 @@ def test_analogical_memory_visualization_renders_simplicial_maps(tmp_path: Path)
                 "base_retrieval_score": 0.5,
                 "persistence_landscape_score_contribution": 0.1,
                 "persistence_vector_score_contribution": 0.3,
+                "probability_simplicial_map_score_contribution": 0.18,
+                "probability_simplicial_map_similarity": 0.9,
+                "probability_simplicial_map_available": True,
+                "probability_simplicial_map_preservation_rate": 1.0,
+                "probability_simplicial_map_source": "model_probability_jensen_shannon_assignment",
                 "retrieval_score_components": {
                     "embedding": 0.2,
                     "signature": 0.2,
                     "quality": 0.1,
                     "persistence_landscape": 0.1,
                     "persistence_vector_family": 0.3,
+                    "probability_simplicial_map": 0.18,
                 },
                 "retrieval_weights": {
                     "persistence_landscape_weight": 0.08,
                     "persistence_vector_weight": 0.18,
+                    "probability_simplicial_map_weight": 0.20,
                     "persistence_vector_includes_landscape": False,
                 },
                 "quality_score": 0.6,
@@ -776,14 +783,20 @@ def test_analogical_memory_visualization_renders_simplicial_maps(tmp_path: Path)
                 "base_retrieval_score": 0.4,
                 "persistence_landscape_score_contribution": 0.08,
                 "persistence_vector_score_contribution": 0.22,
+                "probability_simplicial_map_score_contribution": 0.10,
+                "probability_simplicial_map_similarity": 0.5,
+                "probability_simplicial_map_available": True,
+                "probability_simplicial_map_preservation_rate": 1.0,
+                "probability_simplicial_map_source": "model_probability_jensen_shannon_assignment",
                 "retrieval_score_components": {
                     "embedding": 0.16,
                     "signature": 0.14,
                     "quality": 0.1,
                     "persistence_landscape": 0.08,
                     "persistence_vector_family": 0.22,
+                    "probability_simplicial_map": 0.10,
                 },
-                "retrieval_weights": {"persistence_landscape_weight": 0.08, "persistence_vector_weight": 0.18},
+                "retrieval_weights": {"persistence_landscape_weight": 0.08, "persistence_vector_weight": 0.18, "probability_simplicial_map_weight": 0.20},
                 "quality_score": 0.4,
                 "trajectory_probability_filtered_simplicial_object": obj,
                 "topological_algebra": topo,
@@ -809,6 +822,8 @@ def test_analogical_memory_visualization_renders_simplicial_maps(tmp_path: Path)
     assert "base retrieval" in html
     assert "landscape contribution" in html
     assert "vector-family contribution" in html
+    assert "probability-map contribution" in html
+    assert "retrieval probability map" in html
     assert "retrieval weights" in html
     assert "preserved 1-simplex correspondence" in html
     assert "certificate diagnostic" in html
@@ -830,6 +845,9 @@ def test_analogical_memory_visualization_renders_simplicial_maps(tmp_path: Path)
     assert "landscape L2 sim" in index_html
     assert "landscape cosine" in index_html
     assert "vector aggregate" in index_html
+    assert "prob-map contrib." in index_html
+    assert "prob-map source" in index_html
+    assert "retrieval-side probability-map score contribution" in index_html
     assert "vectorized GUDHI family" in index_html
     assert "BettiCurve, Silhouette" in index_html
     assert "landscape contrib." in index_html
