@@ -11,6 +11,7 @@ from tropicalgt.simplicial import build_embedding_radius_simplicial_object, buil
 from tropicalgt.tokenizer import TokenGTTokenizer
 from tropicalgt.visualization import (
     _attach_graph_token_direction_overlay,
+    _derived_invariant_comparison,
     _gudhi_canonical_complex,
     _has_real_probability_filtration,
     _simplicial_object_svg,
@@ -891,6 +892,116 @@ def test_analogical_memory_visualization_renders_simplicial_maps(tmp_path: Path)
     assert isinstance(maps["maps"][0]["failed_edge_pairs"], list)
     assert isinstance(maps["maps"][0]["preserved_edge_query_vertices"], list)
 
+
+
+def _topology_with_certified_real_resolution(*, input_hash: str = "hash-a", fitt0: str = "ideal(x_level,x_radius)", multiplier_matrix: str = "matrix {{1}}"):
+    free_modules = [
+        {"homological_degree": 0, "multidegree": [0, 0], "rank": 1, "display": "F_0 contains S(-0,0)^1"},
+        {"homological_degree": 1, "multidegree": [1, 0], "rank": 1, "display": "F_1 contains S(-1,0)^1"},
+    ]
+    real = {
+        "schema_version": "tropicalgt.real_free_resolution.v1",
+        "available": True,
+        "status": "certified",
+        "backend": "Macaulay2",
+        "coefficient_ring": "F2[x_level,x_radius]",
+        "input_sha256": input_hash,
+        "certificate_attached": True,
+        "exactness_certified": True,
+        "minimality_certified": True,
+        "real_free_resolution_certified": True,
+        "multigraded_free_resolution_certified": True,
+        "safe_to_render_as_multigraded_free_resolution": True,
+        "free_resolution_summary": {
+            "available": True,
+            "safe_for_multigraded_claims": True,
+            "not_multigraded": False,
+            "betti_by_homological_and_multidegree": {"0": {"0,0": 1}, "1": {"1,0": 1}},
+            "free_modules": free_modules,
+        },
+        "cas_artifacts": {
+            "differentials": [
+                {
+                    "homological_degree": 1,
+                    "rows": 1,
+                    "cols": 1,
+                    "source_degrees": [[1, 0]],
+                    "target_degrees": [[0, 0]],
+                    "matrix_text": "matrix {{x_level}}",
+                }
+            ],
+            "fitting_ideals": {"Fitt0": fitt0, "Fitt1": "ideal 1"},
+            "minors": {"minors_1": fitt0},
+            "buchsbaum_eisenbud_diagnostics": {
+                "available": True,
+                "multiplier_output_available": True,
+                "bemultipliers_status": "computed_aMultiplier_1",
+                "a_multiplier_1_shape": "1x1",
+                "a_multiplier_1_matrix": multiplier_matrix,
+            },
+        },
+    }
+    return {
+        "persistence": {"intervals": [{"dimension": 0, "birth": 0.0, "death": None, "infinite": True}]},
+        "derived_equivalence_signature": {
+            "betti_vector": [1, 0, 0, 0],
+            "persistence_finite_interval_count": 0,
+            "persistence_infinite_interval_count": 1,
+            "persistence_total_finite_length": 0.0,
+            "multiparameter_grid_points": 1,
+            "multiparameter_h0_rank_sample": [{"h0_rank": 1}],
+        },
+        "commutative_algebra": {
+            "two_parameter_chain_presentation_diagnostics": {
+                "ring": "F2[x_level,x_radius]",
+                "free_chain_modules": [
+                    {"homological_degree": 0, "rank": 1},
+                    {"homological_degree": 1, "rank": 1},
+                ],
+                "real_free_resolution": real,
+            }
+        },
+    }
+
+
+def test_derived_comparison_requires_matching_certified_cas_artifacts():
+    query = _topology_with_certified_real_resolution()
+    matching = _topology_with_certified_real_resolution()
+    comparison = _derived_invariant_comparison(
+        query,
+        matching,
+        sim={"derived_signature_similarity": 1.0, "chain_presentation_similarity": 1.0, "derived_algebraic_similarity": 1.0},
+    )
+    real = comparison["real_free_resolution_comparison"]
+    assert real["available"] is True
+    assert real["safe_for_derived_category_claims"] is True
+    assert real["certified_cas_evidence_match"] is True
+    assert real["certified_cas_evidence_similarity"] == 1.0
+    assert comparison["certified_cas_evidence_match"] is True
+    assert comparison["derived_equivalence_claim"] == "cas_certified_matching_real_resolution_witness"
+    assert real["component_matches"]["fitting_ideals"] is True
+    assert real["component_matches"]["buchsbaum_eisenbud"] is True
+
+    mismatched = _topology_with_certified_real_resolution(
+        input_hash="hash-b",
+        fitt0="ideal(x_radius^2)",
+        multiplier_matrix="matrix {{x_radius}}",
+    )
+    mismatch = _derived_invariant_comparison(
+        query,
+        mismatched,
+        sim={"derived_signature_similarity": 1.0, "chain_presentation_similarity": 1.0, "derived_algebraic_similarity": 1.0},
+    )
+    real_mismatch = mismatch["real_free_resolution_comparison"]
+    assert real_mismatch["available"] is True
+    assert real_mismatch["safe_for_derived_category_claims"] is False
+    assert real_mismatch["certified_cas_evidence_match"] is False
+    assert 0.0 < real_mismatch["certified_cas_evidence_similarity"] < 1.0
+    assert "input_sha256" in real_mismatch["mismatched_components"]
+    assert "fitting_ideals" in real_mismatch["mismatched_components"]
+    assert "buchsbaum_eisenbud" in real_mismatch["mismatched_components"]
+    assert mismatch["derived_equivalence_claim"] == "compatible_finite_invariant_witness"
+    assert "do not match" in mismatch["free_resolution_similarity_interpretation"]
 
 
 def test_analogical_memory_visualization_rejects_non_trajectory_probability_fallback(tmp_path: Path):

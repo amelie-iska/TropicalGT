@@ -7205,15 +7205,25 @@ def _derived_invariant_comparison(query_topology: dict[str, object], memory_topo
     finite_match = bool(betti_match and signature_match and free_rank_match and persistence_match and commutative_algebra_match)
     q_real_resolution = _real_free_resolution_claim_summary(query_topology)
     m_real_resolution = _real_free_resolution_claim_summary(memory_topology)
-    real_resolution_pair_available = bool(q_real_resolution.get("available") and m_real_resolution.get("available"))
+    real_resolution_comparison = _compare_real_free_resolution_summaries(q_real_resolution, m_real_resolution)
+    real_resolution_pair_available = bool(real_resolution_comparison.get("available"))
+    certified_cas_evidence_match = bool(real_resolution_comparison.get("certified_cas_evidence_match"))
     coarse_signature_similarity = float((sim or {}).get("derived_signature_similarity", 0.0) or 0.0)
     chain_resolution_similarity = float((sim or {}).get("chain_presentation_similarity", 0.0) or 0.0)
     high_coarse_low_resolution = bool(coarse_signature_similarity >= 0.75 and chain_resolution_similarity <= 1e-12)
-    resolution_interpretation = (
-        "Coarse derived-signature similarity is high while chain/free-resolution similarity is zero; this is reported as a coarse invariant collision, not a derived-equivalence claim. A real derived/free-resolution comparison requires CAS-certified multigraded resolutions for both sides."
-        if high_coarse_low_resolution
-        else "Derived/free-resolution comparison is restricted to finite invariants unless both sides expose CAS-certified multigraded real free resolutions."
-    )
+    if real_resolution_pair_available and certified_cas_evidence_match:
+        resolution_interpretation = "Both sides expose CAS-certified multigraded real free resolutions with matching Betti shifts, differential summaries, Fitting/minor ideals, and Buchsbaum-Eisenbud multiplier evidence."
+    elif real_resolution_pair_available:
+        resolution_interpretation = "Both sides expose CAS-certified multigraded real free resolutions, but their CAS artifacts do not match; this is not a derived-equivalence claim without an explicit resolution/chain-map isomorphism."
+    elif high_coarse_low_resolution:
+        resolution_interpretation = "Coarse derived-signature similarity is high while chain/free-resolution similarity is zero; this is reported as a coarse invariant collision, not a derived-equivalence claim. A real derived/free-resolution comparison requires CAS-certified multigraded resolutions for both sides."
+    else:
+        resolution_interpretation = "Derived/free-resolution comparison is restricted to finite invariants unless both sides expose CAS-certified multigraded real free resolutions."
+    derived_claim = "not_certified"
+    if finite_match and certified_cas_evidence_match:
+        derived_claim = "cas_certified_matching_real_resolution_witness"
+    elif finite_match:
+        derived_claim = "compatible_finite_invariant_witness"
     return {
         "comparison_kind": "finite_F2xy_persistence_module_and_chain_presentation_invariant_comparison",
         "field": "F2",
@@ -7222,7 +7232,7 @@ def _derived_invariant_comparison(query_topology: dict[str, object], memory_topo
         "tolerance": float(tol),
         "derived_algebraic_similarity": float((sim or {}).get("derived_algebraic_similarity", 0.0)),
         "derived_signature_cosine": float((sim or {}).get("derived_signature_similarity", 0.0)),
-        "derived_equivalence_claim": "compatible_finite_invariant_witness" if finite_match else "not_certified",
+        "derived_equivalence_claim": derived_claim,
         "geometric_realization_required": "a filtered simplex-tree map is required; module/chain-presentation diagnostic similarity alone does not construct a unique simplicial map",
         "induced_map_direction": "filtered_simplicial_map -> chain_map -> F2[x,y]-persistence_module_morphism -> derived_category_morphism",
         "finite_invariants_match": finite_match,
@@ -7234,13 +7244,9 @@ def _derived_invariant_comparison(query_topology: dict[str, object], memory_topo
         "persistence_landscape_vector_match": bool(landscape_vector_match),
         "persistence_landscape_vector_available": bool(q_landscape_padded.size > 0 and m_landscape_padded.size > 0),
         "real_free_resolution_certified": real_resolution_pair_available,
-        "real_free_resolution_comparison": {
-            "available": real_resolution_pair_available,
-            "query": q_real_resolution,
-            "memory": m_real_resolution,
-            "reason": None if real_resolution_pair_available else "CAS-certified multigraded real free resolution unavailable for one or both sides",
-            "safe_for_derived_category_claims": real_resolution_pair_available,
-        },
+        "certified_cas_evidence_match": certified_cas_evidence_match,
+        "certified_cas_evidence_similarity": float(real_resolution_comparison.get("certified_cas_evidence_similarity", 0.0) or 0.0),
+        "real_free_resolution_comparison": real_resolution_comparison,
         "free_resolution_similarity_interpretation": resolution_interpretation,
         "high_coarse_signature_low_resolution_warning": high_coarse_low_resolution,
         "query_betti_vector": q_betti,
@@ -7367,11 +7373,8 @@ def _analogical_realization_certificate(
     derived_ok = bool(derived_comparison.get("finite_invariants_match"))
     tree_ok = bool(sim_map.get("is_filtered_simplicial_map"))
     simplex_tree_rate = float(sim_map.get("simplex_tree_map_preservation_rate", 0.0) or 0.0)
-    real_resolution_certified = bool(
-        derived_comparison.get("real_free_resolution_certified")
-        or derived_comparison.get("certificate_attached")
-        or derived_comparison.get("cas_free_resolution_certificate")
-    )
+    real_resolution_comparison = derived_comparison.get("real_free_resolution_comparison") if isinstance(derived_comparison.get("real_free_resolution_comparison"), dict) else {}
+    real_resolution_certified = bool(real_resolution_comparison.get("safe_for_derived_category_claims"))
     claim = "not_certified"
     if derived_ok and tree_ok and real_resolution_certified:
         claim = "cas_certified_derived_geometric_realization"
@@ -7390,6 +7393,8 @@ def _analogical_realization_certificate(
         "chain_map_note": "A filtration-preserving simplicial map induces a chain map and hence a morphism of the associated F2[x,y] persistence modules.",
         "finite_invariants_match": derived_ok,
         "real_free_resolution_certified": real_resolution_certified,
+        "real_free_resolution_pair_available": bool(real_resolution_comparison.get("available")),
+        "certified_cas_evidence_match": bool(real_resolution_comparison.get("certified_cas_evidence_match")),
         "filtered_simplex_tree_map": tree_ok,
         "simplex_tree_map_preservation_rate": simplex_tree_rate,
     }
@@ -7483,6 +7488,11 @@ def _real_free_resolution_claim_summary(topology: Mapping[str, object]) -> dict[
             and report.get("multigraded_free_resolution_certified") is True
             and report.get("safe_to_render_as_multigraded_free_resolution") is True
         ):
+            artifact_signature = _certified_cas_resolution_signature(report)
+            artifact_hash = _stable_artifact_hash(artifact_signature)
+            artifacts = report.get("cas_artifacts") if isinstance(report.get("cas_artifacts"), Mapping) else {}
+            be = artifacts.get("buchsbaum_eisenbud_diagnostics") if isinstance(artifacts.get("buchsbaum_eisenbud_diagnostics"), Mapping) else {}
+            summary = report.get("free_resolution_summary") if isinstance(report.get("free_resolution_summary"), Mapping) else {}
             return {
                 "available": True,
                 "backend": report.get("backend"),
@@ -7491,12 +7501,117 @@ def _real_free_resolution_claim_summary(topology: Mapping[str, object]) -> dict[
                 "status": report.get("status"),
                 "safe_to_render_as_multigraded_free_resolution": True,
                 "minimality_certified": bool(report.get("minimality_certified")),
+                "artifact_signature": artifact_signature,
+                "artifact_hash": artifact_hash,
+                "betti_by_homological_and_multidegree": summary.get("betti_by_homological_and_multidegree", {}),
+                "fitting_ideals": artifacts.get("fitting_ideals", {}) if isinstance(artifacts.get("fitting_ideals"), Mapping) else {},
+                "minors": artifacts.get("minors", {}) if isinstance(artifacts.get("minors"), Mapping) else {},
+                "bemultipliers_status": be.get("bemultipliers_status", "unreported"),
+                "multiplier_output_available": bool(be.get("multiplier_output_available")),
+                "a_multiplier_1_shape": be.get("a_multiplier_1_shape", ""),
+                "a_multiplier_1_matrix_hash": _stable_artifact_hash(be.get("a_multiplier_1_matrix", "")),
             }
     return {
         "available": False,
         "reason": "no CAS-certified multigraded real free resolution found in topology payload",
         "candidate_reports_seen": len(reports),
     }
+
+
+def _certified_cas_resolution_signature(report: Mapping[str, object]) -> dict[str, object]:
+    artifacts = report.get("cas_artifacts") if isinstance(report.get("cas_artifacts"), Mapping) else {}
+    summary = report.get("free_resolution_summary") if isinstance(report.get("free_resolution_summary"), Mapping) else {}
+    be = artifacts.get("buchsbaum_eisenbud_diagnostics") if isinstance(artifacts.get("buchsbaum_eisenbud_diagnostics"), Mapping) else {}
+    differentials = artifacts.get("differentials") if isinstance(artifacts.get("differentials"), list) else []
+    differential_summary = []
+    for row in differentials[:24]:
+        if not isinstance(row, Mapping):
+            continue
+        differential_summary.append(
+            {
+                "homological_degree": row.get("homological_degree"),
+                "rows": row.get("rows"),
+                "cols": row.get("cols"),
+                "shape": row.get("shape"),
+                "source_degrees": row.get("source_degrees"),
+                "target_degrees": row.get("target_degrees"),
+                "matrix_hash": _stable_artifact_hash(row.get("matrix_text", row.get("matrix_preview", ""))),
+            }
+        )
+    return {
+        "schema_version": report.get("schema_version"),
+        "backend": report.get("backend"),
+        "ring": report.get("coefficient_ring"),
+        "input_sha256": report.get("input_sha256"),
+        "minimality_certified": bool(report.get("minimality_certified")),
+        "betti_by_homological_and_multidegree": summary.get("betti_by_homological_and_multidegree", {}),
+        "free_modules": summary.get("free_modules", []),
+        "differentials": differential_summary,
+        "fitting_ideals": artifacts.get("fitting_ideals", {}) if isinstance(artifacts.get("fitting_ideals"), Mapping) else {},
+        "minors": artifacts.get("minors", {}) if isinstance(artifacts.get("minors"), Mapping) else {},
+        "bemultipliers": {
+            "available": bool(be.get("available")),
+            "multiplier_output_available": bool(be.get("multiplier_output_available")),
+            "bemultipliers_status": be.get("bemultipliers_status", "unreported"),
+            "a_multiplier_1_shape": be.get("a_multiplier_1_shape", ""),
+            "a_multiplier_1_matrix_hash": _stable_artifact_hash(be.get("a_multiplier_1_matrix", "")),
+        },
+    }
+
+
+def _compare_real_free_resolution_summaries(query: Mapping[str, object], memory: Mapping[str, object]) -> dict[str, object]:
+    available = bool(query.get("available") and memory.get("available"))
+    if not available:
+        return {
+            "available": False,
+            "query": query,
+            "memory": memory,
+            "reason": "CAS-certified multigraded real free resolution unavailable for one or both sides",
+            "safe_for_derived_category_claims": False,
+            "certified_cas_evidence_match": False,
+            "certified_cas_evidence_similarity": 0.0,
+        }
+    q_sig = query.get("artifact_signature") if isinstance(query.get("artifact_signature"), Mapping) else {}
+    m_sig = memory.get("artifact_signature") if isinstance(memory.get("artifact_signature"), Mapping) else {}
+    components = {
+        "ring": query.get("ring") == memory.get("ring"),
+        "input_sha256": bool(query.get("input_sha256") and query.get("input_sha256") == memory.get("input_sha256")),
+        "artifact_hash": bool(query.get("artifact_hash") and query.get("artifact_hash") == memory.get("artifact_hash")),
+        "betti_by_multidegree": q_sig.get("betti_by_homological_and_multidegree", {}) == m_sig.get("betti_by_homological_and_multidegree", {}),
+        "differential_summaries": q_sig.get("differentials", []) == m_sig.get("differentials", []),
+        "fitting_ideals": q_sig.get("fitting_ideals", {}) == m_sig.get("fitting_ideals", {}),
+        "minors": q_sig.get("minors", {}) == m_sig.get("minors", {}),
+        "buchsbaum_eisenbud": q_sig.get("bemultipliers", {}) == m_sig.get("bemultipliers", {}),
+    }
+    matched = sum(1 for value in components.values() if value)
+    total = max(len(components), 1)
+    safe = bool(all(components.values()))
+    mismatches = [key for key, value in components.items() if not value]
+    return {
+        "available": True,
+        "query": query,
+        "memory": memory,
+        "component_matches": components,
+        "mismatched_components": mismatches,
+        "certified_cas_evidence_match": safe,
+        "certified_cas_evidence_similarity": float(matched / total),
+        "safe_for_derived_category_claims": safe,
+        "reason": None if safe else "Certified CAS free-resolution artifacts differ: " + ", ".join(mismatches),
+        "interpretation": (
+            "The certified multigraded real free-resolution artifacts match exactly at the stored CAS-evidence level."
+            if safe
+            else "Both sides have certified multigraded real free resolutions, but matching is not proved because one or more CAS-evidence components differ."
+        ),
+    }
+
+
+def _stable_artifact_hash(value: object) -> str:
+    try:
+        payload = json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
+    except TypeError:
+        payload = str(value)
+    return hashlib.sha256(payload.encode("utf-8", "ignore")).hexdigest()
+
 
 def _simplex_tree_map_report(
     query_obj: dict[str, object],

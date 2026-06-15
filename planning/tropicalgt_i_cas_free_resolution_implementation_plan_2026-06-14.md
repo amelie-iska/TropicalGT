@@ -645,3 +645,26 @@ PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pyt
 ```
 
 Next linear CAS item: add more small-known-module fixtures for Macaulay2/Singular Fitting/minor/BEM behavior, then connect certified CAS evidence into derived/analogical comparison only when both sides expose compatible certified artifacts.
+
+
+## 2026-06-15 Certified CAS Evidence Comparison Pass
+
+Follow-up CAS/analogical item completed:
+
+- Derived/analogical comparison now distinguishes three states: no certified multigraded free-resolution pair, certified pair with mismatched CAS evidence, and certified pair with matching CAS evidence.
+- Matching evidence requires agreement of ring, input hash, stable artifact hash, multigraded Betti shifts, differential summaries, Fitting ideals, minors, and Buchsbaum-Eisenbud multiplier output/status.
+- Mismatched certified artifacts remain useful evidence but are not safe for derived-category claims without an explicit resolution or chain-map isomorphism. The mismatch list is stored in `real_free_resolution_comparison["mismatched_components"]`.
+- Analogical realization certificates now inherit `safe_for_derived_category_claims` from this artifact-level comparison rather than from the weaker condition that both sides merely have a certified resolution.
+
+Validation:
+
+```text
+PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_simplicial_visualization.py TropicalGT-I/tests/test_interactive_artifact_validator.py -q
+# 33 passed
+PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_algebraic_persistence.py -q
+# 15 passed
+PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_metrics_and_memory.py -q
+# 8 passed
+```
+
+Next linear item: extend certified CAS comparisons into retrieval scoring only when compatible query/memory CAS artifacts are available, then continue the simplex-tree/NLL/tropical-support repair queue.

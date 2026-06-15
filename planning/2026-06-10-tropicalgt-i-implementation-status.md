@@ -240,3 +240,12 @@
 - Live smoke on a small `F2[x_level,x_radius]` module returned a certified Macaulay2 multigraded resolution plus BEM output: `bemultipliers_status=computed_aMultiplier_1`, `multiplier_output_available=true`, and nonempty `aMultiplier_1_matrix` text.
 - The adapter cache version was bumped to invalidate older certified CAS payloads that lack the BE artifact fields.
 - Verification: algebraic persistence `15 passed`; visualization plus artifact validator `32 passed`.
+
+
+## Iteration 33: Certified CAS Evidence in Analogical Derived Comparison
+
+- Tightened `_derived_invariant_comparison` so CAS-certified multigraded real free resolutions are compared at the artifact level before any derived-category safety flag is set.
+- The comparison now checks ring, input hash, stable CAS artifact hash, multigraded Betti shifts, differential summaries, Fitting ideals, minors, and Buchsbaum-Eisenbud multiplier output/status. Matching artifacts produce `certified_cas_evidence_match=true`; mismatches keep `safe_for_derived_category_claims=false` and list the mismatched components.
+- Analogical realization certificates now require the nested real-free-resolution comparison to be safe before using the `cas_certified_derived_geometric_realization` claim. Having certified resolutions on both sides is no longer enough by itself.
+- Added regression coverage for exactly matching certified Macaulay2-style artifacts and for mismatched certified artifacts with otherwise compatible finite invariants.
+- Verification: visualization plus artifact validator `33 passed`; algebraic persistence `15 passed`; metrics and memory `8 passed`.

@@ -171,7 +171,7 @@ The live item-by-item repair inventory is maintained in `planning/tropicalgt_i_c
 - [x] Corrected the module-staircase orientation to match the Miller-Sturmfels monomial-ideal convention: `x_radius` runs horizontally and `x_level` runs vertically.
 - [x] Added regression checks for adjacent `F2` structure maps and generated HTML language.
 - [x] Browser-opened the regenerated `sample_000/trajectory_persistence/two_parameter_bifiltration.html` page on port `8991` and confirmed the corrected visible orientation strings.
-- [ ] Push this repair on the non-main branch after final status/doc review.
+- [x] Pushed this repair on the non-main branch.
 
 
 ### Current Objective Update - CAS BE Diagnostics Pass
@@ -181,7 +181,7 @@ The live item-by-item repair inventory is maintained in `planning/tropicalgt_i_c
 - [x] Parsed BE diagnostics into certified CAS artifacts and surfaced them in the two-parameter CAS certificate display.
 - [x] Added regression coverage proving Fitting ideals, minors, multigraded shifts, and BE diagnostic metadata are parsed from a tagged Macaulay2 certificate without implying BEMultipliers output.
 - [x] Focused verification passed: algebraic persistence `15 passed`; visualization plus artifact validator `32 passed`.
-- [ ] Push this CAS diagnostic repair on the non-main branch after final diff/status review.
+- [x] Pushed this CAS diagnostic repair on the non-main branch.
 
 
 ### Current Objective Update - Bounded BEMultipliers Pass
@@ -191,4 +191,14 @@ The live item-by-item repair inventory is maintained in `planning/tropicalgt_i_c
 - [x] Parsed and displayed actual `aMultiplier(1)` output shape/matrix text when the backend emits it.
 - [x] Bumped the CAS adapter cache version to avoid stale certified artifacts without BE fields.
 - [x] Focused verification passed: algebraic persistence `15 passed`; visualization plus artifact validator `32 passed`.
-- [ ] Push this bounded BEMultipliers repair on the non-main branch after final diff/status review.
+- [x] Pushed this bounded BEMultipliers repair on the non-main branch.
+
+
+### Current Objective Update - Certified CAS Analogical Comparison Pass
+
+- [x] Tightened analogical derived/free-resolution comparison so two certified CAS resolutions are not treated as safe derived-category evidence merely because both exist.
+- [x] Added artifact-level comparison for ring, input hash, multigraded Betti shifts, differential summaries, Fitting ideals, minors, and Buchsbaum-Eisenbud multiplier output/status.
+- [x] Updated analogical realization certificates to require `safe_for_derived_category_claims` from the CAS artifact comparison before claiming CAS-certified derived geometric realization.
+- [x] Added regression coverage for matching certified CAS artifacts and mismatched certified CAS artifacts with otherwise compatible finite invariants.
+- [x] Focused verification passed: visualization plus artifact validator `33 passed`; algebraic persistence `15 passed`; metrics and memory `8 passed`.
+- [ ] Push this certified CAS analogical-comparison repair on the non-main branch after final diff/status review.
