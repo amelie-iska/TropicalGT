@@ -209,3 +209,15 @@
   sample-first browser buttons, analogical pair-page links, probability-map
   provenance, filtration distortion summaries, and preserved/failed simplex
   evidence.
+
+## Iteration 30: Probability-Vector Analogical Retrieval Certificates
+
+- Current branch: `tropicalgt-i-real-cas-no-proxy-20260614`; latest pushed commit after this pass is `654cb67`.
+- Laplace paper sidecar resumed and completed: `TropicalGT-I/assets/tropicalgt_neurips_research_paper.tex` now replaces "free-resolution proxy" wording with a finite chain-presentation summary plus CAS-only certified free-resolution language. The helper compile succeeded with `python3 TropicalGT-I/scripts/compile_tropicalgt_paper.py`; output PDF is 58 pages and 528022 bytes, with no unresolved citations/references in the final log.
+- `AnalogicalMemoryBank.retrieve` now accepts a model-derived `query_probability_complex`, computes Jensen-Shannon probability-vector assignments into each memory trajectory probability complex, validates whether the assignment extends to a filtration-preserving simplex-tree map, and emits chain-map and persistence-module morphism diagnostics when the filtered map is certified.
+- Retrieval now has a real `probability_simplicial_map` score component gated by the certified map and mean Jensen-Shannon distance. Missing query/memory probability complexes or failed simplex-tree preservation contribute zero and report unavailable state rather than falling back to embeddings.
+- Periodic training audits and `infer_tropicalgt_i.py` now pass the query trajectory probability complex into memory retrieval, expose `memory_retrieval_probability_map_weight`, and log available-rate, preservation-rate, similarity, and score-contribution metrics for probability-map retrieval.
+- Analogical-memory audit HTML now surfaces the retrieval-side probability-map contribution, similarity, preserved-map rate, and source in both the rank diagnostic table and top-k index. The geometric browser page still recomputes the displayed map from the serialized probability complexes, while the retrieval certificate records what the retrieval scorer used.
+- Verification: `PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_metrics_and_memory.py TropicalGT-I/tests/test_training_metrics.py -q` passed with 19 tests; `test_simplicial_visualization.py` passed with 24 tests; `test_interactive_artifact_validator.py` passed with 8 tests; `git diff --check` passed before commits.
+- Readiness audit against live b58 config reported `status=ready` with no failed gates.
+- Active b58 training remains alive at PID `4180659` using config `TropicalGT-I/outputs/launch_configs/tropicalgt_i_pg_bpb_step0_full24b_b58_20260615T225921Z_bpb112_chunkfix_resume7500.json`. Latest checked validation reports: step 7750 BPB `1.3429450362078115`, graph-conditioned BPB without side cost `1.1806933794762031`, invalid graph rate `0.0`; step 8000 BPB `1.3375931457168166`, graph-conditioned BPB without side cost `1.1759880925880348`, invalid graph rate `0.0`. Target BPB `<1.12` remains open.
