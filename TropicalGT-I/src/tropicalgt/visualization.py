@@ -6833,7 +6833,7 @@ def _write_analogical_topk_index(path: Path, pair_pages: list[dict[str, object]]
             f"<td>{float(report.get('edge_preservation_rate', 0.0)):.4f}</td>"
             "</tr>"
         )
-    body = "\n".join(rows) or "<tr><td colspan='16'>No retrieved memories.</td></tr>"
+    body = "\n".join(rows) or "<tr><td colspan='20'>No retrieved memories.</td></tr>"
     path.write_text(
         f"""<!doctype html>
 <html>
