@@ -333,7 +333,17 @@ TropicalGT uses the max-plus convention, while many computer-algebra packages us
   =-b_r-\langle a_r,u\rangle
   =-\ell_r(u).
 \]
-Thus $\operatorname{in}_{-u}(f)$ keeps exactly the monomials indexed by $\argmax_r\ell_r(u)$.  The tie locus is the tropical hypersurface; the unique-max chambers remain part of the TropicalGT decision stratification because they record which proof alternative, predecessor, memory item, or graph-token witness was selected.
+\begin{proposition}[Attention provenance as an initial degeneration]
+\label{prop:attention-provenance-initial-degeneration}
+With the max-plus score convention above, a term $\tau^{-b_r}\chi^{a_r}$ appears in $\operatorname{in}_{-u}(f)$ if and only if $r\in\argmax_s\ell_s(u)$.  Hence the initial form records exactly the active attention provenance for the rationalized finite head.  The tropical hypersurface is the locus where at least two candidates are retained; unique-max chambers are not in the hypersurface, but they are cells of the same decision stratification.
+\end{proposition}
+\begin{proof}
+In the usual nonarchimedean min convention, $\operatorname{in}_{-u}(f)$ keeps those terms whose value
+\[
+  \operatorname{val}(\tau^{-b_r})+\langle -u,a_r\rangle
+\]
+is minimal.  The displayed sign identity identifies this value with $-\ell_r(u)$.  Minimizing $-\ell_r(u)$ is equivalent to maximizing $\ell_r(u)$, so the retained monomials are precisely the active max-plus candidates.  A tie gives a non-monomial initial form and therefore lies on the tropical hypersurface; a unique maximum gives a monomial initial form but still records a stable provenance chamber.
+\end{proof}
 
 \begin{definition}[Finite TropicalGT toric sidecar]
 A finite TropicalGT toric sidecar is
@@ -343,13 +353,30 @@ A finite TropicalGT toric sidecar is
 where $A=(a_1,\ldots,a_R)$ and $b$ are rationalized candidate data, $\mathcal F_H$ is the finite Laurent-polynomial family exported by selected heads, coordinates, or graph-token windows, $I_H=\langle\mathcal F_H\rangle$ when an ideal sidecar is enabled, $\Sigma$ is a rational fan refining the observed active normal decomposition and any finite Groebner decomposition used by $I_H$, and $\eta$ records the lattice basis, denominator scale, valuation convention, max-plus/min-initial sign, software backend, and source checkpoint/window.
 \end{definition}
 
+Operationally, $\Sigma$ is chosen after export, not learned as an unrestricted neural object.  For a single Laurent polynomial it refines the normal fan of the lifted Newton polytope $\Conv\{(a_r,b_r)\}$ together with the active candidate cells observed in the batch.  For an ideal sidecar it also refines the finite Groebner cells that the CAS backend certifies or samples for $I_H$.  After this refinement, every cone of $\Sigma$ labels a constant initial-form and provenance regime on the audited sidecar; one-dimensional cones carry the incidence data used for bend, Cartier-compatibility, and filtration checks.
+
 For an ideal sidecar, set $Y_H=V(I_H)\cap T_N$ and
 \[
   \operatorname{Trop}(Y_H)=\{u\in N_\mathbb R:\operatorname{in}_{-u}(I_H)\text{ contains no monomial}\}.
 \]
 If $|\Sigma|=\operatorname{Trop}(Y_H)$ and the multiplication map $T_N\times\overline Y_H\to X_\Sigma$ is flat and surjective, then the closure in $X_\Sigma$ is a tropical compactification in the sense of Tevelev \cite{tevelev2007compactifications}; smoothness of this map gives the stronger schon case.  TropicalGT-I does not assume those hypotheses for ordinary training batches.  Without them, $X_\Sigma$ is a finite toric audit envelope: it provides orbit labels, one-dimensional-cone incidence, initial ideals, active-face refinements, bend data, and local resolution targets, but it does not certify global compactification, smooth boundary behavior, or sheaf cohomology of a neural model.
 
-This sidecar also explains which exact methods are available.  Toric ideals $\ker(k[x_1,\ldots,x_R]\to K[M])$ give binomial consistency relations and Groebner/initial ideals; Miller--Sturmfels two-variable monomial staircases give the correct picture for local two-parameter persistence slices and adjacent-generator first syzygies \cite{miller2005}; balanced tropical cycles give Minkowski weights and Chow classes only when the tropical-ideal or classical-tropicalization hypotheses are certified \cite{maclaganrincon2018tropicalideals,maclaganrincon2020balanced,fultonsturmfels1994intersection,katz2009tropicalintersection}.  Sage, Normaliz, Gfan, Polymake, and Macaulay2 sidecars may compute these objects offline; the GPU receives compact tensors such as active labels, multiplicities, Betti vectors, sparse differentials, or unavailable masks \cite{m2tropical2019}.  A differentiable loss is allowed only after the exact small-window sidecar validates the corresponding target, and it remains a late-phase auxiliary behind BPB and graph-BPB gates.
+This sidecar also explains which exact methods are available.  Given the exponent matrix $A=[a_1,\ldots,a_R]$, the toric ideal is the kernel of
+\[
+  \varphi_A:K[x_1,\ldots,x_R]\longrightarrow K[M],\qquad x_r\longmapsto \chi^{a_r},
+\]
+namely
+\[
+  I_A=\ker\varphi_A=\langle x^\alpha-x^\beta:A\alpha=A\beta\rangle.
+\]
+This is the algebraic source of binomial consistency checks, Markov-basis moves, Groebner bases, monomial initial ideals, Hilbert series, Betti tables, and free-resolution targets.  Miller--Sturmfels two-variable monomial staircases give the correct picture for local two-parameter persistence slices and adjacent-generator first syzygies \cite{miller2005}; balanced tropical cycles give Minkowski weights and Chow classes only when the tropical-ideal or classical-tropicalization hypotheses are certified \cite{maclaganrincon2018tropicalideals,maclaganrincon2020balanced,fultonsturmfels1994intersection,katz2009tropicalintersection}.
+
+For a certified fan $\Sigma$, the Cox ring and irrelevant ideal provide the sheaf-facing audit interface
+\[
+  S_\Sigma=K[x_\rho:\rho\in\Sigma(1)],\qquad
+  B_\Sigma=\left\langle\prod_{\rho\not\preceq\sigma}x_\rho:\sigma\in\Sigma\right\rangle.
+\]
+Equivariant sheaf or vector-bundle diagnostics are therefore represented as graded Cox-module, local-cohomology, Fitting-ideal, or Klyachko-filtration sidecars only after the fan and grading data are exported.  Sage, Normaliz, Gfan, Polymake, and Macaulay2 sidecars may compute these objects offline; the GPU receives compact tensors such as active labels, multiplicities, Betti vectors, sparse differentials, filtration defects, or unavailable masks \cite{m2tropical2019}.  A differentiable loss is allowed only after the exact small-window sidecar validates the corresponding target, and it remains a late-phase auxiliary behind BPB and graph-BPB gates.
 
 \section{TropicalGT architecture}
 
@@ -1232,7 +1259,7 @@ where $M$ is a valuated matroid on a ground set of feature atoms, $p$ is its cir
 The bundle is chart-consistent on $G$ if $T_{bc}T_{ab}=T_{ac}$ on triple overlaps up to a tropical scalar and if every active filtration can be recovered as a join of atoms selected by tropical one-dimensional-cone inequalities.
 \end{definition}
 
-The definition mirrors the toric compatibility condition for tropical toric vector bundles: over each maximal cone, the one-dimensional-cone filtrations must be generated by a matroid basis.  In TropicalGT-I the cones are not literal fans of a toric variety; they are local regions in activation space defined by graph neighborhoods, persistence summaries, and token context.  The toric condition is nevertheless useful because it gives an auditable finite constraint: for each chart, selected basis atoms must reconstruct the flats that determine which features are allowed to dominate.
+The definition mirrors the toric compatibility condition for tropical toric vector bundles: over each maximal cone, the one-dimensional-cone filtrations must be generated by a matroid basis.  In TropicalGT-I the cones are not literal fans of a toric variety unless they come from a certified finite sidecar of \Cref{subsec:finite-tropical-toric-sidecars}; otherwise they are local regions in activation space defined by graph neighborhoods, persistence summaries, and token context.  The toric condition is nevertheless useful because it gives an auditable finite constraint: for each chart, selected basis atoms must reconstruct the flats that determine which features are allowed to dominate.
 
 \begin{definition}[Tropical toric embedding of a reasoning state]
 \label{def:tropicalgt-toric-embedding}
