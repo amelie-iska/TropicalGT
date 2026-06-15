@@ -585,7 +585,19 @@ Sequential no-proxy item completed after the CAS generator-boundary fix:
 ## 2026-06-14 Cleanup And Exact Bivariate Toric Certificate
 - Cleaned generated artifacts without touching source, data, secrets, or the active b55_v11 training run: stale outputs/smoke runs/checkpoints/local W&B runs removed; latest audit payload JSONs compressed and catalog links rewritten.
 - Current generated footprint after cleanup: `TropicalGT-I/outputs` 784MB, `TropicalGT-I/checkpoints` 4KB, local `wandb` 4.4MB, no generated files over 100MB.
-- Tightened the exact bivariate monomial staircase certificate: the scoped real resolution now records the affine toric exponent chart `Spec F2[x_level,x_radius]`, the semigroup `N^2`, and the coordinate one dimensional cone(s) that generate the chart.
+- Tightened the exact bivariate monomial staircase certificate: the scoped real resolution now records the coordinate exponent semigroup chart `Spec F2[x_level,x_radius]`, the semigroup `N^2`, and the coordinate one dimensional cone(s) that generate the chart.
 - The certificate remains deliberately scoped: it is a real Hilbert-Burch/Miller-Sturmfels minimal free resolution for the named two-variable staircase monomial ideal, not a fake full persistence-module free resolution.
 - Regression coverage: `PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_algebraic_persistence.py -q` passed with `9 passed`.
 
+## 2026-06-14 Bifiltration Module Figure Repair
+
+Sequential visualization/CAS artifact item completed for the Miller-Sturmfels staircase requirement:
+
+- Reoriented the primary 2-parameter module figure so the horizontal axis is the `x_radius` exponent/radius grade and the vertical axis is the `x_level` exponent/reasoning growth level. This matches the bivariate monomial-ideal staircase convention from Miller-Sturmfels: lattice columns are radius grades, rows are reasoning levels, and antichain/staircase corners are plotted in the exponent plane.
+- Preserved the third dimension in the companion 3D panel as the actual fiber rank `beta_i = dim_F2 H_i(K_(level,radius))`; small H0/H1 display offsets are visual separation only and do not replace the fiber-rank height.
+- Kept adjacent structure maps as persisted real homology maps over `F2`, computed by the rank formula `rank(B_target + image(Z_source)) - rank(B_target)` for source-to-target inclusions in the `x_level` and `x_radius` directions.
+- The figure now says explicitly that chain-presentation diagnostics are not substituted for free resolutions. Certified multigraded free resolutions remain CAS-gated; exact bivariate staircase certificates remain scoped to the named monomial ideal.
+- Browser QA opened the regenerated page at `127.0.0.1:8991/sample_000/trajectory_persistence/two_parameter_bifiltration.html` and confirmed the visible labels and DOM text describe horizontal `x_radius`, vertical `x_level`, adjacent structure maps, and no fake free-resolution substitution.
+- Regression coverage: `PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_algebraic_persistence.py -q` returned `9 passed`.
+
+Next linear CAS item: review `references/2210.11433v1.pdf` in full and implement the paper-derived CAS objects only when Macaulay2/Sage/Singular can certify the requested multigraded data: minimal free resolutions, differential matrices, Fitting ideals, minors, Buchsbaum-Eisenbud diagnostics, and derived/chain-map evidence.

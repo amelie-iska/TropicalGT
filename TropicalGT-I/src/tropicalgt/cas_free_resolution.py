@@ -272,26 +272,110 @@ def build_macaulay2_script(module_schema: dict[str, Any]) -> str:
     rows = int(pmat.get("rows", 0))
     cols = int(pmat.get("cols", 0))
     entries = pmat.get("entries", [])
-    matrix_rows: list[list[str]] = [["0" for _ in range(cols)] for _ in range(rows)]
+    degree_spec = "{" + ",".join("{" + ",".join("1" if i == j else "0" for i in range(len(variables))) + "}" for j in range(len(variables))) + "}"
+    if rows <= 0:
+        return "\n".join(
+            [
+                "-- TropicalGT Macaulay2 multigraded resolution probe",
+                f"R = ZZ/2[{','.join(variables)}, Degrees=>{degree_spec}]",
+                "print \"TROPICALGT_RESOLUTION_BEGIN\"",
+                "print \"backend=Macaulay2\"",
+                "print \"exactness_certified=false\"",
+                "print \"minimality_certified=false\"",
+                "print \"certificate_error=no degree-zero free module rows in the presentation\"",
+                f"print \"presentation_shape={rows}x{cols}\"",
+                "print \"TROPICALGT_RESOLUTION_END\"",
+                "exit 2",
+            ]
+        )
+    if cols <= 0:
+        zero_degrees = "{" + ",".join("{" + ",".join("0" for _ in variables) + "}" for _ in range(rows)) + "}"
+        return "\n".join(
+            [
+                "-- TropicalGT Macaulay2 multigraded resolution probe",
+                f"R = ZZ/2[{','.join(variables)}, Degrees=>{degree_spec}]",
+                "print \"TROPICALGT_RESOLUTION_BEGIN\"",
+                "print \"backend=Macaulay2\"",
+                "print \"exactness_certified=true\"",
+                "print \"minimality_certified=true\"",
+                "print \"certificate_type=Macaulay2 trivial free cokernel with no relations\"",
+                f"print \"presentation_shape={rows}x{cols}\"",
+                "print \"macaulay2_free_modules_begin\"",
+                f"print \"F0_degrees={zero_degrees}\"",
+                "print \"macaulay2_free_modules_end\"",
+                "print \"fitting_ideals_begin\"",
+                "print \"Fitt0=ideal 0_R\"",
+                "print \"fitting_ideals_end\"",
+                "print \"minors_begin\"",
+                "print \"minors_0=ideal 1_R\"",
+                "print \"minors_end\"",
+                "print \"TROPICALGT_RESOLUTION_END\"",
+                "exit 0",
+            ]
+        )
+    matrix_rows: list[list[str]] = [["0_R" for _ in range(cols)] for _ in range(rows)]
     for entry in entries:
         matrix_rows[int(entry["row"])][int(entry["col"])] = _m2_monomial(entry["exponent"], variables)
     matrix_literal = "{" + ",".join("{" + ",".join(row) + "}" for row in matrix_rows) + "}"
+    max_minors = min(rows, cols)
+    differential_lines: list[str] = []
+    max_resolution_len = min(cols + len(variables) + 3, 24)
+    for i in range(1, max_resolution_len + 1):
+        differential_lines.extend(
+            [
+                f"if length C >= {i} then (",
+                f"  print concatenate(\"d{i}_shape=\", toString numRows C.dd_{i}, \"x\", toString numColumns C.dd_{i});",
+                f"  print concatenate(\"d{i}_source_degrees=\", toString degrees source C.dd_{i});",
+                f"  print concatenate(\"d{i}_target_degrees=\", toString degrees target C.dd_{i});",
+                f"  print concatenate(\"d{i}_matrix=\", replace(\"\\n\", \" || \", toString C.dd_{i}));",
+                ")",
+            ]
+        )
+    minor_lines = []
+    for k in range(1, max_minors + 1):
+        minor_lines.append(f"print concatenate(\"minors_{k}=\", replace(\"\\n\", \" \", toString minors({k}, M)))")
+    fitting_lines = [
+        "print concatenate(\"Fitt0=\", replace(\"\\n\", \" \", toString fittingIdeal(0, N)))",
+        "print concatenate(\"Fitt1=\", replace(\"\\n\", \" \", toString fittingIdeal(1, N)))",
+    ]
     return "\n".join(
         [
-            "-- TropicalGT certified resolution probe generated from model audit data",
-            "needsPackage \"JSON\"",
-            f"R = ZZ/2[{','.join(variables)}]",
+            "-- TropicalGT certified multigraded free resolution probe generated from model audit data",
+            f"R = ZZ/2[{','.join(variables)}, Degrees=>{degree_spec}]",
             f"M = matrix {matrix_literal}",
-            "C = res coker M",
-            "H = prune HH C",
-            "okExact = (length H == 0)",
+            "N = coker M",
+            "C = res N",
+            "higherHomologyGeneratorCount = 0",
+            "for i from 1 to length C do (",
+            "  H = prune HH_i C;",
+            "  higherHomologyGeneratorCount = higherHomologyGeneratorCount + numgens source presentation H;",
+            ")",
+            "okExact = (higherHomologyGeneratorCount == 0)",
             "B = betti C",
             "print \"TROPICALGT_RESOLUTION_BEGIN\"",
-            "print concatenate(\"backend=Macaulay2\")",
+            "print \"backend=Macaulay2\"",
             "print concatenate(\"exactness_certified=\", toString okExact)",
-            "print concatenate(\"minimality_certified=\", toString true)",
-            "print concatenate(\"betti_table=\", replace(\"\\n\", \";\", toString B))",
+            "print \"minimality_certified=true\"",
+            "print \"certificate_type=Macaulay2 res coker presentation over multigraded F2 polynomial ring\"",
+            f"print \"presentation_shape={rows}x{cols}\"",
+            "print \"betti_table_begin\"",
+            "print B",
+            "print \"betti_table_end\"",
+            "print \"macaulay2_free_modules_begin\"",
+            "if length C >= 1 then print concatenate(\"F0_degrees=\", toString degrees target C.dd_1)",
+            *[f"if length C >= {i} then print concatenate(\"F{i}_degrees=\", toString degrees source C.dd_{i})" for i in range(1, max_resolution_len + 1)],
+            "print \"macaulay2_free_modules_end\"",
+            "print \"macaulay2_differentials_begin\"",
+            *differential_lines,
+            "print \"macaulay2_differentials_end\"",
+            "print \"fitting_ideals_begin\"",
+            *fitting_lines,
+            "print \"fitting_ideals_end\"",
+            "print \"minors_begin\"",
+            *minor_lines,
+            "print \"minors_end\"",
             "print \"TROPICALGT_RESOLUTION_END\"",
+            "exit 0",
         ]
     )
 
@@ -516,6 +600,7 @@ def _certified_result(module_schema: dict[str, Any], backend_result: dict[str, A
     sage_total_graded = _parse_json_dict(parsed.get("total_graded_betti_json"))
     sage_differentials = _parse_json_list(parsed.get("differentials_json"))
     sage_resolution_text = str(parsed.get("sage_resolution_text", "") or "")
+    macaulay2_multigraded = _parse_macaulay2_multigraded_artifacts(parsed, backend=backend) if backend == "Macaulay2" else {}
     structured_betti = _parse_ungraded_betti_table(betti_text, backend=backend)
     if sage_total_graded.get("available"):
         sage_total_graded.setdefault("safe_for_multigraded_claims", False)
@@ -523,7 +608,7 @@ def _certified_result(module_schema: dict[str, Any], backend_result: dict[str, A
         structured_betti = _ungraded_from_total_graded_betti(sage_total_graded, backend=backend)
     presentation_shape = _parse_presentation_shape(parsed.get("presentation_shape"))
     unit_entries = _parse_int_or_none(parsed.get("unit_entries"))
-    free_resolution_summary = sage_total_graded if sage_total_graded.get("available") else structured_betti
+    free_resolution_summary = macaulay2_multigraded if macaulay2_multigraded.get("available") else (sage_total_graded if sage_total_graded.get("available") else structured_betti)
     variables = list(module_schema.get("variables", []))
     expects_multigrading = len(variables) > 1
     total_graded_certified = bool(exact and sage_total_graded.get("available"))
@@ -574,7 +659,10 @@ def _certified_result(module_schema: dict[str, Any], backend_result: dict[str, A
             "betti_table_text": betti_text,
             "betti_table_ungraded": structured_betti,
             "betti_table_total_graded": sage_total_graded,
-            "differentials": sage_differentials,
+            "differentials": macaulay2_multigraded.get("differentials", sage_differentials) if isinstance(macaulay2_multigraded, dict) else sage_differentials,
+            "macaulay2_multigraded": macaulay2_multigraded,
+            "fitting_ideals": macaulay2_multigraded.get("fitting_ideals", {}) if isinstance(macaulay2_multigraded, dict) else {},
+            "minors": macaulay2_multigraded.get("minors", {}) if isinstance(macaulay2_multigraded, dict) else {},
             "singular_resolution_text": singular_resolution_text,
             "sage_resolution_text": sage_resolution_text,
             "raw_tagged_output": backend_result.get("tagged_output", ""),
@@ -594,6 +682,115 @@ def _certified_result(module_schema: dict[str, Any], backend_result: dict[str, A
     }
 
 
+
+
+def _parse_macaulay2_multigraded_artifacts(parsed: dict[str, Any], *, backend: str) -> dict[str, Any]:
+    free_text = str(parsed.get("macaulay2_free_modules", "") or "")
+    differentials_text = str(parsed.get("macaulay2_differentials", "") or "")
+    fitting_text = str(parsed.get("fitting_ideals", "") or "")
+    minors_text = str(parsed.get("minors", "") or "")
+    if not free_text:
+        return {"available": False, "backend": backend, "reason": "Macaulay2 output did not contain multigraded free-module degree blocks."}
+    free_modules: list[dict[str, Any]] = []
+    betti_by_multidegree: dict[str, dict[str, int]] = {}
+    for line in free_text.splitlines():
+        line = line.strip()
+        if not line or "_degrees=" not in line or not line.startswith("F"):
+            continue
+        left, right = line.split("_degrees=", 1)
+        try:
+            homological_degree = int(left[1:])
+        except ValueError:
+            continue
+        degrees = _parse_m2_degree_list(right)
+        counts: Counter[tuple[int, ...]] = Counter(tuple(int(v) for v in degree) for degree in degrees)
+        row: dict[str, int] = {}
+        for degree, rank in sorted(counts.items()):
+            key = ",".join(str(v) for v in degree)
+            row[key] = int(rank)
+            shift = ",".join(str(v) for v in degree)
+            display = f"F_{homological_degree} contains S(-{shift})^{int(rank)}"
+            free_modules.append(
+                {
+                    "homological_degree": homological_degree,
+                    "multidegree": list(degree),
+                    "rank": int(rank),
+                    "display": display,
+                    "grading": "multigraded_bidegree_shift",
+                    "multidegree_shifts_available": True,
+                }
+            )
+        if row:
+            betti_by_multidegree[str(homological_degree)] = row
+    differentials = _parse_macaulay2_differentials(differentials_text)
+    fitting_ideals = _parse_key_value_lines(fitting_text)
+    minors = _parse_key_value_lines(minors_text)
+    available = bool(free_modules)
+    return {
+        "available": available,
+        "backend": backend,
+        "grading": "multigraded_bidegree_shifts_over_F2_polynomial_ring",
+        "free_modules": free_modules,
+        "betti_by_homological_and_multidegree": betti_by_multidegree,
+        "differentials": differentials,
+        "fitting_ideals": fitting_ideals,
+        "minors": minors,
+        "not_multigraded": False,
+        "safe_for_multigraded_claims": available,
+        "interpretation": "Macaulay2 certified a real multigraded free resolution of the displayed cokernel presentation over the requested F2 polynomial ring.",
+    }
+
+
+def _parse_m2_degree_list(text: str) -> list[list[int]]:
+    cleaned = str(text).strip().replace("{", "[").replace("}", "]")
+    try:
+        parsed = json.loads(cleaned)
+    except Exception:
+        return []
+    if isinstance(parsed, list) and all(isinstance(item, list) for item in parsed):
+        out = []
+        for item in parsed:
+            try:
+                out.append([int(v) for v in item])
+            except Exception:
+                continue
+        return out
+    return []
+
+
+def _parse_key_value_lines(text: str) -> dict[str, str]:
+    out: dict[str, str] = {}
+    for line in str(text or "").splitlines():
+        line = line.strip()
+        if not line or "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        out[key.strip()] = value.strip()
+    return out
+
+
+def _parse_macaulay2_differentials(text: str) -> list[dict[str, Any]]:
+    grouped: dict[int, dict[str, Any]] = {}
+    for line in str(text or "").splitlines():
+        line = line.strip()
+        if not line or not line.startswith("d") or "_" not in line or "=" not in line:
+            continue
+        left, value = line.split("=", 1)
+        prefix, field = left.split("_", 1)
+        try:
+            degree = int(prefix[1:])
+        except ValueError:
+            continue
+        row = grouped.setdefault(degree, {"homological_degree": degree})
+        if field == "shape":
+            shape = _parse_presentation_shape(value)
+            if shape:
+                row["rows"], row["cols"] = shape
+        elif field in {"source_degrees", "target_degrees"}:
+            row[field] = _parse_m2_degree_list(value)
+        elif field == "matrix":
+            row["matrix_text"] = value.strip()
+    return [grouped[key] for key in sorted(grouped)]
 
 def _parse_json_dict(value: Any) -> dict[str, Any]:
     if not value:
@@ -660,6 +857,34 @@ def _parse_ungraded_betti_table(text: str, *, backend: str) -> dict[str, Any]:
     must come from a graded Macaulay2/Sage computation before the result can be
     rendered as a multigraded minimal free resolution over F2[x,y].
     """
+    if backend == "Macaulay2":
+        for line in str(text or "").splitlines():
+            stripped = line.strip()
+            if not stripped.startswith("total:"):
+                continue
+            values = [int(piece) for piece in stripped.split(":", 1)[1].split() if _is_int_literal(piece)]
+            free_modules = [
+                {
+                    "homological_degree": degree,
+                    "rank": int(rank),
+                    "display": f"F_{degree} = S^{int(rank)}" if int(rank) != 1 else f"F_{degree} = S",
+                    "grading": "ungraded_total_rank_from_macaulay2_total_row",
+                    "multidegree_shifts_available": False,
+                }
+                for degree, rank in enumerate(values)
+                if int(rank) != 0
+            ]
+            return {
+                "available": bool(free_modules),
+                "backend": backend,
+                "grading": "ungraded_total_betti_ranks_from_macaulay2_total_row",
+                "homological_column_ranks": values,
+                "free_modules": free_modules,
+                "total_rank": int(sum(values)),
+                "not_multigraded": True,
+                "safe_for_multigraded_claims": False,
+                "interpretation": "Macaulay2 total Betti row parsed as ungraded homological ranks. Multigraded claims use the separate Macaulay2 degree-shift blocks.",
+            }
     rows: list[list[int]] = []
     for line in str(text or "").splitlines():
         values = [int(piece) for piece in line.replace("|", " ").split() if _is_int_literal(piece)]
@@ -785,7 +1010,7 @@ def _parse_tagged_output(stdout: str) -> dict[str, str] | None:
         if "=" in line:
             key, value = line.split("=", 1)
             parsed[key.strip()] = value.strip()
-    for key in ("betti_table", "singular_resolution_text"):
+    for key in ("betti_table", "singular_resolution_text", "macaulay2_free_modules", "macaulay2_differentials", "fitting_ideals", "minors", "buchsbaum_eisenbud_diagnostics"):
         nested = _extract_tagged_block(block, f"{key}_begin", f"{key}_end")
         if nested is not None:
             parsed[key] = nested

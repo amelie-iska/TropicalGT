@@ -296,6 +296,7 @@ def compute_level_radius_bifiltration_report(
 
     generators = sorted(generator_by_simplex.values(), key=lambda row: (row["multidegree"], row["dimension"], row["simplex"]))
     boundary = _multigraded_boundary_monomials_named(generators, ["x_level", "x_radius"])
+    structure_maps = _adjacent_homology_structure_maps_mod2(subsets, levels, list(range(len(thresholds))), max_dim=2)
     report = {
         "available": True,
         "num_parameters": 2,
@@ -320,9 +321,11 @@ def compute_level_radius_bifiltration_report(
         "radius_grade_policy": "exact_sorted_radius_grid_index_no_bucket_collision",
         "fiber_rank_profile": fiber_profile,
         "rank_invariant_samples": rank_samples,
+        "structure_maps": structure_maps,
+        "structure_map_policy": "adjacent_grid_inclusion_induced_homology_ranks_over_F2",
         "notes": [
             "A finite 2-parameter persistence module is represented as a multigraded F2[x_level,x_radius]-module.",
-            "Each fiber is computed by F2 chain complexes on K_{level,radius}; H0 rank samples are exact inclusion-induced ranks on the sampled radius grid.",
+            "Each fiber is computed by F2 chain complexes on K_{level,radius}; H0 rank samples and adjacent H_i structure maps are exact inclusion-induced ranks on the sampled radius grid.",
             "The x_radius grade is the exact sorted radius-grid index; radius_grade_values records the real radius for each index.",
             "Real free resolutions are unavailable unless a CAS backend certifies them; the emitted object is only the exact multigraded free chain presentation plus labeled boundary maps.",
         ],
@@ -852,8 +855,8 @@ def _bivariate_staircase_resolution_from_points(
             "ambient_one_dimensional_cones": ambient_one_dimensional_cones,
             "staircase_corner_bidegrees": [row["bidegree"] for row in generator_rows],
             "interpretation": (
-                "The bivariate monomial ideal is computed in the affine toric chart whose coordinate "
-                "semigroup is N^2. The coordinate axes are the ambient one dimensional cone(s); the "
+                "The bivariate monomial ideal is computed in the coordinate exponent semigroup chart "
+                "Spec F2[x_level,x_radius] with semigroup N^2. The coordinate axes are the ambient one dimensional cone(s); the "
                 "minimal generator bidegrees are staircase corners in this semigroup, and adjacent "
                 "least-common-multiple corners give the exact Hilbert-Burch syzygies."
             ),
@@ -861,7 +864,7 @@ def _bivariate_staircase_resolution_from_points(
         "one_dimensional_cone_language": {
             "required_terminology": "one dimensional cone(s)",
             "ambient_cone_count": len(ambient_one_dimensional_cones),
-            "applies_to": "the toric exponent chart of the two-variable polynomial ring, not an extra heuristic resolution",
+            "applies_to": "the coordinate exponent semigroup chart of the two-variable polynomial ring, not a full tropical-variety embedding into a toric variety",
         },
         "adjacent_lcm_syzygies": syzygy_rows,
         "free_modules": free_modules,
@@ -888,13 +891,13 @@ def _bivariate_staircase_resolution_from_points(
         "buchsbaum_eisenbud_diagnostics": {
             "minimality_certified": True,
             "exactness_certified": True,
-            "certificate": "two-variable monomial staircase resolution: adjacent lcm syzygies in the affine toric exponent chart, with coordinate one dimensional cone(s), give the Hilbert-Burch/Miller-Sturmfels minimal resolution of S/I",
+            "certificate": "two-variable monomial staircase resolution: adjacent lcm syzygies in the coordinate exponent semigroup chart Spec F2[x_level,x_radius], with coordinate one dimensional cone(s), give the Hilbert-Burch/Miller-Sturmfels minimal resolution of S/I",
             "d1_d2_zero_over_F2": True,
             "grade_depth_requires_cas_for_general_determinantal_ideals": False,
         },
         "derived_category_note": (
             "This finite free complex is an actual object of D^b(gr-F2[x,y]) resolving the named quotient S/I. "
-            "The toric exponent chart supplies the coordinate one dimensional cone(s) for the bidegree semigroup; "
+            "The coordinate exponent semigroup chart supplies the coordinate one dimensional cone(s) for the bidegree semigroup; "
             "analogical derived comparisons may use this certificate only at the stated ideal scope."
         ),
     }
@@ -1343,6 +1346,87 @@ def _h0_inclusion_rank(source: list[dict[str, Any]], target: list[dict[str, Any]
         union(a, b)
     return len({find(v) for v in source_vertices if v in parent})
 
+
+
+def _homology_inclusion_rank_mod2(source: list[dict[str, Any]], target: list[dict[str, Any]], dim: int) -> int:
+    """Rank of H_dim(source) -> H_dim(target) for a subcomplex inclusion over F2."""
+    if dim < 0:
+        return 0
+    source_by_dim = _simplices_by_dim(source)
+    target_by_dim = _simplices_by_dim(target)
+    source_k = source_by_dim.get(dim, [])
+    target_k = target_by_dim.get(dim, [])
+    if not source_k or not target_k:
+        return 0
+    target_index = {simplex: idx for idx, simplex in enumerate(target_k)}
+    if dim == 0:
+        d_source = np.zeros((0, len(source_k)), dtype=np.uint8)
+    else:
+        d_source = _boundary_matrix(source_by_dim.get(dim - 1, []), source_k)
+    source_cycles = _nullspace_mod2(d_source)
+    if not source_cycles:
+        return 0
+    cycle_cols: list[np.ndarray] = []
+    for vec in source_cycles:
+        col = np.zeros((len(target_k),), dtype=np.uint8)
+        for src_idx, active in enumerate(vec.tolist()):
+            if not active:
+                continue
+            tgt_idx = target_index.get(source_k[src_idx])
+            if tgt_idx is not None:
+                col[tgt_idx] ^= 1
+        if np.any(col):
+            cycle_cols.append(col)
+    if not cycle_cols:
+        return 0
+    target_boundaries = _boundary_matrix(target_k, target_by_dim.get(dim + 1, []))
+    image_cycles = np.stack(cycle_cols, axis=1)
+    if target_boundaries.size == 0:
+        boundary_rank = 0
+        combined = image_cycles
+    else:
+        boundary_rank = _rank_mod2(target_boundaries)
+        combined = np.concatenate([target_boundaries, image_cycles], axis=1)
+    return int(max(_rank_mod2(combined) - boundary_rank, 0))
+
+
+def _adjacent_homology_structure_maps_mod2(
+    subsets: dict[tuple[int, int], list[dict[str, Any]]],
+    levels: Sequence[int],
+    radius_grades: Sequence[int],
+    *,
+    max_dim: int = 2,
+) -> list[dict[str, Any]]:
+    """Compute adjacent F2 homology structure-map ranks on the sampled bifiltration grid."""
+    out: list[dict[str, Any]] = []
+    level_set = set(int(v) for v in levels)
+    radius_set = set(int(v) for v in radius_grades)
+    for level in sorted(level_set):
+        for radius in sorted(radius_set):
+            source_grade = (level, radius)
+            source = subsets.get(source_grade)
+            if source is None:
+                continue
+            candidates = [((level + 1, radius), "x_level"), ((level, radius + 1), "x_radius")]
+            for target_grade, direction in candidates:
+                if target_grade not in subsets:
+                    continue
+                target = subsets[target_grade]
+                ranks = {
+                    str(dim): _homology_inclusion_rank_mod2(source, target, dim)
+                    for dim in range(max_dim + 1)
+                }
+                out.append(
+                    {
+                        "source_grade": [int(source_grade[0]), int(source_grade[1])],
+                        "target_grade": [int(target_grade[0]), int(target_grade[1])],
+                        "direction": direction,
+                        "homology_rank": ranks,
+                        "field": "F2",
+                        "method": "rank(B_target + image(Z_source)) - rank(B_target) over F2",
+                    }
+                )
+    return out
 
 def _closed_complex(filtered_object: dict[str, Any], max_simplices: int) -> dict[str, Any]:
     raw_simplices = list(filtered_object.get("simplices", []))

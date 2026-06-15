@@ -1,0 +1,175 @@
+# TropicalGT-I Current Repair Inventory - 2026-06-14
+
+## Operating Rules
+
+- Work only on `iska` in `/home/iska/Documents/amelie/bio/TropicalGT`.
+- Stay on the non-main branch `tropicalgt-i-real-cas-no-proxy-20260614` or a newer non-main branch created from it.
+- Proceed linearly: finish the current repair, test it, inspect it in the browser, then move to the next item.
+- Replace proxy or synthetic claims when encountered. If a required computation is not yet implemented, the next task is the real implementation, not a fake figure.
+- Generated browser artifacts may be regenerated for QA, but source, planning, tests, and docs are the commit targets.
+
+## Current Objective
+
+Repair `trajectory_persistence/two_parameter_bifiltration.html` so it is mathematically faithful and readable:
+
+1. The z-axis remains the actual fiber rank `beta_i = dim_F2 H_i(K_(level,radius))`.
+2. H0 and H1 occupy distinguishable, low, close visual layers without changing the reported rank.
+3. The displayed radius coordinate is normalized only for readability; the exact radius grade stays in hover and JSON.
+4. The `F2[x_level,x_radius]` module grid shows actual fibers and structure-map edges.
+5. The Miller-Sturmfels panel is an exponent-lattice/staircase diagram for the scoped monomial ideal, not a full toric embedding claim.
+6. Coordinate one dimensional cone(s) terminology is used only where it accurately denotes the coordinate generators of the exponent semigroup.
+
+## Implementation List
+
+### 1. Bifiltration and 2-Parameter Persistence
+
+- Guarantee every nonempty reasoning trajectory emits an `F2[x_level,x_radius]` bifiltration.
+- Compute grid fibers `K_(level,radius)` from the actual filtered complexes.
+- Compute structure maps on adjacent grid fibers in the `x_level` and `x_radius` directions.
+- Render a 3D lattice view with `x_level`, normalized/display `x_radius`, and actual fiber rank on z.
+- Keep exact radius grades, rank-invariant samples, Betti surfaces, and fiber provenance in downloadable JSON.
+- Add tests proving every nonempty trajectory has level grades, radius grades, fibers, and module ring metadata.
+
+### 2. Review `references/2210.11433v1.pdf`
+
+- Extract and read the full paper.
+- Write `planning/tropicalgt_i_2210_11433_cas_methodology_review.md`.
+- Identify transferable methods: fitting ideals, determinantal minors, Buchsbaum-Eisenbud multipliers, exactness criteria, multigraded resolutions, and module invariants.
+- Separate what applies to two-parameter persistence modules over `F2[x_level,x_radius]` from what applies only to auxiliary ideals or unrelated rings.
+
+### 3. CAS Computations and Certified Free Resolutions
+
+- Probe and integrate Macaulay2, SageMath, Singular, and optional `amelie-iska/BEMultipliers` in that order.
+- Compute real minimal multigraded free resolutions over `F2[x_level,x_radius]` only when a backend emits exactness, minimality, multidegree-shift, and differential-matrix evidence.
+- Implement Fitting ideals, minors, Buchsbaum-Eisenbud diagnostics, Betti tables, differential matrices, multidegree shifts, and certificate payloads.
+- Render Macaulay2/Sage-style research figures for certified algebraic objects.
+- Never render chain-presentation diagnostics as certified free resolutions.
+
+### 4. Derived, Analogical, and Memory Maps
+
+- Compute analogical retrieval from model-predicted probability vectors.
+- Use Jensen-Shannon assignments between probability-vector filtered complexes.
+- Validate vertex, edge, face, simplex-tree, and bifiltration preservation before calling a correspondence a simplicial map.
+- Compare derived objects only through certified free-resolution or chain-map evidence.
+- Retrieve many top-k memories only when stored memories pass the quality threshold; otherwise render an explicit insufficient-memory state.
+
+### 5. Simplicial Complexes and Simplex Trees
+
+- Radius filtrations must start as disjoint vertices and grow min-to-max by adding edges and faces.
+- Dotted directed edges show causal direction, decoding order, or both; solid simplicial edges/faces are radius-gated.
+- Every reasoning step gets its own filtered complex and simplex tree.
+- Simplex tree plots must show a connected trie or face-coface poset, not disconnected columns.
+- Hover payloads must include model input/output, simplex, filtration value, dimension, and provenance.
+
+### 6. NLL/Fitness Visuals
+
+- Replace misleading sparse triangular surfaces with a 3D PCA Gaussian density cloud around actual model embeddings.
+- Color density by local NLL/fitness while keeping actual trajectory vertices and edges separate.
+- Keep 2D/3D surfaces only when they interpolate the neighborhood around the trajectory and visibly anchor the model vertices.
+- Show edgewise NLL improvements and terminal improvement.
+
+### 7. Tropical Support, GraphCG, and Decoding
+
+- Make tropical support heatmaps interpretable with grouped labels, collapse diagnostics, wall-hit context, and margin summaries.
+- Fix tropical margin sign/scale naming so negative values are not mislabeled as a loss unless that is the intended maximization convention.
+- Investigate rising certificate loss and distinguish real certificate failures from auxiliary penalties.
+- Ensure GraphCG directions are full rank relative to embedding dimension and render readable spectra/activity/bias plots.
+- Keep meet-in-the-middle decoding behind a config toggle.
+- Decode causal DAGs with forward and reverse causal directions; use ROAR/random-order autoregression for cyclic or noncausal graphs.
+
+### 8. Tropical/Toric Embedding and Paper Updates
+
+- Research Macaulay2 `Tropical`, Sage tropical polynomial and tropical variety APIs, `references/1710.10651v2.pdf`, and Maclagan-style embeddings of tropical schemes into toric varieties.
+- Implement toric embeddings only when fan, one dimensional cone(s), semigroup, and embedding maps are mathematically correct and tool-backed.
+- Add vector-bundle, tropical toric embedding, scheme, and sheaf-theoretic material to the TropicalGT-I paper as implementations mature.
+
+### 9. Training, Browser QA, Docs, and Push
+
+- Reconcile training state and restart/resume BPB training only under the user-requested 5K gate policy or explicit instruction.
+- Generate periodic browser audit artifacts every 250 steps.
+- Keep `127.0.0.1:8991` or the active forwarded port pointed at the latest repaired bundle.
+- Inspect every repaired visualization in the browser.
+- Update `README.md`, planning docs, and tests.
+- Push source/planning/docs changes to the non-main branch.
+
+## Present Status
+
+- Current branch: `tropicalgt-i-real-cas-no-proxy-20260614`.
+- Current edited files: `TropicalGT-I/src/tropicalgt/visualization.py`, `TropicalGT-I/src/tropicalgt/algebra.py`, and planning docs.
+- Focused tests currently pass for algebraic persistence and artifact validation.
+- The active figure repair is still under browser review; CAS review begins only after this objective is closed.
+
+## 2026-06-14 Bifiltration Figure Repair Pass
+
+The current renderer for `trajectory_persistence/two_parameter_bifiltration.html` now separates three objects that had been visually conflated:
+
+1. The top 3D panel is the actual finite `F2[x_level,x_radius]` fiber-rank lattice.  The z coordinate is always the computed Betti rank `beta_i = dim_F2 H_i(K_(level,radius))`.  H0 and H1 are separated only by a small visual offset in the displayed radius coordinate; the exact radius grade remains in hover and JSON.
+2. The middle module panel is a Miller-Sturmfels-style exponent-lattice diagram built from the same actual grid fibers.  It renders zero H1 fibers, nonzero H1 fibers, actual H1 rank-change staircase curves, and actual multigraded chain-generator bidegrees from the chain-presentation diagnostics.  The displayed `x_radius` coordinate is normalized for readability, with exact grades in hover.
+3. The algebra tables remain diagnostic unless a CAS backend attaches a certificate for an actual minimal multigraded free resolution.  Chain-presentation objects are not labeled as certified free resolutions.
+
+Focused validation after this pass:
+
+```bash
+PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_algebraic_persistence.py TropicalGT-I/tests/test_interactive_artifact_validator.py -q
+# 17 passed
+```
+
+The next linear item is the full review of `references/2210.11433v1.pdf`, followed by exact CAS integration for Fitting ideals, minors, Buchsbaum-Eisenbud diagnostics, and certified minimal multigraded free resolutions over `F2[x_level,x_radius]` where the backend certifies exactness and minimality.
+
+## 2026-06-14 Bifiltration Figure Repair Pass 2
+
+Status: implemented and regenerated for `TropicalGT-I/outputs/multi_sample_browser/latest/sample_000/trajectory_persistence/two_parameter_bifiltration.html`.
+
+Changes made:
+- Replaced the cramped two-panel 2-parameter module plot with a stacked dark-mode research figure.
+- First panel now follows the Miller-Sturmfels staircase convention for a bivariate monomial ideal: lattice coordinates are bidegrees over `F2[x_level,x_radius]`, the support staircase is drawn from actual nonzero H1 grid fibers, and coordinate axes are labeled as one dimensional cone(s).
+- Second panel keeps the actual fiber rank as the third dimension, with only a small visual y-offset separating H0 and H1 layers when they occupy the same lattice coordinates.
+- Hover payloads report the actual level, radius grade, H0/H1 rank, and chain-generator bidegrees from the generated bifiltration payload.
+- CAS/free-resolution tables remain explicitly diagnostic unless populated by certified CAS output; no page text claims certification without CAS evidence.
+
+Verification:
+- `python -m py_compile TropicalGT-I/src/tropicalgt/visualization.py TropicalGT-I/src/tropicalgt/algebra.py` passed.
+- `PYTHONPATH=TropicalGT-I/src python -m pytest TropicalGT-I/tests/test_algebraic_persistence.py TropicalGT-I/tests/test_interactive_artifact_validator.py -q` passed: 17 tests.
+- Browser QA opened the regenerated page at `http://127.0.0.1:8991/sample_000/trajectory_persistence/two_parameter_bifiltration.html`. DOM checks confirmed the visible strings `2-parameter module fibers`, `H0 fiber rank`, `Miller-Sturmfels staircase`, and `one dimensional cone(s)`.
+
+Next sequential item:
+- Review `references/2210.11433v1.pdf` in detail, then implement the CAS-backed computations for minimal multigraded free resolutions, Fitting ideals, Buchsbaum-Eisenbud diagnostics, and derived/analogical maps.
+
+## 2026-06-14 Bifiltration Figure Repair Pass 3
+
+Status: implemented and browser-reviewed at `http://127.0.0.1:8991/sample_000/trajectory_persistence/two_parameter_bifiltration.html`.
+
+Changes made:
+- Replaced the compressed split/flat-looking module panel with a Miller-Sturmfels-style exponent-lattice diagram over `F2[x_level,x_radius]`.
+- The main panel now renders actual grid fibers / monomial lattice points, actual `H0` and `H1` fiber-rank samples, actual `C_0`, `C_1`, and `C_2` shifted free-chain-module generator bidegrees, minimal multidegree antichain / staircase, and dotted coordinate one dimensional cone(s).
+- Shaded orthants now come only from actual shifted free-chain-module bidegrees. The page no longer treats arbitrary `H_i` fiber-rank support as a monomial ideal support.
+- The companion 3D panel keeps fiber rank as the z-axis and uses only a small visual y-offset to distinguish `H0` from `H1` layers.
+
+Browser QA evidence:
+- DOM text contains `Miller-Sturmfels-style multigraded`, `shifted free-chain-module supports`, `minimal multidegree antichain`, and `one dimensional cone`.
+- Rendered legend contains: actual grid fibers / monomial lattice; H0 fiber-rank samples; H1 fiber-rank samples; C_0/C_1/C_2 shifted free-module generators; minimal multidegree antichain / staircase; coordinate one dimensional cone(s); H0/H1 fiber-rank lattice; H0/H1 module structure maps.
+- Focused test command passed: `PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_algebraic_persistence.py TropicalGT-I/tests/test_interactive_artifact_validator.py -q` -> `17 passed`.
+
+Next sequential item:
+- CAS integration for real multigraded free resolutions, Fitting ideals, minors, and Buchsbaum-Eisenbud diagnostics. Update the CAS plan with the completed `2210.11433v1.pdf` review and then implement the Macaulay2/Singular/BEMultipliers bridge item-by-item.
+
+
+
+## 2026-06-14 Bifiltration Figure Repair Pass 4
+
+Status: implemented, regenerated, and opened in the in-app browser at `http://127.0.0.1:8991/sample_000/trajectory_persistence/two_parameter_bifiltration.html`.
+
+Correction made from browser review:
+- The Miller-Sturmfels module panel now uses the same visual convention as the monomial-ideal staircase reference: horizontal coordinate is the `x_radius` exponent/radius grade, vertical coordinate is the `x_level` exponent/reasoning growth level.
+- This replaces the visually compressed `x_level`-horizontal, `x_radius`-vertical layout that made the module appear as a tall block rather than a staircase.
+- The 3D companion panel still uses `z = beta_i = dim_F2 H_i(K_(level,radius))`; the small H0/H1 layer offset is only visual and is reported as such in hover text.
+- The page text now explicitly states horizontal `x_radius`, vertical `x_level`, persisted adjacent structure-map ranks, and that diagnostic chain data is not substituted for a free resolution.
+
+Regression added:
+- `test_level_radius_bifiltration_reports_scoped_real_staircase_resolution` now checks real adjacent `F2` structure maps in both `x_level` and `x_radius` directions and validates the generated HTML orientation/language.
+
+Verification:
+- `PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_algebraic_persistence.py -q` -> `9 passed`.
+- Browser DOM check confirmed: `horizontal lattice coordinates are x_radius`, `Columns are radius grades`, two Plotly panels, and `Adjacent structure maps persisted=`.
+
+Next sequential item remains CAS integration: review `references/2210.11433v1.pdf` and implement certified multigraded free-resolution, Fitting-ideal, minor, Buchsbaum-Eisenbud, and derived-map computations without proxy substitutions.

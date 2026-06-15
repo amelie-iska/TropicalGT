@@ -85,6 +85,17 @@ def test_real_cas_free_resolution_smoke_when_backend_available():
         assert ungraded["homological_column_ranks"][:2] == [2, 1]
         assert [row["display"] for row in ungraded["free_modules"][:2]] == ["F_0 = S^2", "F_1 = S"]
         assert ungraded["not_multigraded"] is True
+        if real["backend"] == "Macaulay2":
+            summary = real["free_resolution_summary"]
+            assert real["multigraded_free_resolution_certified"] is True
+            assert real["safe_to_render_as_multigraded_free_resolution"] is True
+            assert summary["grading"] == "multigraded_bidegree_shifts_over_F2_polynomial_ring"
+            assert summary["not_multigraded"] is False
+            assert summary["safe_for_multigraded_claims"] is True
+            assert summary["free_modules"]
+            assert real["cas_artifacts"]["differentials"]
+            assert real["cas_artifacts"]["fitting_ideals"]
+            assert real["cas_artifacts"]["minors"]
 
 
 def test_cas_canonicalization_preserves_generator_id_boundaries():
@@ -174,7 +185,7 @@ def test_topological_algebra_report_has_multiparameter_data():
     assert summary["algebra_reports"] == 1.0
 
 
-def test_level_radius_bifiltration_reports_scoped_real_staircase_resolution():
+def test_level_radius_bifiltration_reports_scoped_real_staircase_resolution(tmp_path):
     growth = [
         {
             "level": 0,
@@ -207,6 +218,24 @@ def test_level_radius_bifiltration_reports_scoped_real_staircase_resolution():
     assert report["coefficient_ring"] == "F2[x_level,x_radius]"
     assert report["grid_axes"][0] == [0, 1, 2]
     assert report["radius_grade_values"] == {0: 0.0, 1: 0.3, 2: 0.6, 3: 0.7}
+    structure_maps = report["structure_maps"]
+    assert structure_maps
+    assert {row["direction"] for row in structure_maps} >= {"x_level", "x_radius"}
+    assert all(row["field"] == "F2" for row in structure_maps)
+    assert all(set(row["homology_rank"]) >= {"0", "1", "2"} for row in structure_maps)
+    assert all("rank(B_target + image(Z_source))" in row["method"] for row in structure_maps)
+
+    from tropicalgt.visualization import write_two_parameter_bifiltration_visualization
+
+    html_path = tmp_path / "two_parameter_bifiltration.html"
+    write_two_parameter_bifiltration_visualization(html_path, report, title="test bifiltration")
+    html = html_path.read_text()
+    assert "horizontal lattice coordinates are x_radius" in html
+    assert "Columns are radius grades" in html
+    assert "Adjacent structure maps persisted=" in html
+    assert "diagnostic chain data is not substituted for a free resolution" in html
+    assert "x_radius exponent" in html and "radius grade" in html
+    assert "x_level exponent" in html and "reasoning growth level" in html
     chain = report["chain_presentation_diagnostics"]
     assert chain["not_a_free_resolution"] is True
     real = chain["real_free_resolution"]
