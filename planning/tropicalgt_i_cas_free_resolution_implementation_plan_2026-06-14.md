@@ -601,3 +601,25 @@ Sequential visualization/CAS artifact item completed for the Miller-Sturmfels st
 - Regression coverage: `PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_algebraic_persistence.py -q` returned `9 passed`.
 
 Next linear CAS item: review `references/2210.11433v1.pdf` in full and implement the paper-derived CAS objects only when Macaulay2/Sage/Singular can certify the requested multigraded data: minimal free resolutions, differential matrices, Fitting ideals, minors, Buchsbaum-Eisenbud diagnostics, and derived/chain-map evidence.
+
+
+## 2026-06-15 Buchsbaum-Eisenbud Diagnostic Contract Pass
+
+Sequential CAS item completed in the no-proxy lane:
+
+- Macaulay2, Singular, and Sage script templates now emit a tagged `buchsbaum_eisenbud_diagnostics` section whenever they emit a certified successful CAS result.
+- The tagged section records whether backend diagnostics are available, the exactness/minimality source, BEMultipliers repository/path/status, and whether multiplier output is actually present.
+- BEMultipliers remains optional and is not treated as a free-resolution backend. If no explicit multiplier output is emitted, the result says `multiplier_output_available=false` and explains that no multiplier data is substituted from chain diagnostics, Fitting ideals, minors, or rank tables.
+- Certified-result parsing now stores this payload in `cas_artifacts["buchsbaum_eisenbud_diagnostics"]`, so visualization and downstream analogy code can distinguish real CAS output, total/ungraded output, unavailable multiplier output, and actual future BEMultipliers output.
+- Added regression coverage using a synthetic tagged Macaulay2 certificate containing multigraded shifts, differential metadata, Fitting ideals, minors, and a BE diagnostic block.
+
+Validation:
+
+```text
+PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_algebraic_persistence.py -q
+# 15 passed
+PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_simplicial_visualization.py TropicalGT-I/tests/test_interactive_artifact_validator.py -q
+# 32 passed
+```
+
+Next linear CAS item: run the backend smoke path against any installed Macaulay2/Sage/Singular executable and add small-known-module tests for real backend Fitting/minor output where the local backend is available; if Macaulay2 remains absent, continue rendering the exact unavailable state with command templates and certificate requirements.

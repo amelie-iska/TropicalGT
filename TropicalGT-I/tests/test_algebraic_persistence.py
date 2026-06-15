@@ -234,6 +234,87 @@ def test_real_cas_free_resolution_smoke_when_backend_available():
             assert real["cas_artifacts"]["minors"]
 
 
+def test_certified_cas_result_surfaces_buchsbaum_eisenbud_diagnostics():
+    schema = canonicalize_module(_small_free_resolution_module())
+    tagged = "\n".join([
+        "TROPICALGT_RESOLUTION_BEGIN",
+        "backend=Macaulay2",
+        "exactness_certified=true",
+        "minimality_certified=true",
+        "certificate_type=Macaulay2 res coker presentation over multigraded F2 polynomial ring",
+        "presentation_shape=1x2",
+        "betti_table_begin",
+        "       0 1 2",
+        "total: 1 2 1",
+        "betti_table_end",
+        "macaulay2_free_modules_begin",
+        "F0_degrees={{0,0}}",
+        "F1_degrees={{1,0},{0,1}}",
+        "F2_degrees={{1,1}}",
+        "macaulay2_free_modules_end",
+        "macaulay2_differentials_begin",
+        "d1_shape=1x2",
+        "d1_source_degrees={{1,0},{0,1}}",
+        "d1_target_degrees={{0,0}}",
+        "d1_matrix=| x_level x_radius |",
+        "d2_shape=2x1",
+        "d2_source_degrees={{1,1}}",
+        "d2_target_degrees={{1,0},{0,1}}",
+        "d2_matrix=| x_radius || x_level |",
+        "macaulay2_differentials_end",
+        "fitting_ideals_begin",
+        "Fitt0=ideal(x_level,x_radius)",
+        "Fitt1=ideal 1_R",
+        "fitting_ideals_end",
+        "minors_begin",
+        "minors_1=ideal(x_level,x_radius)",
+        "minors_end",
+        "buchsbaum_eisenbud_diagnostics_begin",
+        "backend_diagnostics_available=true",
+        "exactness_certified=true",
+        "minimality_certified=true",
+        "be_exactness_source=Macaulay2 res/HH exactness certificate for the displayed cokernel presentation",
+        "multiplier_output_available=false",
+        "bemultipliers_status=unavailable_no_package_path",
+        "bemultipliers_repository=https://github.com/amelie-iska/BEMultipliers.git",
+        "reason=Buchsbaum-Eisenbud multiplier output is rendered only after an explicit BEMultipliers run; no multiplier data is substituted",
+        "buchsbaum_eisenbud_diagnostics_end",
+        "TROPICALGT_RESOLUTION_END",
+    ])
+    parsed = cas_free_resolution._parse_tagged_output(tagged)
+    assert parsed is not None
+    real = cas_free_resolution._certified_result(
+        schema,
+        {
+            "available": True,
+            "backend": "M2",
+            "parsed": parsed,
+            "tagged_output": parsed["_raw"],
+            "certificate_attached": True,
+        },
+        attempts=[{"backend": "M2", "status": "ran"}],
+    )
+    _assert_real_resolution_guard(real, "F2[x_level,x_radius]")
+    assert real["backend"] == "Macaulay2"
+    assert real["safe_to_render_as_multigraded_free_resolution"] is True
+    be = real["cas_artifacts"]["buchsbaum_eisenbud_diagnostics"]
+    assert be["available"] is True
+    assert be["exactness_certified"] is True
+    assert be["minimality_certified"] is True
+    assert be["multiplier_output_available"] is False
+    assert be["bemultipliers_status"] == "unavailable_no_package_path"
+    assert "not substituted" in be["interpretation"]
+    assert real["cas_artifacts"]["fitting_ideals"]["Fitt0"] == "ideal(x_level,x_radius)"
+    assert real["cas_artifacts"]["minors"]["minors_1"] == "ideal(x_level,x_radius)"
+    m2_script = cas_free_resolution.build_macaulay2_script(schema)
+    singular_script = build_singular_script(schema)
+    sage_script = cas_free_resolution.build_sage_python_script(schema)
+    assert "buchsbaum_eisenbud_diagnostics_begin" in m2_script
+    assert "BEMultipliers" in m2_script
+    assert "buchsbaum_eisenbud_diagnostics_begin" in singular_script
+    assert "buchsbaum_eisenbud_diagnostics_begin" in sage_script
+
+
 def test_cas_canonicalization_preserves_generator_id_boundaries():
     module = {
         "coefficient_ring": "F2[x_level,x_radius]",

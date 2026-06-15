@@ -3540,6 +3540,7 @@ def _cas_real_resolution_display(real: Mapping[str, Any]) -> Dict[str, Any]:
         differentials.append({"map": f"d_{hd}", "name": f"d_{hd}", "shape": shape, "rank": "CAS", "matrix_preview": [str(preview)], "source_degrees": row.get("source_degrees"), "target_degrees": row.get("target_degrees")})
     fitting = artifacts.get("fitting_ideals") if isinstance(artifacts.get("fitting_ideals"), Mapping) else summary.get("fitting_ideals", {})
     minors = artifacts.get("minors") if isinstance(artifacts.get("minors"), Mapping) else summary.get("minors", {})
+    be_artifacts = artifacts.get("buchsbaum_eisenbud_diagnostics") if isinstance(artifacts.get("buchsbaum_eisenbud_diagnostics"), Mapping) else {}
     return {
         "available": bool(modules),
         "ring": real.get("coefficient_ring", "F2[x_level,x_radius]"),
@@ -3556,6 +3557,11 @@ def _cas_real_resolution_display(real: Mapping[str, Any]) -> Dict[str, Any]:
             "exactness_certified": bool(real.get("exactness_certified")),
             "certificate": str(real.get("render_warning", "CAS certified the displayed resolution under its stated grading.")),
             "grading_scope": "multigraded" if is_multigraded else ("total-graded" if is_total_graded else "ungraded"),
+            "backend_diagnostics_available": bool(be_artifacts.get("available")),
+            "multiplier_output_available": bool(be_artifacts.get("multiplier_output_available")),
+            "bemultipliers_status": str(be_artifacts.get("bemultipliers_status", "unreported")),
+            "be_exactness_source": str(be_artifacts.get("be_exactness_source", "")),
+            "backend_interpretation": str(be_artifacts.get("interpretation", "No Buchsbaum-Eisenbud multiplier output is inferred.")),
         },
         "cas_backend": real.get("backend"),
     }

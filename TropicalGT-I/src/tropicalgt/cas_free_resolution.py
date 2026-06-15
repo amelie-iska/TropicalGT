@@ -428,6 +428,11 @@ def build_macaulay2_script(module_schema: dict[str, Any]) -> str:
                 "print \"minors_begin\"",
                 "print \"minors_0=ideal 1_R\"",
                 "print \"minors_end\"",
+                *_macaulay2_be_diagnostics_lines(
+                    exactness_expression="true",
+                    minimality_expression="true",
+                    source="Macaulay2 trivial free cokernel certificate",
+                ),
                 "print \"TROPICALGT_RESOLUTION_END\"",
                 "exit 0",
             ]
@@ -493,10 +498,46 @@ def build_macaulay2_script(module_schema: dict[str, Any]) -> str:
             "print \"minors_begin\"",
             *minor_lines,
             "print \"minors_end\"",
+            *_macaulay2_be_diagnostics_lines(
+                exactness_expression="okExact",
+                minimality_expression="true",
+                source="Macaulay2 res/HH exactness certificate for the displayed cokernel presentation",
+            ),
             "print \"TROPICALGT_RESOLUTION_END\"",
             "exit 0",
         ]
     )
+
+
+
+def _macaulay2_be_diagnostics_lines(*, exactness_expression: str, minimality_expression: str, source: str) -> list[str]:
+    package_path = _local_bemultipliers_package_path()
+    if package_path:
+        bem_status = "package_path_detected_not_loaded_without_explicit_multiplier_run"
+        bem_path = str(package_path)
+    else:
+        bem_status = "unavailable_no_package_path"
+        bem_path = ""
+    safe_source = _cas_text_literal(source)
+    safe_status = _cas_text_literal(bem_status)
+    safe_path = _cas_text_literal(bem_path)
+    return [
+        "print \"buchsbaum_eisenbud_diagnostics_begin\"",
+        "print \"backend_diagnostics_available=true\"",
+        f"print concatenate(\"exactness_certified=\", toString {exactness_expression})",
+        f"print concatenate(\"minimality_certified=\", toString {minimality_expression})",
+        f"print \"be_exactness_source={safe_source}\"",
+        "print \"multiplier_output_available=false\"",
+        f"print \"bemultipliers_status={safe_status}\"",
+        f"print \"bemultipliers_package_path={safe_path}\"",
+        "print \"bemultipliers_repository=https://github.com/amelie-iska/BEMultipliers.git\"",
+        "print \"reason=Buchsbaum-Eisenbud multiplier output is rendered only after an explicit BEMultipliers run on a CAS-certified Macaulay2 ChainComplex; no multiplier data is substituted from rank tables or chain diagnostics\"",
+        "print \"buchsbaum_eisenbud_diagnostics_end\"",
+    ]
+
+
+def _cas_text_literal(value: str) -> str:
+    return str(value).replace("\\", "/").replace('"', "'").replace("\n", " ")
 
 
 def build_singular_script(module_schema: dict[str, Any]) -> str:
@@ -535,6 +576,11 @@ def build_singular_script(module_schema: dict[str, Any]) -> str:
             "print(\"minors_begin\");",
             "print(\"minors_0=1\");",
             "print(\"minors_end\");",
+            *_singular_be_diagnostics_lines(
+                exactness=True,
+                minimality=True,
+                source="Singular trivial free cokernel certificate",
+            ),
             "print(\"TROPICALGT_RESOLUTION_END\");",
         ]
     else:
@@ -575,6 +621,11 @@ def build_singular_script(module_schema: dict[str, Any]) -> str:
             "print(\"singular_resolution_text_end\");",
             *fitting_lines,
             *minor_lines,
+            *_singular_be_diagnostics_lines(
+                exactness=True,
+                minimality=(unit_entries == 0),
+                source="Singular mres plus exact determinantal/Fitting ideals for the displayed presentation matrix",
+            ),
             "print(\"TROPICALGT_RESOLUTION_END\");",
         ]
     return "\n".join(
@@ -588,6 +639,25 @@ def build_singular_script(module_schema: dict[str, Any]) -> str:
             *body,
         ]
     )
+
+
+
+def _singular_be_diagnostics_lines(*, exactness: bool, minimality: bool, source: str) -> list[str]:
+    exact_text = "true" if exactness else "false"
+    minimal_text = "true" if minimality else "false"
+    safe_source = _cas_text_literal(source)
+    return [
+        "print(\"buchsbaum_eisenbud_diagnostics_begin\");",
+        "print(\"backend_diagnostics_available=true\");",
+        f"print(\"exactness_certified={exact_text}\");",
+        f"print(\"minimality_certified={minimal_text}\");",
+        f"print(\"be_exactness_source={safe_source}\");",
+        "print(\"multiplier_output_available=false\");",
+        "print(\"bemultipliers_status=unsupported_in_singular_adapter\");",
+        "print(\"bemultipliers_repository=https://github.com/amelie-iska/BEMultipliers.git\");",
+        "print(\"reason=Singular can provide exact determinantal and Fitting ideals here, but Buchsbaum-Eisenbud multiplier output requires a Macaulay2 BEMultipliers run and is not inferred\");",
+        "print(\"buchsbaum_eisenbud_diagnostics_end\");",
+    ]
 
 
 def build_sage_python_script(module_schema: dict[str, Any]) -> str:
@@ -648,6 +718,15 @@ try:
         print("total_graded_betti_json=" + json.dumps(summary, sort_keys=True))
         print("differentials_json=[]")
         print("sage_resolution_text=S^%d <-- 0" % rows)
+        print("buchsbaum_eisenbud_diagnostics_begin")
+        print("backend_diagnostics_available=true")
+        print("exactness_certified=true")
+        print("minimality_certified=true")
+        print("be_exactness_source=Sage trivial total-graded free cokernel certificate")
+        print("multiplier_output_available=false")
+        print("bemultipliers_status=unsupported_in_sage_total_graded_adapter")
+        print("reason=Sage adapter output is total-graded only; Buchsbaum-Eisenbud multiplier output requires Macaulay2/BEMultipliers and is not inferred")
+        print("buchsbaum_eisenbud_diagnostics_end")
         print("TROPICALGT_RESOLUTION_END")
         raise SystemExit(0)
     if rows != 1:
@@ -722,6 +801,15 @@ try:
     print("total_graded_betti_json=" + json.dumps(summary, sort_keys=True))
     print("differentials_json=" + json.dumps(differentials, sort_keys=True))
     print("sage_resolution_text=" + str(resolution).replace("\n", "; "))
+    print("buchsbaum_eisenbud_diagnostics_begin")
+    print("backend_diagnostics_available=true")
+    print("exactness_certified=true")
+    print("minimality_certified=true")
+    print("be_exactness_source=Sage total-graded S/I resolution certificate")
+    print("multiplier_output_available=false")
+    print("bemultipliers_status=unsupported_in_sage_total_graded_adapter")
+    print("reason=Sage adapter output is total-graded only; Buchsbaum-Eisenbud multiplier output requires Macaulay2/BEMultipliers and is not inferred")
+    print("buchsbaum_eisenbud_diagnostics_end")
     print("TROPICALGT_RESOLUTION_END")
 except SystemExit:
     raise
@@ -751,6 +839,7 @@ def _certified_result(module_schema: dict[str, Any], backend_result: dict[str, A
     sage_resolution_text = str(parsed.get("sage_resolution_text", "") or "")
     macaulay2_multigraded = _parse_macaulay2_multigraded_artifacts(parsed, backend=backend) if backend == "Macaulay2" else {}
     singular_determinantal = _parse_singular_determinantal_artifacts(parsed, backend=backend) if backend == "Singular" else {}
+    be_diagnostics = _parse_buchsbaum_eisenbud_diagnostics(parsed, backend=backend)
     structured_betti = _parse_ungraded_betti_table(betti_text, backend=backend)
     if sage_total_graded.get("available"):
         sage_total_graded.setdefault("safe_for_multigraded_claims", False)
@@ -820,6 +909,7 @@ def _certified_result(module_schema: dict[str, Any], backend_result: dict[str, A
             "singular_determinantal": singular_determinantal,
             "fitting_ideals": fitting_ideals,
             "minors": minors,
+            "buchsbaum_eisenbud_diagnostics": be_diagnostics,
             "singular_resolution_text": singular_resolution_text,
             "sage_resolution_text": sage_resolution_text,
             "raw_tagged_output": backend_result.get("tagged_output", ""),
@@ -912,6 +1002,44 @@ def _parse_singular_determinantal_artifacts(parsed: dict[str, Any], *, backend: 
             "For an r-row presentation matrix PM, Fitt_j(coker PM) is I_{r-j}(PM)."
         ),
     }
+
+
+
+def _parse_buchsbaum_eisenbud_diagnostics(parsed: dict[str, Any], *, backend: str) -> dict[str, Any]:
+    raw = str(parsed.get("buchsbaum_eisenbud_diagnostics", "") or "")
+    values = _parse_key_value_lines(raw)
+    if not values:
+        return {
+            "available": False,
+            "backend": backend,
+            "multiplier_output_available": False,
+            "reason": "CAS output did not include a Buchsbaum-Eisenbud diagnostic block; no multiplier or grade/depth evidence is inferred.",
+        }
+    multiplier_available = _parse_bool(values.get("multiplier_output_available"))
+    return {
+        "available": True,
+        "backend": backend,
+        "exactness_certified": _parse_bool(values.get("exactness_certified")),
+        "minimality_certified": _parse_bool(values.get("minimality_certified")),
+        "backend_diagnostics_available": _parse_bool(values.get("backend_diagnostics_available"), default=True),
+        "multiplier_output_available": multiplier_available,
+        "bemultipliers_status": values.get("bemultipliers_status", "unreported"),
+        "bemultipliers_repository": values.get("bemultipliers_repository", "https://github.com/amelie-iska/BEMultipliers.git"),
+        "bemultipliers_package_path": values.get("bemultipliers_package_path", ""),
+        "be_exactness_source": values.get("be_exactness_source", ""),
+        "raw_key_values": values,
+        "interpretation": (
+            "Buchsbaum-Eisenbud multiplier output is present as explicit CAS output."
+            if multiplier_available
+            else "No Buchsbaum-Eisenbud multiplier output is present; exactness/Fitting/minor data is not substituted for multiplier evidence."
+        ),
+    }
+
+
+def _parse_bool(value: Any, *, default: bool = False) -> bool:
+    if value is None:
+        return default
+    return str(value).strip().lower() in {"1", "true", "yes", "on"}
 
 
 def _parse_m2_degree_list(text: str) -> list[list[int]]:

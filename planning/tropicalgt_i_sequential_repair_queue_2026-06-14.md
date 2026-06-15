@@ -172,3 +172,13 @@ The live item-by-item repair inventory is maintained in `planning/tropicalgt_i_c
 - [x] Added regression checks for adjacent `F2` structure maps and generated HTML language.
 - [x] Browser-opened the regenerated `sample_000/trajectory_persistence/two_parameter_bifiltration.html` page on port `8991` and confirmed the corrected visible orientation strings.
 - [ ] Push this repair on the non-main branch after final status/doc review.
+
+
+### Current Objective Update - CAS BE Diagnostics Pass
+
+- [x] Inspected the current CAS adapter and 2210.11433 methodology notes after the two-parameter bifiltration tests passed.
+- [x] Added explicit tagged Buchsbaum-Eisenbud diagnostic blocks to Macaulay2, Singular, and Sage script templates.
+- [x] Parsed BE diagnostics into certified CAS artifacts and surfaced them in the two-parameter CAS certificate display.
+- [x] Added regression coverage proving Fitting ideals, minors, multigraded shifts, and BE diagnostic metadata are parsed from a tagged Macaulay2 certificate without implying BEMultipliers output.
+- [x] Focused verification passed: algebraic persistence `15 passed`; visualization plus artifact validator `32 passed`.
+- [ ] Push this CAS diagnostic repair on the non-main branch after final diff/status review.
