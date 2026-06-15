@@ -623,3 +623,25 @@ PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pyt
 ```
 
 Next linear CAS item: run the backend smoke path against any installed Macaulay2/Sage/Singular executable and add small-known-module tests for real backend Fitting/minor output where the local backend is available; if Macaulay2 remains absent, continue rendering the exact unavailable state with command templates and certificate requirements.
+
+
+## 2026-06-15 Bounded BEMultipliers Execution Pass
+
+Follow-up CAS item completed after the diagnostic contract pass:
+
+- The remote backend inventory now includes working Macaulay2, Singular, Sage Python, and a local BEMultipliers Macaulay2 package path.
+- Macaulay2 script generation now performs a bounded post-certificate BEMultipliers call for small certified resolutions: `aMultiplier(1,C,ComputeRanks=>true)` runs only after `C = res N` has an exactness certificate and only when presentation size/order limits allow it.
+- BEM package load and multiplier computation are guarded independently. If either fails, the result records a backend status and keeps `multiplier_output_available=false`; it does not erase the certified resolution, Fitting ideals, minors, or differential data.
+- Successful multiplier output is parsed into `cas_artifacts["buchsbaum_eisenbud_diagnostics"]` with `a_multiplier_1_shape` and `a_multiplier_1_matrix`, and the two-parameter certificate table displays BEM availability/status/shape.
+- `ADAPTER_CACHE_VERSION` was bumped so cached certificates produced before these fields are not reused.
+
+Validation:
+
+```text
+PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_algebraic_persistence.py -q
+# 15 passed
+PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_simplicial_visualization.py TropicalGT-I/tests/test_interactive_artifact_validator.py -q
+# 32 passed
+```
+
+Next linear CAS item: add more small-known-module fixtures for Macaulay2/Singular Fitting/minor/BEM behavior, then connect certified CAS evidence into derived/analogical comparison only when both sides expose compatible certified artifacts.

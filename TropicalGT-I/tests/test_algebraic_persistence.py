@@ -232,6 +232,14 @@ def test_real_cas_free_resolution_smoke_when_backend_available():
             assert real["cas_artifacts"]["differentials"]
             assert real["cas_artifacts"]["fitting_ideals"]
             assert real["cas_artifacts"]["minors"]
+            be = real["cas_artifacts"]["buchsbaum_eisenbud_diagnostics"]
+            assert be["available"] is True
+            if cas_free_resolution.probe_bemultipliers().get("macaulay2_loadable"):
+                assert be["multiplier_output_available"] is True
+                assert be["bemultipliers_status"] == "computed_aMultiplier_1"
+                assert "x" in be["a_multiplier_1_shape"]
+                assert be["a_multiplier_1_matrix"]
+                assert "matrix" in be["a_multiplier_1_matrix"]
 
 
 def test_certified_cas_result_surfaces_buchsbaum_eisenbud_diagnostics():
@@ -311,6 +319,7 @@ def test_certified_cas_result_surfaces_buchsbaum_eisenbud_diagnostics():
     sage_script = cas_free_resolution.build_sage_python_script(schema)
     assert "buchsbaum_eisenbud_diagnostics_begin" in m2_script
     assert "BEMultipliers" in m2_script
+    assert "aMultiplier(1,C,ComputeRanks=>true)" in m2_script
     assert "buchsbaum_eisenbud_diagnostics_begin" in singular_script
     assert "buchsbaum_eisenbud_diagnostics_begin" in sage_script
 

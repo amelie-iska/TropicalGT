@@ -182,3 +182,13 @@ The live item-by-item repair inventory is maintained in `planning/tropicalgt_i_c
 - [x] Added regression coverage proving Fitting ideals, minors, multigraded shifts, and BE diagnostic metadata are parsed from a tagged Macaulay2 certificate without implying BEMultipliers output.
 - [x] Focused verification passed: algebraic persistence `15 passed`; visualization plus artifact validator `32 passed`.
 - [ ] Push this CAS diagnostic repair on the non-main branch after final diff/status review.
+
+
+### Current Objective Update - Bounded BEMultipliers Pass
+
+- [x] Confirmed Macaulay2, Singular, Sage Python, and local BEMultipliers availability on the remote machine.
+- [x] Added bounded Macaulay2 BEMultipliers execution for small certified resolutions, guarded by presentation-size/order limits.
+- [x] Parsed and displayed actual `aMultiplier(1)` output shape/matrix text when the backend emits it.
+- [x] Bumped the CAS adapter cache version to avoid stale certified artifacts without BE fields.
+- [x] Focused verification passed: algebraic persistence `15 passed`; visualization plus artifact validator `32 passed`.
+- [ ] Push this bounded BEMultipliers repair on the non-main branch after final diff/status review.

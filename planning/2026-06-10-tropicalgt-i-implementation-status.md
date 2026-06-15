@@ -230,3 +230,13 @@
 - The two-parameter CAS display path now carries the backend BE diagnostic payload into the certificate table, including `multiplier_output_available`, `bemultipliers_status`, and the exactness source. This preserves the existing rule that Fitting/minor output is real CAS evidence only under its stated scope and is not a BEMultipliers substitute.
 - Regression coverage now includes a synthetic tagged Macaulay2 certificate with multigraded degree shifts, Fitting ideals, minors, and a BE diagnostic block, proving the parser surfaces the payload and keeps multiplier output unavailable unless explicitly emitted by the backend.
 - Verification: `PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_algebraic_persistence.py -q` returned `15 passed`; `PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_simplicial_visualization.py TropicalGT-I/tests/test_interactive_artifact_validator.py -q` returned `32 passed`.
+
+
+## Iteration 32: Bounded BEMultipliers Execution
+
+- Confirmed live CAS availability on the remote machine: Macaulay2 `/usr/bin/M2` version `1.22`, Singular `/usr/bin/Singular` version `4.3.2`, Sage Python at `/home/iska/miniconda3/envs/tropicalgt-sage/bin/python`, and local BEMultipliers at `external/BEMultipliers/BuchsbaumEisenbudMultipliers.m2`.
+- Upgraded the Macaulay2 BE diagnostic block to run `aMultiplier(1,C,ComputeRanks=>true)` on small certified `C = res N` chain complexes when the BEMultipliers package is loadable and the presentation stays under `TROPICALGT_CAS_MAX_BEM_CELLS` / `TROPICALGT_CAS_MAX_BEM_ORDER` guards.
+- Protected the BEM path with separate `try` blocks for package load and multiplier computation. A multiplier failure now records `bemultipliers_status=backend_error` without invalidating an otherwise certified Macaulay2 free-resolution result.
+- Live smoke on a small `F2[x_level,x_radius]` module returned a certified Macaulay2 multigraded resolution plus BEM output: `bemultipliers_status=computed_aMultiplier_1`, `multiplier_output_available=true`, and nonempty `aMultiplier_1_matrix` text.
+- The adapter cache version was bumped to invalidate older certified CAS payloads that lack the BE artifact fields.
+- Verification: algebraic persistence `15 passed`; visualization plus artifact validator `32 passed`.

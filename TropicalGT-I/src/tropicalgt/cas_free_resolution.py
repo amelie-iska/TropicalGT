@@ -16,7 +16,7 @@ from typing import Any
 SCHEMA_VERSION = "tropicalgt.real_free_resolution.v1"
 MODULE_SCHEMA_VERSION = "tropicalgt.level_radius_module.v1"
 CACHE_SCHEMA_VERSION = "tropicalgt.real_free_resolution.cache.v1"
-ADAPTER_CACHE_VERSION = "2026-06-15.cas-free-resolution-cache-v1"
+ADAPTER_CACHE_VERSION = "2026-06-15.cas-free-resolution-cache-v2"
 SUPPORTED_RINGS = {
     "F2[x_level,x_radius]": ["x_level", "x_radius"],
     "F2[x_filtration,x_dimension]": ["x_filtration", "x_dimension"],
@@ -432,6 +432,8 @@ def build_macaulay2_script(module_schema: dict[str, Any]) -> str:
                     exactness_expression="true",
                     minimality_expression="true",
                     source="Macaulay2 trivial free cokernel certificate",
+                    run_multiplier=False,
+                    skip_reason="trivial free cokernel has no nonzero certified ChainComplex multiplier target",
                 ),
                 "print \"TROPICALGT_RESOLUTION_END\"",
                 "exit 0",
@@ -502,6 +504,9 @@ def build_macaulay2_script(module_schema: dict[str, Any]) -> str:
                 exactness_expression="okExact",
                 minimality_expression="true",
                 source="Macaulay2 res/HH exactness certificate for the displayed cokernel presentation",
+                run_multiplier=_macaulay2_bemultipliers_allowed(rows, cols, max_minors),
+                skip_reason=_macaulay2_bemultipliers_skip_reason(rows, cols, max_minors),
+                chain_complex_name="C",
             ),
             "print \"TROPICALGT_RESOLUTION_END\"",
             "exit 0",
@@ -510,30 +515,105 @@ def build_macaulay2_script(module_schema: dict[str, Any]) -> str:
 
 
 
-def _macaulay2_be_diagnostics_lines(*, exactness_expression: str, minimality_expression: str, source: str) -> list[str]:
+def _macaulay2_bemultipliers_allowed(rows: int, cols: int, determinant_order: int) -> bool:
+    if _local_bemultipliers_package_path() is None:
+        return False
+    if rows <= 0 or cols <= 0:
+        return False
+    max_cells = _env_int("TROPICALGT_CAS_MAX_BEM_CELLS", 64)
+    max_order = _env_int("TROPICALGT_CAS_MAX_BEM_ORDER", 4)
+    if max_cells > 0 and rows * cols > max_cells:
+        return False
+    if max_order > 0 and determinant_order > max_order:
+        return False
+    return True
+
+
+def _macaulay2_bemultipliers_skip_reason(rows: int, cols: int, determinant_order: int) -> str:
+    if _local_bemultipliers_package_path() is None:
+        return "unavailable_no_package_path"
+    if rows <= 0 or cols <= 0:
+        return "no_nonzero_presentation_matrix"
+    max_cells = _env_int("TROPICALGT_CAS_MAX_BEM_CELLS", 64)
+    max_order = _env_int("TROPICALGT_CAS_MAX_BEM_ORDER", 4)
+    reasons: list[str] = []
+    if max_cells > 0 and rows * cols > max_cells:
+        reasons.append(f"presentation_cells_{rows * cols}_above_bem_limit_{max_cells}")
+    if max_order > 0 and determinant_order > max_order:
+        reasons.append(f"determinantal_order_{determinant_order}_above_bem_limit_{max_order}")
+    return ";".join(reasons) if reasons else ""
+
+
+def _macaulay2_be_diagnostics_lines(
+    *,
+    exactness_expression: str,
+    minimality_expression: str,
+    source: str,
+    run_multiplier: bool = False,
+    skip_reason: str = "",
+    chain_complex_name: str = "C",
+) -> list[str]:
     package_path = _local_bemultipliers_package_path()
+    safe_source = _cas_text_literal(source)
     if package_path:
-        bem_status = "package_path_detected_not_loaded_without_explicit_multiplier_run"
+        bem_status = "ready_to_run" if run_multiplier else (skip_reason or "package_path_detected_not_loaded_without_explicit_multiplier_run")
         bem_path = str(package_path)
     else:
         bem_status = "unavailable_no_package_path"
         bem_path = ""
-    safe_source = _cas_text_literal(source)
     safe_status = _cas_text_literal(bem_status)
     safe_path = _cas_text_literal(bem_path)
-    return [
+    lines = [
         "print \"buchsbaum_eisenbud_diagnostics_begin\"",
         "print \"backend_diagnostics_available=true\"",
         f"print concatenate(\"exactness_certified=\", toString {exactness_expression})",
         f"print concatenate(\"minimality_certified=\", toString {minimality_expression})",
         f"print \"be_exactness_source={safe_source}\"",
-        "print \"multiplier_output_available=false\"",
-        f"print \"bemultipliers_status={safe_status}\"",
-        f"print \"bemultipliers_package_path={safe_path}\"",
-        "print \"bemultipliers_repository=https://github.com/amelie-iska/BEMultipliers.git\"",
-        "print \"reason=Buchsbaum-Eisenbud multiplier output is rendered only after an explicit BEMultipliers run on a CAS-certified Macaulay2 ChainComplex; no multiplier data is substituted from rank tables or chain diagnostics\"",
-        "print \"buchsbaum_eisenbud_diagnostics_end\"",
     ]
+    if package_path and run_multiplier:
+        loader = f'load "{_cas_text_literal(str(package_path))}"'
+        safe_complex = _cas_text_literal(chain_complex_name)
+        lines.extend(
+            [
+                "bemComputed = false",
+                "bemStatus = \"not_run\"",
+                "bemShape = \"\"",
+                "bemMatrix = \"\"",
+                f"bemLoad = try ({loader}; \"ok\") else \"load_error\"",
+                f"if bemLoad == \"ok\" and {exactness_expression} then (",
+                "  bemOutcome = try (",
+                f"    ABE = aMultiplier(1,{safe_complex},ComputeRanks=>true);",
+                "    bemComputed = true;",
+                "    bemStatus = \"computed_aMultiplier_1\";",
+                "    bemShape = concatenate(toString numRows ABE, \"x\", toString numColumns ABE);",
+                "    bemMatrix = replace(\"\\n\", \" || \", toString ABE);",
+                "    \"ok\"",
+                "  ) else \"backend_error\";",
+                "  if bemOutcome != \"ok\" then bemStatus = \"backend_error\";",
+                ")",
+                "if bemLoad != \"ok\" then bemStatus = bemLoad",
+                "print concatenate(\"multiplier_output_available=\", toString bemComputed)",
+                "print concatenate(\"bemultipliers_status=\", bemStatus)",
+                "print concatenate(\"aMultiplier_1_shape=\", bemShape)",
+                "print concatenate(\"aMultiplier_1_matrix=\", bemMatrix)",
+            ]
+        )
+    else:
+        lines.extend(
+            [
+                "print \"multiplier_output_available=false\"",
+                f"print \"bemultipliers_status={safe_status}\"",
+            ]
+        )
+    lines.extend(
+        [
+            f"print \"bemultipliers_package_path={safe_path}\"",
+            "print \"bemultipliers_repository=https://github.com/amelie-iska/BEMultipliers.git\"",
+            "print \"reason=Buchsbaum-Eisenbud multiplier output is rendered only after an explicit BEMultipliers run on a CAS-certified Macaulay2 ChainComplex; no multiplier data is substituted from rank tables or chain diagnostics\"",
+            "print \"buchsbaum_eisenbud_diagnostics_end\"",
+        ]
+    )
+    return lines
 
 
 def _cas_text_literal(value: str) -> str:
@@ -1027,6 +1107,8 @@ def _parse_buchsbaum_eisenbud_diagnostics(parsed: dict[str, Any], *, backend: st
         "bemultipliers_repository": values.get("bemultipliers_repository", "https://github.com/amelie-iska/BEMultipliers.git"),
         "bemultipliers_package_path": values.get("bemultipliers_package_path", ""),
         "be_exactness_source": values.get("be_exactness_source", ""),
+        "a_multiplier_1_shape": values.get("aMultiplier_1_shape", ""),
+        "a_multiplier_1_matrix": values.get("aMultiplier_1_matrix", ""),
         "raw_key_values": values,
         "interpretation": (
             "Buchsbaum-Eisenbud multiplier output is present as explicit CAS output."
