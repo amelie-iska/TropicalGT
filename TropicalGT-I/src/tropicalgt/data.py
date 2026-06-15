@@ -333,7 +333,7 @@ class ChunkShuffleSampler(Sampler[int]):
     """Shuffle dataset chunks while preserving deterministic in-chunk order.
 
     Datasets that expose ``chunk_bounds()`` keep their natural storage or shard
-    chunks.  Other datasets use fixed index windows and report that fallback so
+    chunks.  Other datasets use fixed index windows and report that mode so
     training logs never confuse virtual chunking with Parquet row-group locality.
     """
 

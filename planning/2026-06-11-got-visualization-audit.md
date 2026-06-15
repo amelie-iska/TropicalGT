@@ -102,10 +102,10 @@ Current vectorized persistence finding on the main step-250 audit:
   - exact NLL values at sampled reasoning states.
 - Fast vectorized computations:
   - GUDHI landscapes, Betti curves, persistence images, silhouettes, persistence lengths, entropy, and topological vectors are computed from finite persistence intervals and are suitable for train/eval metrics, memory retrieval features, and optional inference artifacts.
-- Explicit surrogates:
+- Explicit surrogates and retired aliases:
   - projected NLL/fitness landscape is a visualization surrogate over PCA space, not a dense model re-evaluation; metadata records provenance and anchor residual.
-  - `multiparameter_free_resolution_proxy` remains a multigraded free-chain/free-resolution proxy, not a minimal free resolution. The label is intentionally retained until a CAS/backend computes minimal resolutions.
-  - GraphCG condition numbers named `*_condition_proxy` are spectral diagnostics, not proof of well-conditioned causal directions.
+  - the retired multiparameter free-resolution alias has been replaced by exact finite-chain diagnostics plus nested CAS-certified real-resolution fields when available.
+  - GraphCG condition-number metrics are spectral diagnostics, not proof of well-conditioned causal directions.
 
 Immediate modeling recommendation:
 

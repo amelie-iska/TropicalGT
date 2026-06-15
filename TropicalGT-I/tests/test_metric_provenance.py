@@ -16,6 +16,7 @@ def test_metric_provenance_registry_covers_current_risky_terms(tmp_path: Path):
         "local_interpolating_nll_sheet",
         "persistence_landscape",
         "legacy_multiparameter_free_resolution_alias_removed",
+        "determinantal_grade_depth_cas_unavailable",
         "graphcg_direction_svd_condition_number",
         "synthetic_h0_fallback",
         "json_fallback_graph_trace",
@@ -175,3 +176,27 @@ def test_audit_metric_provenance_script_fail_gate_accepts_static_preview(tmp_pat
     report = json.loads(json_path.read_text(encoding="utf-8"))
     assert report["uncovered_finding_count"] == 0
     assert {row["matched_entry"] for row in report["covered_findings"]} == {"browser_static_preview_rendering_fallback"}
+
+
+def test_metric_provenance_covers_cas_unavailable_and_degenerate_pca_guardrails(tmp_path: Path):
+    source = tmp_path / "guardrails.py"
+    source.write_text(
+        "reason = 'Ideal grade/depth and regular-element checks for determinantal ideals require Macaulay2/Singular/Sage; no proxy is substituted.'\n"
+        "policy = 'no synthetic duplicate points; one-state inputs render as a degenerate single-anchor PCA/NLL view'\n"
+        "html = 'Static SVG fallback preview from the same filtered-complex payload'\n",
+        encoding="utf-8",
+    )
+
+    report = write_provenance_audit(
+        [source],
+        tmp_path / "provenance.json",
+        tmp_path / "provenance.md",
+    )
+
+    assert report["finding_count"] == 3
+    assert report["uncovered_finding_count"] == 0
+    assert {row["matched_entry"] for row in report["covered_findings"]} == {
+        "browser_static_preview_rendering_fallback",
+        "determinantal_grade_depth_cas_unavailable",
+        "embedding_coordinate_source_diagnostic",
+    }

@@ -149,6 +149,19 @@ PROVENANCE_REGISTRY: tuple[ProvenanceEntry, ...] = (
         match_terms=("multiparameter_free_resolution_legacy_alias", "free-resolution legacy alias", "free_resolution_legacy_alias"),
     ),
     ProvenanceEntry(
+        name="determinantal_grade_depth_cas_unavailable",
+        kind="cas_required_unavailable_state",
+        surface="topological algebra report",
+        optimize_directly=False,
+        description="Grade/depth and regular-element checks for determinantal ideals are withheld unless Macaulay2, Singular, or Sage can certify them.",
+        replacement_or_guardrail="Emit available=false for this subreport and attach no free-resolution certificate; do not substitute finite-rank diagnostics for CAS-certified grade/depth conditions.",
+        match_terms=(
+            "Ideal grade/depth and regular-element checks for determinantal ideals require Macaulay2/Singular/Sage",
+            "no proxy is substituted",
+            "grade/depth exactness conditions",
+        ),
+    ),
+    ProvenanceEntry(
         name="graphcg_direction_gram_condition_number",
         kind="spectral_diagnostic",
         surface="GraphCG metric",
@@ -318,6 +331,7 @@ PROVENANCE_REGISTRY: tuple[ProvenanceEntry, ...] = (
             "Interactive WebGL rendering is unavailable",
             "static preview below comes from the selected real filtered-complex payload",
             "same serialized simplicial object payload",
+            "Static SVG fallback preview from the same filtered-complex payload",
             "webgl fallback test",
             "webgl_failures",
         ),
@@ -362,7 +376,7 @@ PROVENANCE_REGISTRY: tuple[ProvenanceEntry, ...] = (
         optimize_directly=False,
         description="Audit statement that embedding maps use model graph_state PCA coordinates rather than tree layouts or synthetic coordinates.",
         replacement_or_guardrail="Keep PCA diagnostics, distance correlation, stress, and coordinate_source metadata in plot payloads.",
-        match_terms=("no tree-layout or synthetic coordinates", "model graph_state pca only", "coordinate_source"),
+        match_terms=("no tree-layout or synthetic coordinates", "no synthetic duplicate points", "model graph_state pca only", "coordinate_source"),
     ),
 )
 
