@@ -223,30 +223,30 @@ def run_inference_scaling(
         else None
     )
     trajectory_growth = []
-    if trajectory_algebra is not None:
-        max_level = max((int(row.get("level", 0) or 0) for row in public_candidates), default=0)
-        for level in range(max_level + 1):
-            level_complex = build_reasoning_trajectory_complex(public_candidates, up_to_level=level)
-            level_probability_complex = build_reasoning_trajectory_complex(public_candidates, up_to_level=level, metric="jensen_shannon")
-            trajectory_growth.append(
-                {
-                    "level": level,
-                    "filtered_simplicial_object": level_complex,
-                    "probability_filtered_simplicial_object": level_probability_complex,
-                    "topological_algebra": compute_topological_algebra_report(
-                        level_complex,
-                        audit_level=audit_level,
-                        ph_backend=ph_backend,
-                        max_simplices=audit_max_simplices,
-                    ),
-                    "probability_topological_algebra": compute_topological_algebra_report(
-                        level_probability_complex,
-                        audit_level=audit_level,
-                        ph_backend=ph_backend,
-                        max_simplices=audit_max_simplices,
-                    ),
-                }
+    max_level = max((int(row.get("level", 0) or 0) for row in public_candidates), default=0)
+    compute_growth_algebra = (audit_level or "none").lower() != "none"
+    for level in range(max_level + 1):
+        level_complex = build_reasoning_trajectory_complex(public_candidates, up_to_level=level)
+        level_probability_complex = build_reasoning_trajectory_complex(public_candidates, up_to_level=level, metric="jensen_shannon")
+        growth_row: dict[str, Any] = {
+            "level": level,
+            "filtered_simplicial_object": level_complex,
+            "probability_filtered_simplicial_object": level_probability_complex,
+        }
+        if compute_growth_algebra:
+            growth_row["topological_algebra"] = compute_topological_algebra_report(
+                level_complex,
+                audit_level=audit_level,
+                ph_backend=ph_backend,
+                max_simplices=audit_max_simplices,
             )
+            growth_row["probability_topological_algebra"] = compute_topological_algebra_report(
+                level_probability_complex,
+                audit_level=audit_level,
+                ph_backend=ph_backend,
+                max_simplices=audit_max_simplices,
+            )
+        trajectory_growth.append(growth_row)
     probability_growth_available = bool(
         trajectory_growth
         and _has_real_probability_complex(trajectory_probability_complex)
@@ -256,7 +256,7 @@ def run_inference_scaling(
         trajectory_growth,
         object_key="probability_filtered_simplicial_object" if probability_growth_available else "filtered_simplicial_object",
         max_simplices=audit_max_simplices,
-    ) if trajectory_growth else {"available": False, "reason": "trajectory growth unavailable"}
+    ) if trajectory_growth else {"available": False, "reason": "trajectory growth unavailable only for empty or invalid trajectory"}
     if isinstance(trajectory_level_radius_bifiltration, dict):
         trajectory_level_radius_bifiltration["object_key_policy"] = (
             "probability Jensen-Shannon complexes only when every growth row has real model probability vertices/edges; otherwise embedding radius complexes"

@@ -14,6 +14,8 @@ from typing import Any
 
 SCHEMA_VERSION = "tropicalgt.real_free_resolution.v1"
 MODULE_SCHEMA_VERSION = "tropicalgt.level_radius_module.v1"
+CACHE_SCHEMA_VERSION = "tropicalgt.real_free_resolution.cache.v1"
+ADAPTER_CACHE_VERSION = "2026-06-15.cas-free-resolution-cache-v1"
 SUPPORTED_RINGS = {
     "F2[x_level,x_radius]": ["x_level", "x_radius"],
     "F2[x_filtration,x_dimension]": ["x_filtration", "x_dimension"],
@@ -28,6 +30,7 @@ UNAVAILABLE_STATUSES = {
     "invalid_grading",
     "parse_error",
     "certificate_failed",
+    "disabled_by_environment",
 }
 
 
@@ -211,11 +214,31 @@ def unavailable_real_resolution(
     }
 
 
-def try_compute_real_free_resolution(module: dict[str, Any], *, timeout_s: float = 20.0) -> dict[str, Any]:
+def try_compute_real_free_resolution(module: dict[str, Any], *, timeout_s: float = 20.0, use_cache: bool | None = None) -> dict[str, Any]:
     try:
         module_schema = canonicalize_module(module)
     except Exception as exc:
         return unavailable_real_resolution(module, status="invalid_grading", error=str(exc))
+
+    disabled_reason = _cas_resolution_disabled_reason()
+    if disabled_reason:
+        report = unavailable_real_resolution(
+            module,
+            status="disabled_by_environment",
+            reason=disabled_reason,
+            attempts=[],
+        )
+        report["cache"] = {
+            "enabled": False,
+            "hit": False,
+            "reason": "CAS execution disabled by environment",
+        }
+        return report
+
+    cache_context = _cache_context(module_schema, use_cache=use_cache)
+    cached = _load_cached_result(cache_context)
+    if cached is not None:
+        return cached
 
     attempts: list[dict[str, Any]] = []
     m2 = _candidate_executable("M2")
@@ -229,7 +252,7 @@ def try_compute_real_free_resolution(module: dict[str, Any], *, timeout_s: float
         )
         attempts.append(result.get("attempt", {}))
         if result.get("available"):
-            return _certified_result(module_schema, result, attempts)
+            return _cache_and_annotate(_certified_result(module_schema, result, attempts), cache_context)
     sage = _candidate_executable("sage")
     if sage:
         result = _run_tagged_cas_script(
@@ -241,7 +264,7 @@ def try_compute_real_free_resolution(module: dict[str, Any], *, timeout_s: float
         )
         attempts.append(result.get("attempt", {}))
         if result.get("available"):
-            return _certified_result(module_schema, result, attempts)
+            return _cache_and_annotate(_certified_result(module_schema, result, attempts), cache_context)
     singular = _candidate_executable("Singular")
     if singular:
         result = _run_tagged_cas_script(
@@ -253,9 +276,9 @@ def try_compute_real_free_resolution(module: dict[str, Any], *, timeout_s: float
         )
         attempts.append(result.get("attempt", {}))
         if result.get("available"):
-            return _certified_result(module_schema, result, attempts)
+            return _cache_and_annotate(_certified_result(module_schema, result, attempts), cache_context)
     status = "backend_not_installed" if not attempts else "certificate_failed"
-    return unavailable_real_resolution(module, status=status, attempts=attempts)
+    return _cache_and_annotate(unavailable_real_resolution(module, status=status, attempts=attempts), cache_context)
 
 
 def cas_command_templates(module_schema: dict[str, Any]) -> dict[str, str]:
@@ -1011,6 +1034,131 @@ def _parse_int_or_none(value: Any) -> int | None:
         return int(str(value).strip())
     except ValueError:
         return None
+
+
+
+def _truthy_env(value: str | None) -> bool:
+    return str(value or "").strip().lower() in {"1", "true", "yes", "on", "enabled"}
+
+
+def _falsey_env(value: str | None) -> bool:
+    return str(value or "").strip().lower() in {"0", "false", "no", "off", "disabled", "disable"}
+
+
+def _cas_resolution_disabled_reason() -> str | None:
+    explicit_disable = os.environ.get("TROPICALGT_DISABLE_CAS_FREE_RESOLUTION")
+    if _truthy_env(explicit_disable):
+        return "CAS free-resolution execution disabled by TROPICALGT_DISABLE_CAS_FREE_RESOLUTION"
+    mode = os.environ.get("TROPICALGT_CAS_FREE_RESOLUTION")
+    if _falsey_env(mode):
+        return "CAS free-resolution execution disabled by TROPICALGT_CAS_FREE_RESOLUTION"
+    return None
+
+
+def _cache_context(module_schema: dict[str, Any], *, use_cache: bool | None) -> dict[str, Any]:
+    cache_env = os.environ.get("TROPICALGT_CAS_FREE_RESOLUTION_CACHE")
+    enabled = use_cache is not False and not _falsey_env(cache_env)
+    backend_probe = probe_cas_backends()
+    key_payload = {
+        "cache_schema_version": CACHE_SCHEMA_VERSION,
+        "adapter_cache_version": ADAPTER_CACHE_VERSION,
+        "schema_version": SCHEMA_VERSION,
+        "module_schema_version": module_schema.get("schema_version"),
+        "module_input_sha256": module_schema.get("input_sha256"),
+        "module_schema": module_schema,
+        "backend_probe": backend_probe,
+    }
+    key = sha256_json(key_payload)
+    cache_dir = _cache_dir()
+    path = cache_dir / key[:2] / f"{key}.json"
+    return {
+        "enabled": enabled,
+        "key": key,
+        "path": path,
+        "backend_probe": backend_probe,
+        "module_input_sha256": module_schema.get("input_sha256"),
+    }
+
+
+def _cache_dir() -> Path:
+    override = os.environ.get("TROPICALGT_CAS_FREE_RESOLUTION_CACHE_DIR")
+    if override:
+        return Path(override).expanduser()
+    root = Path(os.environ.get("XDG_CACHE_HOME", Path.home() / ".cache")).expanduser()
+    return root / "tropicalgt" / "cas_free_resolution"
+
+
+def _load_cached_result(cache_context: dict[str, Any]) -> dict[str, Any] | None:
+    if not cache_context.get("enabled"):
+        return None
+    path = cache_context.get("path")
+    if not isinstance(path, Path) or not path.exists():
+        return None
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        if payload.get("cache_schema_version") != CACHE_SCHEMA_VERSION:
+            return None
+        if payload.get("key") != cache_context.get("key"):
+            return None
+        result = payload.get("result")
+        if not isinstance(result, dict):
+            return None
+    except Exception:
+        return None
+    result = dict(result)
+    result["cache"] = {
+        "enabled": True,
+        "hit": True,
+        "written": False,
+        "cache_schema_version": CACHE_SCHEMA_VERSION,
+        "adapter_cache_version": ADAPTER_CACHE_VERSION,
+        "key": cache_context.get("key"),
+        "path": str(path),
+    }
+    return result
+
+
+def _cache_and_annotate(result: dict[str, Any], cache_context: dict[str, Any]) -> dict[str, Any]:
+    result = dict(result)
+    enabled = bool(cache_context.get("enabled"))
+    path = cache_context.get("path")
+    written = False
+    write_error = None
+    if enabled and isinstance(path, Path) and _result_cacheable(result):
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            cache_payload = {
+                "cache_schema_version": CACHE_SCHEMA_VERSION,
+                "adapter_cache_version": ADAPTER_CACHE_VERSION,
+                "key": cache_context.get("key"),
+                "module_input_sha256": cache_context.get("module_input_sha256"),
+                "backend_probe": cache_context.get("backend_probe"),
+                "result": {key: value for key, value in result.items() if key != "cache"},
+            }
+            tmp_path = path.with_suffix(path.suffix + ".tmp")
+            tmp_path.write_text(json.dumps(cache_payload, sort_keys=True, indent=2), encoding="utf-8")
+            tmp_path.replace(path)
+            written = True
+        except Exception as exc:
+            write_error = f"{type(exc).__name__}: {exc}"
+    result["cache"] = {
+        "enabled": enabled,
+        "hit": False,
+        "written": written,
+        "cache_schema_version": CACHE_SCHEMA_VERSION,
+        "adapter_cache_version": ADAPTER_CACHE_VERSION,
+        "key": cache_context.get("key"),
+        "path": str(path) if isinstance(path, Path) else None,
+        **({"write_error": write_error} if write_error else {}),
+    }
+    return result
+
+
+def _result_cacheable(result: dict[str, Any]) -> bool:
+    status = str(result.get("status", ""))
+    if status == "certified":
+        return bool(result.get("certificate_attached") and result.get("exactness_certified"))
+    return status in {"backend_not_installed", "certificate_failed", "unsupported_ring", "invalid_grading"}
 
 def _run_tagged_cas_script(
     *,

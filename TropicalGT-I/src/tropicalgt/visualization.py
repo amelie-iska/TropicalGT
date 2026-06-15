@@ -188,7 +188,7 @@ def write_reasoning_visualizations(
     title_suffix = " (single-state degenerate PCA)" if source_state_count == 1 else ""
     fig3d.update_layout(title=f"TropicalGT-I validation graph-state PCA sample{title_suffix}", scene=dict(xaxis_title="PC1", yaxis_title="PC2", zaxis_title="PC3"))
     panel_items = _simplicial_panel_items(filtered_objects, hover)
-    p3 = output_dir / "reasoning_trajectory_3d.html"; _write_plotly_dark_html(p3, fig3d, f"TropicalGT-I validation graph-state PCA sample{title_suffix}", panel_items, show_filtration_slider=True)
+    p3 = output_dir / "reasoning_trajectory_3d.html"; _write_plotly_dark_html(p3, fig3d, f"TropicalGT-I validation graph-state PCA sample{title_suffix}", panel_items, show_filtration_slider=True, show_selected_complex_panel=True)
     surface_nll, surface_nll_meta = _nll_surface_trace(pca[:, 0], pca[:, 1], nll, z_values=nll, mode="nll_height", name="Interpolating NLL surface through reasoning points")
     fig2 = go.Figure()
     if surface_nll is not None:
@@ -208,7 +208,7 @@ def write_reasoning_visualizations(
     )
     fig2.data[-1].customdata = node_indices
     fig2.update_layout(title=f"TropicalGT-I validation PCA with NLL height{title_suffix}", scene=dict(xaxis_title="PC1", yaxis_title="PC2", zaxis_title="NLL"))
-    p2 = output_dir / "reasoning_trajectory_pca_nll.html"; _write_plotly_dark_html(p2, fig2, f"TropicalGT-I validation PCA with NLL height{title_suffix}", panel_items, show_filtration_slider=True)
+    p2 = output_dir / "reasoning_trajectory_pca_nll.html"; _write_plotly_dark_html(p2, fig2, f"TropicalGT-I validation PCA with NLL height{title_suffix}", panel_items, show_filtration_slider=True, show_selected_complex_panel=True)
     payload = output_dir / "reasoning_trajectory_payloads.json"
     points = []
     for idx, obj in enumerate(filtered_objects):
@@ -299,7 +299,24 @@ def write_inference_audit_artifacts(
             growth_path.write_text(json.dumps(trajectory_growth, indent=2), encoding="utf-8")
             paths["trajectory_growth"] = str(growth_path)
         level_radius = scaling.get("trajectory_level_radius_bifiltration")
-        if not isinstance(level_radius, dict) and isinstance(trajectory_growth, list):
+
+        def _level_radius_report_needs_refresh(report: Any) -> bool:
+            if not isinstance(report, dict):
+                return True
+            if not report.get("available"):
+                return True
+            if not isinstance(report.get("grid_fiber_provenance"), dict):
+                return True
+            fiber_rows = report.get("fiber_rank_profile")
+            if not isinstance(fiber_rows, list) or not fiber_rows:
+                return True
+            return any(
+                isinstance(row, dict)
+                and (not isinstance(row.get("fiber_basis"), dict) or not isinstance(row.get("fiber_provenance"), dict))
+                for row in fiber_rows
+            )
+
+        if isinstance(trajectory_growth, list) and _level_radius_report_needs_refresh(level_radius):
             try:
                 from .algebra import compute_level_radius_bifiltration_report
 
@@ -718,7 +735,7 @@ def write_got_trajectory_visualization(scaling_report: dict[str, object], output
     current_margin = fig.layout.margin.to_plotly_json() if fig.layout.margin else {}
     fig.update_layout(margin=dict(t=max(int(current_margin.get("t", 82)), 138)))
     panel_items = _simplicial_panel_items(panel_objects, panel_hover)
-    _write_plotly_dark_html(path, fig, "Graph-of-thought trajectory PCA in embedding space", panel_items, show_filtration_slider=True)
+    _write_plotly_dark_html(path, fig, "Graph-of-thought trajectory PCA in embedding space", panel_items, show_filtration_slider=True, show_selected_complex_panel=True)
     payload = {
         "embedding_pca_diagnostics": pca_report,
         "nodes": [
@@ -2878,6 +2895,14 @@ def write_tropical_support_heatmap(result: dict[str, object], output_dir: str | 
         except (TypeError, ValueError):
             return -1
 
+    def finite_token_float(token: dict[str, object], key: str) -> float | None:
+        try:
+            value = float(token.get(key))
+        except (TypeError, ValueError):
+            return None
+        return value if math.isfinite(value) else None
+
+
     support_indices = []
     for token in tokens:
         active = active_support_index(token) if isinstance(token, dict) else -1
@@ -2928,6 +2953,8 @@ def write_tropical_support_heatmap(result: dict[str, object], output_dir: str | 
                 f"candidate support={html.escape(_support_token_label(support_idx, support, long=True))}<br>"
                 f"selected={str(selected).lower()}<br>"
                 f"selected-support margin={margin:.5f}" + ("" if selected else " (shown only on the selected support column)") + "<br>"
+                f"active support probability={finite_token_float(token, 'active_support_probability') if finite_token_float(token, 'active_support_probability') is not None else 'unavailable'}<br>"
+                f"support probability entropy={finite_token_float(token, 'support_probability_entropy_bits') if finite_token_float(token, 'support_probability_entropy_bits') is not None else 'unavailable'} bits<br>"
                 f"query text={_html_clip(token.get('text', ''), 360)}<br>"
                 f"support text={_html_clip(support.get('text', ''), 360)}"
             )
@@ -2940,6 +2967,36 @@ def write_tropical_support_heatmap(result: dict[str, object], output_dir: str | 
         mean_margins.append(float(np.mean(vals)) if vals else 0.0)
     margin_values = np.asarray([float(token.get("margin", 0.0) or 0.0) for token in tokens], dtype=float)
     finite_margins = margin_values[np.isfinite(margin_values)]
+
+    active_probability_values = [
+        value
+        for token in tokens
+        if isinstance(token, dict)
+        for value in [finite_token_float(token, "active_support_probability")]
+        if value is not None
+    ]
+    entropy_values = [
+        value
+        for token in tokens
+        if isinstance(token, dict)
+        for value in [finite_token_float(token, "support_probability_entropy_bits")]
+        if value is not None
+    ]
+
+    def value_summary(values: list[float]) -> dict[str, object]:
+        arr = np.asarray(values, dtype=float)
+        arr = arr[np.isfinite(arr)]
+        return {
+            "available": bool(arr.size),
+            "count": int(arr.size),
+            "min": float(np.min(arr)) if arr.size else None,
+            "max": float(np.max(arr)) if arr.size else None,
+            "mean": float(np.mean(arr)) if arr.size else None,
+            "p05": float(np.quantile(arr, 0.05)) if arr.size else None,
+            "p50": float(np.quantile(arr, 0.50)) if arr.size else None,
+            "p95": float(np.quantile(arr, 0.95)) if arr.size else None,
+        }
+
     margin_summary = {
         "min": float(np.min(finite_margins)) if finite_margins.size else 0.0,
         "max": float(np.max(finite_margins)) if finite_margins.size else 0.0,
@@ -2949,6 +3006,8 @@ def write_tropical_support_heatmap(result: dict[str, object], output_dir: str | 
         "p50": float(np.quantile(finite_margins, 0.50)) if finite_margins.size else 0.0,
         "p95": float(np.quantile(finite_margins, 0.95)) if finite_margins.size else 0.0,
     }
+    active_probability_summary = value_summary(active_probability_values)
+    support_probability_entropy_summary = value_summary(entropy_values)
     support_flow_edges = []
     for row_idx, token in enumerate(tokens):
         active = active_support_index(token) if isinstance(token, dict) else -1
@@ -2960,6 +3019,10 @@ def write_tropical_support_heatmap(result: dict[str, object], output_dir: str | 
                 "support_index": int(active),
                 "support_label": _support_token_label(active, support) if 0 <= active < n else "invalid",
                 "margin": float(token.get("margin", 0.0) or 0.0),
+                "active_support_probability": finite_token_float(token, "active_support_probability"),
+                "support_probability_entropy_bits": finite_token_float(token, "support_probability_entropy_bits"),
+                "top_model_support_probabilities": token.get("top_model_support_probabilities", []) if isinstance(token.get("top_model_support_probabilities"), list) else [],
+                "support_probability_source": token.get("support_probability_source"),
                 "query_kind": str(token.get("kind", "?")),
                 "support_kind": str(support.get("kind", "?")) if isinstance(support, dict) else "?",
             }
@@ -2981,9 +3044,13 @@ def write_tropical_support_heatmap(result: dict[str, object], output_dir: str | 
         "support_counts": [int(c) for c in counts.tolist()],
         "mean_margins": [float(v) for v in mean_margins],
         "margin_summary": margin_summary,
+        "active_support_probability_summary": active_probability_summary,
+        "support_probability_entropy_bits_summary": support_probability_entropy_summary,
+        "support_probability_source": "model_tropical_support_probabilities" if active_probability_values or entropy_values else "unavailable_in_trace",
         "layout_mode": "collapse_diagnostic" if collapse_like_layout else "observed_support_matrix",
         "raw_token_labels_truncated": True,
-        "interpretation": "The heatmap is an assignment matrix: yellow cells mean the model selected that support token. Confidence lives in the separate selected-margin profile and distribution.",
+        "render_contract": "assignment_matrix is binary model argmax support; selected_margin_matrix is model tropical margin only on selected cells; probability summaries come from model_tropical_support_probabilities and are not fabricated scores",
+        "interpretation": "The heatmap is an assignment matrix: yellow cells mean the model selected that support token. Confidence lives in the separate selected-margin profile, distribution, and model support-probability summaries.",
     }
     payload_path.write_text(
         json.dumps(
@@ -4075,12 +4142,12 @@ def _write_two_parameter_bifiltration_staircase_html(
         pts = [(int(lvl), int(rg)) for lvl, rg, _count, _ex in items]
         mins = _minimal_antichain(pts)
         principal = len(mins) <= 1
-        width = 1260 if primary else 940
-        height = 720 if primary else 430
-        left = 112
-        right = 96
-        top = 78
-        bottom = 98
+        width = 1080 if primary else 860
+        height = 640 if primary else 400
+        left = 96
+        right = 70
+        top = 70
+        bottom = 86
         x_max = max([max_radius] + [rg for _lvl, rg in pts] + [rg for _lvl, rg in mins] + [8])
         y_max = max([max_level] + [lvl for lvl, _rg in pts] + [lvl for lvl, _rg in mins] + [3])
         x_pad = max(2, int(math.ceil(0.04 * max(1, x_max))))
@@ -4197,11 +4264,11 @@ def _write_two_parameter_bifiltration_staircase_html(
         if principal:
             trivial = "<p class='svg-note'>Principal shifted module: a single minimal bidegree generates one upward orthant. It is shown compactly because there is no nontrivial staircase.</p>"
         else:
-            trivial = "<p class='svg-note'>Nontrivial Miller-Sturmfels staircase: the gold boundary is the minimal antichain of actual generator bidegrees; shaded orthants are generated over F2[x_level,x_radius], and the unshaded lattice points form the displayed quotient-basis complement S/I_C.</p>"
+            trivial = "<p class='svg-note'>Nontrivial Miller-Sturmfels staircase: the gold boundary is the minimal antichain of actual generator bidegrees; the shaded upward-closed region is generated over F2[x_level,x_radius], and the unshaded lattice points are the displayed quotient-basis complement S/I_C.</p>"
         resolution_block = _staircase_resolution_html(dim, pts)
         return f"""
         <article class='{card_class}'>
-          <h3>C{dim} shifted free module support over F2[x_level,x_radius]</h3>
+          <h3>C{dim} shifted free module and monomial staircase over F2[x_level,x_radius]</h3>
           {trivial}
           <p class='formula'>I_C{dim} = &lt; {html.escape(generator_formula or '0')} &gt;</p>
           <svg viewBox='0 0 {width} {height}' role='img' aria-label='C{dim} Miller-Sturmfels bivariate staircase from actual generator bidegrees'>
@@ -4222,15 +4289,7 @@ def _write_two_parameter_bifiltration_staircase_html(
             {''.join(min_labels)}
             <text x='{sx(x_axis_max)-6:.2f}' y='{sy(0)+46:.2f}' fill='#e2e8f0' font-size='17' text-anchor='end'>x_radius</text>
             <text x='{sx(0)-48:.2f}' y='{sy(y_axis_max)+8:.2f}' fill='#e2e8f0' font-size='17'>x_level</text>
-            <g transform='translate({width-438},{top+18})'>
-              <rect x='-10' y='-18' width='406' height='88' rx='9' fill='rgba(3,7,18,0.66)' stroke='rgba(226,232,240,0.18)'/>
-              <rect x='0' y='0' width='20' height='13' fill='rgba(148,163,184,0.54)' stroke='rgba(226,232,240,0.44)'/>
-              <text x='30' y='12' fill='#e8f2ff' font-size='13'>generated submodule I_C{dim}</text>
-              <circle cx='10' cy='32' r='3.4' fill='#f8fafc'/>
-              <text x='30' y='36' fill='#e8f2ff' font-size='13'>quotient-basis lattice points: {basis_count}</text>
-              <line x1='0' y1='55' x2='22' y2='55' stroke='#facc15' stroke-width='4.2'/>
-              <text x='30' y='59' fill='#e8f2ff' font-size='13'>minimal antichain generators: {len(mins)}; dominated: {dominated_count}</text>
-            </g>
+            <text x='{sx(max(1.0, x_axis_max * 0.58)):.2f}' y='{sy(max(0.35, y_axis_max * 0.14)):.2f}' fill='#e8f2ff' font-size='12' opacity='0.86'>white dots: quotient basis ({basis_count}); gold boundary: minimal generators ({len(mins)}); dominated bidegrees: {dominated_count}</text>
           </svg>
           {resolution_block}
         </article>
@@ -4281,7 +4340,7 @@ def _write_two_parameter_bifiltration_staircase_html(
 <style>
 :root {{ color-scheme: dark; --bg:#050914; --ink:#e8f2ff; --muted:#a7b8d1; --edge:#203d5e; --panel:#07111f; --accent:#5eead4; }}
 body {{ margin:0; background:radial-gradient(circle at 20% 0%, #10233f 0, var(--bg) 42%, #030611 100%); color:var(--ink); font-family:Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }}
-main {{ max-width:1500px; margin:0 auto; padding:36px 28px 80px; }}
+main {{ max-width:1280px; margin:0 auto; padding:34px 24px 76px; }}
 h1 {{ margin:0 0 10px; font-size:34px; line-height:1.08; }}
 .lede {{ color:var(--muted); max-width:1180px; font-size:17px; line-height:1.45; margin-bottom:22px; }}
 .callout {{ border:1px solid rgba(94,234,212,.45); background:rgba(5,12,28,.82); padding:14px 16px; border-radius:10px; margin:18px 0 24px; font-size:15px; }}
@@ -4290,10 +4349,13 @@ h1 {{ margin:0 0 10px; font-size:34px; line-height:1.08; }}
 .card-grid {{ display:grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap:18px; }}
 .staircase-grid {{ display:grid; grid-template-columns:1fr; gap:18px; }}
 .stair-card {{ border:1px solid rgba(94,234,212,.24); background:rgba(3,7,18,.76); border-radius:12px; padding:16px; overflow:auto; }}
-.stair-card svg {{ display:block; width:100%; min-width:860px; shape-rendering:geometricPrecision; }}
-.primary-staircase svg {{ min-width:1080px; }}
-.stair-card h3 {{ margin:0 0 6px; font-size:17px; color:#e8f2ff; }}
-.svg-note {{ margin:0 0 10px; color:#a7b8d1; font-size:13px; }}
+.stair-card svg {{ display:block; width:100%; min-width:720px; shape-rendering:geometricPrecision; }}
+.primary-staircase svg {{ min-width:860px; }}
+.stair-card h3 {{ margin:0 0 6px; font-size:18px; color:#e8f2ff; }}
+.svg-note {{ margin:0 0 10px; color:#a7b8d1; font-size:13px; line-height:1.35; }}
+.secondary-disclosure {{ border:1px solid rgba(94,234,212,.22); background:rgba(3,7,18,.70); border-radius:12px; padding:12px 16px; margin:18px 0; }}
+.secondary-disclosure > summary {{ cursor:pointer; font-weight:800; letter-spacing:.06em; text-transform:uppercase; color:#bfe3ff; }}
+.secondary-disclosure[open] > summary {{ margin-bottom:14px; }}
 .formula {{ margin:0 0 10px; color:#fde68a; font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size:13px; }}
 .resolution-block {{ margin-top:14px; border:1px solid rgba(250,204,21,.28); background:rgba(12,10,4,.62); border-radius:10px; padding:12px; }}
 .resolution-block h4 {{ margin:0 0 8px; color:#fef3c7; font-size:15px; }}
@@ -4318,12 +4380,11 @@ td {{ background:#07111f; color:#d7e8ff; }}
 <body>
 <main>
 <h1>Trajectory 2-parameter persistence over F2[x_level,x_radius]</h1>
-<p class='lede'>Actual 2-parameter module fibers and multigraded chain-generator bidegrees over F2[x_level,x_radius]. The first panel is the module figure: horizontal lattice coordinates are x_radius exponents, vertical lattice coordinates are x_level exponents, shaded orthants are generated submodules, and white lattice points are the displayed S/I_C basis complement. H0/H1 fiber-rank charts below are secondary diagnostics, not substitutes for the staircase module.</p>
-<div class='callout'><b>Computed bifiltration:</b> {html.escape(rank_note)}<br>The large gold/cyan/blue boundary points are minimal antichain generators; smaller dim-colored points are dominated observed bidegrees and are not treated as additional generators. White lattice points are displayed quotient-basis complements, colored cells/points are actual H1 fiber ranks. Adjacent structure maps persisted={len(bifiltration.get("structure_maps", [])) if isinstance(bifiltration, Mapping) else 0}. Staircase cards render exact two-variable monomial-ideal resolutions when the Miller-Sturmfels adjacent-LCM theorem applies. Lower CAS tables render only certified CAS output under its actual grading; diagnostic chain data is not substituted for a free resolution.</div>
-<section class='panel'><h2>Miller-Sturmfels bivariate free-chain staircases from actual generator bidegrees</h2><div class='staircase-grid'>{staircase_svgs}</div></section>
-<section class='panel'><h2>Secondary diagnostic: F2[x_level,x_radius] support and homology fiber ranks</h2>{chart1}</section>
-<section class='panel'><h2>Secondary diagnostic: fiber-rank lattice with H0/H1 layer offsets</h2>{chart2}</section>
-<div class='card-grid'>{_table_html(betti_h, betti_c, 'Betti-style diagnostics')}{_table_html(free_h, free_c, 'Free chain modules / certified free modules')}{_table_html(diff_h, diff_c, 'Differentials / boundary maps')}{_table_html(cert_h, cert_c, 'CAS certificates, Fitting ideals, BE diagnostics')}</div>
+<p class='lede'>Actual 2-parameter module fibers and multigraded chain-generator bidegrees over F2[x_level,x_radius]. The first section is the Miller-Sturmfels staircase view of the bivariate module diagram: horizontal lattice coordinates are x_radius and vertical lattice coordinates are x_level; x_radius runs horizontally, x_level vertically, shaded upward-closed regions are generated submodules, and white lattice points are the displayed S/I_C basis complement.</p>
+<div class='callout'><b>Computed bifiltration:</b> {html.escape(rank_note)}<br>This section is an exponent-lattice module diagram in the sense of the two-variable monomial-ideal staircase picture: the coordinate axes are the x_radius and x_level one dimensional cone(s). The large gold/cyan/blue boundary points are minimal antichain generators; smaller dim-colored points are dominated observed bidegrees and are not treated as additional generators. White lattice points are displayed quotient-basis complements, colored cells/points are actual H1 fiber ranks. Adjacent structure maps persisted={len(bifiltration.get("structure_maps", [])) if isinstance(bifiltration, Mapping) else 0}. Staircase cards render exact two-variable monomial-ideal resolutions when the Miller-Sturmfels adjacent-LCM theorem applies. Lower CAS tables render only certified CAS output under its actual grading; diagnostic chain data is not substituted for a free resolution.</div>
+<section class='panel'><h2>Miller-Sturmfels bivariate module staircases from actual multidegree generators</h2><div class='staircase-grid'>{staircase_svgs}</div></section>
+<details class='secondary-disclosure'><summary>Secondary fiber-rank diagnostics</summary><section class='panel'><h2>F2[x_level,x_radius] support and homology fiber ranks</h2>{chart1}</section><section class='panel'><h2>Fiber-rank lattice with H0/H1 layer offsets</h2>{chart2}</section></details>
+<details class='secondary-disclosure'><summary>Certified algebra tables and CAS certificates</summary><div class='card-grid'>{_table_html(betti_h, betti_c, 'Betti-style diagnostics')}{_table_html(free_h, free_c, 'Free chain modules / certified free modules')}{_table_html(diff_h, diff_c, 'Differentials / boundary maps')}{_table_html(cert_h, cert_c, 'CAS certificates, Fitting ideals, BE diagnostics')}</div></details>
 </main>
 </body>
 </html>
@@ -7108,6 +7169,17 @@ def _derived_invariant_comparison(query_topology: dict[str, object], memory_topo
     commutative_algebra_match = close_vec(q_ca, m_ca)
     landscape_vector_match = close_vec(q_landscape_padded, m_landscape_padded) if q_landscape_padded.size or m_landscape_padded.size else False
     finite_match = bool(betti_match and signature_match and free_rank_match and persistence_match and commutative_algebra_match)
+    q_real_resolution = _real_free_resolution_claim_summary(query_topology)
+    m_real_resolution = _real_free_resolution_claim_summary(memory_topology)
+    real_resolution_pair_available = bool(q_real_resolution.get("available") and m_real_resolution.get("available"))
+    coarse_signature_similarity = float((sim or {}).get("derived_signature_similarity", 0.0) or 0.0)
+    chain_resolution_similarity = float((sim or {}).get("chain_presentation_similarity", 0.0) or 0.0)
+    high_coarse_low_resolution = bool(coarse_signature_similarity >= 0.75 and chain_resolution_similarity <= 1e-12)
+    resolution_interpretation = (
+        "Coarse derived-signature similarity is high while chain/free-resolution similarity is zero; this is reported as a coarse invariant collision, not a derived-equivalence claim. A real derived/free-resolution comparison requires CAS-certified multigraded resolutions for both sides."
+        if high_coarse_low_resolution
+        else "Derived/free-resolution comparison is restricted to finite invariants unless both sides expose CAS-certified multigraded real free resolutions."
+    )
     return {
         "comparison_kind": "finite_F2xy_persistence_module_and_chain_presentation_invariant_comparison",
         "field": "F2",
@@ -7127,6 +7199,16 @@ def _derived_invariant_comparison(query_topology: dict[str, object], memory_topo
         "commutative_algebra_vector_match": bool(commutative_algebra_match),
         "persistence_landscape_vector_match": bool(landscape_vector_match),
         "persistence_landscape_vector_available": bool(q_landscape_padded.size > 0 and m_landscape_padded.size > 0),
+        "real_free_resolution_certified": real_resolution_pair_available,
+        "real_free_resolution_comparison": {
+            "available": real_resolution_pair_available,
+            "query": q_real_resolution,
+            "memory": m_real_resolution,
+            "reason": None if real_resolution_pair_available else "CAS-certified multigraded real free resolution unavailable for one or both sides",
+            "safe_for_derived_category_claims": real_resolution_pair_available,
+        },
+        "free_resolution_similarity_interpretation": resolution_interpretation,
+        "high_coarse_signature_low_resolution_warning": high_coarse_low_resolution,
         "query_betti_vector": q_betti,
         "memory_betti_vector": m_betti,
         "signature_l2_distance": float(np.linalg.norm(q_signature - m_signature)),
@@ -7185,6 +7267,8 @@ def _simplicial_map_between_complexes(query_obj: dict[str, object], memory_obj: 
     simplex_tree_report = _simplex_tree_map_report(query_obj, memory_obj, mapping, q_filtration, m_filtration)
     all_distortion_values = list(edge_report["positive_distortions"]) + list(face_report["positive_distortions"])
     all_distortion = _numeric_summary(all_distortion_values)
+    chain_map_report = _chain_map_diagnostics(simplex_tree_report, is_map, mapping)
+    persistence_morphism = _persistence_module_morphism_diagnostics(chain_map_report)
     is_identity_self_map = bool(
         len(query_vertices) == len(memory_vertices)
         and len(vertex_map) == len(query_vertices)
@@ -7224,6 +7308,8 @@ def _simplicial_map_between_complexes(query_obj: dict[str, object], memory_obj: 
         "simplex_tree_map_checked": int(simplex_tree_report.get("checked_simplices", 0)),
         "simplex_tree_map_preserved": int(simplex_tree_report.get("preserved_simplices", 0)),
         "simplex_tree_map_preservation_rate": float(simplex_tree_report.get("preservation_rate", 0.0)),
+        "chain_map_diagnostics": chain_map_report,
+        "persistence_module_morphism_diagnostics": persistence_morphism,
         "is_filtered_simplicial_map": is_map,
         "is_simplicial_on_displayed_skeleton": is_map,
         "simplicial_map_certificate": {
@@ -7274,6 +7360,109 @@ def _analogical_realization_certificate(
         "simplex_tree_map_preservation_rate": simplex_tree_rate,
     }
 
+
+
+
+def _unavailable_chain_map_diagnostics(reason: str) -> dict[str, object]:
+    return {
+        "available": False,
+        "field": "F2",
+        "source": "unavailable_no_filtered_simplicial_map",
+        "reason": reason,
+        "chain_map_certified": False,
+        "boundary_commutation_certified": False,
+        "filtration_nonincreasing": False,
+        "safe_to_use_as_persistence_module_morphism": False,
+    }
+
+
+def _chain_map_diagnostics(simplex_tree_report: Mapping[str, object], is_filtered_map: bool, mapping: Mapping[str, str]) -> dict[str, object]:
+    checked = int(simplex_tree_report.get("checked_simplices", 0) or 0)
+    preserved = int(simplex_tree_report.get("preserved_simplices", 0) or 0)
+    rate = float(simplex_tree_report.get("preservation_rate", 0.0) or 0.0)
+    available = bool(is_filtered_map and checked > 0 and preserved == checked and rate >= 0.999)
+    if not available:
+        return {
+            **_unavailable_chain_map_diagnostics("filtered_simplicial_map_failed_or_unchecked"),
+            "checked_simplices": checked,
+            "preserved_simplices": preserved,
+            "simplex_tree_map_preservation_rate": rate,
+            "domain_vertices_mapped": len(mapping),
+            "simplex_tree_dimension_counts": simplex_tree_report.get("dimension_counts", {}),
+        }
+    return {
+        "available": True,
+        "field": "F2",
+        "source": "finite_filtered_simplicial_map_linear_extension",
+        "chain_map_certified": True,
+        "boundary_commutation_certified": True,
+        "filtration_nonincreasing": True,
+        "domain_vertices_mapped": len(mapping),
+        "checked_simplices": checked,
+        "preserved_simplices": preserved,
+        "simplex_tree_map_preservation_rate": rate,
+        "simplex_tree_dimension_counts": simplex_tree_report.get("dimension_counts", {}),
+        "chain_groups": simplex_tree_report.get("dimension_counts", {}),
+        "interpretation": "The model-probability vertex assignment extends to a filtered simplicial map on the displayed simplex trees, so its F2-linear extension is a chain map commuting with boundary.",
+        "safe_to_use_as_persistence_module_morphism": True,
+    }
+
+
+def _persistence_module_morphism_diagnostics(chain_map: Mapping[str, object]) -> dict[str, object]:
+    available = bool(chain_map.get("available") and chain_map.get("safe_to_use_as_persistence_module_morphism"))
+    return {
+        "available": available,
+        "ring": "F2[x_level,x_radius]",
+        "source": "filtered_chain_map" if available else "unavailable_no_filtered_chain_map",
+        "morphism_certified": available,
+        "free_resolution_required": False,
+        "safe_for_derived_equivalence_claim": False,
+        "reason": None if available else chain_map.get("reason", "chain map unavailable"),
+        "interpretation": (
+            "A filtration-preserving chain map induces a morphism of finite F2[x_level,x_radius] persistence modules; this is not a derived equivalence or free-resolution comparison."
+            if available
+            else "No persistence-module morphism is asserted because the filtered chain map was not certified."
+        ),
+    }
+
+
+def _real_free_resolution_claim_summary(topology: Mapping[str, object]) -> dict[str, object]:
+    reports: list[Mapping[str, object]] = []
+
+    def visit(obj: object, depth: int = 0) -> None:
+        if depth > 7:
+            return
+        if isinstance(obj, Mapping):
+            if obj.get("schema_version") == "tropicalgt.real_free_resolution.v1" or "safe_to_render_as_multigraded_free_resolution" in obj:
+                reports.append(obj)
+            for value in obj.values():
+                visit(value, depth + 1)
+        elif isinstance(obj, list):
+            for value in obj[:32]:
+                visit(value, depth + 1)
+
+    visit(topology)
+    for report in reports:
+        if (
+            report.get("available") is True
+            and report.get("exactness_certified") is True
+            and report.get("multigraded_free_resolution_certified") is True
+            and report.get("safe_to_render_as_multigraded_free_resolution") is True
+        ):
+            return {
+                "available": True,
+                "backend": report.get("backend"),
+                "ring": report.get("coefficient_ring"),
+                "input_sha256": report.get("input_sha256"),
+                "status": report.get("status"),
+                "safe_to_render_as_multigraded_free_resolution": True,
+                "minimality_certified": bool(report.get("minimality_certified")),
+            }
+    return {
+        "available": False,
+        "reason": "no CAS-certified multigraded real free resolution found in topology payload",
+        "candidate_reports_seen": len(reports),
+    }
 
 def _simplex_tree_map_report(
     query_obj: dict[str, object],
@@ -7342,6 +7531,7 @@ def _simplex_tree_map_report(
 
 
 def _empty_simplicial_map_report(query_vertices: list[dict[str, object]], memory_vertices: list[dict[str, object]], reason: str) -> dict[str, object]:
+    chain_map = _unavailable_chain_map_diagnostics(reason)
     return {
         "vertex_map": [],
         "displayed_domain_vertices": len(query_vertices),
@@ -7352,6 +7542,8 @@ def _empty_simplicial_map_report(query_vertices: list[dict[str, object]], memory
         "checked_two_simplices": 0,
         "preserved_two_simplices": 0,
         "two_simplex_preservation_rate": 0.0,
+        "chain_map_diagnostics": chain_map,
+        "persistence_module_morphism_diagnostics": _persistence_module_morphism_diagnostics(chain_map),
         "is_filtered_simplicial_map": False,
         "is_simplicial_on_displayed_skeleton": False,
         "simplicial_map_failure_reason": reason,

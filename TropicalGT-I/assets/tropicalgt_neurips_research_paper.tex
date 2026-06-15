@@ -65,6 +65,20 @@
 \lstset{basicstyle=\ttfamily\small,breaklines=true,columns=fullflexible,frame=single,backgroundcolor=\color{softgray}}
 \setlist[itemize]{leftmargin=1.3em,itemsep=2pt,topsep=2pt}
 \setlist[enumerate]{leftmargin=1.5em,itemsep=2pt,topsep=2pt}
+\newenvironment{objectivecard}[7]{%
+  \par\smallskip\noindent\begingroup
+  \setlength{\fboxsep}{6pt}%
+  \fcolorbox{darkblue}{softblue}{%
+    \begin{minipage}{0.94\linewidth}
+    \textbf{Objective #1: #2}\par
+    \textit{Task.} #3\par
+    \textit{Theory.} #4\par
+    \textit{Acceptance.} #5\par
+    \textit{Metrics.} #6\par
+    \textit{Guardrail.} #7
+    \end{minipage}}%
+  \par\smallskip\endgroup
+}{}
 \sloppy
 
 \title{\vspace{-2em}\textbf{TropicalGT: Tropical Attention, Polyhedral Reasoning, and Bits-per-byte-Safe Training for Graph-Token Reasoning Agents}}
@@ -298,6 +312,44 @@ is a polyhedron.  If \(A=A_\psi(h)\), then \(A\) is the vertex set of the expose
 \begin{proof}
 The inequalities are linear, hence their intersection is a polyhedron.  A point \((a_r,b_r)\) lies on the exposed face for functional \((h,1)\) exactly when it attains the maximum value of \(\ip{a}{h}+b\).  Thus the active set is the exposed face.  As \(h\) varies, exposed faces of a polytope are organized by its normal fan.
 \end{proof}
+
+
+\subsection{Finite tropical-to-toric sidecars}
+\label{subsec:finite-tropical-toric-sidecars}
+
+The active-face dictionary can be made algebraic without claiming that a Transformer layer is itself a toric variety.  TropicalGT-I uses a local finite sidecar: a checkpoint, layer, head, token window, and rationalized probe determine a Laurent-polynomial or toric-ideal object that can be audited by toric and tropical methods.  This sidecar is a certificate for the sampled tropical computation, not a global model of the whole network.
+
+Let $N\simeq \mathbb Z^r$ be a cocharacter lattice, $M=\operatorname{Hom}(N,\mathbb Z)$, and $T_N=\operatorname{Spec}K[M]$ over a nonarchimedean field $K$ with uniformizer $\tau$ and $\operatorname{val}(\tau)=1$.  A rationalized TropicalGT head or low-rank audit probe supplies characters $a_1,\ldots,a_R\in M$ and candidate scores
+\[
+  \ell_r(u)=\langle a_r,u\rangle+b_r,\qquad u=P h\in N_\mathbb R,\quad b_r\in\mathbb Q.
+\]
+Clearing denominators records an integer lattice object together with a scale factor.  Define
+\[
+  f=\sum_{r=1}^R \tau^{-b_r}\chi^{a_r}\in K[M].
+\]
+TropicalGT uses the max-plus convention, while many computer-algebra packages use the nonarchimedean min convention.  The bridge is stored explicitly:
+\[
+  \operatorname{val}(\tau^{-b_r})+\langle -u,a_r\rangle
+  =-b_r-\langle a_r,u\rangle
+  =-\ell_r(u).
+\]
+Thus $\operatorname{in}_{-u}(f)$ keeps exactly the monomials indexed by $\argmax_r\ell_r(u)$.  The tie locus is the tropical hypersurface; the unique-max chambers remain part of the TropicalGT decision stratification because they record which proof alternative, predecessor, memory item, or graph-token witness was selected.
+
+\begin{definition}[Finite TropicalGT toric sidecar]
+A finite TropicalGT toric sidecar is
+\[
+  \mathsf S_{\mathrm{TGT}}=(K,N,M,A,b,P,\mathcal F_H,I_H,\Sigma,\eta),
+\]
+where $A=(a_1,\ldots,a_R)$ and $b$ are rationalized candidate data, $\mathcal F_H$ is the finite Laurent-polynomial family exported by selected heads, coordinates, or graph-token windows, $I_H=\langle\mathcal F_H\rangle$ when an ideal sidecar is enabled, $\Sigma$ is a rational fan refining the observed active normal decomposition and any finite Groebner decomposition used by $I_H$, and $\eta$ records the lattice basis, denominator scale, valuation convention, max-plus/min-initial sign, software backend, and source checkpoint/window.
+\end{definition}
+
+For an ideal sidecar, set $Y_H=V(I_H)\cap T_N$ and
+\[
+  \operatorname{Trop}(Y_H)=\{u\in N_\mathbb R:\operatorname{in}_{-u}(I_H)\text{ contains no monomial}\}.
+\]
+If $|\Sigma|=\operatorname{Trop}(Y_H)$ and the multiplication map $T_N\times\overline Y_H\to X_\Sigma$ is flat and surjective, then the closure in $X_\Sigma$ is a tropical compactification in the sense of Tevelev \cite{tevelev2007compactifications}; smoothness of this map gives the stronger schon case.  TropicalGT-I does not assume those hypotheses for ordinary training batches.  Without them, $X_\Sigma$ is a finite toric audit envelope: it provides orbit labels, one-dimensional-cone incidence, initial ideals, active-face refinements, bend data, and local resolution targets, but it does not certify global compactification, smooth boundary behavior, or sheaf cohomology of a neural model.
+
+This sidecar also explains which exact methods are available.  Toric ideals $\ker(k[x_1,\ldots,x_R]\to K[M])$ give binomial consistency relations and Groebner/initial ideals; Miller--Sturmfels two-variable monomial staircases give the correct picture for local two-parameter persistence slices and adjacent-generator first syzygies \cite{miller2005}; balanced tropical cycles give Minkowski weights and Chow classes only when the tropical-ideal or classical-tropicalization hypotheses are certified \cite{maclaganrincon2018tropicalideals,maclaganrincon2020balanced,fultonsturmfels1994intersection,katz2009tropicalintersection}.  Sage, Normaliz, Gfan, Polymake, and Macaulay2 sidecars may compute these objects offline; the GPU receives compact tensors such as active labels, multiplicities, Betti vectors, sparse differentials, or unavailable masks \cite{m2tropical2019}.  A differentiable loss is allowed only after the exact small-window sidecar validates the corresponding target, and it remains a late-phase auxiliary behind BPB and graph-BPB gates.
 
 \section{TropicalGT architecture}
 
@@ -1162,10 +1214,10 @@ where \(e\) is a pooled embedding, \(\Sigma_K\) is the trajectory graph on reaso
 \subsection{TropicalGT chart bundles and toric embedding training}
 \label{subsec:bundle-toric-training}
 
-TropicalGT-I uses persistence-landscape vectors as optional geometric evidence for retrieval.  Two complementary tropical vector bundle theories give a more structural way to decide how such evidence should be transported, compared, and regularized across graph charts.  The first is the tropical toric theory of Khan and Maclagan, where a toric tropical vector bundle is encoded by a valuated matroid plus compatible ray filtrations.  The second is the semiring-scheme theory of Jun, Mincheva, and Tolliver, where vector bundles are locally free modules over tropical schemes and transition functions are forced, under zero-sum-free hypotheses, to be monomial matrices.  For TropicalGT-I this suggests a practical design rule: local graph charts may carry different tropical coordinates, but feature transports between charts should be sparse monomial rescalings together with matroidal filtration constraints rather than arbitrary dense affine maps.
+TropicalGT-I uses persistence-landscape vectors as optional geometric evidence for retrieval.  Two complementary tropical vector bundle theories give a more structural way to decide how such evidence should be transported, compared, and regularized across graph charts.  The first is the tropical toric theory of Khan and Maclagan, where a toric tropical vector bundle is encoded by a valuated matroid plus compatible one-dimensional-cone filtrations.  The second is the semiring-scheme theory of Jun, Mincheva, and Tolliver, where vector bundles are locally free modules over tropical schemes and transition functions are forced, under zero-sum-free hypotheses, to be monomial matrices.  For TropicalGT-I this suggests a practical design rule: local graph charts may carry different tropical coordinates, but feature transports between charts should be sparse monomial rescalings together with matroidal filtration constraints rather than arbitrary dense affine maps.  The finite toric sidecar of \Cref{subsec:finite-tropical-toric-sidecars} supplies the exact audit path for this design rule; the chart-bundle losses below are differentiable companions, not substitutes for CAS-certified small-window checks.
 
 \paragraph{Reference-theory background.}
-Khan and Maclagan's tropical toric vector bundles are not merely collections of piecewise-linear functions.  Their basic datum is a simple valuated matroid $M$ on a ground set $G_M$ together with decreasing flat filtrations $E^i(j)$ along the rays of a fan; the vector-bundle condition requires every maximal cone to admit a matroid basis whose ray-threshold joins recover those flats.  Their Cox-semirings and bend-congruence presentation explain why fibers are tropical linear spaces and why realizability depends on both the valuated matroid and the chosen filtrations.  Jun, Mincheva, and Tolliver give the complementary semiring-scheme warning: over zero-sum-free local semirings with only trivial idempotent pairs, invertible changes of basis are monomial and many vector bundles split as line-bundle sums.  TropicalGT-I uses the first result as a matroidal compatibility template and the second as a constraint on invertible chart transports, while treating expressive neural chart covers as a metric-gated training construction rather than as literal tropical schemes.
+Khan and Maclagan's tropical toric vector bundles are not merely collections of piecewise-linear functions.  Their basic datum is a simple valuated matroid $M$ on a ground set $G_M$ together with decreasing flat filtrations $E^i(j)$ along the one-dimensional cones of a fan; the vector-bundle condition requires every maximal cone to admit a matroid basis whose threshold joins recover those flats.  Their Cox-semirings and bend-congruence presentation explain why fibers are tropical linear spaces and why realizability depends on both the valuated matroid and the chosen filtrations.  Kaveh and Manon's toric-vector-bundle viewpoint adds the valuation/tropical-object interpretation of Klyachko-style data \cite{kavehmanon2023toricbundles}.  Jun, Mincheva, and Tolliver give the complementary semiring-scheme warning: over zero-sum-free local semirings with only trivial idempotent pairs, invertible changes of basis are monomial and many vector bundles split as line-bundle sums.  TropicalGT-I uses these results as finite compatibility templates and transport constraints, while treating expressive neural chart covers as metric-gated training constructions rather than literal tropical schemes.
 
 \begin{definition}[TropicalGT chart bundle]
 \label{def:tropicalgt-chart-bundle}
@@ -1173,14 +1225,14 @@ Let $G=(V,E,x)$ be a token graph with local charts $U_a\subseteq G$ produced by 
 \[
   \mathcal{E}_{\theta}(G)=(M,p,\{\mathcal{F}^{a,i}(j)\}_{a,i,j},\{T_{ab}\}_{U_a\cap U_b\neq\emptyset}),
 \]
-where $M$ is a valuated matroid on a ground set of feature atoms, $p$ is its circuit valuation, $\mathcal{F}^{a,i}(j)$ is a decreasing filtration of flats indexed by the tropical ray or graph statistic $i$ in chart $a$, and each overlap transport is a tropical monomial map
+where $M$ is a valuated matroid on a ground set of feature atoms, $p$ is its circuit valuation, $\mathcal{F}^{a,i}(j)$ is a decreasing filtration of flats indexed by the tropical one-dimensional-cone probe or graph statistic $i$ in chart $a$, and each overlap transport is a tropical monomial map
 \[
   T_{ab}(z)_k = c_{ab,k}+z_{\pi_{ab}(k)}.
 \]
-The bundle is chart-consistent on $G$ if $T_{bc}T_{ab}=T_{ac}$ on triple overlaps up to a tropical scalar and if every active filtration can be recovered as a join of atoms selected by tropical ray inequalities.
+The bundle is chart-consistent on $G$ if $T_{bc}T_{ab}=T_{ac}$ on triple overlaps up to a tropical scalar and if every active filtration can be recovered as a join of atoms selected by tropical one-dimensional-cone inequalities.
 \end{definition}
 
-The definition mirrors the toric compatibility condition for tropical toric vector bundles: over each maximal cone, the ray filtrations must be generated by a matroid basis.  In TropicalGT-I the cones are not literal fans of a toric variety; they are local regions in activation space defined by graph neighborhoods, persistence summaries, and token context.  The toric condition is nevertheless useful because it gives an auditable finite constraint: for each chart, selected basis atoms must reconstruct the flats that determine which features are allowed to dominate.
+The definition mirrors the toric compatibility condition for tropical toric vector bundles: over each maximal cone, the one-dimensional-cone filtrations must be generated by a matroid basis.  In TropicalGT-I the cones are not literal fans of a toric variety; they are local regions in activation space defined by graph neighborhoods, persistence summaries, and token context.  The toric condition is nevertheless useful because it gives an auditable finite constraint: for each chart, selected basis atoms must reconstruct the flats that determine which features are allowed to dominate.
 
 \begin{definition}[Tropical toric embedding of a reasoning state]
 \label{def:tropicalgt-toric-embedding}
@@ -1191,24 +1243,24 @@ Let $A\in\Z^{m\times d}$ be an exponent matrix whose rows are graph, token, and 
 For a graph chart $U_a$, $\Phi_A$ is compatible with the chart bundle when the active rows of $A$ refine the chart filtration $\mathcal{F}^{a,i}(j)$ and when overlap transports preserve the induced normal fan cells.
 \end{definition}
 
-This definition turns toric geometry into a trainable interface.  The exponent rows are small integer templates for edge cuts, motif counts, persistence-landscape bins, register states, and token-window statistics.  Their max-linear images produce a toric tropical coordinate system in which local feature comparisons are cheap and in which chart changes can be checked by sparse permutations and shifts.
+This definition turns toric geometry into a trainable interface.  The exponent rows are small integer templates for edge cuts, motif counts, persistence-landscape bins, register states, and token-window statistics.  Their max-linear images produce a toric tropical coordinate system in which local feature comparisons are cheap and in which chart changes can be checked by sparse permutations and shifts.  When the rows and biases are rationalized, the same data define a finite Laurent-polynomial sidecar; when a family of rows is exported, the induced toric ideal gives exact binomial, Groebner, Hilbert-series, Betti-table, and free-resolution checks.  These checks belong to the audit envelope unless the compactification and flatness/smoothness hypotheses of \Cref{subsec:finite-tropical-toric-sidecars} are separately certified.
 
-\begin{definition}[Ray-filtration atomization for graph tokens]
-\label{def:ray-filtration-atomization}
-Let $P_i$ be graph-token probes such as endpoint incidence, edge type, active tropical support, GraphCG direction activity, persistence-bin membership, or memory-retrieval availability.  A ray-filtration atomization maps each probe to a ray score $s_i(u)$ for feature atom $u\in G_M$ and defines
+\begin{definition}[One-dimensional-cone filtration atomization for graph tokens]
+\label{def:one-dimensional-cone-filtration-atomization}
+Let $P_i$ be graph-token probes such as endpoint incidence, edge type, active tropical support, GraphCG direction activity, persistence-bin membership, or memory-retrieval availability.  A one-dimensional-cone filtration atomization maps each probe to a one-dimensional-cone score $s_i(u)$ for feature atom $u\in G_M$ and defines
 \[
   \mathcal{F}^{a,i}(j)=\operatorname{cl}_M\{u\in G_M:s_i^a(u)\ge j\},
 \]
 where $\operatorname{cl}_M$ is matroid closure.  The resulting chart filtration is admissible for TropicalGT-I when it is decreasing in $j$, has finite support on the sampled threshold grid, and is compared to basis-generated joins through $\mathcal{L}_{\mathrm{flat}}$.
 \end{definition}
 
-\begin{proposition}[Finite auditability of ray-filtration losses]
-\label{prop:finite-ray-auditability}
+\begin{proposition}[Finite auditability of one-dimensional-cone filtration losses]
+\label{prop:finite-one-dimensional-cone-auditability}
 For a fixed batch, a finite atom set $G_M$, and a finite threshold grid, the losses $\mathcal{L}_{\mathrm{flat}}$, $\mathcal{L}_{\mathrm{toric}}$, and $\mathcal{L}_{\mathrm{GraphCG\mbox{-}toric}}$ are computable from finite incidence tables, chart ids, active tropical supports, GraphCG direction scores, and persistence or memory availability masks.  No unobserved continuum of toric points is required for the training audit.
 \end{proposition}
 
 \begin{proof}
-All sets in Definition~\ref{def:ray-filtration-atomization} are finite on a batch: graph tokens are finite, feature atoms are finite, and the threshold grid is finite.  Matroid closure and rank-defect penalties are therefore table operations on subsets of $G_M$.  The toric active-cell terms depend on finitely many max-linear probe rows, and the GraphCG term depends on finitely many learned directions.  Persistence and memory terms enter only through stored finite summaries or availability masks.  Thus the audit evaluates a finite list of ranks, closures, active rows, and distances.
+All sets in Definition~\ref{def:one-dimensional-cone-filtration-atomization} are finite on a batch: graph tokens are finite, feature atoms are finite, and the threshold grid is finite.  Matroid closure and rank-defect penalties are therefore table operations on subsets of $G_M$.  The toric active-cell terms depend on finitely many max-linear probe rows, and the GraphCG term depends on finitely many learned directions.  Persistence and memory terms enter only through stored finite summaries or availability masks.  Thus the audit evaluates a finite list of ranks, closures, active rows, and distances.
 \end{proof}
 
 \begin{theorem}[Monomial transport principle for TropicalGT-I]
@@ -1225,7 +1277,7 @@ Let $M$ be a valuated matroid with ground atoms $G_M$, and let each chart $a$ pr
 \[
   \mathcal{F}^{a,i}(j)=\bigvee_{u\in B_a:\,\langle u,v_i\rangle\ge j} u
 \]
-for all active rays $i$ and thresholds $j$, then the chart bundle satisfies the toric tropical vector-bundle compatibility condition on the fan cells represented by the charts.  A nonnegative relaxation is
+for all active one-dimensional-cone probes $i$ and thresholds $j$, then the chart bundle satisfies the toric tropical vector-bundle compatibility condition on the fan cells represented by the charts.  A nonnegative relaxation is
 \[
   \mathcal{L}_{\mathrm{flat}} = \sum_{a,i,j} d_{\mathrm{flat}}\left(\mathcal{F}^{a,i}(j),\bigvee_{u\in B_a:\,s_{a,i}(u)\ge j}u\right),
 \]
@@ -1233,7 +1285,7 @@ where $d_{\mathrm{flat}}$ is a rank-defect or incidence-distance penalty.
 \end{theorem}
 
 \begin{proof}[Proof sketch]
-Khan and Maclagan define tropical toric vector bundles by exactly this compatibility: on each maximal cone, the filtrations along the rays are generated from a matroid basis by thresholding the ray pairings and joining the selected rank-one flats.  Replacing a maximal cone by an activation chart gives the displayed condition.  The loss is zero precisely when the predicted flats agree with a basis-generated family on the sampled chart.  Rank-defect penalties are valid relaxations because flats are determined by closure and rank in the underlying matroid.\end{proof}
+Khan and Maclagan define tropical toric vector bundles by exactly this compatibility: on each maximal cone, the filtrations along the one-dimensional cones are generated from a matroid basis by thresholding the one-dimensional-cone pairings and joining the selected rank-one flats.  Replacing a maximal cone by an activation chart gives the displayed condition.  The loss is zero precisely when the predicted flats agree with a basis-generated family on the sampled chart.  Rank-defect penalties are valid relaxations because flats are determined by closure and rank in the underlying matroid.\end{proof}
 
 \begin{proposition}[BPB-oriented chart consistency]
 Let $q_{\theta}(B_t\mid C_t,a)$ be the next-byte distribution produced in chart $a$ for context $C_t$, and let $T_{ab}$ be a monomial transport on an overlap.  Suppose the transported logits satisfy
@@ -1262,6 +1314,21 @@ The total training criterion is
 \lambda_B\mathcal{L}_{\mathrm{BPB\mbox{-}chart}}.
 \]
 The auxiliary coefficients should be warm-started at zero and increased only when validation BPB, graph BPB, and certificate losses remain stable.
+
+\begin{center}
+\scriptsize
+\begin{tabular}{@{}p{0.18\linewidth}p{0.30\linewidth}p{0.24\linewidth}p{0.20\linewidth}@{}}
+\toprule
+Object & Exact sidecar & Differentiable companion & Failure mode \\
+\midrule
+Initial forms & rational $\operatorname{in}_{-u}(\mathcal F_H)$ or $\operatorname{in}_{-u}(I_H)$ & active-support agreement, margin, wall-hit loss & unavailable if valuation or sign metadata disagree \\
+Fan and bends & normal fan refinement, one-dimensional-cone incidence, Cartier compatibility & cell-distance and bend-matching losses & audit envelope only if refinement or Cartier data are incomplete \\
+Toric ideals and staircases & toric ideal, monomial initial ideal, two-variable staircase, Hilbert series, Betti table, free resolution & binomial and resolution residuals & skip active loss when CAS limits or exactness checks fail \\
+Chow/Minkowski data & balanced multiplicities or certified Minkowski weights & balance and Chow residuals & visualization only unless balancing hypotheses are certified \\
+Bundle/sheaf data & Klyachko-style filtrations, Cox modules, local cohomology or Fitting ideals when available & flat, cocycle, gluing, rank-defect losses & late-phase auxiliary after toy-window certification \\
+\bottomrule
+\end{tabular}
+\end{center}
 
 \paragraph{Metric-facing implementation contract.}
 The geometric machinery is accepted only through implementation metrics that already govern TropicalGT-I.  The byte objective remains primary, so any vector-bundle or toric-embedding term must report its effect on validation BPB and graph-BPB before promotion.  The chart-consistency regularizers report overlap transport error, cocycle defect, flat rank defect, and chart NLL gap; these metrics make the tropical chart structure auditable rather than decorative.  Persistence-landscape memory comparison reports availability, transported L2 distance, and transported cosine distance only for real GUDHI $\lambda_k(t)$ vectors, while unavailable vectors remain masked.  Optional inference artifacts should therefore expose chart ids, transport ids, toric active rows, normal-fan cell labels, and top-$k$ memory landscape distances without changing decoding unless the corresponding validation BPB or graph-BPB gate has passed.
@@ -1302,8 +1369,8 @@ A graph-of-thought trajectory is a path through pooled TokenGT states, and the G
 \]
 This is not a theorem from tropical vector-bundle theory; it is a training principle.  The justification is that GoT branches that reuse information across charts should pay for inconsistent transports, while the GFlowNet still receives the task and BPB-derived reward that decides promotion.
 
-\paragraph{Training principle: GraphCG directions as toric rays.}
-GraphCG learns latent steering directions.  A tropical toric embedding can treat a small subset of stable, full-rank GraphCG directions as candidate ray probes $v_i$ in the filtration terms $\mathcal{F}^{a,i}(j)$.  The corresponding regularizer penalizes disagreement between the active GraphCG direction cone and the active toric normal-fan cell:
+\paragraph{Training principle: GraphCG directions as toric one-dimensional-cone probes.}
+GraphCG learns latent steering directions.  A tropical toric embedding can treat a small subset of stable, full-rank GraphCG directions as candidate one-dimensional-cone probes $v_i$ in the filtration terms $\mathcal{F}^{a,i}(j)$.  The corresponding regularizer penalizes disagreement between the active GraphCG direction cone and the active toric normal-fan cell:
 \[
   \mathcal{L}_{\mathrm{GraphCG\mbox{-}toric}}=\sum_a d_{\mathrm{cell}}\left(\operatorname{cone}(D_{\mathrm{active}}(h_a)),\operatorname{cell}(\Phi_A(h_a))\right)+\gamma\,\mathcal{L}_{\mathrm{full\mbox{-}rank}}(D).
 \]
@@ -1321,7 +1388,7 @@ Here $\mathcal{H}_a$ is a small sampled family of flats or atom clusters and $m$
 The two-parameter persistence module already records how graph-of-thought simplices appear under two filtrations such as tropical margin and NLL.  Vector-bundle training does not turn this module into a toric vector bundle.  Instead it uses its summaries as chart labels and memory atoms.  Rank-invariant bins, Betti profiles, and optional GUDHI persistence landscapes can enter $G_M$ as atoms; analogical retrieval then compares both latent embeddings and transported topological atoms.  If a memory row lacks a GUDHI landscape vector, the corresponding atom is absent from the comparison.  This preserves the mathematical distinction between a persistence landscape $\lambda_k(t)$ and an NLL or fitness field on a graph-of-thought visualization.
 
 \begin{example}[A chart-consistency batch]
-Consider a byte window whose TokenGT graph contains problem, intermediate reasoning, and answer vertices.  Chart $U_a$ contains the edge tokens supporting the current answer, chart $U_b$ contains a retrieved analogical memory item with a matching derived signature, and chart $U_c$ contains a GraphCG-shifted variant used by the verifier.  The training step computes byte NLL and graph-BPB as usual.  It also computes $T_{ab}$ for retrieval reuse, $T_{bc}$ for the verifier branch, a cocycle defect against $T_{ac}$, a flat rank-defect for active GraphCG rays, and transported L2/cosine distances for any real GUDHI landscape vectors.  The optimizer may use these quantities, but the model-selection rule accepts the change only if the validation BPB gates pass.
+Consider a byte window whose TokenGT graph contains problem, intermediate reasoning, and answer vertices.  Chart $U_a$ contains the edge tokens supporting the current answer, chart $U_b$ contains a retrieved analogical memory item with a matching derived signature, and chart $U_c$ contains a GraphCG-shifted variant used by the verifier.  The training step computes byte NLL and graph-BPB as usual.  It also computes $T_{ab}$ for retrieval reuse, $T_{bc}$ for the verifier branch, a cocycle defect against $T_{ac}$, a flat rank-defect for active GraphCG one-dimensional-cone probes, and transported L2/cosine distances for any real GUDHI landscape vectors.  The optimizer may use these quantities, but the model-selection rule accepts the change only if the validation BPB gates pass.
 \end{example}
 
 \paragraph{Example: transported persistence-landscape memory.}
@@ -1346,7 +1413,7 @@ The runnable contract is implemented by the training, evaluation, inference, val
 
 The ablation analyzer consumes one or more training reports, ranks logged metrics by correlation with \(\mathrm{BPB}_{\mathrm{text}}\), \(\mathrm{BPB}_{\mathrm{graph}}\), and held-out evaluation variants, and emits best-by-target summaries with the lowest run, baseline delta, runner-up, and runner-up margin for each compression target; the ablation-grid runner generates same-seed loss-weight variants such as no-GraphCG, no-GFlowNet, no-certificate, no-tropical-regularizer, no-auxiliary, half/quarter auxiliary weights, and isolated low-weight GFlowNet, GraphCG, and tropical-regularizer settings, then optionally trains them and runs the analyzer.  These reports are screening devices for matched ablations, not causal evidence by themselves.  The first finite certificate objective is deliberately modest: an edge token is structurally certified when its active tropical support is the edge token itself or one of its endpoint vertex tokens.  This is a TokenGT skeleton certificate rather than a semantic proof; it should be promoted only when it improves held-out BPB, verifier score, support faithfulness, or downstream reasoning metrics.  Checkpoints store model state, optimizer state, step, metric history, config, and random-number-generator state; long runs can resume from either the final checkpoint or a periodic \texttt{.latest.pt} checkpoint.  Evaluation reports aggregate NLL/BPB/graph-BPB together with optional per-record NLL, tropical support histograms, graph-token traces, filtered simplicial objects, and opt-in topological algebra audits.  Inference emits the generated byte-level argmax string plus BPB accounting, tropical support/margin diagnostics, GFlowNet action probabilities, GraphCG direction summaries, a graph-token trace, the filtered object for the prompt graph, optional multiparameter algebra, optional analogical-memory retrieval, and an optional bounded inference-scaling report containing all expanded candidates and the selected graph-of-thought path.  The visualization script projects graph-of-thought candidate embeddings by PCA and writes dark-mode interactive three-dimensional trajectories whose edges are the reasoning graph.  Hovering over a node renders a cursor-following SVG hover card and updates a persistent SVG side panel for that node's filtered simplicial object, so the audit shows actual vertices, edges, two-simplices, filtration colors, and filtration layers rather than only textual summaries.  The same HTML stores the complete object in JSON, and the PCA/NLL view adds a smoothed heatmapped NLL surface under the reasoning graph or as the NLL-height field.  Additional Plotly artifacts visualize tropical support heatmaps, persistence barcodes, persistence-module Betti profiles, GraphCG direction cosines, GraphCG full-rank singular spectra, GraphCG training direction geometry, analogical memory retrieval scores, and training metrics.  In the first implementation each filtered object contains vertices as \(0\)-simplices, graph edges as \(1\)-simplices, directed length-two reasoning paths as \(2\)-simplices, filtration thresholds, and a compact summary; longer runs can replace the deterministic smoke filtration with learned margin, verifier, or persistence-based weights.
 
-This implementation deliberately omits toric-only mechanisms from the ToricGT paper unless they admit a tropical meaning.  Ported methods are the dataset schema, graph-of-thought trajectory view, GFlowNet branch training, GraphCG steering, W\&B discipline, reproducibility reports, and latent-trajectory visual audits.  Omitted methods include noncommutative toric phase memory, toric ideals, and torus-specific chamber constraints; tropical replacements are active faces, Hilbert margins, max-plus supports, and fan-cell certificates.
+This implementation deliberately omits toric-only mechanisms from the deployable TropicalGT-I student unless they admit a tropical meaning and pass the BPB gates.  Ported methods are the dataset schema, graph-of-thought trajectory view, GFlowNet branch training, GraphCG steering, W\&B discipline, reproducibility reports, latent-trajectory visual audits, and finite algebraic sidecars for rationalized tropical probes.  Noncommutative toric phase memory and torus-specific chamber constraints remain out of scope for the first TropicalGT-I artifact.  Toric ideals, Cox modules, Chow/Minkowski weights, and Klyachko-style filtrations enter only as opt-in finite audit sidecars or late-phase auxiliary losses after exact small-window certification; the always-on tropical replacements remain active faces, Hilbert margins, max-plus supports, and fan-cell certificates.
 
 \section{Conclusion}
 
@@ -2044,6 +2111,41 @@ David Cox, John Little, and Hal Schenck.
 Ezra Miller and Bernd Sturmfels.
 \newblock \emph{Combinatorial Commutative Algebra}.
 \newblock Springer, 2005.
+
+\bibitem{tevelev2007compactifications}
+Jenia Tevelev.
+\newblock Compactifications of subvarieties of tori.
+\newblock arXiv:math/0412329, 2005.
+
+\bibitem{maclaganrincon2018tropicalideals}
+Diane Maclagan and Felipe Rinc\'on.
+\newblock Tropical ideals.
+\newblock \emph{Compositio Mathematica}, 154(3):640--670, 2018. arXiv:1609.03838.
+
+\bibitem{maclaganrincon2020balanced}
+Diane Maclagan and Felipe Rinc\'on.
+\newblock Varieties of tropical ideals are balanced.
+\newblock arXiv:2009.14557, 2020.
+
+\bibitem{m2tropical2019}
+Carlos Am\'endola, Kathl\'en Kohn, Sara Lamboglia, Diane Maclagan, Ben Smith, Jeff Sommars, Paolo Tripoli, and Magdalena Zajaczkowska.
+\newblock Computing tropical varieties in Macaulay2.
+\newblock arXiv:1710.10651, 2019.
+
+\bibitem{fultonsturmfels1994intersection}
+William Fulton and Bernd Sturmfels.
+\newblock Intersection theory on toric varieties.
+\newblock arXiv:alg-geom/9403002, 1994.
+
+\bibitem{katz2009tropicalintersection}
+Eric Katz.
+\newblock Tropical intersection theory from toric varieties.
+\newblock arXiv:0907.2488, 2009.
+
+\bibitem{kavehmanon2023toricbundles}
+Kiumars Kaveh and Christopher Manon.
+\newblock Toric vector bundles, valuations and tropical geometry.
+\newblock arXiv:2304.11211, 2023.
 
 \bibitem{schreiber2022multiparameter}
 Amelie Schreiber.

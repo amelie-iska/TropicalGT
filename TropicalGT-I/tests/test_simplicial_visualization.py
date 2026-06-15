@@ -191,6 +191,10 @@ def test_analogical_simplicial_map_uses_model_probability_vectors():
     assert report["jensen_shannon_distance_summary"]["count"] == 2
     assert report["assignment_cost_summary"]["count"] == 2
     assert report["preserved_edge_pairs"]
+    assert report["chain_map_diagnostics"]["available"] is True
+    assert report["chain_map_diagnostics"]["boundary_commutation_certified"] is True
+    assert report["persistence_module_morphism_diagnostics"]["available"] is True
+    assert report["persistence_module_morphism_diagnostics"]["ring"] == "F2[x_level,x_radius]"
 
 
 def test_analogical_simplicial_map_preserves_plain_probability_after_gudhi_canonicalization():
@@ -418,16 +422,16 @@ def test_got_trajectory_visualization_renders_simplicial_panel_and_nll_surface(t
     assert payload["nll_surface"]["surface_kind"] in {"sparse_exact_triangular_nll_mesh", "sparse_observed_state_nll_anchor_mesh"}
     assert payload["nll_surface"]["z_axis"] == "projected_nll_fitness_energy"
     assert payload["nll_surface"]["provenance"] == "computed only from observed model-evaluated GoT state embeddings and their measured raw NLL values"
-    assert payload["nll_surface"]["surface_contact_contract"].startswith("every rendered GoT state marker")
+    assert payload["nll_surface"]["surface_contact_contract"].startswith("disabled for the main trajectory page")
     assert payload["nll_surface"]["trajectory_point_surface_residual_max"] == 0.0
     projected_by_id = payload["nll_surface"]["surface_projected_z_by_record_id"]
     for idx, node in enumerate(payload["nodes"]):
         rid = node["record_id"]
-        assert node["plot"]["touches_nll_surface"] is True
-        assert node["plot"]["z"] == node["plot"]["z_surface"]
-        assert abs(node["plot"]["z_surface"] - projected_by_id[rid]) < 1e-9
-        assert abs(node["plot"]["z"] - projected_by_id[rid]) < 1e-9
-        assert node["plot"]["z_centered_scaled_nll"] == node["plot"]["z_surface"]
+        assert node["plot"]["touches_nll_surface"] is False
+        assert node["plot"]["z_surface"] is None
+        assert rid in projected_by_id
+        assert abs(node["plot"]["z_centered_scaled_nll"] - projected_by_id[rid]) < 1e-9
+        assert node["plot"]["z"] == node["pca"]["pc3"]
         assert "raw_centered_scaled_nll" in node["plot"]
         assert node["reasoning_step_index"] == idx
         assert node["step_complex_href"] == f"reasoning_step_complex_maps/reasoning_step_{idx:03d}.html"
@@ -598,15 +602,22 @@ def test_tropical_support_heatmap_layout_keeps_legend_out_of_margin(tmp_path: Pa
     result = {
         "graph_token_trace": {
             "tokens": [
-                {"index": 0, "text": "graph", "kind": "graph", "node_type": "graph", "active_support_index": 0, "margin": 12.0},
-                {"index": 1, "text": "problem", "kind": "node", "node_type": "problem", "active_support_index": 0, "margin": 11.5},
-                {"index": 2, "text": "answer", "kind": "node", "node_type": "answer", "active_support_index": 2, "margin": 0.4},
-                {"index": 3, "text": "edge", "kind": "edge", "active_support_index": 3, "margin": 0.2},
+                {"index": 0, "text": "graph", "kind": "graph", "node_type": "graph", "active_support_index": 0, "margin": 12.0, "active_support_probability": 0.91, "support_probability_entropy_bits": 0.3, "top_model_support_probabilities": [{"index": 0, "probability": 0.91}], "support_probability_source": "model_tropical_support_probabilities"},
+                {"index": 1, "text": "problem", "kind": "node", "node_type": "problem", "active_support_index": 0, "margin": 11.5, "active_support_probability": 0.82, "support_probability_entropy_bits": 0.5, "top_model_support_probabilities": [{"index": 0, "probability": 0.82}], "support_probability_source": "model_tropical_support_probabilities"},
+                {"index": 2, "text": "answer", "kind": "node", "node_type": "answer", "active_support_index": 2, "margin": 0.4, "active_support_probability": 0.63, "support_probability_entropy_bits": 1.1, "top_model_support_probabilities": [{"index": 2, "probability": 0.63}], "support_probability_source": "model_tropical_support_probabilities"},
+                {"index": 3, "text": "edge", "kind": "edge", "active_support_index": 3, "margin": 0.2, "active_support_probability": 0.57, "support_probability_entropy_bits": 1.3, "top_model_support_probabilities": [{"index": 3, "probability": 0.57}], "support_probability_source": "model_tropical_support_probabilities"},
             ]
         }
     }
     paths = write_tropical_support_heatmap(result, tmp_path)
     html = Path(paths["tropical_support_heatmap"]).read_text(encoding="utf-8")
+    payload = json.loads(Path(paths["tropical_support_payload"]).read_text(encoding="utf-8"))
+    assert payload["metrics"]["support_probability_source"] == "model_tropical_support_probabilities"
+    assert payload["metrics"]["active_support_probability_summary"]["available"] is True
+    assert payload["metrics"]["support_probability_entropy_bits_summary"]["available"] is True
+    assert payload["support_flow_edges"][0]["active_support_probability"] == 0.91
+    assert payload["metrics"]["render_contract"].startswith("assignment_matrix is binary model argmax support")
+    assert "active support probability" in html
     assert "Tropical active-support audit" in html
     compact = html.replace(" ", "")
     assert '"showlegend":false' in compact
@@ -850,6 +861,11 @@ def test_analogical_memory_visualization_renders_simplicial_maps(tmp_path: Path)
     assert "differentiable" in maps["maps"][0]["persistence_vector_differentiable_note"]
     assert maps["maps"][0]["derived_invariant_comparison"]["persistence_landscape_vector_available"] is True
     assert "is_simplicial_on_displayed_skeleton" in maps["maps"][0]
+    assert maps["maps"][0]["chain_map_diagnostics"]["available"] is True
+    assert maps["maps"][0]["persistence_module_morphism_diagnostics"]["available"] is True
+    assert maps["maps"][0]["persistence_module_morphism_diagnostics"]["free_resolution_required"] is False
+    assert maps["maps"][0]["derived_invariant_comparison"]["real_free_resolution_comparison"]["safe_for_derived_category_claims"] is False
+    assert "free_resolution_similarity_interpretation" in maps["maps"][0]["derived_invariant_comparison"]
     assert isinstance(maps["maps"][0]["preserved_edge_pairs"], list)
     assert isinstance(maps["maps"][0]["failed_edge_pairs"], list)
     assert isinstance(maps["maps"][0]["preserved_edge_query_vertices"], list)

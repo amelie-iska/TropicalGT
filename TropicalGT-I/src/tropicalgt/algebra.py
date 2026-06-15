@@ -190,6 +190,7 @@ def compute_level_radius_bifiltration_report(
     object_key: str = "filtered_simplicial_object",
     max_simplices: int = 1024,
     max_rank_invariant_pairs: int = 64,
+    max_fiber_basis_entries: int = 512,
 ) -> dict[str, Any]:
     """Compute the explicit trajectory bifiltration as a finite k[x,y]-module.
 
@@ -212,12 +213,15 @@ def compute_level_radius_bifiltration_report(
         }
 
     closed_by_level: dict[int, list[dict[str, Any]]] = {}
+    closed_summary_by_level: dict[int, dict[str, Any]] = {}
     all_thresholds: set[float] = {0.0}
     for idx, item in enumerate(rows):
         level = int(item.get("level", idx) or 0)
         obj = item.get(object_key) if isinstance(item.get(object_key), dict) else {}
-        closed = _closed_complex(obj, max_simplices=max_simplices)["simplices"]
+        closed_report = _closed_complex(obj, max_simplices=max_simplices)
+        closed = closed_report["simplices"]
         closed_by_level[level] = closed
+        closed_summary_by_level[level] = closed_report.get("summary", {}) if isinstance(closed_report.get("summary"), dict) else {}
         all_thresholds.update(float(row.get("filtration", 0.0) or 0.0) for row in closed)
 
     levels = sorted(closed_by_level)
@@ -241,6 +245,38 @@ def compute_level_radius_bifiltration_report(
     subsets: dict[tuple[int, int], list[dict[str, Any]]] = {}
     fiber_profile: list[dict[str, Any]] = []
     generator_by_simplex: dict[tuple[str, ...], dict[str, Any]] = {}
+
+    def _fiber_basis_payload(by_dim: dict[int, list[tuple[str, ...]]]) -> dict[str, Any]:
+        remaining = max(0, int(max_fiber_basis_entries))
+        basis_by_dim: dict[str, list[list[str]]] = {}
+        total = 0
+        for dim, simplices in sorted(by_dim.items()):
+            total += len(simplices)
+            take = simplices[:remaining] if remaining else []
+            if take:
+                basis_by_dim[str(dim)] = [list(simplex) for simplex in take]
+            remaining = max(0, remaining - len(take))
+        counts = {str(dim): len(simplices) for dim, simplices in sorted(by_dim.items())}
+        return {
+            "basis_by_dim": basis_by_dim,
+            "basis_count_by_dim": counts,
+            "total_basis_count": int(total),
+            "entry_limit": int(max_fiber_basis_entries),
+            "truncated": bool(total > int(max_fiber_basis_entries)),
+            "basis_source": "closed_GUDHI_serialized_simplex_tree_simplices_when_available_else_closed_filtered_simplicial_object",
+        }
+
+    def _fiber_provenance(level: int) -> dict[str, Any]:
+        source_levels = [src_level for src_level in levels if src_level <= level]
+        summaries = [closed_summary_by_level.get(src_level, {}) for src_level in source_levels]
+        backends = sorted({str(summary.get("input_simplex_tree_backend", "missing")) for summary in summaries})
+        return {
+            "object_key": object_key,
+            "source_levels": [int(src_level) for src_level in source_levels],
+            "simplex_tree_backends": backends,
+            "all_source_levels_have_gudhi_simplex_tree": bool(summaries) and all(summary.get("input_simplex_tree_backend") == "gudhi.SimplexTree" for summary in summaries),
+            "construction": "K_(level,radius) is the closed subcomplex of all source levels <= level with simplex filtration <= radius grade over F2",
+        }
 
     for level in levels:
         level_simplices: dict[tuple[str, ...], dict[str, Any]] = {}
@@ -277,6 +313,8 @@ def compute_level_radius_bifiltration_report(
                     "radius_grade": radius_idx,
                     "radius": float(threshold),
                     "chain_group_ranks": {str(dim): len(rows_) for dim, rows_ in sorted(by_dim.items())},
+                    "fiber_basis": _fiber_basis_payload(by_dim),
+                    "fiber_provenance": _fiber_provenance(level),
                     "betti": homology["betti"],
                     "boundary_ranks": {key: value.get("rank", 0) for key, value in boundaries.get("maps", {}).items()},
                     "euler_characteristic": _euler_characteristic(by_dim),
@@ -297,6 +335,7 @@ def compute_level_radius_bifiltration_report(
     generators = sorted(generator_by_simplex.values(), key=lambda row: (row["multidegree"], row["dimension"], row["simplex"]))
     boundary = _multigraded_boundary_monomials_named(generators, ["x_level", "x_radius"])
     structure_maps = _adjacent_homology_structure_maps_mod2(subsets, levels, list(range(len(thresholds))), max_dim=2)
+    backend_counts = Counter(str(summary.get("input_simplex_tree_backend", "missing")) for summary in closed_summary_by_level.values())
     report = {
         "available": True,
         "num_parameters": 2,
@@ -319,6 +358,13 @@ def compute_level_radius_bifiltration_report(
         "grid_axes": [levels, list(range(len(thresholds)))],
         "radius_grade_values": radius_grade_values,
         "radius_grade_policy": "exact_sorted_radius_grid_index_no_bucket_collision",
+        "grid_fiber_provenance": {
+            "object_key": object_key,
+            "construction": "closed bifiltration fibers K_(level,radius) from trajectory growth complexes over F2",
+            "all_growth_rows_have_gudhi_simplex_tree": bool(closed_summary_by_level) and all(summary.get("input_simplex_tree_backend") == "gudhi.SimplexTree" for summary in closed_summary_by_level.values()),
+            "simplex_tree_backend_counts": {key: int(value) for key, value in sorted(backend_counts.items())},
+            "fiber_basis_policy": "fiber_rank_profile[*].fiber_basis carries complete simplex bases when total_basis_count <= entry_limit; otherwise counts plus prefix are marked truncated",
+        },
         "fiber_rank_profile": fiber_profile,
         "rank_invariant_samples": rank_samples,
         "structure_maps": structure_maps,
@@ -327,6 +373,7 @@ def compute_level_radius_bifiltration_report(
             "A finite 2-parameter persistence module is represented as a multigraded F2[x_level,x_radius]-module.",
             "Each fiber is computed by F2 chain complexes on K_{level,radius}; H0 rank samples and adjacent H_i structure maps are exact inclusion-induced ranks on the sampled radius grid.",
             "The x_radius grade is the exact sorted radius-grid index; radius_grade_values records the real radius for each index.",
+            "fiber_rank_profile entries include closed simplex bases and simplex-tree provenance for downloadable audit JSON.",
             "Real free resolutions are unavailable unless a CAS backend certifies them; the emitted object is only the exact multigraded free chain presentation plus labeled boundary maps.",
         ],
     }
@@ -1430,6 +1477,8 @@ def _adjacent_homology_structure_maps_mod2(
 
 def _closed_complex(filtered_object: dict[str, Any], max_simplices: int) -> dict[str, Any]:
     raw_simplices = list(filtered_object.get("simplices", []))
+    simplex_tree = filtered_object.get("simplex_tree") if isinstance(filtered_object.get("simplex_tree"), dict) else {}
+    simplex_tree_backend = str(simplex_tree.get("backend", "missing")) if isinstance(simplex_tree, dict) else "missing"
     vertices_seen: dict[str, float] = {}
     closed: dict[tuple[str, ...], dict[str, Any]] = {}
 
@@ -1498,6 +1547,10 @@ def _closed_complex(filtered_object: dict[str, Any], max_simplices: int) -> dict
             "added_closure_faces": sum(1 for row in ordered if str(row.get("source", "")).startswith("closure")),
             "dimension_counts": {str(dim): int(count) for dim, count in sorted(counts.items())},
             "max_dimension": max(counts) if counts else -1,
+            "input_simplex_tree_backend": simplex_tree_backend,
+            "input_simplex_tree_available": simplex_tree_backend == "gudhi.SimplexTree",
+            "input_simplex_tree_num_simplices": int(simplex_tree.get("num_simplices", 0) or 0) if isinstance(simplex_tree, dict) else 0,
+            "basis_source": "gudhi.SimplexTree serialized simplices" if simplex_tree_backend == "gudhi.SimplexTree" else "filtered_simplicial_object.simplices",
         },
     }
 

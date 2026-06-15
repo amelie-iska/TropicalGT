@@ -50,12 +50,12 @@ def _row(root: Path, name: str) -> Path:
                 "plot": {
                     "x": candidate["embedding"][0],
                     "y": candidate["embedding"][1],
-                    "z": candidate["nll"],
-                    "z_surface": candidate["nll"],
+                    "z": candidate["embedding"][2],
+                    "z_surface": None,
                     "z_centered_scaled_nll": candidate["nll"],
                     "raw_centered_scaled_nll": candidate["nll"],
                     "raw_nll": candidate["nll"],
-                    "touches_nll_surface": True,
+                    "touches_nll_surface": False,
                 },
                 "reasoning_step_index": idx,
                 "step_complex_href": f"reasoning_step_complex_maps/reasoning_step_{idx:03d}.html",
@@ -93,7 +93,7 @@ def _row(root: Path, name: str) -> Path:
             "sparse_observed_anchor_layer": True,
             "actual_landscape_layer": False,
             "support_radius": 0.5,
-            "surface_contact_contract": "every rendered GoT state marker and trajectory edge endpoint uses plot.z/plot.z_surface sampled from the displayed NLL energy surface",
+            "surface_contact_contract": "disabled for the main trajectory page: rendered GoT state marker z uses PC3 geometry, while raw NLL is preserved as color, hover, centered/scaled metadata, and projected surface diagnostics",
             "trajectory_point_surface_residual_max": 0.0,
             "surface_projected_z_by_record_id": {row["record_id"]: row["nll"] for row in candidates},
             "local_interpolating_sheet": {"available": False, "reason": "disabled_to_preserve_exact_reasoning_point_surface_contact"},
@@ -229,10 +229,14 @@ def _row(root: Path, name: str) -> Path:
                     "support_entropy_bits": 0.0,
                     "top_support_collapse_rate": 1.0,
                     "margin_summary": {"min": 0.1, "max": 0.4, "mean": 0.25, "std": 0.1, "p05": 0.1, "p50": 0.25, "p95": 0.4},
+                    "active_support_probability_summary": {"available": True, "count": 4, "min": 0.7, "max": 0.9, "mean": 0.8, "p05": 0.7, "p50": 0.8, "p95": 0.9},
+                    "support_probability_entropy_bits_summary": {"available": True, "count": 4, "min": 0.2, "max": 0.6, "mean": 0.4, "p05": 0.2, "p50": 0.4, "p95": 0.6},
+                    "support_probability_source": "model_tropical_support_probabilities",
+                    "render_contract": "assignment_matrix is binary model argmax support; selected_margin_matrix is model tropical margin only on selected cells; probability summaries come from model_tropical_support_probabilities and are not fabricated scores",
                     "interpretation": "Uniform blocks indicate true active-support collapse or nearly constant margins.",
                 },
                 "support_flow_edges": [
-                    {"query_index": idx, "query_label": f"q{idx}", "support_index": 0, "support_label": "q0", "margin": 0.1 * (idx + 1)}
+                    {"query_index": idx, "query_label": f"q{idx}", "support_index": 0, "support_label": "q0", "margin": 0.1 * (idx + 1), "active_support_probability": 0.8, "support_probability_entropy_bits": 0.4, "support_probability_source": "model_tropical_support_probabilities", "top_model_support_probabilities": [{"index": 0, "probability": 0.8}]}
                     for idx in range(4)
                 ],
             }
@@ -303,8 +307,8 @@ def _row(root: Path, name: str) -> Path:
             "Plotly.newPlot simplicial-object-panel simplicial-object-plot selected-complex-graph hover-simplicial-card plotly_click",
         ),
         "got_trajectory_pca_3d.html": _html(
-            "Graph-of-thought branching trajectory with observed NLL anchors",
-            "Plotly.newPlot selected-complex-graph plotly_click open interactive reasoning-step complex page",
+            "Graph-of-thought branching trajectory with raw NLL metadata",
+            "Plotly.newPlot selected-complex-graph plotly_click open interactive reasoning-step complex page raw NLL PC3 marker geometry",
         ),
         "got_nll_density_cloud_pca_3d.html": _html("3D PCA NLL density cloud", "Gaussian cloud actual model GoT state anchors not a model state Plotly.newPlot plotly.min.js"),
         "got_full_trajectory_complex.html": _html("Full graph-of-thought trajectory filtered simplicial complex", "Plotly.newPlot play filtration min-to-max Filtration radius model input model output filtration backend= simplicial-object-plot selected-complex-graph plotly_click"),
@@ -494,12 +498,13 @@ def test_validate_audit_root_rejects_broken_nll_surface_contact_fields(tmp_path:
     validator = _load_validator()
     cases = [
         ("missing_projected_map", lambda payload: payload["nll_surface"].pop("surface_projected_z_by_record_id"), "missing per-record projected z values"),
-        ("touch_flag_false", lambda payload: payload["nodes"][0]["plot"].__setitem__("touches_nll_surface", False), "not marked as touching"),
+        ("touch_flag_true", lambda payload: payload["nodes"][0]["plot"].__setitem__("touches_nll_surface", True), "should keep PC3 geometry rather than touch"),
         ("missing_z", lambda payload: payload["nodes"][0]["plot"].pop("z"), "missing finite plotted z"),
-        ("missing_z_surface", lambda payload: payload["nodes"][0]["plot"].pop("z_surface"), "missing finite z_surface"),
+        ("non_null_z_surface", lambda payload: payload["nodes"][0]["plot"].__setitem__("z_surface", 999.0), "should leave z_surface null"),
         ("missing_raw_centered", lambda payload: payload["nodes"][0]["plot"].pop("raw_centered_scaled_nll"), "missing raw centered/scaled NLL z"),
-        ("projected_z_mismatch", lambda payload: payload["nodes"][0]["plot"].__setitem__("z", 999.0), "plotted z does not equal z_surface"),
-        ("projected_z_surface_mismatch", lambda payload: payload["nodes"][0]["plot"].__setitem__("z_surface", 999.0), "plotted z/z_surface does not match the displayed NLL surface projection"),
+        ("missing_centered", lambda payload: payload["nodes"][0]["plot"].pop("z_centered_scaled_nll"), "missing centered/scaled NLL metadata z"),
+        ("projected_z_mismatch", lambda payload: payload["nodes"][0]["plot"].__setitem__("z", 999.0), "plotted z does not match PCA pc3 geometry"),
+        ("projected_centered_mismatch", lambda payload: payload["nodes"][0]["plot"].__setitem__("z_centered_scaled_nll", 999.0), "centered/scaled NLL metadata does not match"),
     ]
     for case_name, mutate, expected in cases:
         audit = tmp_path / case_name / "got_audit"

@@ -77,6 +77,10 @@ def test_training_history_contains_certificate_and_throughput_metrics(tmp_path: 
     row = report["history"][0]
     for key in [
         "certificate_loss",
+        "tropical_margin_signed_loss",
+        "tropical_margin_reward",
+        "tropical_margin_shortfall_loss",
+        "tropical_margin_shortfall_rate",
         "certificate_agreement",
         "certificate_allowed_mass_mean",
         "certificate_disallowed_support_rate",

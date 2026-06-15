@@ -1,5 +1,6 @@
 import torch
 
+import tropicalgt.cas_free_resolution as cas_free_resolution
 from tropicalgt.algebra import compute_level_radius_bifiltration_report, compute_topological_algebra_report, summarize_algebra_reports
 from tropicalgt.cas_free_resolution import build_singular_script, canonicalize_module, try_compute_real_free_resolution
 from tropicalgt.data import FixtureGraphDataset
@@ -48,7 +49,7 @@ def _assert_real_resolution_guard(real, expected_ring):
         if real["cas_artifacts"].get("betti_table_ungraded", {}).get("available"):
             assert real["cas_artifacts"].get("betti_table_ungraded", {}).get("not_multigraded") is True
     else:
-        assert real["status"] in {"unavailable_no_certificate", "backend_not_installed", "certificate_failed"}
+        assert real["status"] in {"unavailable_no_certificate", "backend_not_installed", "certificate_failed", "disabled_by_environment"}
         assert real["certificate_attached"] is False
         assert real["real_free_resolution_certified"] is False
         assert real["total_graded_resolution_certified"] is False
@@ -60,6 +61,53 @@ def _assert_real_resolution_guard(real, expected_ring):
         assert real["safe_to_render_as_total_graded_resolution"] is False
         assert real["safe_to_render_as_multigraded_free_resolution"] is False
         assert real["cas_artifacts"] == {}
+
+
+def _small_free_resolution_module():
+    return {
+        "coefficient_ring": "F2[x_level,x_radius]",
+        "chain_module_generators": [
+            {"generator_id": "v0", "simplex": ["v0"], "homological_degree": 0, "multidegree": [0, 0]},
+            {"generator_id": "e01", "simplex": ["v0", "v1"], "homological_degree": 1, "multidegree": [1, 0]},
+            {"generator_id": "e02", "simplex": ["v0", "v2"], "homological_degree": 1, "multidegree": [0, 1]},
+        ],
+        "boundary_monomials": {
+            "d1": [
+                {"source_generator_id": "e01", "target_generator_id": "v0", "exponent": [1, 0]},
+                {"source_generator_id": "e02", "target_generator_id": "v0", "exponent": [0, 1]},
+            ]
+        },
+    }
+
+
+def test_real_cas_free_resolution_disabled_by_environment(monkeypatch):
+    monkeypatch.setenv("TROPICALGT_DISABLE_CAS_FREE_RESOLUTION", "1")
+    real = try_compute_real_free_resolution(_small_free_resolution_module(), timeout_s=1)
+    _assert_real_resolution_guard(real, "F2[x_level,x_radius]")
+    assert real["available"] is False
+    assert real["status"] == "disabled_by_environment"
+    assert real["cache"]["enabled"] is False
+    assert real["cache"]["hit"] is False
+    assert "TROPICALGT_DISABLE_CAS_FREE_RESOLUTION" in real["reason"]
+    assert real["command_templates"]["macaulay2"]
+
+
+def test_real_cas_free_resolution_caches_deterministic_unavailable_probe(tmp_path, monkeypatch):
+    monkeypatch.setenv("TROPICALGT_CAS_FREE_RESOLUTION_CACHE_DIR", str(tmp_path / "cas-cache"))
+    monkeypatch.setattr(cas_free_resolution, "_candidate_executable", lambda name: None)
+    module = _small_free_resolution_module()
+    first = cas_free_resolution.try_compute_real_free_resolution(module, timeout_s=1)
+    second = cas_free_resolution.try_compute_real_free_resolution(module, timeout_s=1)
+    _assert_real_resolution_guard(first, "F2[x_level,x_radius]")
+    _assert_real_resolution_guard(second, "F2[x_level,x_radius]")
+    assert first["status"] == "backend_not_installed"
+    assert first["cache"]["enabled"] is True
+    assert first["cache"]["hit"] is False
+    assert first["cache"]["written"] is True
+    assert second["status"] == "backend_not_installed"
+    assert second["cache"]["enabled"] is True
+    assert second["cache"]["hit"] is True
+    assert second["cache"]["key"] == first["cache"]["key"]
 
 
 def test_real_cas_free_resolution_smoke_when_backend_available():
@@ -202,12 +250,14 @@ def test_level_radius_bifiltration_reports_scoped_real_staircase_resolution(tmp_
         {
             "level": 0,
             "filtered_simplicial_object": {
+                "simplex_tree": {"backend": "gudhi.SimplexTree", "num_simplices": 1},
                 "simplices": [{"simplex": ["root"], "dimension": 0, "filtration": 0.0}],
             },
         },
         {
             "level": 1,
             "filtered_simplicial_object": {
+                "simplex_tree": {"backend": "gudhi.SimplexTree", "num_simplices": 2},
                 "simplices": [
                     {"simplex": ["root"], "dimension": 0, "filtration": 0.0},
                     {"simplex": ["a"], "dimension": 0, "filtration": 0.6},
@@ -217,6 +267,7 @@ def test_level_radius_bifiltration_reports_scoped_real_staircase_resolution(tmp_
         {
             "level": 2,
             "filtered_simplicial_object": {
+                "simplex_tree": {"backend": "gudhi.SimplexTree", "num_simplices": 4},
                 "simplices": [
                     {"simplex": ["root"], "dimension": 0, "filtration": 0.0},
                     {"simplex": ["b"], "dimension": 0, "filtration": 0.3},
@@ -230,6 +281,15 @@ def test_level_radius_bifiltration_reports_scoped_real_staircase_resolution(tmp_
     assert report["coefficient_ring"] == "F2[x_level,x_radius]"
     assert report["grid_axes"][0] == [0, 1, 2]
     assert report["radius_grade_values"] == {0: 0.0, 1: 0.3, 2: 0.6, 3: 0.7}
+    provenance = report["grid_fiber_provenance"]
+    assert provenance["all_growth_rows_have_gudhi_simplex_tree"] is True
+    assert provenance["simplex_tree_backend_counts"] == {"gudhi.SimplexTree": 3}
+    first_fiber = next(row for row in report["fiber_rank_profile"] if row["grade"] == [0, 0])
+    assert first_fiber["fiber_basis"]["basis_by_dim"] == {"0": [["root"]]}
+    assert first_fiber["fiber_basis"]["total_basis_count"] == 1
+    assert first_fiber["fiber_basis"]["truncated"] is False
+    assert first_fiber["fiber_provenance"]["all_source_levels_have_gudhi_simplex_tree"] is True
+    assert first_fiber["fiber_provenance"]["construction"].startswith("K_(level,radius)")
     structure_maps = report["structure_maps"]
     assert structure_maps
     assert {row["direction"] for row in structure_maps} >= {"x_level", "x_radius"}
@@ -328,6 +388,31 @@ def test_inference_scaling_emits_step_and_trajectory_algebra():
     assert report["candidates"][0]["topological_algebra"]["multiparameter_persistence"]["num_parameters"] == 3
     assert report["trajectory_topological_algebra"]["multiparameter_persistence"]["fiber_rank_profile"]
     assert report["trajectory_growth"]
+    assert report["trajectory_level_radius_bifiltration"]["available"] is True
+    assert report["trajectory_level_radius_bifiltration"]["fiber_rank_profile"][0]["fiber_basis"]["total_basis_count"] >= 1
+
+    light_report = run_inference_scaling(
+        model,
+        record,
+        tok,
+        seq_len=32,
+        device=torch.device("cpu"),
+        depth=1,
+        width=2,
+        branch_factor=2,
+        trace_limit=4,
+        audit_level="none",
+        ph_backend="gudhi",
+        audit_max_simplices=128,
+    )
+    assert light_report["trajectory_topological_algebra"] is None
+    assert light_report["trajectory_growth"]
+    assert light_report["trajectory_level_radius_bifiltration"]["available"] is True
+    assert light_report["trajectory_level_radius_bifiltration"]["coefficient_ring"] == "F2[x_level,x_radius]"
+    assert light_report["trajectory_level_radius_bifiltration"]["grid_fiber_provenance"]["object_key"] in {
+        "filtered_simplicial_object",
+        "probability_filtered_simplicial_object",
+    }
 
 
 def test_sequential_text_is_always_graphified():

@@ -15,10 +15,10 @@ import numpy as np
 
 REQUIRED_HTML = {
     "embedding_map": ("got_embedding_map_3d.html", ("Graph-of-thought embedding-space trajectory map", "actual graph_state PCA")),
-    "trajectory_nll": ("got_trajectory_pca_3d.html", ("Graph-of-thought branching trajectory", "observed NLL anchors")),
-    "trajectory_nll_density": ("got_nll_density_cloud_pca_3d.html", ("3D PCA NLL density cloud", "Gaussian cloud", "actual model GoT state anchors", "not a model state")),
+    "trajectory_nll": ("got_trajectory_pca_3d.html", ("Graph-of-thought branching trajectory", "raw NLL")),
+    "trajectory_nll_density": ("got_nll_density_cloud_pca_3d.html", ("3D PCA NLL density cloud", "Gaussian", "actual model GoT state anchors", "not a model state")),
     "full_complex": ("got_full_trajectory_complex.html", ("Full graph-of-thought trajectory filtered simplicial complex", "play filtration", "filtration backend=")),
-    "full_simplex_tree": ("got_full_trajectory_simplex_tree_3d.html", ("Full graph-of-thought trajectory GUDHI SimplexTree face-coface poset", "face-coface poset view", "not a literal trie layout")),
+    "full_simplex_tree": ("got_full_trajectory_simplex_tree_3d.html", ("Full graph-of-thought trajectory GUDHI SimplexTree face-coface poset", "face-coface poset view", "GUDHI SimplexTree")),
     "probability_complex": ("got_full_trajectory_complex_jensen_shannon.html", ("probability filtered simplicial complex", "Jensen-Shannon")),
     "probability_simplex_tree": ("got_full_trajectory_simplex_tree_3d_jensen_shannon.html", ("probability", "SimplexTree", "Jensen-Shannon")),
     "step_complex_index": ("reasoning_step_complex_maps/index.html", ("Reasoning step filtered simplicial complex maps",)),
@@ -393,35 +393,38 @@ def validate_row(row_dir: Path, *, min_candidates: int = 8, min_depth: int = 2, 
     _assert(surface.get("touches_points") is True, errors, "NLL surface is not point-anchored")
     _assert(_finite_float(surface.get("max_point_residual"), 999.0) <= nll_residual_tol, errors, "NLL surface residual exceeds tolerance")
     _assert(
-        str(surface.get("surface_contact_contract", "")).startswith("every rendered GoT state marker"),
+        str(surface.get("surface_contact_contract", "")).startswith("disabled for the main trajectory page"),
         errors,
-        "NLL surface is missing the trajectory point surface-contact contract",
+        "NLL surface contract does not document PC3 marker geometry with NLL as metadata",
     )
     _assert(
         _finite_float(surface.get("trajectory_point_surface_residual_max"), 999.0) <= nll_residual_tol,
         errors,
-        "NLL trajectory points are not guaranteed to touch the displayed surface",
+        "NLL surface projection residual exceeds tolerance",
     )
     projected_by_record = surface.get("surface_projected_z_by_record_id", {})
     _assert(isinstance(projected_by_record, dict) and len(projected_by_record) >= len(nodes), errors, "NLL surface is missing per-record projected z values")
     for node in nodes:
         rid = str(node.get("record_id", ""))
         plot = node.get("plot", {}) if isinstance(node.get("plot"), dict) else {}
-        _assert(plot.get("touches_nll_surface") is True, errors, f"trajectory node {rid} is not marked as touching the NLL surface")
+        pca = node.get("embedding_pca", node.get("pca", {})) if isinstance(node, dict) else {}
+        _assert(plot.get("touches_nll_surface") is False, errors, f"trajectory node {rid} should keep PC3 geometry rather than touch the NLL surface")
         _assert(math.isfinite(_finite_float(plot.get("z"))), errors, f"trajectory node {rid} is missing finite plotted z")
-        _assert(math.isfinite(_finite_float(plot.get("z_surface"))), errors, f"trajectory node {rid} is missing finite z_surface")
-        _assert(
-            abs(_finite_float(plot.get("z")) - _finite_float(plot.get("z_surface"))) <= nll_residual_tol,
-            errors,
-            f"trajectory node {rid} plotted z does not equal z_surface",
-        )
+        _assert(plot.get("z_surface") is None, errors, f"trajectory node {rid} should leave z_surface null under the PC3 geometry contract")
         _assert(math.isfinite(_finite_float(plot.get("raw_centered_scaled_nll"))), errors, f"trajectory node {rid} is missing raw centered/scaled NLL z")
+        _assert(math.isfinite(_finite_float(plot.get("z_centered_scaled_nll"))), errors, f"trajectory node {rid} is missing centered/scaled NLL metadata z")
+        if isinstance(pca, dict) and "pc3" in pca:
+            _assert(
+                abs(_finite_float(plot.get("z")) - _finite_float(pca.get("pc3"))) <= nll_residual_tol,
+                errors,
+                f"trajectory node {rid} plotted z does not match PCA pc3 geometry",
+            )
         if isinstance(projected_by_record, dict) and rid in projected_by_record:
             _assert(
-                abs(_finite_float(plot.get("z")) - _finite_float(projected_by_record.get(rid))) <= nll_residual_tol
-                and abs(_finite_float(plot.get("z_surface")) - _finite_float(projected_by_record.get(rid))) <= nll_residual_tol,
+                abs(_finite_float(plot.get("z_centered_scaled_nll")) - _finite_float(projected_by_record.get(rid))) <= nll_residual_tol
+                and abs(_finite_float(plot.get("raw_centered_scaled_nll")) - _finite_float(projected_by_record.get(rid))) <= nll_residual_tol,
                 errors,
-                f"trajectory node {rid} plotted z/z_surface does not match the displayed NLL surface projection",
+                f"trajectory node {rid} centered/scaled NLL metadata does not match the displayed NLL surface projection",
             )
     z_axis = surface.get("z_axis")
     _assert(
@@ -462,6 +465,10 @@ def validate_row(row_dir: Path, *, min_candidates: int = 8, min_depth: int = 2, 
     _assert(_finite_float(support_metrics.get("unique_support_count"), 0.0) >= 1, errors, "tropical support payload has no observed supports")
     _assert("interpretation" in support_metrics, errors, "tropical support payload is missing collapse interpretation")
     _assert(isinstance(support_metrics.get("margin_summary"), dict), errors, "tropical support payload is missing margin summary")
+    _assert(str(support_metrics.get("render_contract", "")).startswith("assignment_matrix is binary model argmax support"), errors, "tropical support payload is missing binary assignment render contract")
+    _assert(support_metrics.get("support_probability_source") == "model_tropical_support_probabilities", errors, "tropical support payload is missing model support-probability provenance")
+    _assert(isinstance(support_metrics.get("active_support_probability_summary"), dict), errors, "tropical support payload is missing active-support probability summary")
+    _assert(isinstance(support_metrics.get("support_probability_entropy_bits_summary"), dict), errors, "tropical support payload is missing support-probability entropy summary")
     flow_edges = support_payload.get("support_flow_edges", []) if isinstance(support_payload, dict) else []
     token_count = int(_finite_float(support_metrics.get("token_count"), 0.0))
     _assert(isinstance(flow_edges, list) and len(flow_edges) >= token_count, errors, "tropical support payload is missing query-to-support flow edges")
@@ -473,6 +480,9 @@ def validate_row(row_dir: Path, *, min_candidates: int = 8, min_depth: int = 2, 
         support_idx = int(_finite_float(edge.get("support_index"), -1.0))
         _assert(0 <= query_idx < token_count, errors, "tropical support flow has out-of-range query_index")
         _assert(0 <= support_idx < token_count, errors, "tropical support flow has out-of-range support_index")
+        _assert(_finite_float(edge.get("active_support_probability"), -1.0) >= 0.0, errors, "tropical support flow is missing active support probability")
+        _assert(edge.get("support_probability_source") == "model_tropical_support_probabilities", errors, "tropical support flow is missing probability provenance")
+        _assert(isinstance(edge.get("top_model_support_probabilities"), list), errors, "tropical support flow is missing top model support probabilities")
 
     graphcg_available = graphcg_payload.get("available") is True
     _assert(graphcg_available, errors, "GraphCG payload is unavailable")
@@ -602,7 +612,7 @@ def validate_row(row_dir: Path, *, min_candidates: int = 8, min_depth: int = 2, 
         _assert(tree_file.exists(), errors, f"missing reasoning step simplex tree page {tree_file.name}")
         if tree_file.exists():
             tree_html = _read_text(tree_file)
-            _assert("simplex-tree inclusion" in tree_html or "GUDHI simplex tree" in tree_html, errors, f"{tree_file.name} missing simplex-tree inclusion view")
+            _assert("simplex-tree inclusion" in tree_html or "GUDHI simplex tree" in tree_html or "GUDHI SimplexTree" in tree_html or "face-coface poset" in tree_html, errors, f"{tree_file.name} missing simplex-tree inclusion view")
 
     browser_index = _validate_browser_index(row_dir, errors)
     codex_browser_index = _validate_codex_browser_index(row_dir, errors)

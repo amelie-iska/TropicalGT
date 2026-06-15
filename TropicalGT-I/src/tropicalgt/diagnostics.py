@@ -86,9 +86,11 @@ def graph_token_trace(
     margin: torch.Tensor,
     tokenizer: TokenGTTokenizer,
     max_tokens: int | None = None,
+    support_probabilities: torch.Tensor | None = None,
 ) -> list[dict[str, Any]]:
     support_cpu = support.detach().cpu()
     margin_cpu = margin.detach().cpu()
+    probability_cpu = support_probabilities.detach().cpu() if torch.is_tensor(support_probabilities) else None
     mask_cpu = graph_batch.attention_mask.detach().cpu()
     endpoint_cpu = graph_batch.endpoint_ids.detach().cpu()
     traces = []
@@ -100,12 +102,43 @@ def graph_token_trace(
             desc = dict(descriptors[token_idx]) if token_idx < len(descriptors) else {"index": token_idx, "kind": "unknown"}
             active = int(support_cpu[batch_idx, token_idx].item())
             active_desc = descriptors[active] if 0 <= active < len(descriptors) else {"index": active, "kind": "padded"}
+            probability_row = None
+            active_probability = None
+            probability_entropy = None
+            top_probability_supports: list[dict[str, Any]] = []
+            if probability_cpu is not None and probability_cpu.ndim >= 3:
+                probability_row = probability_cpu[batch_idx, token_idx, :token_count].float()
+                probability_row = torch.nan_to_num(probability_row, nan=0.0, posinf=0.0, neginf=0.0).clamp_min(0.0)
+                total_probability = probability_row.sum().clamp_min(1e-12)
+                probability_row = probability_row / total_probability
+                if 0 <= active < int(probability_row.numel()):
+                    active_probability = float(probability_row[active].item())
+                nonzero = probability_row[probability_row > 0]
+                probability_entropy = float((-(nonzero * nonzero.log2()).sum()).item()) if nonzero.numel() else 0.0
+                k = min(4, int(probability_row.numel()))
+                if k:
+                    values, indices = torch.topk(probability_row, k=k)
+                    for value, index in zip(values.tolist(), indices.tolist()):
+                        support_idx = int(index)
+                        support_desc = descriptors[support_idx] if 0 <= support_idx < len(descriptors) else {"index": support_idx, "kind": "padded"}
+                        top_probability_supports.append(
+                            {
+                                "index": support_idx,
+                                "label": support_desc.get("label"),
+                                "kind": support_desc.get("kind"),
+                                "probability": float(value),
+                            }
+                        )
             desc.update(
                 {
                     "endpoint_ids": [int(v) for v in endpoint_cpu[batch_idx, token_idx].tolist()],
                     "active_support_index": active,
                     "active_support_kind": active_desc.get("kind"),
                     "active_support_label": active_desc.get("label"),
+                    "active_support_probability": active_probability,
+                    "support_probability_entropy_bits": probability_entropy,
+                    "top_model_support_probabilities": top_probability_supports,
+                    "support_probability_source": "model_tropical_support_probabilities" if probability_row is not None else None,
                     "margin": float(margin_cpu[batch_idx, token_idx].item()),
                 }
             )
@@ -209,13 +242,21 @@ def record_diagnostics(
     nll = token_counts = None
     if target_ids is not None:
         nll, token_counts = per_record_nll(out["logits"].detach().cpu(), target_ids.detach().cpu())
-    traces = graph_token_trace(records, graph_batch, support, margin, tokenizer, max_tokens=max_trace_tokens)
     graph_token_embeddings = out.get("graph_token_embeddings")
     graph_token_support_probabilities = out.get("graph_token_support_probabilities")
     if torch.is_tensor(graph_token_embeddings):
         graph_token_embeddings = graph_token_embeddings.detach().cpu()
     if torch.is_tensor(graph_token_support_probabilities):
         graph_token_support_probabilities = graph_token_support_probabilities.detach().cpu()
+    traces = graph_token_trace(
+        records,
+        graph_batch,
+        support,
+        margin,
+        tokenizer,
+        max_tokens=max_trace_tokens,
+        support_probabilities=graph_token_support_probabilities,
+    )
     rows = []
     limit = len(records) if max_records is None else min(max_records, len(records))
     for idx in range(limit):

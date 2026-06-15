@@ -41,7 +41,7 @@ PRIMARY_ARTIFACTS: tuple[ArtifactSpec, ...] = (
     ArtifactSpec("Analogical many-map overview", "analogical_memory_retrieval.html", "many"),
     ArtifactSpec("Analogical top-k index", "analogical_memory_topk_index.html", "top-k"),
     ArtifactSpec("Persistence barcode", "trajectory_persistence/persistence_barcode.html", "bars"),
-    ArtifactSpec("2-parameter F2[x_level,x_radius] bifiltration", "trajectory_persistence/two_parameter_bifiltration.html", "2-param"),
+    ArtifactSpec("Miller-Sturmfels 2-parameter module staircase", "trajectory_persistence/two_parameter_bifiltration.html", "stair"),
     ArtifactSpec("Persistence Betti/chain presentation", "trajectory_persistence/persistence_module_betti.html", "betti"),
     ArtifactSpec("Persistence vector representations", "trajectory_persistence/persistence_representations.html", "vector"),
     ArtifactSpec("Persistence landscape lambda_k(t)", "trajectory_persistence/persistence_landscapes.html", "land"),

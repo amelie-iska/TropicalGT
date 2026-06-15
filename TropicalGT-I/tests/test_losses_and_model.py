@@ -86,6 +86,10 @@ def test_model_forward_fixture():
     assert torch.isfinite(out["loss"])
     for key in [
         "certificate_loss",
+        "tropical_margin_signed_loss",
+        "tropical_margin_reward",
+        "tropical_margin_shortfall_loss",
+        "tropical_margin_shortfall_rate",
         "certificate_agreement",
         "certificate_edge_agreement",
         "certificate_coverage",
@@ -114,6 +118,10 @@ def test_model_forward_fixture():
         assert torch.isfinite(out[key])
     assert out["graphcg_num_directions"].item() == 32.0
     assert out["graphcg_embedding_dim"].item() == 32.0
+    assert torch.allclose(out["tropical_margin_loss"], out["tropical_margin_signed_loss"])
+    assert torch.allclose(out["tropical_margin_reward"], -out["tropical_margin_signed_loss"])
+    assert out["tropical_margin_shortfall_loss"].item() >= 0.0
+    assert 0.0 <= out["tropical_margin_shortfall_rate"].item() <= 1.0
 
 
 def test_model_allows_explicit_full_embedding_graphcg_bank():

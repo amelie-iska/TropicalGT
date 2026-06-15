@@ -129,7 +129,15 @@ class TropicalGTModel(nn.Module):
             actions = torch.zeros(input_ids.shape[0], 2, dtype=torch.long, device=input_ids.device)
             gfn_loss, gfn_metrics = self.gfn.trajectory_balance_loss(states, actions, reward, return_metrics=True)
             graphcg_loss, graphcg_metrics = self.graphcg(graph_state)
-            margin_loss = -_safe_mean(valid_margin)
+            margin_reward = _safe_mean(valid_margin)
+            margin_loss = -margin_reward
+            margin_threshold = torch.as_tensor(float(self.config.wall_margin_threshold), device=valid_margin.device)
+            margin_shortfall = _safe_mean(F.relu(margin_threshold - valid_margin.float()))
+            margin_shortfall_rate = (
+                valid_margin.lt(float(self.config.wall_margin_threshold)).float().mean()
+                if valid_margin.numel()
+                else valid_margin.sum() * 0.0
+            )
             entropy_loss = soft_entropy
             gfn_weighted = self.config.gflownet_weight * gfn_loss
             graphcg_weighted = self.config.graphcg_weight * graphcg_loss
@@ -148,6 +156,10 @@ class TropicalGTModel(nn.Module):
                     "graphcg_loss": graphcg_loss.detach(),
                     "certificate_loss": certificate_loss.detach(),
                     "tropical_margin_loss": margin_loss.detach(),
+                    "tropical_margin_signed_loss": margin_loss.detach(),
+                    "tropical_margin_reward": margin_reward.detach(),
+                    "tropical_margin_shortfall_loss": margin_shortfall.detach(),
+                    "tropical_margin_shortfall_rate": margin_shortfall_rate.detach(),
                     "tropical_entropy_loss": entropy_loss.detach(),
                     "loss_gflownet_weighted": gfn_weighted.detach(),
                     "loss_graphcg_weighted": graphcg_weighted.detach(),
