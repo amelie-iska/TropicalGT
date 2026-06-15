@@ -1,7 +1,7 @@
 import torch
 
 from tropicalgt.algebra import compute_level_radius_bifiltration_report, compute_topological_algebra_report, summarize_algebra_reports
-from tropicalgt.cas_free_resolution import canonicalize_module, try_compute_real_free_resolution
+from tropicalgt.cas_free_resolution import build_singular_script, canonicalize_module, try_compute_real_free_resolution
 from tropicalgt.data import FixtureGraphDataset
 from tropicalgt.model import TropicalGTConfig, TropicalGTModel
 from tropicalgt.records import GraphRecord
@@ -75,6 +75,12 @@ def test_real_cas_free_resolution_smoke_when_backend_available():
             {"source_simplex": ["a", "b"], "target_face": ["b"], "monomial_exponent": [0, 1]},
         ],
     }
+    schema = canonicalize_module(module)
+    singular_script = build_singular_script(schema)
+    assert "matrix PM[2][1]" in singular_script
+    assert "minor(PM,1)" in singular_script
+    assert "Fitt0=" in singular_script
+    assert "minors_1=" in singular_script
     real = try_compute_real_free_resolution(module, timeout_s=10)
     _assert_real_resolution_guard(real, "F2[x_level,x_radius]")
     if real["available"]:
@@ -85,6 +91,12 @@ def test_real_cas_free_resolution_smoke_when_backend_available():
         assert ungraded["homological_column_ranks"][:2] == [2, 1]
         assert [row["display"] for row in ungraded["free_modules"][:2]] == ["F_0 = S^2", "F_1 = S"]
         assert ungraded["not_multigraded"] is True
+        if real["backend"] == "Singular":
+            assert real["cas_artifacts"]["singular_determinantal"]["available"] is True
+            assert real["cas_artifacts"]["fitting_ideals"]
+            assert real["cas_artifacts"]["minors"]
+            assert "Fitt" in " ".join(real["cas_artifacts"]["fitting_ideals"].keys())
+            assert "minors_1" in real["cas_artifacts"]["minors"]
         if real["backend"] == "Macaulay2":
             summary = real["free_resolution_summary"]
             assert real["multigraded_free_resolution_certified"] is True

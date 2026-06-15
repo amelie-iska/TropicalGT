@@ -388,6 +388,7 @@ def build_singular_script(module_schema: dict[str, Any]) -> str:
     cols = int(pmat.get("cols", 0))
     unit_entries = sum(1 for entry in entries if all(int(power) == 0 for power in entry.get("exponent", [])))
     module_literal = _singular_module_literal(entries, rows=rows, cols=cols, variables=variables)
+    matrix_literal = _singular_matrix_literal(entries, rows=rows, cols=cols, variables=variables) if rows > 0 and cols > 0 else ""
     if rows <= 0:
         body = [
             "print(\"TROPICALGT_RESOLUTION_BEGIN\");",
@@ -409,11 +410,36 @@ def build_singular_script(module_schema: dict[str, Any]) -> str:
             "print(\"betti_table_begin\");",
             f"print(\"{rows}\");",
             "print(\"betti_table_end\");",
+            "print(\"fitting_ideals_begin\");",
+            "print(\"Fitt0=0\");",
+            "print(\"fitting_ideals_end\");",
+            "print(\"minors_begin\");",
+            "print(\"minors_0=1\");",
+            "print(\"minors_end\");",
             "print(\"TROPICALGT_RESOLUTION_END\");",
         ]
     else:
+        max_minors = min(rows, cols)
+        minor_lines = ["print(\"minors_begin\");", "print(\"minors_0=1\");"]
+        for k in range(1, max_minors + 1):
+            minor_lines.extend([f"ideal Iminor{k}=minor(PM,{k});", f"print(\"minors_{k}=\"+string(Iminor{k}));"])
+        minor_lines.append("print(\"minors_end\");")
+        fitting_lines = ["print(\"fitting_ideals_begin\");"]
+        for j in range(0, rows + 1):
+            determinantal_order = rows - j
+            if determinantal_order <= 0:
+                fitting_lines.append(f"print(\"Fitt{j}=1\");")
+            elif determinantal_order > max_minors:
+                fitting_lines.append(f"print(\"Fitt{j}=0\");")
+            else:
+                fitting_lines.extend([
+                    f"ideal IFitt{j}=minor(PM,{determinantal_order});",
+                    f"print(\"Fitt{j}=\"+string(IFitt{j}));",
+                ])
+        fitting_lines.append("print(\"fitting_ideals_end\");")
         body = [
             f"module M = {module_literal};",
+            f"matrix PM[{rows}][{cols}] = {matrix_literal};",
             "resolution R = mres(M,0);",
             "print(\"TROPICALGT_RESOLUTION_BEGIN\");",
             "print(\"backend=Singular\");",
@@ -428,6 +454,8 @@ def build_singular_script(module_schema: dict[str, Any]) -> str:
             "print(\"singular_resolution_text_begin\");",
             "print(R);",
             "print(\"singular_resolution_text_end\");",
+            *fitting_lines,
+            *minor_lines,
             "print(\"TROPICALGT_RESOLUTION_END\");",
         ]
     return "\n".join(
@@ -435,6 +463,8 @@ def build_singular_script(module_schema: dict[str, Any]) -> str:
             "// TropicalGT certified resolution probe generated from model audit data.",
             "// Singular mres resolves the image submodule M; TropicalGT prepends",
             "// the displayed free module F0 -> coker(M) to obtain the cokernel resolution.",
+            "// The same presentation matrix PM is used for exact determinantal minors",
+            "// and Fitting ideals Fitt_j(coker PM)=I_{rows-j}(PM).",
             f"ring r = 2,({','.join(variables)}),dp;",
             *body,
         ]
@@ -601,6 +631,7 @@ def _certified_result(module_schema: dict[str, Any], backend_result: dict[str, A
     sage_differentials = _parse_json_list(parsed.get("differentials_json"))
     sage_resolution_text = str(parsed.get("sage_resolution_text", "") or "")
     macaulay2_multigraded = _parse_macaulay2_multigraded_artifacts(parsed, backend=backend) if backend == "Macaulay2" else {}
+    singular_determinantal = _parse_singular_determinantal_artifacts(parsed, backend=backend) if backend == "Singular" else {}
     structured_betti = _parse_ungraded_betti_table(betti_text, backend=backend)
     if sage_total_graded.get("available"):
         sage_total_graded.setdefault("safe_for_multigraded_claims", False)
@@ -640,6 +671,12 @@ def _certified_result(module_schema: dict[str, Any], backend_result: dict[str, A
         )
     else:
         render_warning = "CAS exactness was certified, but no renderable free-resolution summary was parsed."
+    fitting_ideals = macaulay2_multigraded.get("fitting_ideals", {}) if isinstance(macaulay2_multigraded, dict) else {}
+    minors = macaulay2_multigraded.get("minors", {}) if isinstance(macaulay2_multigraded, dict) else {}
+    if not fitting_ideals and isinstance(singular_determinantal, dict):
+        fitting_ideals = singular_determinantal.get("fitting_ideals", {})
+    if not minors and isinstance(singular_determinantal, dict):
+        minors = singular_determinantal.get("minors", {})
     return {
         "schema_version": SCHEMA_VERSION,
         "available": True,
@@ -661,8 +698,9 @@ def _certified_result(module_schema: dict[str, Any], backend_result: dict[str, A
             "betti_table_total_graded": sage_total_graded,
             "differentials": macaulay2_multigraded.get("differentials", sage_differentials) if isinstance(macaulay2_multigraded, dict) else sage_differentials,
             "macaulay2_multigraded": macaulay2_multigraded,
-            "fitting_ideals": macaulay2_multigraded.get("fitting_ideals", {}) if isinstance(macaulay2_multigraded, dict) else {},
-            "minors": macaulay2_multigraded.get("minors", {}) if isinstance(macaulay2_multigraded, dict) else {},
+            "singular_determinantal": singular_determinantal,
+            "fitting_ideals": fitting_ideals,
+            "minors": minors,
             "singular_resolution_text": singular_resolution_text,
             "sage_resolution_text": sage_resolution_text,
             "raw_tagged_output": backend_result.get("tagged_output", ""),
@@ -738,6 +776,22 @@ def _parse_macaulay2_multigraded_artifacts(parsed: dict[str, Any], *, backend: s
         "not_multigraded": False,
         "safe_for_multigraded_claims": available,
         "interpretation": "Macaulay2 certified a real multigraded free resolution of the displayed cokernel presentation over the requested F2 polynomial ring.",
+    }
+
+
+def _parse_singular_determinantal_artifacts(parsed: dict[str, Any], *, backend: str) -> dict[str, Any]:
+    fitting_ideals = _parse_key_value_lines(str(parsed.get("fitting_ideals", "") or ""))
+    minors = _parse_key_value_lines(str(parsed.get("minors", "") or ""))
+    return {
+        "available": bool(fitting_ideals or minors),
+        "backend": backend,
+        "grading": "determinantal_ideals_from_presentation_matrix_over_F2_polynomial_ring",
+        "fitting_ideals": fitting_ideals,
+        "minors": minors,
+        "interpretation": (
+            "Singular computed exact determinantal ideals from the displayed presentation matrix. "
+            "For an r-row presentation matrix PM, Fitt_j(coker PM) is I_{r-j}(PM)."
+        ),
     }
 
 
@@ -1159,6 +1213,23 @@ def _singular_module_literal(entries: list[dict[str, Any]], *, rows: int, cols: 
             row_literals.append("+".join(cell_terms) if cell_terms else "0")
         column_literals.append("[" + ",".join(row_literals) + "]")
     return ",".join(column_literals) if column_literals else "0"
+
+
+def _singular_matrix_literal(entries: list[dict[str, Any]], *, rows: int, cols: int, variables: list[str]) -> str:
+    terms: dict[tuple[int, int], Counter[str]] = {}
+    for entry in entries:
+        row = int(entry["row"])
+        col = int(entry["col"])
+        if row < 0 or row >= rows or col < 0 or col >= cols:
+            continue
+        monomial = _singular_monomial(entry["exponent"], variables)
+        terms.setdefault((row, col), Counter())[monomial] += 1
+    cells: list[str] = []
+    for row in range(rows):
+        for col in range(cols):
+            cell_terms = [term for term, count in sorted(terms.get((row, col), {}).items()) if count % 2]
+            cells.append("+".join(cell_terms) if cell_terms else "0")
+    return ",".join(cells) if cells else "0"
 
 
 def _backend_version(executable: str | None) -> str | None:
