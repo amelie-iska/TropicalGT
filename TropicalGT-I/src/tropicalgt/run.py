@@ -16,7 +16,6 @@ from tqdm.auto import tqdm
 from .algebra import compute_topological_algebra_report, summarize_algebra_reports
 from .data import (
     ChunkShuffleSampler,
-    ParquetGraphDataset,
     dataset_budget_report,
     dataset_manifest,
     encode_record_bytes,
@@ -423,26 +422,18 @@ def train(config_path: str | Path, resume_from: str | Path | None = None, max_st
     loader_shuffle = bool(cfg.get("shuffle", True))
     sampler_report: dict[str, Any] = {"kind": "torch_shuffle" if loader_shuffle else "sequential"}
     if bool(cfg.get("chunk_shuffle", False)):
-        if isinstance(train_ds, ParquetGraphDataset):
-            sampler = ChunkShuffleSampler(
-                train_ds,
-                seed=int(cfg.get("chunk_shuffle_seed", 0)),
-                shuffle_rows=bool(cfg.get("shuffle_rows_within_chunk", False)),
-            )
-            loader_shuffle = False
-            sampler_report = {
-                "kind": "chunk_shuffle",
-                "seed": sampler.seed,
-                "shuffle_rows_within_chunk": sampler.shuffle_rows,
-                "chunks": len(train_ds.chunks),
-                "rows": len(train_ds),
-            }
-        else:
-            sampler_report = {
-                "kind": "requested_chunk_shuffle_unavailable",
-                "reason": type(train_ds).__name__,
-                "fallback_shuffle": loader_shuffle,
-            }
+        sampler = ChunkShuffleSampler(
+            train_ds,
+            seed=int(cfg.get("chunk_shuffle_seed", 0)),
+            shuffle_rows=bool(cfg.get("shuffle_rows_within_chunk", False)),
+            chunk_size=int(cfg.get("chunk_shuffle_size", cfg.get("sampler_chunk_size", 1024))),
+        )
+        loader_shuffle = False
+        sampler_report = {
+            "kind": "chunk_shuffle",
+            **sampler.state_dict(),
+            "shuffle_rows_within_chunk": sampler.shuffle_rows,
+        }
     loader = DataLoader(
         train_ds,
         batch_size=batch_size,

@@ -330,27 +330,44 @@ class HybridGraphDataset(Dataset):
 
 
 class ChunkShuffleSampler(Sampler[int]):
-    """Shuffle parquet row groups while preserving cache-friendly reads."""
+    """Shuffle dataset chunks while preserving deterministic in-chunk order.
+
+    Datasets that expose ``chunk_bounds()`` keep their natural storage or shard
+    chunks.  Other datasets use fixed index windows and report that fallback so
+    training logs never confuse virtual chunking with Parquet row-group locality.
+    """
 
     def __init__(
         self,
-        dataset: ParquetGraphDataset,
+        dataset: Dataset,
         seed: int = 0,
         shuffle_rows: bool = False,
         epoch: int = 0,
+        chunk_size: int | None = None,
     ) -> None:
         self.dataset = dataset
         self.seed = int(seed)
         self.shuffle_rows = bool(shuffle_rows)
         self.epoch = int(epoch)
+        self.chunk_size = max(int(chunk_size or 1024), 1)
+        self.bounds, self.chunking_kind = self._resolve_bounds()
+
+    def _resolve_bounds(self) -> tuple[list[tuple[int, int]], str]:
+        bounds_fn = getattr(self.dataset, "chunk_bounds", None)
+        if callable(bounds_fn):
+            bounds = [(int(start), int(end)) for start, end in bounds_fn() if int(end) > int(start)]
+            if bounds and bounds[0][0] == 0 and bounds[-1][1] == len(self.dataset):
+                return bounds, "dataset_chunk_bounds"
+        rows = len(self.dataset)
+        bounds = [(start, min(start + self.chunk_size, rows)) for start in range(0, rows, self.chunk_size)]
+        return bounds, "fixed_index_windows"
 
     def __iter__(self) -> Iterator[int]:
         rng = random.Random(self.seed + self.epoch)
-        order = list(range(len(self.dataset.chunks)))
+        order = list(range(len(self.bounds)))
         rng.shuffle(order)
-        bounds = self.dataset.chunk_bounds()
         for chunk_index in order:
-            start, end = bounds[chunk_index]
+            start, end = self.bounds[chunk_index]
             if self.shuffle_rows:
                 indices = list(range(start, end))
                 rng.shuffle(indices)
@@ -369,8 +386,11 @@ class ChunkShuffleSampler(Sampler[int]):
             "seed": self.seed,
             "shuffle_rows": self.shuffle_rows,
             "epoch": self.epoch,
-            "chunks": len(self.dataset.chunks),
+            "chunks": len(self.bounds),
             "rows": len(self.dataset),
+            "chunking": self.chunking_kind,
+            "chunk_size": self.chunk_size,
+            "dataset_type": type(self.dataset).__name__,
         }
 
 

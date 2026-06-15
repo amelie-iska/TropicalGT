@@ -137,6 +137,42 @@ def test_make_dataset_from_config_mixes_graph_parquet_and_parameter_golf(tmp_pat
     assert sources
 
 
+def test_chunk_shuffle_sampler_supports_hybrid_dataset_with_fixed_windows(tmp_path: Path):
+    parquet_root = tmp_path / "shards" / "train"
+    parquet_root.mkdir(parents=True)
+    pd.DataFrame([
+        {"record_id": f"r{i}", "text": f"abc {i}", "graph_json": '{"nodes":[{"id":"a"}],"edges":[]}'}
+        for i in range(5)
+    ]).to_parquet(parquet_root / "train-000.parquet")
+    pg_root = tmp_path / "pg"
+    pg_root.mkdir()
+    _write_parameter_golf_bin(pg_root / "fineweb_train_000000.bin", b"abcdefghijklmnop")
+    cfg = {
+        "seed": 7,
+        "seq_len": 4,
+        "data_root": str(tmp_path / "shards"),
+        "hybrid_data": {
+            "enabled": True,
+            "train_length": 7,
+            "sources": [
+                {"kind": "parquet", "name": "graph_parquet", "root": str(tmp_path / "shards"), "weight": 1.0, "required": True},
+                {"kind": "parameter_golf_bin", "name": "openai_parameter_golf", "root": str(pg_root), "weight": 1.0, "required": True, "window_tokens": 4},
+            ],
+        },
+    }
+    ds = make_dataset_from_config(cfg, "train")
+    sampler = ChunkShuffleSampler(ds, seed=11, shuffle_rows=False, chunk_size=3)
+    indices = list(sampler)
+
+    assert sorted(indices) == list(range(len(ds)))
+    state = sampler.state_dict()
+    assert state["dataset_type"] == "HybridGraphDataset"
+    assert state["chunking"] == "fixed_index_windows"
+    assert state["chunk_size"] == 3
+    assert state["chunks"] == 3
+    assert list(ChunkShuffleSampler(ds, seed=11, shuffle_rows=False, chunk_size=3)) == indices
+
+
 def test_hybrid_config_resolves_fallback_roots_and_reports_budget(tmp_path: Path):
     parquet_root = tmp_path / "shards" / "train"
     parquet_root.mkdir(parents=True)
