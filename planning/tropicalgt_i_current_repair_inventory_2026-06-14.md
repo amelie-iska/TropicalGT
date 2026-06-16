@@ -373,11 +373,11 @@ Status: implemented and focused-tested.
 
 Changes made:
 - Added a reusable training step-gate monitor that watches the b59 log and writes a bounded JSON status/stop record.
-- The monitor terminates the configured PID only after the parsed training step reaches `5000`, and otherwise exits early only for fatal markers or a process that dies before the gate.
+- The monitor terminates the configured PID only after the parsed training step reaches `5000`; when required artifact paths are configured, it waits for those step-5000 validation/audit files before terminating, up to a bounded grace window. It otherwise exits early only for fatal markers or a process that dies before the gate.
 - This keeps the user-requested 5K evidence policy operational without changing the already-running training config or fabricating a review boundary.
 
 Verification:
 - `python -m py_compile TropicalGT-I/scripts/monitor_training_step_gate.py` passed.
-- `PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_training_step_gate_monitor.py -q` -> `4 passed`.
+- `PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_training_step_gate_monitor.py -q` -> `7 passed`.
 
-Next sequential item: launch the 5K watcher for b59, notify Galileo of the new source commit, then keep hardening non-interfering audit paths while b59 trains.
+Next sequential item: relaunch the 5K watcher for b59 with required step-5000 artifact paths, notify Galileo of the new source commit, then keep hardening non-interfering audit paths while b59 trains.

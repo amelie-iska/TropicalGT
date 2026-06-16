@@ -5,7 +5,7 @@ This checklist merges the browser/photo review, the current active training stat
 ## 1. Active Training and BPB Priority
 
 - Keep `tropicalgt_i_pg_bpb_step0_full24b_b59_20260616T001122Z_fresh_bpb112_5k_gate` alive until at least step 5K unless it crashes, OOMs, or produces nonfinite/invalid losses. Current detached launch PID at last check: `73189`; W&B run id: `itxgxj40`; run URL: `https://wandb.ai/amelie-iska-math/TropicalGT-I/runs/itxgxj40`; config: `TropicalGT-I/outputs/launch_configs/tropicalgt_i_pg_bpb_step0_full24b_b59_20260616T001122Z_fresh_bpb112_5k_gate.json`; output dir: `TropicalGT-I/outputs/tropicalgt_i_pg_bpb_step0_full24b_b59_20260616T001122Z_fresh_bpb112_5k_gate`; tested 5K monitor record target: `TropicalGT-I/outputs/training_stop_records/b59_step5000_gate.json`.
-- Do not restart before 5K merely because early metrics are noisy. A tested `monitor_training_step_gate.py` watcher should stop b59 at or after the parsed step `5000`, write the stop record, and then Galileo should run the analysis/eval/visualization sidecars, inspect BPB, graph-BPB, NLL, advanced topology/geometric/algebraic diagnostics, and restart from step 0 only with evidence-backed hyperparameter/config adjustments.
+- Do not restart before 5K merely because early metrics are noisy. A tested `monitor_training_step_gate.py` watcher should stop b59 at or after the parsed step `5000` after required step-5000 validation/audit artifacts are present or a bounded grace window expires, write the stop record, and then Galileo should run the analysis/eval/visualization sidecars, inspect BPB, graph-BPB, NLL, advanced topology/geometric/algebraic diagnostics, and restart from step 0 only with evidence-backed hyperparameter/config adjustments.
 - Preserve BPB and graph-BPB as primary optimization and promotion gates.
 - Use advanced auxiliaries only when they are zero-default or BPB-gated and ablated: tropical support, GFlowNet GoT rewards, GraphCG, persistence/landscape diagnostics, chart-bundle transports, tropical toric active-cell agreement, and memory retrieval.
 - Track step, VRAM, wall time, train/eval NLL, BPB, graph-BPB, certificate loss, tropical wall-hit rate, support entropy, GraphCG rank, meet-in-the-middle agreement, ROAR/causal decoding path mix, and artifact-generation status.
@@ -204,7 +204,7 @@ _Last updated: 2026-06-16T03:05:00+00:00_
 ## 2026-06-16 5K Step Gate Monitor Addendum
 
 - Added and focused-tested `TropicalGT-I/scripts/monitor_training_step_gate.py` plus `TropicalGT-I/tests/test_training_step_gate_monitor.py`.
-- The b59 operational plan is now: keep training alive, run the detached watcher against PID `73189` and the b59 log, terminate only when the parsed step reaches `5000`, then hand the resulting stop record and artifact inventory to Galileo for post-5K review and evidence-backed restart.
+- The b59 operational plan is now: keep training alive, run the detached watcher against PID `73189` and the b59 log, terminate only when the parsed step reaches `5000` and required step-5000 artifacts are present or the bounded grace window expires, then hand the resulting stop record and artifact inventory to Galileo for post-5K review and evidence-backed restart.
 - The monitor writes generated records under `TropicalGT-I/outputs/training_stop_records/`; those records are operational artifacts and should remain untracked.
 
 ## Real Implementations Only Policy

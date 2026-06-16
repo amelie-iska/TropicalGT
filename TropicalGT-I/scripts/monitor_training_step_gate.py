@@ -49,6 +49,10 @@ def write_record(path: Path, payload: dict[str, Any]) -> None:
     path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
 
 
+def _missing_required_paths(required_paths: list[Path]) -> list[str]:
+    return [str(path) for path in required_paths if not path.exists()]
+
+
 def monitor_step_gate(
     *,
     pid: int,
@@ -59,10 +63,15 @@ def monitor_step_gate(
     terminate_signal: signal.Signals = signal.SIGTERM,
     once: bool = False,
     dry_run: bool = False,
+    required_paths: list[Path] | None = None,
+    grace_polls_after_target: int = 30,
 ) -> dict[str, Any]:
+    required_paths = list(required_paths or [])
+    target_seen_polls = 0
     while True:
         status = latest_training_status(log_path)
         alive = process_alive(pid)
+        missing_required_paths = _missing_required_paths(required_paths)
         payload = {
             "pid": int(pid),
             "pid_alive": bool(alive),
@@ -73,10 +82,26 @@ def monitor_step_gate(
             "status": status,
             "action": "monitoring",
             "dry_run": bool(dry_run),
+            "required_paths": [str(path) for path in required_paths],
+            "missing_required_paths": missing_required_paths,
+            "target_seen_polls": target_seen_polls,
+            "grace_polls_after_target": int(grace_polls_after_target),
         }
         latest_step = status.get("latest_step")
         if isinstance(latest_step, int) and latest_step >= int(target_step):
-            payload["action"] = "target_reached_terminate" if alive else "target_reached_process_already_stopped"
+            if alive and missing_required_paths and target_seen_polls < int(grace_polls_after_target):
+                target_seen_polls += 1
+                payload["target_seen_polls"] = target_seen_polls
+                payload["action"] = "target_reached_waiting_for_required_paths"
+                write_record(record_path, payload)
+                if once:
+                    return payload
+                time.sleep(max(float(poll_seconds), 1.0))
+                continue
+            if missing_required_paths:
+                payload["action"] = "target_reached_grace_expired_terminate" if alive else "target_reached_process_already_stopped"
+            else:
+                payload["action"] = "target_reached_terminate" if alive else "target_reached_process_already_stopped"
             if alive and not dry_run:
                 os.kill(pid, terminate_signal)
             write_record(record_path, payload)
@@ -105,6 +130,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--signal", default="TERM", choices=("TERM", "INT"))
     parser.add_argument("--once", action="store_true")
     parser.add_argument("--dry-run", action="store_true")
+    parser.add_argument("--require-path", action="append", type=Path, default=[], help="Artifact path that should exist before terminating after the target step. May be repeated.")
+    parser.add_argument("--grace-polls-after-target", type=int, default=30, help="Polls to wait for required paths after the target step before terminating anyway.")
     args = parser.parse_args(argv)
     sig = signal.SIGTERM if args.signal == "TERM" else signal.SIGINT
     result = monitor_step_gate(
@@ -116,6 +143,8 @@ def main(argv: list[str] | None = None) -> int:
         terminate_signal=sig,
         once=args.once,
         dry_run=args.dry_run,
+        required_paths=args.require_path,
+        grace_polls_after_target=args.grace_polls_after_target,
     )
     print(json.dumps(result, indent=2))
     return 0
