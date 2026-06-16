@@ -276,3 +276,11 @@
 - Gaussian support samples are explicitly verified as visualization-only density samples, not model states; exact anchors remain the model-evaluated states.
 - The payload contract now checks kernel-weighted local NLL metadata, density-volume provenance, anchor count, and edge-wise NLL deltas.
 - Verification: visualization plus artifact validator `33 passed`.
+
+## Iteration 34: b59 Fresh BPB Run and 5K Review Handoff
+
+- Stopped the previously active b58 training run at user request after preserving its evidence. The latest checked validation was step `8750` with BPB `1.331143465780304`, graph-BPB `19.24880762755732`, NLL `0.9226783402264118`, invalid graph rate `0.0`, and target BPB `<1.12` still open.
+- Added training-time certified-CAS retrieval telemetry in source commit `70c2e93`: periodic memory retrieval now logs certified-CAS availability, match rate, score contribution, similarity, and configured retrieval weight alongside the probability-map retrieval diagnostics.
+- Launched fresh step-0 run `tropicalgt_i_pg_bpb_step0_full24b_b59_20260616T001122Z_fresh_bpb112_5k_gate` from source commit `70c2e93`, config `TropicalGT-I/outputs/launch_configs/tropicalgt_i_pg_bpb_step0_full24b_b59_20260616T001122Z_fresh_bpb112_5k_gate.json`, PID `73189`, W&B id `itxgxj40`, and output dir `TropicalGT-I/outputs/tropicalgt_i_pg_bpb_step0_full24b_b59_20260616T001122Z_fresh_bpb112_5k_gate`.
+- b59 readiness audit passed with `status=ready`, no failed gates, CUDA dry-run BPB `7.969144958556688`, graph-BPB `33.58283549642874`, and graph JSON fallback rate `0.0`. Early live log review reached step `112`, latest train loss/NLL around `1.748/1.724`, with no traceback or OOM and about `17.8` GiB allocated on the RTX 4090.
+- Spawned Galileo (`019ecdc9-a3b8-7761-b0e5-36e6adad8e15`) as the 5K evidence worker. The worker must let b59 reach at least step `5000`, run the analysis/eval/visualization sidecars, review BPB, graph-BPB, advanced metrics, and topological/geometric/algebraic visual artifacts, then restart from step 0 only with evidence-backed hyperparameter/config changes aimed at better BPB.

@@ -1,15 +1,15 @@
 # TropicalGT-I Current Required Updates and Repair List
 
-This checklist merges the browser/photo review, the current active training state, the CAS/free-resolution policy, and the new tropical vector-bundle / tropical toric-embedding paper workstream. All work is remote-only on `iska@iska` in `/home/iska/Documents/amelie/bio/TropicalGT`, branch `tropicalgt-i-implementation`.
+This checklist merges the browser/photo review, the current active training state, the CAS/free-resolution policy, and the new tropical vector-bundle / tropical toric-embedding paper workstream. All work is remote-only on `iska@iska` in `/home/iska/Documents/amelie/bio/TropicalGT`, branch `tropicalgt-i-real-cas-no-proxy-20260614` or a newer non-main successor branch.
 
 ## 1. Active Training and BPB Priority
 
-- Keep `tropicalgt_i_pg_bpb_step0_full24b_b54_v10_bpb_5k_gate` alive until at least step 5K unless it crashes or produces nonfinite/invalid losses. Current detached relaunch PID at last check: `2195134`; W&B run id: `e3qevo1u`; run URL: `https://wandb.ai/amelie-iska-math/TropicalGT-I/runs/e3qevo1u`. The run is configured for >10B token slots, batch 54, BPB target `<1.12` by 5K, meet-in-the-middle decoding, causal forward/reverse decoding for DAGs, ROAR for cyclic/noncausal graphs, and low-weight BPB-gated advanced objectives.
-- Do not restart before 5K merely because early metrics are noisy. Review at 5K, then restart/resume only if BPB and diagnostics justify a new hyperparameter setting.
+- Keep `tropicalgt_i_pg_bpb_step0_full24b_b59_20260616T001122Z_fresh_bpb112_5k_gate` alive until at least step 5K unless it crashes, OOMs, or produces nonfinite/invalid losses. Current detached launch PID at last check: `73189`; W&B run id: `itxgxj40`; run URL: `https://wandb.ai/amelie-iska-math/TropicalGT-I/runs/itxgxj40`; config: `TropicalGT-I/outputs/launch_configs/tropicalgt_i_pg_bpb_step0_full24b_b59_20260616T001122Z_fresh_bpb112_5k_gate.json`; output dir: `TropicalGT-I/outputs/tropicalgt_i_pg_bpb_step0_full24b_b59_20260616T001122Z_fresh_bpb112_5k_gate`.
+- Do not restart before 5K merely because early metrics are noisy. At 5K, the Galileo Codex worker should run the analysis/eval/visualization sidecars, inspect BPB, graph-BPB, NLL, advanced topology/geometric/algebraic diagnostics, and then restart from step 0 only with evidence-backed hyperparameter/config adjustments.
 - Preserve BPB and graph-BPB as primary optimization and promotion gates.
 - Use advanced auxiliaries only when they are zero-default or BPB-gated and ablated: tropical support, GFlowNet GoT rewards, GraphCG, persistence/landscape diagnostics, chart-bundle transports, tropical toric active-cell agreement, and memory retrieval.
 - Track step, VRAM, wall time, train/eval NLL, BPB, graph-BPB, certificate loss, tropical wall-hit rate, support entropy, GraphCG rank, meet-in-the-middle agreement, ROAR/causal decoding path mix, and artifact-generation status.
-- After this v10 restart, the main implementation focus is CAS integration and utilization only until real free-resolution and derived-map reporting are wired, tested, and rendered.
+- After the b59 restart, the main implementation focus is the remaining visual/math repair queue while the 5K worker handles monitor/analyze/restart coordination.
 
 ## 2. Browser QA and Visual Evidence
 
@@ -119,7 +119,7 @@ This checklist merges the browser/photo review, the current active training stat
 - Update README with current training, eval, visualization, inference, W&B, and artifact commands.
 - Remove AI-generated filler language from `references/main.pdf` source and the TropicalGT-I paper source.
 - Recompile papers when a LaTeX engine is available.
-- Push only to non-main branch `tropicalgt-i-implementation`, excluding secrets, datasets, W&B runs, caches, checkpoints, and bulky artifacts.
+- Push only to non-main branch `tropicalgt-i-real-cas-no-proxy-20260614` or its newer non-main successor, excluding secrets, datasets, W&B runs, caches, checkpoints, and bulky artifacts.
 
 ## 2026-06-14 v9 5K-Gated Restart Addendum
 
@@ -182,7 +182,17 @@ Remaining CAS items:
 - CAS package survey: look for Sage, Macaulay2, Singular, RIVET/multipers, polymake, Normaliz, and related packages that compute real multigraded modules, minimal resolutions, Betti tables, Fitting ideals, minors, Buchsbaum-Eisenbud diagnostics, tropical fans, toric varieties, and stable intersections.
 - Maclagan-style toric embedding research direction: investigate whether the transformer graph-state and tropical-attention coordinate system can be embedded into a toric variety via model-derived monomial coordinates, Newton polytopes, fan data, and one dimensional cone data. Any resulting implementation must distinguish theorem-level certified constructions from diagnostic embeddings or visual probes.
 
-_Last updated: 2026-06-14T15:27:54+00:00_
+_Last updated: 2026-06-16T00:18:00+00:00_
+
+
+## 2026-06-16 Fresh b59 5K Review Gate and Worker Handoff
+
+- The active b58 run was stopped cleanly at user request. Its latest checked validation was step `8750` with BPB `1.331143465780304`, graph-BPB `19.24880762755732`, NLL `0.9226783402264118`, and invalid graph rate `0.0`; target BPB `<1.12` remained open.
+- Source commit `70c2e93` added certified-CAS retrieval metrics to periodic training logs before the new launch: certified-CAS availability, match rate, score contribution, similarity, and configured retrieval weight are now exposed for W&B/audit review.
+- Fresh b59 step-0 launch uses source commit `70c2e93`, batch size `54`, sequence length `1024`, learning rate `2.1e-4`, checkpoint/validation/visualization cadence `250`, `periodic_viz_got_scaling=true`, `memory_retrieval_probability_map_weight=0.20`, `memory_retrieval_certified_cas_weight=0.12`, and `minimum_steps_before_restart=5000`.
+- Readiness audit for b59 returned `status=ready` with no failed gates. The train dry-run was finite on CUDA with BPB `7.969144958556688`, graph-BPB `33.58283549642874`, and `0.0` graph JSON fallback rate.
+- Fresh run launch details: PID `73189`, W&B id `itxgxj40`, run URL `https://wandb.ai/amelie-iska-math/TropicalGT-I/runs/itxgxj40`, log `TropicalGT-I/outputs/tropicalgt_i_pg_bpb_step0_full24b_b59_20260616T001122Z_fresh_bpb112_5k_gate/logs/train_nohup_20260616T001158Z.log`. Early log review reached step `112` with latest train loss/NLL around `1.748/1.724`, no traceback, no OOM, and GPU allocation around `17.8` GiB on the RTX 4090.
+- Galileo (`019ecdc9-a3b8-7761-b0e5-36e6adad8e15`) owns the post-5K sidecar: monitor b59 to at least step `5000`, run project analyses/evaluations/visualizations, review metrics and topological/geometric/algebraic artifacts, write `planning/tropicalgt_i_b59_5k_worker_review_2026-06-16.md`, then stop b59 and launch an evidence-backed step-0 restart with adjusted hyperparameters/configs for lower BPB.
 
 ## Real Implementations Only Policy
 

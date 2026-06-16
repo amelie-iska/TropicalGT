@@ -134,7 +134,7 @@
 - [ ] Serve it in the browser on port 8990 or update the current server root.
 - [ ] Inspect `sample_001` and `sample_002` pages in the Codex browser and capture screenshot evidence for NLL landscape, full radius complex, probability complex, simplex tree, two-parameter module lattice, analogical top-k, GraphCG, and tropical support.
 - [ ] Run focused tests with `PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_visualization_artifacts.py TropicalGT-I/tests/test_algebraic_metrics.py TropicalGT-I/tests/test_metrics_and_memory.py -q`.
-- [ ] Commit and push to `origin/tropicalgt-i-implementation`.
+- [ ] Commit and push to `origin/tropicalgt-i-real-cas-no-proxy-20260614` or its newer non-main successor.
 
 ## Acceptance Criteria
 
@@ -165,6 +165,14 @@
 - Restart policy: step 0, batch size 52, sequence length 1024, max steps 454455, configured token slots 24,198,819,840, meeting the full-dataset token-slot guard with a 23,552-token ceiling margin.
 - Active-training intent: BPB and graph-BPB are primary; advanced methods remain active or observable but have lower auxiliary weights. Periodic interactive artifacts are enabled every 250 steps with one model-output sample bundle. Meet-in-the-middle decoding is enabled with tiny symmetric-KL/reverse-NLL auxiliary weights and `max_records=2` to avoid destabilizing BPB.
 - VRAM target: the initial run occupies about 21.6GB/24.6GB, satisfying the requested >18GB utilization without targeting OOM.
+
+
+### Fresh b59 BPB Gate and Restart Worker (2026-06-16)
+
+- b58 was stopped at user request after reaching validation step `8750` with BPB `1.331143465780304`, graph-BPB `19.24880762755732`, NLL `0.9226783402264118`, and invalid graph rate `0.0`; BPB `<1.12` remained open.
+- b59 was launched fresh from step 0 after source commit `70c2e93` added certified-CAS retrieval telemetry to the training loop. Run name: `tropicalgt_i_pg_bpb_step0_full24b_b59_20260616T001122Z_fresh_bpb112_5k_gate`; PID `73189`; W&B id `itxgxj40`; output dir `TropicalGT-I/outputs/tropicalgt_i_pg_bpb_step0_full24b_b59_20260616T001122Z_fresh_bpb112_5k_gate`.
+- b59 readiness passed with CUDA dry-run BPB `7.969144958556688`, graph-BPB `33.58283549642874`, and no failed gates. Early live log review reached step `112` with latest train loss/NLL around `1.748/1.724`, no traceback, and no OOM.
+- Galileo (`019ecdc9-a3b8-7761-b0e5-36e6adad8e15`) now owns the 5K evidence loop: monitor to at least step `5000`, run analyses and visualization sidecars, review advanced metrics plus topological/geometric/algebraic artifacts, then create and launch an evidence-backed step-0 restart with adjusted BPB-first hyperparameters/configs.
 
 
 
