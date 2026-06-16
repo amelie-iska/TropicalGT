@@ -221,13 +221,15 @@ def test_browser_metric_visualization_prioritizes_graphcg_rank_audit(tmp_path: P
     ]
     assert [key for key in GRAPHCG_BROWSER_PRIORITY_METRICS if key in priority_keys] == priority_keys
 
-    row = {"step": 1, "loss": 1.0, "nll": 0.9}
+    row = {"step": 1, "loss": 1.0, "nll": 0.9, "graph_json_fallback_rate": 0.0}
     row.update({key: float(idx + 1) for idx, key in enumerate(priority_keys)})
     paths = write_metric_visualizations([row], tmp_path)
 
     html = Path(paths["metrics"]).read_text(encoding="utf-8")
     positions = [html.index('"name":"' + key + '"') for key in priority_keys]
     assert positions == sorted(positions)
+    assert '"name":"graph_json_fallback_rate"' not in html
+    assert '"name":"legacy graph-json substitution guardrail (must remain zero)"' in html
 
 
 class _FakeWandbRun:

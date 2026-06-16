@@ -848,3 +848,20 @@ CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/t
 CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_algebraic_persistence.py TropicalGT-I/tests/test_simplicial_visualization.py -q -p no:cacheprovider --basetemp=/tmp/tropicalgt-pytest-be-rank-full
 # 75 passed
 ```
+
+## 2026-06-16 Graph JSON Legacy Guardrail Trace Label Repair
+
+Sequential browser/readout no-proxy item completed after the Buchsbaum-Eisenbud implied-rank diagnostic rename:
+
+- Kept the stored `graph_json_fallback_rate` metric key as a legacy must-remain-zero readiness guardrail for backwards-compatible reports and gates.
+- Changed the Plotly training-metrics trace name to `legacy graph-json substitution guardrail (must remain zero)` so active browser readouts no longer present the retired fallback wording as an active graph-data path.
+- Added regression coverage to ensure the raw legacy metric key is not used as the visible Plotly trace name while GraphCG priority metric ordering remains unchanged.
+
+Validation:
+
+```text
+CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m py_compile TropicalGT-I/src/tropicalgt/visualization.py TropicalGT-I/tests/test_training_metrics.py
+# passed
+CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_training_metrics.py::test_browser_metric_visualization_prioritizes_graphcg_rank_audit -q -p no:cacheprovider --basetemp=/tmp/tropicalgt-pytest-graph-json-label
+# 1 passed
+```

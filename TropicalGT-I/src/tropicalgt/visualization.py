@@ -10221,6 +10221,9 @@ def write_metric_visualizations(history: list[dict[str, float]], output_dir: str
         "graph_json_parse_unavailable_rate",
         "gpu_mem_mb",
     ]
+    metric_display_names = {
+        "graph_json_fallback_rate": "legacy graph-json substitution guardrail (must remain zero)",
+    }
     fig = go.Figure()
     for name in metrics:
         values = [row.get(name) for row in history]
@@ -10230,7 +10233,7 @@ def write_metric_visualizations(history: list[dict[str, float]], output_dir: str
                     x=steps,
                     y=[float(v) if v is not None else None for v in values],
                     mode="lines+markers",
-                    name=name,
+                    name=metric_display_names.get(name, name),
                 )
             )
     fig.update_layout(
