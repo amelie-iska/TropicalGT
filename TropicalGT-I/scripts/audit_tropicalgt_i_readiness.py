@@ -161,6 +161,8 @@ def build_readiness_report(
     tokenizer = TokenGTTokenizer(**cfg.get("tokengt", {}))
     graph_batch = tokenizer.batch_encode(records[: max(1, min(len(records), int(cfg.get("batch_size", 2))))])
     fallback_count = sum(1 for record in records if (record.metadata or {}).get("graph_json_fallback", False))
+    derived_text_graph_count = sum(1 for record in records if (record.metadata or {}).get("graph_json_derived_from_text", False))
+    parse_unavailable_count = sum(1 for record in records if (record.metadata or {}).get("graph_json_parse_unavailable", False))
     sequentialized_count = sum(1 for record in records if (record.metadata or {}).get("graph_json_sequentialized", False))
     causal_dag_count = sum(1 for record in records if (record.metadata or {}).get("decoding_order_kind") == "causal_dag")
     random_ar_count = sum(1 for record in records if (record.metadata or {}).get("decoding_order_kind") == "random_autoregressive")
@@ -179,6 +181,10 @@ def build_readiness_report(
             "sample_records": len(records),
             "graph_json_fallback_records": fallback_count,
             "graph_json_fallback_rate": fallback_count / max(len(records), 1),
+            "graph_json_derived_text_graph_records": derived_text_graph_count,
+            "graph_json_derived_text_graph_rate": derived_text_graph_count / max(len(records), 1),
+            "graph_json_parse_unavailable_records": parse_unavailable_count,
+            "graph_json_parse_unavailable_rate": parse_unavailable_count / max(len(records), 1),
             "graph_json_sequentialized_records": sequentialized_count,
             "graph_json_sequentialized_rate": sequentialized_count / max(len(records), 1),
             "causal_dag_ar_records": causal_dag_count,
@@ -196,7 +202,8 @@ def build_readiness_report(
     )
     add_gate(gates, "sample_records_loaded", len(records) > 0, f"{len(records)} {split} records")
     add_gate(gates, "graph_tokens_nonempty", bool(graph_batch.graph_token_counts.min().item() > 0), str(graph_batch.graph_token_counts.tolist()))
-    add_gate(gates, "graph_json_fallback_rate_low", report["data"]["graph_json_fallback_rate"] <= float(cfg.get("max_fallback_rate", 0.05)), f"{report['data']['graph_json_fallback_rate']:.4f}")
+    add_gate(gates, "graph_json_fallback_zero", fallback_count == 0, f"{fallback_count} legacy fallback records")
+    add_gate(gates, "graph_json_parse_unavailable_zero", parse_unavailable_count == 0, f"{parse_unavailable_count} malformed explicit graph_json records")
     add_gate(gates, "sequential_text_graphs_present", sequence_node_count > 0, f"{sequence_node_count} sequence nodes")
 
     paper_tex = ROOT / "assets" / "tropicalgt_neurips_research_paper.tex"
@@ -530,7 +537,9 @@ def render_markdown(report: dict[str, Any]) -> str:
             "## Summary",
             "",
             f"- Data split/sample: `{report.get('data', {}).get('split', '')}` / `{report.get('data', {}).get('sample_records', 0)}` records",
-            f"- Fallback rate: `{report.get('data', {}).get('graph_json_fallback_rate', 0.0)}`",
+            f"- Legacy fallback rate: `{report.get('data', {}).get('graph_json_fallback_rate', 0.0)}`",
+            f"- Text-derived graph rate: `{report.get('data', {}).get('graph_json_derived_text_graph_rate', 0.0)}`",
+            f"- Parse-unavailable graph JSON rate: `{report.get('data', {}).get('graph_json_parse_unavailable_rate', 0.0)}`",
             f"- Eval NLL: `{report.get('eval', {}).get('nll', 'n/a')}`",
             f"- Eval BPB: `{report.get('eval', {}).get('bpb', 'n/a')}`",
             f"- Eval graph-BPB: `{report.get('eval', {}).get('graph_bpb', 'n/a')}`",

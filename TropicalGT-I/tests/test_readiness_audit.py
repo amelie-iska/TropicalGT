@@ -1,5 +1,7 @@
 from pathlib import Path
 
+import pandas as pd
+
 from audit_tropicalgt_i_readiness import build_readiness_report, render_markdown
 from tropicalgt.run import load_keys
 
@@ -51,10 +53,62 @@ def test_readiness_audit_fixture_without_checkpoint(tmp_path):
     assert report["status"] == "ready"
     assert report["data"]["sample_records"] == 4
     assert report["data"]["graph_json_fallback_rate"] == 0
+    assert report["data"]["graph_json_parse_unavailable_rate"] == 0
+    assert report["data"]["graph_json_derived_text_graph_rate"] == 0.0
     assert not report["failed_gates"]
     markdown = render_markdown(report)
     assert "TropicalGT-I Readiness Audit" in markdown
     assert "| config_loads | pass |" in markdown
+
+
+def test_readiness_audit_blocks_malformed_explicit_graph_json(tmp_path):
+    data_root = tmp_path / "shards" / "train"
+    data_root.mkdir(parents=True)
+    pd.DataFrame(
+        [
+            {"record_id": "bad", "text": "abc", "graph_json": "{not-json}"},
+        ]
+    ).to_parquet(data_root / "train-000.parquet")
+    config = tmp_path / "config.json"
+    config.write_text(
+        """
+{
+  "run_name": "audit_malformed_graph_json",
+  "data_root": "%s",
+  "require_data": true,
+  "train_limit": 1,
+  "val_limit": 1,
+  "batch_size": 1,
+  "seq_len": 32,
+  "seed": 1729,
+  "device": "cpu",
+  "output_dir": "%s",
+  "model": {"dim": 32, "hidden_dim": 32, "graph_feature_dim": 48},
+  "tokengt": {"feature_dim": 48}
+}
+"""
+        % (tmp_path / "shards", tmp_path / "outputs"),
+        encoding="utf-8",
+    )
+    report = build_readiness_report(
+        config_path=config,
+        checkpoint_path=None,
+        split="train",
+        sample_limit=1,
+        details_limit=1,
+        trace_limit=4,
+        scale_depth=0,
+        scale_width=2,
+        scale_branch_factor=2,
+        require_cuda=False,
+        require_checkpoint=False,
+        render_visualizations=False,
+    )
+    assert report["status"] == "blocked"
+    assert report["data"]["graph_json_fallback_records"] == 0
+    assert report["data"]["graph_json_parse_unavailable_records"] == 1
+    assert report["data"]["graph_json_parse_unavailable_rate"] == 1.0
+    assert "graph_json_parse_unavailable_zero" in report["failed_gates"]
 
 
 def test_readiness_audit_train_dry_run_fixture(tmp_path):

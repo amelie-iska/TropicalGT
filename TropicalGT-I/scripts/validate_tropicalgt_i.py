@@ -35,6 +35,8 @@ def main() -> None:
     tok = TokenGTTokenizer(**cfg.get("tokengt", {}))
     batch = tok.batch_encode(records)
     graph_json_fallback_count = sum(1 for record in all_records if (record.metadata or {}).get("graph_json_fallback", False))
+    graph_json_derived_text_graph_count = sum(1 for record in all_records if (record.metadata or {}).get("graph_json_derived_from_text", False))
+    graph_json_parse_unavailable_count = sum(1 for record in all_records if (record.metadata or {}).get("graph_json_parse_unavailable", False))
     causal_dag_count = sum(1 for record in all_records if (record.metadata or {}).get("decoding_order_kind") == "causal_dag")
     random_ar_count = sum(1 for record in all_records if (record.metadata or {}).get("decoding_order_kind") == "random_autoregressive")
     parameter_golf_count = sum(
@@ -61,6 +63,11 @@ def main() -> None:
         "manifest": dataset_manifest(ds, root),
         "graph_json_fallback_records": graph_json_fallback_count,
         "invalid_graph_rate": graph_json_fallback_count / max(len(ds), 1),
+        "graph_json_derived_text_graph_records": graph_json_derived_text_graph_count,
+        "graph_json_derived_text_graph_rate": graph_json_derived_text_graph_count / max(len(ds), 1),
+        "graph_json_parse_unavailable_records": graph_json_parse_unavailable_count,
+        "graph_json_parse_unavailable_rate": graph_json_parse_unavailable_count / max(len(ds), 1),
+        "invalid_explicit_graph_json_rate": graph_json_parse_unavailable_count / max(len(ds), 1),
         "causal_dag_ar_records": causal_dag_count,
         "causal_dag_ar_rate": causal_dag_count / max(len(ds), 1),
         "random_graph_ar_records": random_ar_count,
@@ -77,7 +84,11 @@ def main() -> None:
         "samples": [
             {
                 "record_id": record.record_id,
+                "graph_json_source": (record.metadata or {}).get("graph_json_source", "unknown"),
                 "graph_json_fallback": bool((record.metadata or {}).get("graph_json_fallback", False)),
+                "graph_json_derived_from_text": bool((record.metadata or {}).get("graph_json_derived_from_text", False)),
+                "graph_json_parse_unavailable": bool((record.metadata or {}).get("graph_json_parse_unavailable", False)),
+                "graph_json_parse_unavailable_reason": (record.metadata or {}).get("graph_json_parse_unavailable_reason"),
                 "decoding_order_kind": (record.metadata or {}).get("decoding_order_kind", ""),
                 "graph_tokens": describe_graph_tokens(record, tok)[: args.sample_limit],
             }

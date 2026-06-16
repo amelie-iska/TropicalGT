@@ -738,3 +738,10 @@ The live item-by-item repair inventory is maintained in `planning/tropicalgt_i_c
 - [x] Removed silent fixture substitution when a configured `data_root` is missing or unreadable; configured roots now fail closed even when `require_data=false`.
 - [x] Preserved fixture datasets only as explicit no-root unit-test/dev mode, so training configs cannot accidentally substitute fixture data for missing real data.
 - [x] Focused verification passed: py-compile for `data.py` and `test_data_loader.py`, `git diff --check`, and `pytest TropicalGT-I/tests/test_data_loader.py TropicalGT-I/tests/test_readiness_audit.py TropicalGT-I/tests/test_training_metrics.py TropicalGT-I/tests/test_training_resume.py -q` (`34 passed`, two SentencePiece import deprecation warnings from the corrupt-model failure test).
+
+### Current Objective Update - Graph JSON Parse-Unavailable Readiness Gate Pass
+
+- [x] Extended `audit_tropicalgt_i_readiness.py` and `validate_tropicalgt_i.py` to report `graph_json_derived_text_graph_*` and `graph_json_parse_unavailable_*` counts/rates separately from the legacy fallback counter.
+- [x] Hardened readiness gates for BPB runs: `graph_json_fallback_zero` and `graph_json_parse_unavailable_zero` must both pass, so malformed explicit `graph_json` cannot slip through preflight as a derived graph substitute.
+- [x] Added readiness regression coverage proving malformed explicit `graph_json` blocks readiness with `graph_json_parse_unavailable_zero` while preserving exact fixture-mode behavior.
+- [x] Focused verification passed: py-compile for touched scripts/tests, `git diff --check`, `pytest TropicalGT-I/tests/test_readiness_audit.py TropicalGT-I/tests/test_training_metrics.py TropicalGT-I/tests/test_data_loader.py -q` (`32 passed`, two SentencePiece import deprecation warnings), and a direct `validate_tropicalgt_i.py` malformed-parquet smoke showing parse-unavailable rate `1.0`.
