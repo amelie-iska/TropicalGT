@@ -1087,3 +1087,24 @@ CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/t
 CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_simplicial_visualization.py TropicalGT-I/tests/test_interactive_artifact_validator.py -q -p no:cacheprovider --basetemp=/tmp/tropicalgt-pytest-step-slider-manifest-full
 # 63 passed
 ```
+
+## 2026-06-16 Reasoning-Step Complex Source Contract
+
+Sequential simplicial/simplex-tree repair completed after the radius-slider manifest evidence contract:
+
+- Added `tropicalgt.reasoning_step_complex_source_contract.v1` to every reasoning-step manifest row so each step page records its source as that candidate's own `filtered_simplicial_object`.
+- The source contract records candidate record id, level, path, canonical fingerprint, displayed vertex/edge/face counts, probability-vector and embedding vertex counts, vertex-label samples, SimplexTree backend/availability, and explicit non-proxy flags for global trajectory, embedding-map, and static probability-complex substitutes.
+- The manifest contract now aggregates source-contract counts and requires candidate-owned filtered-object source, no trajectory/static proxy, summary-count agreement, nonempty vertex evidence, and safe renderability for every step.
+- The interactive artifact validator now cross-checks each source contract against the manifest row and rejects missing source contracts, proxy claims, count mismatches, and unsafe per-step source claims.
+- Added a shared simplex-dimension normalizer for manifest fingerprints and source contracts so canonical vertex rows are classified from either explicit dimension metadata or simplex cardinality.
+
+Validation:
+
+```text
+CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_simplicial_visualization.py::test_got_trajectory_visualization_renders_simplicial_panel_and_nll_surface TropicalGT-I/tests/test_interactive_artifact_validator.py::test_validate_audit_root_accepts_three_interactive_rows TropicalGT-I/tests/test_interactive_artifact_validator.py::test_validate_audit_root_rejects_missing_reasoning_step_source_contract TropicalGT-I/tests/test_interactive_artifact_validator.py::test_validate_audit_root_rejects_reasoning_step_source_proxy_claim -q -p no:cacheprovider --basetemp=/tmp/tropicalgt-pytest-step-source-contract
+# 4 passed
+CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m py_compile TropicalGT-I/src/tropicalgt/visualization.py TropicalGT-I/scripts/validate_interactive_audit_artifacts.py TropicalGT-I/tests/test_simplicial_visualization.py TropicalGT-I/tests/test_interactive_artifact_validator.py
+# passed
+CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_simplicial_visualization.py TropicalGT-I/tests/test_interactive_artifact_validator.py -q -p no:cacheprovider --basetemp=/tmp/tropicalgt-pytest-step-source-contract-full
+# 65 passed
+```

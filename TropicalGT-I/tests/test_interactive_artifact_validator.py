@@ -87,6 +87,39 @@ def _slider_contract(html_file: str, *, vertices: int = 4, solid_edges: int = 3,
     }
 
 
+def _step_source_contract(candidate: dict[str, object], step_file: str, simplex_tree_file: str, fingerprint: str) -> dict[str, object]:
+    return {
+        "schema_version": "tropicalgt.reasoning_step_complex_source_contract.v1",
+        "source": "candidate.filtered_simplicial_object",
+        "actual_data_only": True,
+        "no_proxy_or_fallback": True,
+        "candidate_record_id": candidate["record_id"],
+        "candidate_level": candidate["level"],
+        "candidate_path": candidate["path"],
+        "step_complex_fingerprint": fingerprint,
+        "uses_global_trajectory_complex_as_proxy": False,
+        "uses_embedding_trajectory_map_as_proxy": False,
+        "uses_static_probability_complex_as_proxy": False,
+        "displayed_vertex_count": 1,
+        "displayed_edge_count": 0,
+        "displayed_face_count": 0,
+        "summary_vertex_count": 1,
+        "summary_edge_count": 0,
+        "summary_two_simplex_count": 0,
+        "displayed_probability_vector_vertex_count": 0,
+        "displayed_embedding_vertex_count": 1,
+        "displayed_vertex_labels_sample": [candidate["record_id"]],
+        "simplex_tree_backend": "gudhi.SimplexTree",
+        "simplex_tree_available": True,
+        "simplex_tree_num_vertices": 1,
+        "simplex_tree_num_simplices": 1,
+        "graph_token_direction_overlay_source": "candidate_trace_overlay_when_present",
+        "decoding_causal_overlay_source": "candidate_decoding_or_causal_metadata_when_present",
+        "source_counts_match_canonical_summary": True,
+        "safe_to_render_as_step_complex": True,
+    }
+
+
 def _slider_summary(html_file: str, contract_file: str, *, vertices: int = 4, solid_edges: int = 3, filled_faces: int = 1) -> dict[str, object]:
     contract = _slider_contract(html_file, vertices=vertices, solid_edges=solid_edges, filled_faces=filled_faces)
     return {
@@ -363,24 +396,31 @@ def _row(root: Path, name: str) -> Path:
             "simplex_tree": {"backend": "gudhi.SimplexTree", "available": True, "dimension": 0, "num_simplices": 1, "num_vertices": 1},
             "no_record_id_or_path_in_hash": True,
         }
+        fingerprint = f"fixture-step-fingerprint-{idx}"
+        step_file = f"reasoning_step_{idx:03d}.html"
+        simplex_tree_file = f"reasoning_step_{idx:03d}_simplex_tree.html"
         steps.append(
             {
                 "index": idx,
                 "record_id": candidates[idx]["record_id"],
-                "file": f"reasoning_step_{idx:03d}.html",
-                "simplex_tree_file": f"reasoning_step_{idx:03d}_simplex_tree.html",
+                "level": candidates[idx]["level"],
+                "path": candidates[idx]["path"],
+                "file": step_file,
+                "simplex_tree_file": simplex_tree_file,
                 "slider_contract_file": f"reasoning_step_{idx:03d}_slider_contract.json",
                 "radius_slider_contract": _slider_summary(
-                    f"reasoning_step_{idx:03d}.html",
+                    step_file,
                     f"reasoning_step_{idx:03d}_slider_contract.json",
                     vertices=1,
                     solid_edges=0,
                     filled_faces=0,
                 ),
-                "summary": {"num_vertices": 1},
-                "step_complex_fingerprint": f"fixture-step-fingerprint-{idx}",
+                "step_complex_source_contract": _step_source_contract(candidates[idx], step_file, simplex_tree_file, fingerprint),
+                "summary": {"num_vertices": 1, "num_edges": 0, "num_two_simplices": 0},
+                "step_complex_fingerprint": fingerprint,
                 "step_complex_fingerprint_basis": basis,
                 "simplex_tree": {"backend": "gudhi.SimplexTree"},
+                "simplex_tree_backend": "gudhi.SimplexTree",
                 "simplex_tree_available": True,
             }
         )
@@ -394,6 +434,17 @@ def _row(root: Path, name: str) -> Path:
         "step_count": 4,
         "rendered_complex_pages": 4,
         "rendered_simplex_tree_pages": 4,
+        "source_contract_schema_version": "tropicalgt.reasoning_step_complex_source_contract.v1",
+        "source_contract_source": "candidate.filtered_simplicial_object on each manifest row",
+        "rendered_source_contracts": 4,
+        "all_steps_have_source_contracts": True,
+        "all_step_complexes_use_candidate_filtered_object_source": True,
+        "all_step_complex_source_contracts_no_proxy": True,
+        "all_step_complex_source_contracts_safe": True,
+        "all_step_complex_source_counts_match_summary": True,
+        "all_step_complexes_have_vertices": True,
+        "source_contract_unavailable_count": 0,
+        "source_contract_unavailable_steps": [],
         "slider_contract_schema_version": "tropicalgt.reasoning_step_radius_slider_summary.v1",
         "radius_slider_contract_source": "per-step reasoning_step_*_slider_contract.json sidecars summarized into this manifest",
         "rendered_slider_contracts": 4,
@@ -1055,6 +1106,39 @@ def test_validate_audit_root_rejects_missing_reasoning_step_complex_fingerprints
     report = validator.validate_audit_root(audit, min_rows=1, min_candidates=4, min_depth=2)
     assert not report["ok"]
     assert any("fingerprint" in err and "reasoning-step" in err for err in report["errors"])
+
+
+def test_validate_audit_root_rejects_missing_reasoning_step_source_contract(tmp_path: Path):
+    validator = _load_validator()
+    audit = tmp_path / "step_00000001" / "got_audit"
+    row = _row(audit, ".")
+    manifest_path = row / "reasoning_step_complex_maps" / "manifest.json"
+    payload = json.loads(manifest_path.read_text(encoding="utf-8"))
+    payload["steps"][0].pop("step_complex_source_contract")
+    payload["contract"]["all_steps_have_source_contracts"] = False
+    payload["contract"]["all_step_complex_source_contracts_safe"] = False
+    manifest_path.write_text(json.dumps(payload), encoding="utf-8")
+    _write(audit / "codex_browser_index.html", _codex_browser_html(_browser_samples(audit, ["."])))
+    report = validator.validate_audit_root(audit, min_rows=1, min_candidates=4, min_depth=2)
+    assert not report["ok"]
+    assert any("reasoning-step complex source contract" in err or "source contracts" in err for err in report["errors"])
+
+
+def test_validate_audit_root_rejects_reasoning_step_source_proxy_claim(tmp_path: Path):
+    validator = _load_validator()
+    audit = tmp_path / "step_00000001" / "got_audit"
+    row = _row(audit, ".")
+    manifest_path = row / "reasoning_step_complex_maps" / "manifest.json"
+    payload = json.loads(manifest_path.read_text(encoding="utf-8"))
+    payload["steps"][0]["step_complex_source_contract"]["uses_embedding_trajectory_map_as_proxy"] = True
+    payload["steps"][0]["step_complex_source_contract"]["safe_to_render_as_step_complex"] = False
+    payload["contract"]["all_step_complex_source_contracts_no_proxy"] = False
+    payload["contract"]["all_step_complex_source_contracts_safe"] = False
+    manifest_path.write_text(json.dumps(payload), encoding="utf-8")
+    _write(audit / "codex_browser_index.html", _codex_browser_html(_browser_samples(audit, ["."])))
+    report = validator.validate_audit_root(audit, min_rows=1, min_candidates=4, min_depth=2)
+    assert not report["ok"]
+    assert any("embedding trajectory proxy" in err or "source contracts allow proxy" in err for err in report["errors"])
 
 
 def test_validate_audit_root_rejects_missing_reasoning_step_slider_contract(tmp_path: Path):

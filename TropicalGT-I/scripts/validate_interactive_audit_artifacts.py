@@ -192,6 +192,38 @@ def _validate_reasoning_step_slider_summary(
     _assert(summary.get("safe_to_render_radius_filtration") is True, errors, f"{label} reasoning-step radius slider summary is not safe to render")
 
 
+def _validate_reasoning_step_source_contract(
+    contract: Any,
+    step: dict[str, Any],
+    errors: list[str],
+    label: str,
+) -> None:
+    _assert(isinstance(contract, dict), errors, f"{label} missing reasoning-step complex source contract")
+    if not isinstance(contract, dict):
+        return
+    _assert(contract.get("schema_version") == "tropicalgt.reasoning_step_complex_source_contract.v1", errors, f"{label} source contract has wrong schema")
+    _assert(contract.get("source") == "candidate.filtered_simplicial_object", errors, f"{label} source contract does not cite candidate filtered object")
+    _assert(contract.get("actual_data_only") is True, errors, f"{label} source contract is not actual-data-only")
+    _assert(contract.get("no_proxy_or_fallback") is True, errors, f"{label} source contract allows proxy/fallback data")
+    _assert(contract.get("candidate_record_id") == step.get("record_id"), errors, f"{label} source contract candidate record mismatch")
+    _assert(contract.get("candidate_level") == step.get("level"), errors, f"{label} source contract level mismatch")
+    _assert(contract.get("candidate_path") == step.get("path"), errors, f"{label} source contract path mismatch")
+    _assert(contract.get("step_complex_fingerprint") == step.get("step_complex_fingerprint"), errors, f"{label} source contract fingerprint mismatch")
+    _assert(contract.get("uses_global_trajectory_complex_as_proxy") is False, errors, f"{label} source contract allows global trajectory proxy")
+    _assert(contract.get("uses_embedding_trajectory_map_as_proxy") is False, errors, f"{label} source contract allows embedding trajectory proxy")
+    _assert(contract.get("uses_static_probability_complex_as_proxy") is False, errors, f"{label} source contract allows static probability proxy")
+    summary = step.get("summary", {}) if isinstance(step.get("summary"), dict) else {}
+    _assert(int(_finite_float(contract.get("displayed_vertex_count"), -1.0)) == int(_finite_float(summary.get("num_vertices"), -2.0)), errors, f"{label} source contract vertex count mismatch")
+    _assert(int(_finite_float(contract.get("displayed_edge_count"), -1.0)) == int(_finite_float(summary.get("num_edges"), -2.0)), errors, f"{label} source contract edge count mismatch")
+    _assert(int(_finite_float(contract.get("displayed_face_count"), -1.0)) == int(_finite_float(summary.get("num_two_simplices"), -2.0)), errors, f"{label} source contract face count mismatch")
+    _assert(int(_finite_float(contract.get("displayed_vertex_count"), 0.0)) > 0, errors, f"{label} source contract has no displayed vertices")
+    _assert(contract.get("source_counts_match_canonical_summary") is True, errors, f"{label} source contract counts do not match canonical summary")
+    _assert(contract.get("safe_to_render_as_step_complex") is True, errors, f"{label} source contract is unsafe")
+    _assert(isinstance(contract.get("displayed_vertex_labels_sample"), list) and bool(contract.get("displayed_vertex_labels_sample")), errors, f"{label} source contract lacks vertex labels")
+    _assert(contract.get("simplex_tree_backend") == step.get("simplex_tree_backend"), errors, f"{label} source contract simplex-tree backend mismatch")
+    _assert(contract.get("simplex_tree_available") == step.get("simplex_tree_available"), errors, f"{label} source contract simplex-tree availability mismatch")
+
+
 def _html_has_plotly(html: str) -> bool:
     return "Plotly.newPlot" in html or "plotly" in html.lower()
 
@@ -1046,6 +1078,15 @@ def validate_row(row_dir: Path, *, min_candidates: int = 8, min_depth: int = 2, 
         _assert(step_contract.get("one_page_per_model_evaluated_reasoning_step") is True, errors, "reasoning-step manifest contract does not require one page per model state")
         _assert(step_contract.get("embedding_trajectory_map_is_not_a_step_complex") is True, errors, "reasoning-step manifest allows trajectory map as step complex")
         _assert(step_contract.get("all_step_complex_fingerprints_present") is True, errors, "reasoning-step manifest contract says fingerprints are missing")
+        _assert(step_contract.get("source_contract_schema_version") == "tropicalgt.reasoning_step_complex_source_contract.v1", errors, "reasoning-step manifest missing source contract schema")
+        _assert(int(_finite_float(step_contract.get("rendered_source_contracts"), -1.0)) == len(steps), errors, "reasoning-step manifest source contract count mismatch")
+        _assert(step_contract.get("all_steps_have_source_contracts") is True, errors, "reasoning-step manifest says source contracts are missing")
+        _assert(step_contract.get("all_step_complexes_use_candidate_filtered_object_source") is True, errors, "reasoning-step manifest does not require candidate filtered object source")
+        _assert(step_contract.get("all_step_complex_source_contracts_no_proxy") is True, errors, "reasoning-step manifest source contracts allow proxy data")
+        _assert(step_contract.get("all_step_complex_source_contracts_safe") is True, errors, "reasoning-step manifest source contracts are unsafe")
+        _assert(step_contract.get("all_step_complex_source_counts_match_summary") is True, errors, "reasoning-step manifest source counts do not match summaries")
+        _assert(step_contract.get("all_step_complexes_have_vertices") is True, errors, "reasoning-step manifest source contracts lack vertices")
+        _assert(int(_finite_float(step_contract.get("source_contract_unavailable_count"), -1.0)) == 0, errors, "reasoning-step manifest lists unavailable source contracts")
         _assert(step_contract.get("slider_contract_schema_version") == "tropicalgt.reasoning_step_radius_slider_summary.v1", errors, "reasoning-step manifest missing radius slider summary schema")
         _assert(int(_finite_float(step_contract.get("rendered_slider_contracts"), -1.0)) == len(steps), errors, "reasoning-step manifest rendered slider contract count mismatch")
         _assert(step_contract.get("all_steps_have_radius_slider_contracts") is True, errors, "reasoning-step manifest says radius slider summaries are missing")
@@ -1087,6 +1128,12 @@ def validate_row(row_dir: Path, *, min_candidates: int = 8, min_depth: int = 2, 
         _assert(basis.get("source") == "gudhi_canonical_complex(filtered_simplicial_object)", errors, f"reasoning-step manifest fingerprint source mismatch at index {idx}")
         _assert(basis.get("no_record_id_or_path_in_hash") is True, errors, f"reasoning-step manifest fingerprint includes record id/path at index {idx}")
         _assert(isinstance(basis.get("simplices"), list) and bool(basis.get("simplices")), errors, f"reasoning-step manifest fingerprint basis lacks simplices at index {idx}")
+        _validate_reasoning_step_source_contract(
+            step.get("step_complex_source_contract"),
+            step,
+            errors,
+            f"reasoning-step complex {idx}",
+        )
         _assert(node.get("reasoning_step_index") == idx, errors, f"trajectory node {rid} has wrong reasoning_step_index")
         _assert(node.get("step_complex_href") == expected_step_href, errors, f"trajectory node {rid} has wrong step_complex_href")
         _assert(node.get("step_simplex_tree_href") == expected_tree_href, errors, f"trajectory node {rid} has wrong step_simplex_tree_href")

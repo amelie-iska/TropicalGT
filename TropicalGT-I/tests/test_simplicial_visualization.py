@@ -883,6 +883,15 @@ def test_got_trajectory_visualization_renders_simplicial_panel_and_nll_surface(t
     assert step_manifest["contract"]["step_count"] == 4
     assert step_manifest["contract"]["rendered_complex_pages"] == 4
     assert step_manifest["contract"]["rendered_simplex_tree_pages"] == 4
+    assert step_manifest["contract"]["source_contract_schema_version"] == "tropicalgt.reasoning_step_complex_source_contract.v1"
+    assert step_manifest["contract"]["rendered_source_contracts"] == 4
+    assert step_manifest["contract"]["all_steps_have_source_contracts"] is True
+    assert step_manifest["contract"]["all_step_complexes_use_candidate_filtered_object_source"] is True
+    assert step_manifest["contract"]["all_step_complex_source_contracts_no_proxy"] is True
+    assert step_manifest["contract"]["all_step_complex_source_contracts_safe"] is True
+    assert step_manifest["contract"]["all_step_complex_source_counts_match_summary"] is True
+    assert step_manifest["contract"]["all_step_complexes_have_vertices"] is True
+    assert step_manifest["contract"]["source_contract_unavailable_count"] == 0
     assert step_manifest["contract"]["slider_contract_schema_version"] == "tropicalgt.reasoning_step_radius_slider_summary.v1"
     assert step_manifest["contract"]["rendered_slider_contracts"] == 4
     assert step_manifest["contract"]["all_steps_have_radius_slider_contracts"] is True
@@ -905,6 +914,12 @@ def test_got_trajectory_visualization_renders_simplicial_panel_and_nll_surface(t
     assert all(row.get("step_complex_fingerprint_basis", {}).get("schema_version") == "tropicalgt.reasoning_step_complex_fingerprint_basis.v1" for row in step_manifest["steps"])
     assert all(row.get("step_complex_fingerprint_basis", {}).get("no_record_id_or_path_in_hash") is True for row in step_manifest["steps"])
     assert all(row.get("step_complex_fingerprint_basis", {}).get("simplices") for row in step_manifest["steps"])
+    assert all(row.get("step_complex_source_contract", {}).get("schema_version") == "tropicalgt.reasoning_step_complex_source_contract.v1" for row in step_manifest["steps"])
+    assert all(row.get("step_complex_source_contract", {}).get("source") == "candidate.filtered_simplicial_object" for row in step_manifest["steps"])
+    assert all(row.get("step_complex_source_contract", {}).get("candidate_record_id") == row.get("record_id") for row in step_manifest["steps"])
+    assert all(row.get("step_complex_source_contract", {}).get("safe_to_render_as_step_complex") is True for row in step_manifest["steps"])
+    assert all(row.get("step_complex_source_contract", {}).get("uses_global_trajectory_complex_as_proxy") is False for row in step_manifest["steps"])
+    assert all(row.get("step_complex_source_contract", {}).get("displayed_vertex_count") == row.get("summary", {}).get("num_vertices") for row in step_manifest["steps"])
     assert all(row.get("slider_contract_file") == f"reasoning_step_{idx:03d}_slider_contract.json" for idx, row in enumerate(step_manifest["steps"]))
     assert all(row.get("radius_slider_contract", {}).get("schema_version") == "tropicalgt.reasoning_step_radius_slider_summary.v1" for row in step_manifest["steps"])
     assert all(row.get("radius_slider_contract", {}).get("safe_to_render_radius_filtration") is True for row in step_manifest["steps"])

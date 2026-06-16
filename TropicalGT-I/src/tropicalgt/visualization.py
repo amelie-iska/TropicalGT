@@ -2023,13 +2023,27 @@ def _unavailable_complex(reason: str, *, source: str = "model_probability_jensen
     }
 
 
+def _simplex_dimension(row: Mapping[str, object]) -> int:
+    raw = row.get("dimension", row.get("dim"))
+    try:
+        dim = int(raw)
+    except (TypeError, ValueError):
+        dim = -1
+    if dim >= 0:
+        return dim
+    simplex = row.get("simplex")
+    if isinstance(simplex, list) and simplex:
+        return len(simplex) - 1
+    return dim
+
+
 def _reasoning_step_complex_fingerprint(obj_summary: dict[str, object]) -> tuple[str, dict[str, object]]:
     simplices = [row for row in obj_summary.get("simplices", []) if isinstance(row, dict)] if isinstance(obj_summary, dict) else []
     canonical_simplices = sorted(
         [
             {
                 "simplex": [str(value) for value in (row.get("simplex", []) if isinstance(row.get("simplex"), list) else [])],
-                "dimension": int(row.get("dimension", -1) or -1),
+                "dimension": _simplex_dimension(row),
                 "filtration": float(row.get("filtration", 0.0) or 0.0),
                 "type": str(row.get("type", "")),
                 "probability_source": str(row.get("probability_source", row.get("model_probability_source", ""))),
@@ -2138,6 +2152,72 @@ def _reasoning_step_slider_contract_summary(
     return summary
 
 
+def _reasoning_step_complex_source_contract(
+    row: Mapping[str, object],
+    obj_summary: Mapping[str, object],
+    step_complex_fingerprint: str,
+) -> dict[str, object]:
+    simplices = [item for item in obj_summary.get("simplices", []) if isinstance(item, dict)]
+    vertices = [item for item in simplices if _simplex_dimension(item) == 0]
+    edges = [item for item in simplices if _simplex_dimension(item) == 1]
+    faces = [item for item in simplices if _simplex_dimension(item) == 2]
+    tree = obj_summary.get("simplex_tree", {}) if isinstance(obj_summary.get("simplex_tree"), Mapping) else {}
+    vertex_labels = [
+        str((vertex.get("simplex") or [f"v{idx}"])[0]) if isinstance(vertex.get("simplex"), list) else f"v{idx}"
+        for idx, vertex in enumerate(vertices)
+    ]
+    probability_vertex_count = int(sum(1 for vertex in vertices if _probability_feature_vector(vertex) is not None))
+    embedding_vertex_count = int(sum(1 for vertex in vertices if isinstance(vertex.get("embedding"), list) and len(vertex.get("embedding", [])) > 0))
+    summary = obj_summary.get("summary", {}) if isinstance(obj_summary.get("summary"), Mapping) else {}
+    contract = {
+        "schema_version": "tropicalgt.reasoning_step_complex_source_contract.v1",
+        "source": "candidate.filtered_simplicial_object",
+        "actual_data_only": True,
+        "no_proxy_or_fallback": True,
+        "candidate_record_id": str(row.get("record_id", "")),
+        "candidate_level": int(row.get("level", 0) or 0),
+        "candidate_path": row.get("path", []),
+        "step_complex_fingerprint": step_complex_fingerprint,
+        "uses_global_trajectory_complex_as_proxy": False,
+        "uses_embedding_trajectory_map_as_proxy": False,
+        "uses_static_probability_complex_as_proxy": False,
+        "displayed_vertex_count": int(len(vertices)),
+        "displayed_edge_count": int(len(edges)),
+        "displayed_face_count": int(len(faces)),
+        "summary_vertex_count": int(summary.get("num_vertices", len(vertices)) or 0),
+        "summary_edge_count": int(summary.get("num_edges", len(edges)) or 0),
+        "summary_two_simplex_count": int(summary.get("num_two_simplices", len(faces)) or 0),
+        "displayed_probability_vector_vertex_count": probability_vertex_count,
+        "displayed_embedding_vertex_count": embedding_vertex_count,
+        "displayed_vertex_labels_sample": vertex_labels[:32],
+        "simplex_tree_backend": tree.get("backend", "missing"),
+        "simplex_tree_available": tree.get("available") is not False,
+        "simplex_tree_num_vertices": tree.get("num_vertices"),
+        "simplex_tree_num_simplices": tree.get("num_simplices"),
+        "graph_token_direction_overlay_source": "candidate_trace_overlay_when_present",
+        "decoding_causal_overlay_source": "candidate_decoding_or_causal_metadata_when_present",
+    }
+    contract["source_counts_match_canonical_summary"] = (
+        contract["displayed_vertex_count"] == contract["summary_vertex_count"]
+        and contract["displayed_edge_count"] == contract["summary_edge_count"]
+        and contract["displayed_face_count"] == contract["summary_two_simplex_count"]
+    )
+    contract["safe_to_render_as_step_complex"] = all(
+        [
+            bool(contract["candidate_record_id"]),
+            bool(step_complex_fingerprint),
+            contract["displayed_vertex_count"] > 0,
+            contract["source_counts_match_canonical_summary"],
+            contract["actual_data_only"],
+            contract["no_proxy_or_fallback"],
+            contract["uses_global_trajectory_complex_as_proxy"] is False,
+            contract["uses_embedding_trajectory_map_as_proxy"] is False,
+            contract["uses_static_probability_complex_as_proxy"] is False,
+        ]
+    )
+    return contract
+
+
 def _write_reasoning_step_complex_maps(candidates: list[dict[str, object]], output_dir: Path) -> dict[str, str]:
     directory = output_dir / "reasoning_step_complex_maps"
     directory.mkdir(parents=True, exist_ok=True)
@@ -2150,6 +2230,7 @@ def _write_reasoning_step_complex_maps(candidates: list[dict[str, object]], outp
         obj = _attach_decoding_causal_overlay(obj, row)
         obj_summary = _gudhi_canonical_complex(obj)
         step_complex_fingerprint, fingerprint_basis = _reasoning_step_complex_fingerprint(obj_summary)
+        source_contract = _reasoning_step_complex_source_contract(row, obj_summary, step_complex_fingerprint)
         record_id = str(row.get("record_id", f"step-{idx}"))
         file_name = f"reasoning_step_{idx:03d}.html"
         path = directory / file_name
@@ -2202,6 +2283,7 @@ def _write_reasoning_step_complex_maps(candidates: list[dict[str, object]], outp
                 "simplex_tree_file": tree_file_name,
                 "slider_contract_file": slider_contract_path.name,
                 "radius_slider_contract": radius_slider_contract,
+                "step_complex_source_contract": source_contract,
                 "summary": obj_summary.get("summary", {}),
                 "step_complex_fingerprint": step_complex_fingerprint,
                 "step_complex_fingerprint_basis": fingerprint_basis,
@@ -3223,6 +3305,16 @@ def _display_thresholds(obj: dict[str, object], max_steps: int = 32) -> list[flo
 def _reasoning_step_complex_manifest_contract(rows: list[dict[str, object]]) -> dict[str, object]:
     simplex_tree_available = [row for row in rows if bool(row.get("simplex_tree_available"))]
     slider_rows = [row.get("radius_slider_contract") for row in rows if isinstance(row.get("radius_slider_contract"), dict)]
+    source_rows = [row.get("step_complex_source_contract") for row in rows if isinstance(row.get("step_complex_source_contract"), dict)]
+    source_unavailable = [
+        {
+            "index": int(row.get("index", 0) or 0),
+            "record_id": str(row.get("record_id", "")),
+            "reason": "missing_or_unsafe_step_complex_source_contract",
+        }
+        for row in rows
+        if not (isinstance(row.get("step_complex_source_contract"), dict) and row.get("step_complex_source_contract", {}).get("safe_to_render_as_step_complex") is True)
+    ]
     slider_unavailable = [
         {
             "index": int(row.get("index", 0) or 0),
@@ -3294,6 +3386,29 @@ def _reasoning_step_complex_manifest_contract(rows: list[dict[str, object]]) -> 
         and all(row.get("safe_to_render_radius_filtration") is True for row in slider_rows),
         "radius_slider_unavailable_count": int(len(slider_unavailable)),
         "radius_slider_unavailable_steps": slider_unavailable,
+        "source_contract_schema_version": "tropicalgt.reasoning_step_complex_source_contract.v1",
+        "source_contract_source": "candidate.filtered_simplicial_object on each manifest row",
+        "rendered_source_contracts": int(len(source_rows)),
+        "all_steps_have_source_contracts": bool(rows) and len(source_rows) == len(rows),
+        "all_step_complexes_use_candidate_filtered_object_source": bool(rows)
+        and all(row.get("source") == "candidate.filtered_simplicial_object" for row in source_rows),
+        "all_step_complex_source_contracts_no_proxy": bool(rows)
+        and all(
+            row.get("actual_data_only") is True
+            and row.get("no_proxy_or_fallback") is True
+            and row.get("uses_global_trajectory_complex_as_proxy") is False
+            and row.get("uses_embedding_trajectory_map_as_proxy") is False
+            and row.get("uses_static_probability_complex_as_proxy") is False
+            for row in source_rows
+        ),
+        "all_step_complex_source_contracts_safe": bool(rows)
+        and len(source_unavailable) == 0
+        and all(row.get("safe_to_render_as_step_complex") is True for row in source_rows),
+        "all_step_complex_source_counts_match_summary": bool(rows)
+        and all(row.get("source_counts_match_canonical_summary") is True for row in source_rows),
+        "all_step_complexes_have_vertices": bool(rows) and all(int(row.get("displayed_vertex_count", 0) or 0) > 0 for row in source_rows),
+        "source_contract_unavailable_count": int(len(source_unavailable)),
+        "source_contract_unavailable_steps": source_unavailable,
         "fingerprint_source": "sha256 canonical JSON over per-step gudhi_canonical_complex(filtered_simplicial_object); record id/path excluded",
         "all_step_complex_fingerprints_present": bool(rows) and all(bool(row.get("step_complex_fingerprint")) for row in rows),
         "unique_step_complex_fingerprint_count": int(len(fingerprint_groups)),
@@ -3319,6 +3434,9 @@ def _reasoning_step_contract_panel(contract: Mapping[str, object] | None) -> str
         f"<p><strong>Contract:</strong> {html.escape(str(contract.get('claim', '')))} "
         f"GUDHI SimplexTree available for {int(contract.get('gudhi_simplex_tree_step_count', 0) or 0)} step(s); "
         f"explicitly unavailable for {int(contract.get('simplex_tree_unavailable_count', 0) or 0)}.</p>"
+        f"<p><strong>Step source:</strong> candidate-owned filtered objects={html.escape(str(contract.get('all_step_complexes_use_candidate_filtered_object_source', False)))}; "
+        f"no trajectory/static proxy={html.escape(str(contract.get('all_step_complex_source_contracts_no_proxy', False)))}; "
+        f"safe source contracts={html.escape(str(contract.get('all_step_complex_source_contracts_safe', False)))}.</p>"
         f"<p><strong>Radius sliders:</strong> first frame disjoint vertices={html.escape(str(contract.get('all_step_radius_sliders_start_disjoint_vertices', False)))}; "
         f"monotone growth={html.escape(str(contract.get('all_step_radius_sliders_monotone', False)))}; "
         f"safe summaries={html.escape(str(contract.get('all_step_radius_sliders_safe_to_render', False)))}.</p>"
