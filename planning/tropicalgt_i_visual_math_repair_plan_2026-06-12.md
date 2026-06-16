@@ -790,3 +790,23 @@ CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/t
 CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_simplicial_visualization.py -q -p no:cacheprovider --basetemp=/tmp/tropicalgt-pytest-layout-evidence-full
 # 44 passed
 ```
+
+## 2026-06-16 Simplicial Projection Provenance Rename
+
+Sequential provenance/no-proxy item completed after the simplicial projection evidence-boundary repair:
+
+- Renamed the provenance registry entry from `simplicial_projection_feature_fallback` to `simplicial_projection_display_layout_evidence`.
+- Changed the entry kind from `visual_projection_fallback` to `visual_display_layout_boundary` so audit output matches the current renderer contract.
+- The guardrail now says coordinates are metric/model evidence only when rendered with `coordinate_evidence=real_vertex_vectors` and `safe_for_metric_claims=true`; metadata-only coordinates remain visual arrangement only.
+- Legacy fallback-era match terms remain in the audit entry solely so stale code is still caught and classified if it reappears.
+
+Validation:
+
+```text
+CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m py_compile TropicalGT-I/src/tropicalgt/provenance.py TropicalGT-I/tests/test_metric_provenance.py
+# passed
+CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_metric_provenance.py -q -p no:cacheprovider --basetemp=/tmp/tropicalgt-pytest-provenance-layout
+# 7 passed
+CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_simplicial_visualization.py -q -p no:cacheprovider --basetemp=/tmp/tropicalgt-pytest-layout-provenance-viz -k "simplicial_svg_wraps_long_topological_paths or simplicial_svg_reports_model_vector_projection_evidence"
+# 2 passed, 42 deselected
+```

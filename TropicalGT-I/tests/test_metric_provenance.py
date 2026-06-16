@@ -24,7 +24,7 @@ def test_metric_provenance_registry_covers_current_risky_terms(tmp_path: Path):
         "training_data_budget_estimate",
         "config_default_fallback",
         "browser_static_preview_rendering_fallback",
-        "simplicial_projection_feature_fallback",
+        "simplicial_projection_display_layout_evidence",
         "gudhi_vectorizer_autograd_boundary",
     ]:
         assert key in registry
@@ -37,6 +37,7 @@ def test_metric_provenance_registry_covers_current_risky_terms(tmp_path: Path):
     assert registry["persistence_landscape"]["kind"] == "fast_vectorized_topology"
     assert registry["persistence_vector_representation_similarity"]["optimize_directly"] is True
     assert registry["browser_static_preview_rendering_fallback"]["kind"] == "rendering_fallback"
+    assert registry["simplicial_projection_display_layout_evidence"]["kind"] == "visual_display_layout_boundary"
 
 
 def test_metric_provenance_audit_writes_json_and_markdown(tmp_path: Path):
@@ -79,7 +80,7 @@ def test_metric_provenance_audit_classifies_aliases_and_excludes_self(tmp_path: 
     assert report["uncovered_finding_count"] == 0
     assert {row["matched_entry"] for row in report["covered_findings"]} == {
         "json_fallback_graph_trace",
-        "simplicial_projection_feature_fallback",
+        "simplicial_projection_display_layout_evidence",
         "gudhi_vectorizer_autograd_boundary",
     }
 

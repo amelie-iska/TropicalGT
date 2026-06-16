@@ -335,21 +335,36 @@ PROVENANCE_REGISTRY: tuple[ProvenanceEntry, ...] = (
         ),
     ),
     ProvenanceEntry(
-        name="simplicial_projection_feature_fallback",
-        kind="visual_projection_fallback",
+        name="simplicial_projection_display_layout_evidence",
+        kind="visual_display_layout_boundary",
         surface="filtered-complex plot",
         optimize_directly=False,
-        description="Feature PCA/semantic-hash/circular coordinates used only when vertex embeddings are missing or degenerate.",
-        replacement_or_guardrail="Payload reports fallback source, stress, and correlation; prefer embedding-derived coordinates when available.",
+        description=(
+            "Display coordinates for filtered-complex SVG panels may come from real vertex vectors or from "
+            "display-only vertex metadata when vectors are unavailable."
+        ),
+        replacement_or_guardrail=(
+            "Treat coordinates as metric/model evidence only when the rendered layout contract reports "
+            "coordinate_evidence=real_vertex_vectors and safe_for_metric_claims=true; metadata-only layouts are visual arrangement only."
+        ),
         match_terms=(
+            "coordinate_evidence=display_only_vertex_metadata_layout",
+            "coordinate_evidence=mixed_model_vectors_and_display_metadata_layout",
+            "coordinate_evidence=real_vertex_vectors",
+            "safe_for_metric_claims=false",
+            "safe_for_metric_claims=true",
+            "_vertex_display_layout_feature",
+            "display_metadata_rows",
+            "vector_rows",
+            "_feature_pca3_without_synthetic_jitter",
+            "feature_pca3_without_synthetic_jitter",
+            # Retired names remain covered so the audit catches stale fallback-era code.
             "feature_pca3_from_vertex_embeddings_or_semantic_hash",
             "_feature_pca3_with_jitter",
             "circular_fallback",
             "fallback_stats",
             'stats.get("fallback")',
             "_vertex_pca_feature",
-            "_feature_pca3_without_synthetic_jitter",
-            "feature_pca3_without_synthetic_jitter",
         ),
     ),
     ProvenanceEntry(
