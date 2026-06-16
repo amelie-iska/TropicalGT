@@ -514,6 +514,49 @@ def test_analogical_memory_retrieval_uses_probability_simplicial_map_weight(tmp_
     assert hits[0]["retrieval_score_components"]["probability_simplicial_map"] > hits[1]["retrieval_score_components"]["probability_simplicial_map"]
     assert hits[0]["probability_simplicial_map_similarity"] > hits[1]["probability_simplicial_map_similarity"]
     assert hits[0]["probability_simplicial_map"]["chain_map_diagnostics"]["safe_to_use_as_persistence_module_morphism"] is True
+    assert hits[0]["probability_simplicial_map_scoring_policy"].startswith("positive score only")
+    assert hits[0]["probability_simplicial_map_vertex_assignment_count"] == 3
+    assert hits[0]["probability_simplicial_map_checked_edges"] == 3
+    assert hits[0]["probability_simplicial_map_preserved_edges"] == 3
+    assert math.isclose(hits[0]["probability_simplicial_map_edge_preservation_rate"], 1.0)
+    assert hits[0]["probability_simplicial_map_checked_two_simplices"] == 1
+    assert hits[0]["probability_simplicial_map_preserved_two_simplices"] == 1
+    assert hits[0]["probability_simplicial_map_chain_map_certified"] is True
+    assert hits[0]["probability_simplicial_map_persistence_morphism_certified"] is True
+
+
+def test_analogical_memory_probability_map_must_preserve_simplex_tree_to_score(tmp_path):
+    query_complex = _probability_complex("q")
+    vertex_only_complex = _probability_complex("v")
+    vertex_only_complex["simplices"] = [row for row in vertex_only_complex["simplices"] if row.get("dimension") == 0]
+    vertex_only_complex["summary"] = {**vertex_only_complex["summary"], "simplices": len(vertex_only_complex["simplices"])}
+    bank = AnalogicalMemoryBank(tmp_path / "probability_map_no_proxy_memory.jsonl", max_records=4)
+    bank.extend([_probability_memory_record("vertices-only", vertex_only_complex)])
+    hits = bank.retrieve(
+        [0.0, 0.0, 0.0],
+        [0.0, 0.0, 0.0],
+        top_k=1,
+        embedding_weight=0.0,
+        signature_weight=0.0,
+        score_weight=0.0,
+        landscape_weight=0.0,
+        vector_representation_weight=0.0,
+        probability_map_weight=1.0,
+        diversity_weight=0.0,
+        query_probability_complex=query_complex,
+    )
+    assert hits[0]["record_id"] == "vertices-only"
+    assert hits[0]["probability_simplicial_map_available"] is False
+    assert hits[0]["probability_simplicial_map_similarity"] == 0.0
+    assert hits[0]["probability_simplicial_map_score_contribution"] == 0.0
+    assert hits[0]["probability_simplicial_map_checked_edges"] == 3
+    assert hits[0]["probability_simplicial_map_preserved_edges"] == 0
+    assert hits[0]["probability_simplicial_map_missing_edges"] == 3
+    assert hits[0]["probability_simplicial_map_checked_two_simplices"] == 1
+    assert hits[0]["probability_simplicial_map_preserved_two_simplices"] == 0
+    assert hits[0]["probability_simplicial_map_missing_two_simplices"] == 1
+    assert hits[0]["probability_simplicial_map_chain_map_certified"] is False
+    assert hits[0]["probability_simplicial_map_persistence_morphism_certified"] is False
 
 
 def test_analogical_memory_retrieval_reports_transported_landscape_diagnostics(tmp_path):

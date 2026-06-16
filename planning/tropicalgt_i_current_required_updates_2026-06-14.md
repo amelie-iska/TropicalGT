@@ -232,7 +232,7 @@ git diff --check
 - CAS package survey: look for Sage, Macaulay2, Singular, RIVET/multipers, polymake, Normaliz, and related packages that compute real multigraded modules, minimal resolutions, Betti tables, Fitting ideals, minors, Buchsbaum-Eisenbud diagnostics, tropical fans, toric varieties, and stable intersections.
 - Maclagan-style toric embedding research direction: investigate whether the transformer graph-state and tropical-attention coordinate system can be embedded into a toric variety via model-derived monomial coordinates, Newton polytopes, fan data, and one dimensional cone data. Any resulting implementation must distinguish theorem-level certified constructions from diagnostic embeddings or visual probes.
 
-_Last updated: 2026-06-16T04:46:41Z_
+_Last updated: 2026-06-16T06:02:00Z_
 
 
 ## 2026-06-16 Fresh b59 5K Review Gate and Worker Handoff
@@ -285,10 +285,20 @@ _Last updated: 2026-06-16T04:46:41Z_
 - Use this for post-5K restarts that retain frequent validation but do not need every intermediate multi-gigabyte interactive audit bundle.
 
 
+## 2026-06-16 b60 Analogical Memory No-Proxy Addendum
+
+- Fresh b60 (`tropicalgt_i_pg_bpb_step0_full24b_b60_20260616T053631Z_fresh_bpb112_casrows_5k_gate`) is running under the 5K step gate with trainer PID `378962`, watcher PID `379304`, and W&B id `ld5u55p5`. Latest checked watcher state reached step `250` with train loss/NLL `1.543/1.521`, no fatal markers, and the target step-5000 validation/audit paths still pending.
+- Analogical retrieval rows now carry explicit probability simplex-tree certificate fields from the model-probability Jensen-Shannon assignment: vertex assignment count, checked/preserved simplex counts, edge and 2-simplex preservation rates, JS/assignment summaries, filtration distortion, chain-map certification, and persistence-module morphism certification.
+- Probability-map retrieval score contribution is positive only when the stored model-probability assignment extends to a filtration-preserving simplex-tree map. If edge/face/simplex preservation fails, the contribution is exactly zero and the failed counts are exposed.
+- The analogical memory visualization now consumes the retrieval-side `probability_simplicial_map` certificate as the source of truth. It does not recompute a map from raw query/codomain complexes and does not use embedding-only, heuristic, proxy, or compatibility fallback maps.
+- If a retrieval row lacks the probability simplex-tree certificate, the artifact renders `missing_retrieval_probability_simplicial_map_certificate` with unavailable chain-map and persistence-module morphism diagnostics. Raw probability complexes alone are not enough to render an analogical map in this page.
+- Focused and full verification completed: `py_compile` on memory/visualization/tests, `pytest TropicalGT-I/tests/test_metrics_and_memory.py -q` (`11 passed`), `pytest TropicalGT-I/tests/test_simplicial_visualization.py -q` (`28 passed`), and `git diff --check`.
+
+
 ## Real Implementations Only Policy
 
 No TropicalGT-I metric, loss, visualization, analogical map, persistence module, free resolution, derived comparison, tropical-cycle diagnostic, or CAS artifact should be presented as a mathematical object unless it is computed from the actual model outputs, graph states, embeddings, probabilities, simplex trees, bifiltrations, or certified CAS/backend output that define that object. Temporary placeholders, synthetic fallback objects, mock charts, fabricated simplices, and convenience stand-ins are not acceptable. When a requested object cannot yet be computed, the artifact must render an explicit unavailable/uncertified state and the training metric must either be disabled or logged under an audit-only unavailable flag. Finite chain-presentation diagnostics may be shown only as chain diagnostics, never as free resolutions. Total-graded or ungraded CAS output may be shown as real CAS output only under its actual grading; it must not be advertised as a multigraded `F2[x_level,x_radius]` free resolution unless the backend certifies that multigraded structure.
 
 Use "one dimensional cone" or "one dimensional cones" as the preferred fan-theoretic language whenever the intended object is a cone of a fan or a cone-indexed filtration datum. Use singular or plural according to ordinary grammar.
 
-_Last updated: 2026-06-16T04:46:41Z_
+_Last updated: 2026-06-16T06:02:00Z_

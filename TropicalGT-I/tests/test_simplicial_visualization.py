@@ -7,6 +7,7 @@ import torch
 from tropicalgt.data import FixtureGraphDataset
 from tropicalgt.model import TropicalGTConfig, TropicalGTModel
 from tropicalgt.scaling import apply_reasoning_action
+from tropicalgt.memory import probability_simplicial_map_diagnostics
 from tropicalgt.simplicial import build_embedding_radius_simplicial_object, build_filtered_simplicial_object
 from tropicalgt.tokenizer import TokenGTTokenizer
 from tropicalgt.visualization import (
@@ -863,6 +864,8 @@ def test_analogical_memory_visualization_renders_simplicial_maps(tmp_path: Path)
         metric="jensen_shannon",
     )
     assert obj["summary"]["filtration_model"] == "model_tropical_support_probability_jensen_shannon_vietoris_rips_2_skeleton"
+    retrieval_probability_map = probability_simplicial_map_diagnostics(obj, obj)
+    assert retrieval_probability_map["available"] is True
     topo = _toy_topology(intervals=[{"dimension": 0, "birth": 0.0, "death": None, "infinite": True}])
     memory = {
         "bank_path": "",
@@ -881,6 +884,7 @@ def test_analogical_memory_visualization_renders_simplicial_maps(tmp_path: Path)
                 "probability_simplicial_map_available": True,
                 "probability_simplicial_map_preservation_rate": 1.0,
                 "probability_simplicial_map_source": "model_probability_jensen_shannon_assignment",
+                "probability_simplicial_map": retrieval_probability_map,
                 "retrieval_score_components": {
                     "embedding": 0.2,
                     "signature": 0.2,
@@ -914,6 +918,7 @@ def test_analogical_memory_visualization_renders_simplicial_maps(tmp_path: Path)
                 "probability_simplicial_map_available": True,
                 "probability_simplicial_map_preservation_rate": 1.0,
                 "probability_simplicial_map_source": "model_probability_jensen_shannon_assignment",
+                "probability_simplicial_map": retrieval_probability_map,
                 "retrieval_score_components": {
                     "embedding": 0.16,
                     "signature": 0.14,
@@ -986,9 +991,12 @@ def test_analogical_memory_visualization_renders_simplicial_maps(tmp_path: Path)
     assert not Path(maps["maps"][1]["pair_page"]).is_absolute()
     assert maps["maps"][0]["edge_preservation_rate"] >= 0.0
     assert maps["maps"][0]["map_source"] == "model_probability_jensen_shannon_assignment"
+    assert maps["maps"][0]["map_certificate_source"] == "retrieval_probability_simplicial_map_certificate"
+    assert maps["maps"][0]["retrieval_probability_certificate_available"] is True
+    assert maps["maps"][0]["simplicial_map_certificate"]["no_proxy_or_fallback"] is True
     assert maps["maps"][0]["query_complex_source"] == "trajectory_probability_filtered_simplicial_object"
     assert maps["maps"][0]["codomain_complex_source"] == "trajectory_probability_filtered_simplicial_object"
-    assert maps["maps"][0]["simplicial_map_certificate"]["source"] == "finite_filtered_complex_check"
+    assert maps["maps"][0]["simplicial_map_certificate"]["source"] == "retrieval_probability_simplicial_map_certificate"
     assert maps["maps"][0]["derived_signature_similarity"] >= 0.0
     assert maps["maps"][0]["persistence_vector_representation_similarity"]["includes_landscape"] is False
     assert maps["maps"][0]["persistence_landscape_vector_available"] == 1.0
@@ -1127,6 +1135,48 @@ def test_derived_comparison_requires_matching_certified_cas_artifacts():
     assert "buchsbaum_eisenbud" in real_mismatch["mismatched_components"]
     assert mismatch["derived_equivalence_claim"] == "compatible_finite_invariant_witness"
     assert "do not match" in mismatch["free_resolution_similarity_interpretation"]
+
+
+def test_analogical_memory_visualization_requires_retrieval_probability_map_certificate(tmp_path: Path):
+    record = FixtureGraphDataset(1)[0]
+    descriptors = [
+        {"index": 0, "kind": "node", "node_id": "a", "text": "alpha"},
+        {"index": 1, "kind": "node", "node_id": "b", "text": "beta"},
+    ]
+    embeddings = [[0.0, 0.0, 0.0], [1.0, 0.2, 0.0]]
+    probabilities = [[0.82, 0.18], [0.16, 0.84]]
+    obj = build_embedding_radius_simplicial_object(
+        record,
+        descriptors,
+        embeddings,
+        token_probabilities=probabilities,
+        metric="jensen_shannon",
+    )
+    topo = _toy_topology(intervals=[{"dimension": 0, "birth": 0.0, "death": None, "infinite": True}])
+    memory = {
+        "bank_path": "",
+        "retrieved": [
+            {
+                "memory_id": "mem-missing-cert",
+                "record_id": "rec-missing-cert",
+                "retrieval_score": 0.8,
+                "trajectory_probability_filtered_simplicial_object": obj,
+                "topological_algebra": topo,
+            }
+        ],
+    }
+    paths = write_analogical_memory_visualization(
+        memory,
+        tmp_path,
+        query_context={"trajectory_probability_filtered_simplicial_object": obj, "topological_algebra": topo},
+    )
+    maps = json.loads(Path(paths["analogical_simplicial_maps"]).read_text(encoding="utf-8"))
+    report = maps["maps"][0]
+    assert report["retrieval_probability_certificate_available"] is False
+    assert report["simplicial_map_failure_reason"] == "missing_retrieval_probability_simplicial_map_certificate"
+    assert report["simplicial_map_certificate"]["no_proxy_or_fallback"] is True
+    assert report["chain_map_diagnostics"]["available"] is False
+    assert report["persistence_module_morphism_diagnostics"]["available"] is False
 
 
 def test_analogical_memory_visualization_rejects_non_trajectory_probability_fallback(tmp_path: Path):

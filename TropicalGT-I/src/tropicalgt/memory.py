@@ -247,6 +247,11 @@ class AnalogicalMemoryBank:
             probability_map = probability_simplicial_map_diagnostics(query_probability_complex, trajectory_probability_complex)
             probability_map_similarity = _probability_simplicial_map_similarity(probability_map)
             probability_map_contribution = float(probability_map_weight) * probability_map_similarity
+            probability_map_retrieval_fields = _probability_simplicial_map_retrieval_fields(
+                probability_map,
+                probability_map_similarity,
+                probability_map_contribution,
+            )
             transported_landscape = transported_persistence_landscape_diagnostics(query_topology, memory_topology, probability_map)
             certified_cas_report = certified_cas_evidence_similarity(query_topology, memory_topology)
             certified_cas_retrieval_similarity = float(certified_cas_report.get("retrieval_score_similarity", 0.0) or 0.0)
@@ -300,6 +305,7 @@ class AnalogicalMemoryBank:
                     "persistence_vector_score_contribution": float(vector_contribution),
                     "probability_simplicial_map_score_contribution": float(probability_map_contribution),
                     "probability_simplicial_map_similarity": float(probability_map_similarity),
+                    **probability_map_retrieval_fields,
                     "certified_cas_score_contribution": float(certified_cas_contribution),
                     "certified_cas_retrieval_similarity": float(certified_cas_retrieval_similarity),
                     "certified_cas_evidence_similarity": float(certified_cas_report.get("certified_cas_evidence_similarity", 0.0) or 0.0),
@@ -405,6 +411,79 @@ def _probability_simplicial_map_similarity(report: dict[str, Any]) -> float:
     summary = report.get("jensen_shannon_distance_summary", {})
     mean_js = float(summary.get("mean", 0.0) or 0.0) if isinstance(summary, dict) else 0.0
     return float(max(0.0, min(1.0, rate)) / (1.0 + max(0.0, mean_js)))
+
+
+def _probability_map_dimension_summary(report: dict[str, Any], dim: int) -> dict[str, int]:
+    tree = report.get("simplex_tree_map", {}) if isinstance(report, dict) else {}
+    counts = tree.get("dimension_counts", {}) if isinstance(tree, dict) else {}
+    bucket = counts.get(f"dim_{dim}", {}) if isinstance(counts, dict) else {}
+    if not isinstance(bucket, dict):
+        bucket = {}
+    return {
+        "checked": int(bucket.get("checked", 0) or 0),
+        "preserved": int(bucket.get("preserved", 0) or 0),
+        "missing_codomain": int(bucket.get("missing_codomain", 0) or 0),
+    }
+
+
+def _summary_value(summary: Any, key: str) -> float | None:
+    if not isinstance(summary, dict):
+        return None
+    value = summary.get(key)
+    try:
+        out = float(value)
+    except (TypeError, ValueError):
+        return None
+    return out if math.isfinite(out) else None
+
+
+def _probability_simplicial_map_retrieval_fields(
+    report: dict[str, Any],
+    similarity: float,
+    score_contribution: float,
+) -> dict[str, Any]:
+    if not isinstance(report, dict):
+        report = {}
+    edge = _probability_map_dimension_summary(report, 1)
+    face = _probability_map_dimension_summary(report, 2)
+    edge_rate = float(edge["preserved"] / edge["checked"]) if edge["checked"] else 0.0
+    face_rate = float(face["preserved"] / face["checked"]) if face["checked"] else 0.0
+    tree = report.get("simplex_tree_map", {}) if isinstance(report.get("simplex_tree_map"), dict) else {}
+    chain = report.get("chain_map_diagnostics", {}) if isinstance(report.get("chain_map_diagnostics"), dict) else {}
+    morphism = report.get("persistence_module_morphism_diagnostics", {}) if isinstance(report.get("persistence_module_morphism_diagnostics"), dict) else {}
+    js_summary = report.get("jensen_shannon_distance_summary", {})
+    cost_summary = report.get("assignment_cost_summary", {})
+    distortion_summary = tree.get("positive_filtration_distortion_summary", {}) if isinstance(tree, dict) else {}
+    available = bool(report.get("available"))
+    source = str(report.get("map_source", "none"))
+    return {
+        "probability_simplicial_map_score_contribution": float(score_contribution),
+        "probability_simplicial_map_similarity": float(similarity),
+        "probability_simplicial_map_scoring_policy": "positive score only when model-probability Jensen-Shannon assignment extends to a filtration-preserving simplex-tree map",
+        "probability_simplicial_map_available": available,
+        "probability_simplicial_map_source": source,
+        "probability_simplicial_map_vertex_assignment_count": int(len(report.get("vertex_map", [])) if isinstance(report.get("vertex_map"), list) else 0),
+        "probability_simplicial_map_checked_simplices": int(report.get("simplex_tree_map_checked", 0) or 0),
+        "probability_simplicial_map_preserved_simplices": int(report.get("simplex_tree_map_preserved", 0) or 0),
+        "probability_simplicial_map_preservation_rate": float(report.get("simplex_tree_map_preservation_rate", 0.0) or 0.0),
+        "probability_simplicial_map_checked_edges": int(edge["checked"]),
+        "probability_simplicial_map_preserved_edges": int(edge["preserved"]),
+        "probability_simplicial_map_missing_edges": int(edge["missing_codomain"]),
+        "probability_simplicial_map_edge_preservation_rate": edge_rate,
+        "probability_simplicial_map_checked_two_simplices": int(face["checked"]),
+        "probability_simplicial_map_preserved_two_simplices": int(face["preserved"]),
+        "probability_simplicial_map_missing_two_simplices": int(face["missing_codomain"]),
+        "probability_simplicial_map_two_simplex_preservation_rate": face_rate,
+        "probability_simplicial_map_jensen_shannon_mean": _summary_value(js_summary, "mean"),
+        "probability_simplicial_map_jensen_shannon_max": _summary_value(js_summary, "max"),
+        "probability_simplicial_map_assignment_cost_mean": _summary_value(cost_summary, "mean"),
+        "probability_simplicial_map_assignment_cost_max": _summary_value(cost_summary, "max"),
+        "probability_simplicial_map_max_positive_filtration_distortion": _summary_value(distortion_summary, "max"),
+        "probability_simplicial_map_chain_map_certified": bool(chain.get("chain_map_certified")),
+        "probability_simplicial_map_boundary_commutation_certified": bool(chain.get("boundary_commutation_certified")),
+        "probability_simplicial_map_persistence_morphism_certified": bool(morphism.get("morphism_certified")),
+        "probability_simplicial_map_safe_for_module_morphism": bool(morphism.get("available")),
+    }
 
 
 def _empty_probability_map(query_vertices: list[dict[str, Any]], memory_vertices: list[dict[str, Any]], reason: str) -> dict[str, Any]:

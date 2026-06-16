@@ -6289,7 +6289,7 @@ def _analogical_pair_figure(
     )
     mem_layout = _complex_3d_layout(mem_complex, slab=slab)
     sim = _topological_similarity_summary(query_topology, mem_topology, row)
-    sim_map = _simplicial_map_between_complexes(query_complex, mem_complex)
+    sim_map = _retrieval_probability_simplicial_map_report(row)
     derived_comparison = _derived_invariant_comparison(query_topology, mem_topology, sim)
     sim_map["derived_invariant_comparison"] = derived_comparison
     sim_map["algebraic_realization_certificate"] = _analogical_realization_certificate(sim, sim_map, derived_comparison)
@@ -7117,6 +7117,14 @@ def _topological_similarity_summary(query_topology: dict[str, object], memory_to
         "probability_simplicial_map_preservation_rate": float(row.get("probability_simplicial_map_preservation_rate", 0.0)),
         "probability_simplicial_map_available": float(1.0 if row.get("probability_simplicial_map_available") else 0.0),
         "probability_simplicial_map_source": str(row.get("probability_simplicial_map_source", "none")),
+        "probability_simplicial_map_scoring_policy": str(row.get("probability_simplicial_map_scoring_policy", "positive score only for certified retrieval-side probability simplex-tree maps")),
+        "probability_simplicial_map_vertex_assignment_count": float(row.get("probability_simplicial_map_vertex_assignment_count", 0.0) or 0.0),
+        "probability_simplicial_map_checked_simplices": float(row.get("probability_simplicial_map_checked_simplices", row.get("probability_simplicial_map_checked", 0.0)) or 0.0),
+        "probability_simplicial_map_preserved_simplices": float(row.get("probability_simplicial_map_preserved_simplices", 0.0) or 0.0),
+        "probability_simplicial_map_edge_preservation_rate": float(row.get("probability_simplicial_map_edge_preservation_rate", 0.0) or 0.0),
+        "probability_simplicial_map_two_simplex_preservation_rate": float(row.get("probability_simplicial_map_two_simplex_preservation_rate", 0.0) or 0.0),
+        "probability_simplicial_map_chain_map_certified": float(1.0 if row.get("probability_simplicial_map_chain_map_certified") else 0.0),
+        "probability_simplicial_map_persistence_morphism_certified": float(1.0 if row.get("probability_simplicial_map_persistence_morphism_certified") else 0.0),
         "retrieval_score_components": row.get("retrieval_score_components", {}) if isinstance(row.get("retrieval_score_components"), dict) else {},
         "retrieval_weights": retrieval_weights,
         "embedding_similarity": float(row.get("embedding_similarity", 0.0)),
@@ -7233,6 +7241,164 @@ def _derived_invariant_comparison(query_topology: dict[str, object], memory_topo
         "persistence_l2_distance": float(np.linalg.norm(q_ph - m_ph)),
         "commutative_algebra_l2_distance": float(np.linalg.norm(q_ca - m_ca)),
         "persistence_landscape_l2_distance": float(np.linalg.norm(q_landscape_padded - m_landscape_padded)) if q_landscape_padded.size or m_landscape_padded.size else 0.0,
+    }
+
+
+def _summary_float(summary: object, key: str) -> float | None:
+    if not isinstance(summary, dict):
+        return None
+    value = summary.get(key)
+    try:
+        out = float(value)
+    except (TypeError, ValueError):
+        return None
+    return out if math.isfinite(out) else None
+
+
+def _retrieval_probability_dim_counts(tree_report: dict[str, object], dim: int) -> dict[str, int]:
+    counts = tree_report.get("dimension_counts", {}) if isinstance(tree_report, dict) else {}
+    bucket = counts.get(f"dim_{dim}", {}) if isinstance(counts, dict) else {}
+    if not isinstance(bucket, dict):
+        bucket = {}
+    return {
+        "checked": int(bucket.get("checked", 0) or 0),
+        "preserved": int(bucket.get("preserved", 0) or 0),
+        "missing_codomain": int(bucket.get("missing_codomain", 0) or 0),
+    }
+
+
+def _retrieval_probability_dim_rows(tree_report: dict[str, object], dim: int, *, preserved: bool) -> list[dict[str, object]]:
+    rows = tree_report.get("rows", []) if isinstance(tree_report, dict) else []
+    if not isinstance(rows, list):
+        return []
+    out: list[dict[str, object]] = []
+    for row in rows:
+        if not isinstance(row, dict) or int(row.get("dimension", -1) or -1) != dim:
+            continue
+        is_preserved = bool(row.get("preserved_in_simplex_tree"))
+        if is_preserved != preserved:
+            continue
+        out.append(
+            {
+                "query_simplex": list(row.get("domain_simplex", [])) if isinstance(row.get("domain_simplex"), list) else [],
+                "memory_simplex": list(row.get("image_simplex", [])) if isinstance(row.get("image_simplex"), list) else [],
+                "domain_filtration": row.get("domain_filtration"),
+                "codomain_filtration": row.get("codomain_filtration"),
+                "signed_filtration_distortion": row.get("signed_filtration_distortion"),
+                "failure_reason": row.get("failure_reason"),
+            }
+        )
+    return out
+
+
+def _retrieval_probability_simplicial_map_unavailable(reason: str, report: dict[str, object] | None = None) -> dict[str, object]:
+    report = report if isinstance(report, dict) else {}
+    empty = _empty_simplicial_map_report([], [], reason)
+    empty.update(
+        {
+            "map_source": str(report.get("map_source", "none")),
+            "map_certificate_source": "unavailable_retrieval_probability_simplicial_map_certificate",
+            "retrieval_probability_certificate_available": False,
+            "simplex_tree_map_checked": int(report.get("simplex_tree_map_checked", 0) or 0),
+            "simplex_tree_map_preserved": int(report.get("simplex_tree_map_preserved", 0) or 0),
+            "simplex_tree_map_preservation_rate": float(report.get("simplex_tree_map_preservation_rate", 0.0) or 0.0),
+            "simplicial_map_certificate": {
+                "source": "unavailable_retrieval_probability_simplicial_map_certificate",
+                "reason": reason,
+                "no_proxy_or_fallback": True,
+            },
+            "interpretation": "No analogical map is rendered because the retrieval row did not carry a certified model-probability simplex-tree map sidecar.",
+        }
+    )
+    return empty
+
+
+def _retrieval_probability_simplicial_map_report(row: dict[str, object]) -> dict[str, object]:
+    report = row.get("probability_simplicial_map") if isinstance(row, dict) else None
+    if not isinstance(report, dict):
+        return _retrieval_probability_simplicial_map_unavailable("missing_retrieval_probability_simplicial_map_certificate")
+    if report.get("map_source") != "model_probability_jensen_shannon_assignment":
+        return _retrieval_probability_simplicial_map_unavailable("retrieval_certificate_not_model_probability_jensen_shannon_assignment", report)
+    tree_report = report.get("simplex_tree_map") if isinstance(report.get("simplex_tree_map"), dict) else None
+    if not isinstance(tree_report, dict):
+        return _retrieval_probability_simplicial_map_unavailable("missing_retrieval_simplex_tree_map_certificate", report)
+    vertex_map = [entry for entry in report.get("vertex_map", []) if isinstance(entry, dict)] if isinstance(report.get("vertex_map"), list) else []
+    edge = _retrieval_probability_dim_counts(tree_report, 1)
+    face = _retrieval_probability_dim_counts(tree_report, 2)
+    edge_rate = float(edge["preserved"] / edge["checked"]) if edge["checked"] else 0.0
+    face_rate = float(face["preserved"] / face["checked"]) if face["checked"] else 0.0
+    preserved_edge_pairs = _retrieval_probability_dim_rows(tree_report, 1, preserved=True)
+    failed_edge_pairs = _retrieval_probability_dim_rows(tree_report, 1, preserved=False)
+    preserved_faces = _retrieval_probability_dim_rows(tree_report, 2, preserved=True)
+    failed_faces = _retrieval_probability_dim_rows(tree_report, 2, preserved=False)
+    preserved_query_vertices = sorted(
+        {
+            str(vertex)
+            for pair in preserved_edge_pairs
+            for vertex in (pair.get("query_simplex", []) if isinstance(pair.get("query_simplex"), list) else [])
+        }
+    )
+    preserved_memory_vertices = sorted(
+        {
+            str(vertex)
+            for pair in preserved_edge_pairs
+            for vertex in (pair.get("memory_simplex", []) if isinstance(pair.get("memory_simplex"), list) else [])
+        }
+    )
+    js_summary = report.get("jensen_shannon_distance_summary", {})
+    cost_summary = report.get("assignment_cost_summary", {})
+    distortion_summary = tree_report.get("positive_filtration_distortion_summary", {}) if isinstance(tree_report, dict) else {}
+    checked = int(report.get("simplex_tree_map_checked", tree_report.get("checked_simplices", 0)) or 0)
+    preserved = int(report.get("simplex_tree_map_preserved", tree_report.get("preserved_simplices", 0)) or 0)
+    rate = float(report.get("simplex_tree_map_preservation_rate", tree_report.get("preservation_rate", 0.0)) or 0.0)
+    is_map = bool(report.get("available") and report.get("is_filtered_simplicial_map") and checked > 0 and checked == preserved and rate >= 0.999)
+    return {
+        "vertex_map": vertex_map,
+        "displayed_domain_vertices": int(report.get("displayed_domain_vertices", 0) or 0),
+        "displayed_codomain_vertices": int(report.get("displayed_codomain_vertices", 0) or 0),
+        "map_source": "model_probability_jensen_shannon_assignment",
+        "map_certificate_source": "retrieval_probability_simplicial_map_certificate",
+        "retrieval_probability_certificate_available": True,
+        "probability_alignment": report.get("probability_alignment"),
+        "jensen_shannon_distance_summary": js_summary,
+        "assignment_cost_summary": cost_summary,
+        "jensen_shannon_distance_mean": _summary_float(js_summary, "mean"),
+        "jensen_shannon_distance_max": _summary_float(js_summary, "max"),
+        "assignment_cost_mean": _summary_float(cost_summary, "mean"),
+        "assignment_cost_max": _summary_float(cost_summary, "max"),
+        "filtration_distortion_summary": distortion_summary,
+        "max_positive_filtration_distortion": _summary_float(distortion_summary, "max"),
+        "checked_edges": int(edge["checked"]),
+        "preserved_edges": int(edge["preserved"]),
+        "edge_preservation_rate": edge_rate,
+        "preserved_edge_pairs": preserved_edge_pairs,
+        "failed_edge_pairs": failed_edge_pairs,
+        "preserved_edge_query_vertices": preserved_query_vertices,
+        "preserved_edge_memory_vertices": preserved_memory_vertices,
+        "checked_two_simplices": int(face["checked"]),
+        "preserved_two_simplices": int(face["preserved"]),
+        "two_simplex_preservation_rate": face_rate,
+        "preserved_two_simplex_faces": preserved_faces,
+        "failed_two_simplex_faces": failed_faces,
+        "simplex_tree_map": tree_report,
+        "simplex_tree_map_checked": checked,
+        "simplex_tree_map_preserved": preserved,
+        "simplex_tree_map_preservation_rate": rate,
+        "chain_map_diagnostics": report.get("chain_map_diagnostics", {}) if isinstance(report.get("chain_map_diagnostics"), dict) else _unavailable_chain_map_diagnostics("missing_chain_map_diagnostics"),
+        "persistence_module_morphism_diagnostics": report.get("persistence_module_morphism_diagnostics", {}) if isinstance(report.get("persistence_module_morphism_diagnostics"), dict) else _persistence_module_morphism_diagnostics(_unavailable_chain_map_diagnostics("missing_chain_map_diagnostics")),
+        "is_filtered_simplicial_map": is_map,
+        "is_simplicial_on_displayed_skeleton": is_map,
+        "simplicial_map_certificate": {
+            "source": "retrieval_probability_simplicial_map_certificate",
+            "rule": "stored retrieval certificate: model-probability Jensen-Shannon vertex assignment must extend to a filtration-preserving simplex-tree map",
+            "domain_vertices_mapped": len(vertex_map),
+            "domain_vertices_total": int(report.get("displayed_domain_vertices", 0) or 0),
+            "edge_failures": int(edge["checked"] - edge["preserved"]),
+            "two_simplex_failures": int(face["checked"] - face["preserved"]),
+            "max_positive_filtration_distortion": _summary_float(distortion_summary, "max"),
+            "no_proxy_or_fallback": True,
+        },
+        "interpretation": report.get("interpretation", "Retrieval-side certificate from the model-probability simplex-tree map sidecar."),
     }
 
 
