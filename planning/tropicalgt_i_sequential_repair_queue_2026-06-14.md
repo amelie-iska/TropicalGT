@@ -56,12 +56,12 @@
 
 ### 3. Review and Implement `references/2210.11433v1.pdf`
 
-- [ ] Extract and read `./references/2210.11433v1.pdf` in full.
-- [ ] Summarize methods relevant to multiparameter persistence modules, fitting ideals, Buchsbaum-Eisenbud multipliers, minors, resolutions, and module invariants.
-- [ ] Write `planning/tropicalgt_i_2210_11433_cas_methodology_review.md` with exact transferable constructions.
-- [ ] Implement applicable CAS computations from the paper for TropicalGT-I modules.
-- [ ] Add tests comparing computed minors/Fitting ideals/BE diagnostics on small known bivariate modules.
-- [ ] Render those objects in research-figure style with Macaulay2-like tables and diagrams.
+- [x] Extract and read `./references/2210.11433v1.pdf` in full.
+- [x] Summarize methods relevant to multiparameter persistence modules, fitting ideals, Buchsbaum-Eisenbud multipliers, minors, resolutions, and module invariants.
+- [x] Write `planning/tropicalgt_i_2210_11433_cas_methodology_review.md` with exact transferable constructions.
+- [x] Implement applicable CAS computations from the paper for TropicalGT-I modules.
+- [x] Add tests comparing computed minors/Fitting ideals/BE diagnostics on small known bivariate modules.
+- [x] Render those objects in research-figure style with Macaulay2-like tables and diagrams.
 
 ### 4. CAS Integration: Only Real Resolutions
 
@@ -70,7 +70,7 @@
 - [ ] Compute minimal multigraded free resolutions over `F2[x_level,x_radius]` when CAS is available.
 - [ ] Compute Betti tables, differential matrices, multidegree shifts, Fitting ideals, minors, Buchsbaum-Eisenbud diagnostics, and exactness/minimality certificates.
 - [ ] Render unavailable only when the real CAS computation cannot run, and make the missing dependency/action explicit.
-- [ ] Add tests with known monomial ideals: singleton generator, two-generator staircase, three-generator staircase, and a nontrivial adjacent-LCM syzygy case.
+- [x] Add tests with known monomial ideals: singleton generator, two-generator staircase, three-generator staircase, and a nontrivial adjacent-LCM syzygy case.
 
 ### 5. Derived and Analogical Maps
 
@@ -222,6 +222,14 @@ The live item-by-item repair inventory is maintained in `planning/tropicalgt_i_c
 - [x] Preserved the Jensen-Shannon probability SimplexTree unavailable state when model probability vectors are absent.
 - [x] Focused verification passed: visualization plus artifact validator `33 passed`.
 - [x] Pushed this simplex-tree contract repair on the non-main branch.
+
+
+### Current Objective Update - 2210 Methodology And Known Monomial Tests Pass
+
+- [x] Refreshed the 2210.11433 CAS methodology review with the current backend state: Macaulay2 and Singular detected, Sage not on the active shell PATH, and BEMultipliers cloned as a diagnostic layer only.
+- [x] Added exact known-ideal regression coverage for singleton, two-generator, and three-generator bivariate monomial staircase resolutions, including adjacent-LCM first syzygies and one dimensional cone language.
+- [x] Marked the 2210 review/implementation checklist complete for the paper-derived Fitting/minor/BE/rank-invariant objects already wired into the certified CAS and visualization path. Remaining CAS hardening stays in section 4.
+- [x] Focused verification passed: known monomial-ideal test `1 passed`; full algebraic persistence `21 passed`; full simplicial visualization `33 passed`; artifact validator `10 passed`.
 
 
 ### Current Objective Update - Rank-Invariant Table And 2-Parameter Persistence Pass

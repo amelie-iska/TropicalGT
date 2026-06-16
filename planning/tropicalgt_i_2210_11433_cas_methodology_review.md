@@ -94,12 +94,18 @@ The key point for our implementation is that the module is not just a grid of Be
 
 ## Current Backend State
 
-- `GUDHI`: available for simplicial complexes and one-parameter persistence.
-- `Singular`: available for some module and matrix computations; currently emits real ungraded output but does not certify multigraded persistence resolutions.
-- `SageMath`: available in a separate environment for limited exact algebra; currently only certifies total-graded one-row quotient resolutions.
-- `Macaulay2`: not currently detected. This is the preferred backend for multigraded free resolutions, Fitting ideals, minors, and Buchsbaum-Eisenbud workflows.
-- `BEMultipliers`: to be evaluated after Macaulay2 is available or after a compatible M2 package bridge is set up.
+- `GUDHI`: available for simplicial complexes, serialized simplex trees, one-parameter persistence, and the exact finite bifiltration fibers used by the `F2[x_level,x_radius]` reports.
+- `Macaulay2`: detected at `/usr/bin/M2`. This remains the preferred backend for multigraded free resolutions, Fitting ideals, minors, and Buchsbaum-Eisenbud workflows when the generated module is within the configured safety bounds.
+- `Singular`: detected at `/usr/bin/Singular`. It provides certified determinantal/Fitting ideals and ungraded/total-graded rows where applicable; these outputs stay labeled under their actual grading and are not promoted to multigraded persistence-module resolutions.
+- `SageMath`: not on the active shell PATH at the latest check. Any Sage route must continue to record the exact executable/backend path before its output can be rendered.
+- `BEMultipliers`: cloned under `external/BEMultipliers` at commit `d0b55d7`; it is an optional Buchsbaum-Eisenbud diagnostic layer after a certified Macaulay2 complex/resolution exists, not a resolution backend.
+
+## Completed Implementation Checkpoints
+
+- Structured CAS artifacts now persist Fitting ideals, determinantal minors, Betti rows, differential summaries, multidegree shifts when certified, exactness/minimality metadata, and Buchsbaum-Eisenbud diagnostics under explicit certificate fields.
+- The two-parameter bifiltration page renders research-style secondary tables for Betti-style diagnostics, certified free modules, differentials, structured Fitting/minor diagnostics, Buchsbaum-Eisenbud rank/multiplier diagnostics, CAS certificate summaries, and rank-invariant samples.
+- Regression tests now cover singleton, two-generator, and three-generator bivariate monomial staircase ideals, including the adjacent-LCM syzygy case and the one dimensional cone language in the coordinate exponent semigroup chart.
 
 ## Linear Next Step
 
-Implement actual CAS-backed Fitting/minor extraction for the presentation matrix using the available backend path first. If Singular can compute the minors/ideals for the generated matrix, persist and render them. If not, wire the Macaulay2/Sage command paths and report unavailable until the backend exists. Do not fabricate a free resolution or derived equivalence score.
+Continue the CAS-hardening sequence: prefer Macaulay2 for bounded multigraded free-resolution certificates, keep Singular/Sage outputs under their actual grading, and render explicit unavailable states for any missing grade/depth, multiplier, or backend evidence. Do not fabricate a free resolution, multiplier certificate, grade/depth check, or derived equivalence score.

@@ -5,7 +5,12 @@ import torch
 
 import tropicalgt.cas_free_resolution as cas_free_resolution
 import tropicalgt.cas_tropical as cas_tropical
-from tropicalgt.algebra import compute_level_radius_bifiltration_report, compute_topological_algebra_report, summarize_algebra_reports
+from tropicalgt.algebra import (
+    _bivariate_staircase_resolution_from_points,
+    compute_level_radius_bifiltration_report,
+    compute_topological_algebra_report,
+    summarize_algebra_reports,
+)
 from tropicalgt.cas_free_resolution import build_singular_script, canonicalize_module, try_compute_real_free_resolution
 from tropicalgt.data import FixtureGraphDataset
 from tropicalgt.model import TropicalGTConfig, TropicalGTModel
@@ -693,6 +698,56 @@ def test_topological_algebra_report_has_multiparameter_data():
     _assert_real_resolution_guard(chain["real_free_resolution"], "F2[x_filtration,x_dimension,x_position]")
     summary = summarize_algebra_reports([report])
     assert summary["algebra_reports"] == 1.0
+
+
+def test_bivariate_staircase_resolution_known_monomial_ideals():
+    variables = ["x_level", "x_radius"]
+
+    singleton = _bivariate_staircase_resolution_from_points(
+        [(2, 1)],
+        variables,
+        ideal_name="singleton",
+        source="test",
+        auxiliary=True,
+    )
+    assert singleton["available"] is True
+    assert [module["rank"] for module in singleton["free_modules"]] == [1, 1]
+    assert [row["bidegree"] for row in singleton["minimal_generators"]] == [[2, 1]]
+    assert singleton["adjacent_lcm_syzygies"] == []
+    assert singleton["differentials"][0]["entries"] == [
+        {"row": 0, "column": 0, "entry": "x_level^2*x_radius", "exponent": [2, 1]}
+    ]
+
+    two_generator = _bivariate_staircase_resolution_from_points(
+        [(2, 1), (1, 2)],
+        variables,
+        ideal_name="two_generator",
+        source="test",
+        auxiliary=True,
+    )
+    assert [module["rank"] for module in two_generator["free_modules"]] == [1, 2, 1]
+    assert [row["lcm_bidegree"] for row in two_generator["adjacent_lcm_syzygies"]] == [[2, 2]]
+    assert two_generator["differentials"][1]["entries"] == [
+        {"row": 0, "column": 0, "entry": "x_radius", "exponent": [0, 1]},
+        {"row": 1, "column": 0, "entry": "x_level", "exponent": [1, 0]},
+    ]
+
+    three_generator = _bivariate_staircase_resolution_from_points(
+        [(3, 1), (2, 2), (1, 3), (4, 4)],
+        variables,
+        ideal_name="three_generator",
+        source="test",
+        auxiliary=True,
+    )
+    assert [row["bidegree"] for row in three_generator["minimal_generators"]] == [[3, 1], [2, 2], [1, 3]]
+    assert [module["rank"] for module in three_generator["free_modules"]] == [1, 3, 2]
+    assert [row["lcm_bidegree"] for row in three_generator["adjacent_lcm_syzygies"]] == [[3, 2], [2, 3]]
+    assert [row for row in three_generator["betti_table_rows"] if row["homological_degree"] == 2] == [
+        {"homological_degree": 2, "multidegree": [3, 2], "rank": 1},
+        {"homological_degree": 2, "multidegree": [2, 3], "rank": 1},
+    ]
+    assert "one dimensional cone(s)" in three_generator["toric_exponent_chart"]["interpretation"]
+    assert three_generator["derived_category_note"].startswith("This finite free complex")
 
 
 def test_level_radius_bifiltration_reports_scoped_real_staircase_resolution(tmp_path):
