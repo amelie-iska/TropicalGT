@@ -173,3 +173,20 @@ Verification:
 - Browser DOM check confirmed: `horizontal lattice coordinates are x_radius`, `Columns are radius grades`, two Plotly panels, and `Adjacent structure maps persisted=`.
 
 Next sequential item remains CAS integration: review `references/2210.11433v1.pdf` and implement certified multigraded free-resolution, Fitting-ideal, minor, Buchsbaum-Eisenbud, and derived-map computations without proxy substitutions.
+
+
+## 2026-06-16 Certified CAS Retrieval Scoring Pass
+
+Status: implemented and focused-tested.
+
+Changes made:
+- `AnalogicalMemoryBank.retrieve` now adds a `certified_cas_evidence` score component for query/memory pairs with matching certified CAS real-free-resolution artifacts.
+- The score is exact-match gated and contributes zero for unavailable or mismatched CAS evidence.
+- Retrieval rows preserve the audit trail: evidence availability, exact-match flag, similarity fraction, mismatch list, score contribution, and no-derived-claim policy.
+
+Verification:
+- `PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_metrics_and_memory.py -q` -> `9 passed`.
+- `PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_simplicial_visualization.py TropicalGT-I/tests/test_interactive_artifact_validator.py -q` -> `33 passed`.
+- `PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_algebraic_persistence.py -q` -> `15 passed`.
+
+Next sequential item: continue simplex-tree/NLL/tropical-support repairs.

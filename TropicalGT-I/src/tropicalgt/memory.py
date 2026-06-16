@@ -193,6 +193,7 @@ class AnalogicalMemoryBank:
         landscape_weight: float = 0.08,
         vector_representation_weight: float | None = None,
         probability_map_weight: float = 0.20,
+        certified_cas_weight: float = 0.12,
         diversity_weight: float = 0.18,
         query_topology: dict[str, Any] | None = None,
         query_probability_complex: dict[str, Any] | None = None,
@@ -246,7 +247,18 @@ class AnalogicalMemoryBank:
             probability_map = probability_simplicial_map_diagnostics(query_probability_complex, trajectory_probability_complex)
             probability_map_similarity = _probability_simplicial_map_similarity(probability_map)
             probability_map_contribution = float(probability_map_weight) * probability_map_similarity
-            retrieval_score = embedding_contribution + signature_contribution + quality_contribution + landscape_contribution + vector_contribution + probability_map_contribution
+            certified_cas_report = certified_cas_evidence_similarity(query_topology, memory_topology)
+            certified_cas_retrieval_similarity = float(certified_cas_report.get("retrieval_score_similarity", 0.0) or 0.0)
+            certified_cas_contribution = float(certified_cas_weight) * certified_cas_retrieval_similarity
+            retrieval_score = (
+                embedding_contribution
+                + signature_contribution
+                + quality_contribution
+                + landscape_contribution
+                + vector_contribution
+                + probability_map_contribution
+                + certified_cas_contribution
+            )
             retrieval_score_components = {
                 "embedding": float(embedding_contribution),
                 "signature": float(signature_contribution),
@@ -254,6 +266,7 @@ class AnalogicalMemoryBank:
                 "persistence_landscape": float(landscape_contribution),
                 "persistence_vector_family": float(vector_contribution),
                 "probability_simplicial_map": float(probability_map_contribution),
+                "certified_cas_evidence": float(certified_cas_contribution),
             }
             retrieval_weights = {
                 "embedding_weight": float(embedding_weight),
@@ -262,6 +275,8 @@ class AnalogicalMemoryBank:
                 "persistence_landscape_weight": float(landscape_only_weight),
                 "persistence_vector_weight": float(vector_weight),
                 "probability_simplicial_map_weight": float(probability_map_weight),
+                "certified_cas_weight": float(certified_cas_weight),
+                "certified_cas_scoring_policy": "exact CAS-certified real-free-resolution artifact match only; no derived-equivalence claim",
                 "probability_simplicial_map_source": "model_probability_jensen_shannon_assignment",
                 "persistence_vector_includes_landscape": bool(vector_includes_landscape),
                 "legacy_landscape_weight_alias_mode": bool(legacy_vector_alias_mode),
@@ -284,6 +299,14 @@ class AnalogicalMemoryBank:
                     "persistence_vector_score_contribution": float(vector_contribution),
                     "probability_simplicial_map_score_contribution": float(probability_map_contribution),
                     "probability_simplicial_map_similarity": float(probability_map_similarity),
+                    "certified_cas_score_contribution": float(certified_cas_contribution),
+                    "certified_cas_retrieval_similarity": float(certified_cas_retrieval_similarity),
+                    "certified_cas_evidence_similarity": float(certified_cas_report.get("certified_cas_evidence_similarity", 0.0) or 0.0),
+                    "certified_cas_evidence_available": bool(certified_cas_report.get("certified_cas_evidence_available")),
+                    "certified_cas_evidence_match": bool(certified_cas_report.get("certified_cas_evidence_match")),
+                    "certified_cas_mismatched_components": list(certified_cas_report.get("mismatched_components", [])),
+                    "certified_cas_reason": certified_cas_report.get("reason"),
+                    "certified_cas_evidence": certified_cas_report,
                     "embedding_similarity": float(emb_sim),
                     "signature_similarity": float(sig_sim),
                     "persistence_landscape_vector_similarity": landscape_report,
@@ -1516,6 +1539,170 @@ def _commutative_algebra_signature_values(topology: dict[str, Any]) -> list[floa
             float(be_summary.get("exact_chain_modules", 0.0) or 0.0),
         ])
     return values
+
+
+def certified_cas_evidence_similarity(query_topology: dict[str, Any] | None, memory_topology: dict[str, Any] | None) -> dict[str, Any]:
+    """Compare certified CAS free-resolution evidence for retrieval scoring only.
+
+    This is intentionally stricter than the coarse algebraic signature vector:
+    retrieval gets a positive component only when both sides expose certified
+    CAS real-free-resolution artifacts and those artifacts match exactly at the
+    stored evidence level. A match is not reported as a derived-equivalence
+    claim; it is only an evidence-compatible retrieval signal.
+    """
+
+    query = _certified_cas_resolution_summary(query_topology or {})
+    memory = _certified_cas_resolution_summary(memory_topology or {})
+    if not (query.get("available") and memory.get("available")):
+        return {
+            "available": False,
+            "certified_cas_evidence_available": False,
+            "certified_cas_evidence_match": False,
+            "certified_cas_evidence_similarity": 0.0,
+            "retrieval_score_similarity": 0.0,
+            "score_contribution_policy": "zero unless both query and memory have matching certified CAS real-free-resolution artifacts",
+            "safe_for_retrieval_scoring": False,
+            "safe_for_derived_category_claims": False,
+            "derived_category_claim": "not_asserted_by_retrieval_scoring",
+            "query": query,
+            "memory": memory,
+            "reason": "certified CAS real-free-resolution evidence unavailable for one or both sides",
+        }
+    q_sig = query.get("artifact_signature") if isinstance(query.get("artifact_signature"), dict) else {}
+    m_sig = memory.get("artifact_signature") if isinstance(memory.get("artifact_signature"), dict) else {}
+    components = {
+        "ring": bool(query.get("ring") and query.get("ring") == memory.get("ring")),
+        "input_sha256": bool(query.get("input_sha256") and query.get("input_sha256") == memory.get("input_sha256")),
+        "artifact_hash": bool(query.get("artifact_hash") and query.get("artifact_hash") == memory.get("artifact_hash")),
+        "betti_by_multidegree": q_sig.get("betti_by_homological_and_multidegree", {}) == m_sig.get("betti_by_homological_and_multidegree", {}),
+        "differential_summaries": q_sig.get("differentials", []) == m_sig.get("differentials", []),
+        "fitting_ideals": q_sig.get("fitting_ideals", {}) == m_sig.get("fitting_ideals", {}),
+        "minors": q_sig.get("minors", {}) == m_sig.get("minors", {}),
+        "buchsbaum_eisenbud": q_sig.get("bemultipliers", {}) == m_sig.get("bemultipliers", {}),
+    }
+    matched = sum(1 for value in components.values() if value)
+    total = max(len(components), 1)
+    evidence_match = bool(all(components.values()))
+    mismatches = [key for key, value in components.items() if not value]
+    return {
+        "available": True,
+        "certified_cas_evidence_available": True,
+        "certified_cas_evidence_match": evidence_match,
+        "certified_cas_evidence_similarity": float(matched / total),
+        "retrieval_score_similarity": 1.0 if evidence_match else 0.0,
+        "component_matches": components,
+        "mismatched_components": mismatches,
+        "score_contribution_policy": "exact certified CAS artifact match contributes; partial or mismatched evidence is audited but scores zero",
+        "safe_for_retrieval_scoring": evidence_match,
+        "safe_for_derived_category_claims": False,
+        "derived_category_claim": "not_asserted_by_retrieval_scoring",
+        "query": query,
+        "memory": memory,
+        "reason": None if evidence_match else "certified CAS artifacts differ: " + ", ".join(mismatches),
+    }
+
+
+def _certified_cas_resolution_summary(topology: dict[str, Any]) -> dict[str, Any]:
+    reports: list[dict[str, Any]] = []
+
+    def visit(obj: Any, depth: int = 0) -> None:
+        if depth > 8:
+            return
+        if isinstance(obj, dict):
+            if obj.get("schema_version") == "tropicalgt.real_free_resolution.v1" or "safe_to_render_as_multigraded_free_resolution" in obj:
+                reports.append(obj)
+            for value in obj.values():
+                visit(value, depth + 1)
+        elif isinstance(obj, list):
+            for value in obj[:64]:
+                visit(value, depth + 1)
+
+    visit(topology)
+    for report in reports:
+        if not (
+            report.get("available") is True
+            and report.get("exactness_certified") is True
+            and report.get("multigraded_free_resolution_certified") is True
+            and report.get("safe_to_render_as_multigraded_free_resolution") is True
+        ):
+            continue
+        artifacts = report.get("cas_artifacts") if isinstance(report.get("cas_artifacts"), dict) else {}
+        has_artifact_evidence = any(
+            artifacts.get(key)
+            for key in ("differentials", "fitting_ideals", "minors", "buchsbaum_eisenbud_diagnostics")
+        )
+        if not has_artifact_evidence:
+            continue
+        signature = _certified_cas_resolution_signature(report)
+        be = artifacts.get("buchsbaum_eisenbud_diagnostics") if isinstance(artifacts.get("buchsbaum_eisenbud_diagnostics"), dict) else {}
+        return {
+            "available": True,
+            "backend": report.get("backend"),
+            "ring": report.get("coefficient_ring", report.get("ring")),
+            "input_sha256": report.get("input_sha256"),
+            "status": report.get("status"),
+            "minimality_certified": bool(report.get("minimality_certified")),
+            "artifact_signature": signature,
+            "artifact_hash": _cas_artifact_hash(signature),
+            "bemultipliers_status": be.get("bemultipliers_status", "unreported"),
+            "multiplier_output_available": bool(be.get("multiplier_output_available")),
+            "a_multiplier_1_shape": be.get("a_multiplier_1_shape", ""),
+            "a_multiplier_1_matrix_hash": _cas_artifact_hash(be.get("a_multiplier_1_matrix", "")),
+        }
+    return {
+        "available": False,
+        "candidate_reports_seen": len(reports),
+        "reason": "no CAS-certified multigraded real free resolution with stored CAS artifacts found in topology payload",
+    }
+
+
+def _certified_cas_resolution_signature(report: dict[str, Any]) -> dict[str, Any]:
+    artifacts = report.get("cas_artifacts") if isinstance(report.get("cas_artifacts"), dict) else {}
+    summary = report.get("free_resolution_summary") if isinstance(report.get("free_resolution_summary"), dict) else {}
+    be = artifacts.get("buchsbaum_eisenbud_diagnostics") if isinstance(artifacts.get("buchsbaum_eisenbud_diagnostics"), dict) else {}
+    differentials = artifacts.get("differentials") if isinstance(artifacts.get("differentials"), list) else []
+    differential_summary = []
+    for row in differentials[:24]:
+        if not isinstance(row, dict):
+            continue
+        differential_summary.append(
+            {
+                "homological_degree": row.get("homological_degree"),
+                "rows": row.get("rows"),
+                "cols": row.get("cols"),
+                "shape": row.get("shape"),
+                "source_degrees": row.get("source_degrees"),
+                "target_degrees": row.get("target_degrees"),
+                "matrix_hash": _cas_artifact_hash(row.get("matrix_text", row.get("matrix_preview", ""))),
+            }
+        )
+    return {
+        "schema_version": report.get("schema_version"),
+        "backend": report.get("backend"),
+        "ring": report.get("coefficient_ring", report.get("ring")),
+        "input_sha256": report.get("input_sha256"),
+        "minimality_certified": bool(report.get("minimality_certified")),
+        "betti_by_homological_and_multidegree": summary.get("betti_by_homological_and_multidegree", {}),
+        "free_modules": summary.get("free_modules", []),
+        "differentials": differential_summary,
+        "fitting_ideals": artifacts.get("fitting_ideals", {}) if isinstance(artifacts.get("fitting_ideals"), dict) else {},
+        "minors": artifacts.get("minors", {}) if isinstance(artifacts.get("minors"), dict) else {},
+        "bemultipliers": {
+            "available": bool(be.get("available")),
+            "multiplier_output_available": bool(be.get("multiplier_output_available")),
+            "bemultipliers_status": be.get("bemultipliers_status", "unreported"),
+            "a_multiplier_1_shape": be.get("a_multiplier_1_shape", ""),
+            "a_multiplier_1_matrix_hash": _cas_artifact_hash(be.get("a_multiplier_1_matrix", "")),
+        },
+    }
+
+
+def _cas_artifact_hash(value: Any) -> str:
+    try:
+        payload = json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
+    except TypeError:
+        payload = str(value)
+    return hashlib.sha256(payload.encode("utf-8", "ignore")).hexdigest()
 
 
 def _memory_id(record_id: object, embedding: list[float], signature: list[float]) -> str:

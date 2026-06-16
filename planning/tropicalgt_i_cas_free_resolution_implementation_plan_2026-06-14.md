@@ -667,4 +667,28 @@ PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pyt
 # 8 passed
 ```
 
-Next linear item: extend certified CAS comparisons into retrieval scoring only when compatible query/memory CAS artifacts are available, then continue the simplex-tree/NLL/tropical-support repair queue.
+Next linear item completed below: certified CAS comparisons are now part of retrieval scoring only when compatible query/memory CAS artifacts are available. Continue next with the simplex-tree/NLL/tropical-support repair queue.
+
+
+## 2026-06-16 Certified CAS Evidence Retrieval Scoring Pass
+
+Follow-up CAS/analogical retrieval item completed:
+
+- `AnalogicalMemoryBank.retrieve` now computes a `certified_cas_evidence` retrieval component from the query topology and each memory topology.
+- The component searches the topology payloads for CAS-certified multigraded real free-resolution reports with stored CAS artifacts. Chain-presentation diagnostics without a real CAS certificate remain unavailable for this score.
+- Matching requires exact agreement of ring, input hash, stable artifact hash, multigraded Betti shifts, differential summaries, Fitting ideals, minors, and Buchsbaum-Eisenbud multiplier output/status.
+- Only exact certified CAS artifact matches contribute to retrieval score. Partial matches, mismatches, and unavailable evidence are audited with explicit states and reasons but contribute zero.
+- Retrieval output records `certified_cas_evidence_available`, `certified_cas_evidence_match`, `certified_cas_evidence_similarity`, `certified_cas_score_contribution`, `certified_cas_mismatched_components`, and a policy string stating that no derived-equivalence claim is asserted by retrieval scoring.
+
+Validation:
+
+```text
+PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_metrics_and_memory.py -q
+# 9 passed
+PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_simplicial_visualization.py TropicalGT-I/tests/test_interactive_artifact_validator.py -q
+# 33 passed
+PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_algebraic_persistence.py -q
+# 15 passed
+```
+
+Next linear item: continue the simplex-tree/NLL/tropical-support repair queue while keeping active BPB training alive.

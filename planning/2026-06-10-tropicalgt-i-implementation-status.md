@@ -249,3 +249,13 @@
 - Analogical realization certificates now require the nested real-free-resolution comparison to be safe before using the `cas_certified_derived_geometric_realization` claim. Having certified resolutions on both sides is no longer enough by itself.
 - Added regression coverage for exactly matching certified Macaulay2-style artifacts and for mismatched certified artifacts with otherwise compatible finite invariants.
 - Verification: visualization plus artifact validator `33 passed`; algebraic persistence `15 passed`; metrics and memory `8 passed`.
+
+
+## Iteration 34: Certified CAS Evidence in Retrieval Scoring
+
+- Added a certificate-gated `certified_cas_evidence` retrieval component to `AnalogicalMemoryBank.retrieve`.
+- The scorer compares only CAS-certified multigraded real-free-resolution artifacts stored in query and memory topologies. It checks ring, input hash, stable artifact hash, multigraded Betti shifts, differential summaries, Fitting ideals, minors, and Buchsbaum-Eisenbud multiplier output/status.
+- Exact artifact matches can raise retrieval rank; unavailable evidence and mismatches are surfaced with explicit reasons and mismatch components but contribute `0.0`.
+- Retrieval output explicitly marks the signal as retrieval evidence only and sets no derived-category claim from the scorer.
+- Regression coverage now proves matching certified CAS artifacts score positively, mismatched certified artifacts score zero while remaining auditable, and missing query CAS evidence stays unavailable.
+- Verification: metrics and memory `9 passed`; visualization plus artifact validator `33 passed`; algebraic persistence `15 passed`.

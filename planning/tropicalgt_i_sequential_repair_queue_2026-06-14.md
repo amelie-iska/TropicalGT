@@ -201,4 +201,14 @@ The live item-by-item repair inventory is maintained in `planning/tropicalgt_i_c
 - [x] Updated analogical realization certificates to require `safe_for_derived_category_claims` from the CAS artifact comparison before claiming CAS-certified derived geometric realization.
 - [x] Added regression coverage for matching certified CAS artifacts and mismatched certified CAS artifacts with otherwise compatible finite invariants.
 - [x] Focused verification passed: visualization plus artifact validator `33 passed`; algebraic persistence `15 passed`; metrics and memory `8 passed`.
-- [ ] Push this certified CAS analogical-comparison repair on the non-main branch after final diff/status review.
+- [x] Pushed this certified CAS analogical-comparison repair on the non-main branch as commit `1a21a74`.
+
+
+### Current Objective Update - Certified CAS Retrieval Scoring Pass
+
+- [x] Extended `AnalogicalMemoryBank.retrieve` with a certificate-gated `certified_cas_evidence` score component.
+- [x] Retrieval CAS scoring now contributes only for exact artifact-level matches between query and memory certified real-free-resolution evidence: ring, input hash, stable artifact hash, multigraded Betti shifts, differential summaries, Fitting ideals, minors, and Buchsbaum-Eisenbud multiplier output/status.
+- [x] Mismatched or unavailable CAS evidence is still serialized for audit with explicit reasons and mismatch components, but its score contribution is `0.0` and it does not assert derived-category equivalence.
+- [x] Added memory regression coverage for matching certified CAS evidence, mismatched certified CAS evidence, and unavailable query evidence.
+- [x] Focused verification passed: metrics and memory `9 passed`; visualization plus artifact validator `33 passed`; algebraic persistence `15 passed`.
+- [x] Pushed this certified CAS retrieval-scoring repair on the non-main branch.

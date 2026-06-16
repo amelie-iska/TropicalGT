@@ -152,6 +152,145 @@ def _memory_record(record_id, topology):
     )
 
 
+def _topology_with_certified_real_resolution(*, input_hash="hash-a", fitt0="ideal(x_level,x_radius)", multiplier_matrix="matrix {{1}}"):
+    free_modules = [
+        {"homological_degree": 0, "multidegree": [0, 0], "rank": 1, "display": "F_0 contains S(-0,0)^1"},
+        {"homological_degree": 1, "multidegree": [1, 0], "rank": 1, "display": "F_1 contains S(-1,0)^1"},
+    ]
+    real = {
+        "schema_version": "tropicalgt.real_free_resolution.v1",
+        "available": True,
+        "status": "certified",
+        "backend": "Macaulay2",
+        "coefficient_ring": "F2[x_level,x_radius]",
+        "input_sha256": input_hash,
+        "certificate_attached": True,
+        "exactness_certified": True,
+        "minimality_certified": True,
+        "real_free_resolution_certified": True,
+        "multigraded_free_resolution_certified": True,
+        "safe_to_render_as_multigraded_free_resolution": True,
+        "free_resolution_summary": {
+            "available": True,
+            "safe_for_multigraded_claims": True,
+            "not_multigraded": False,
+            "betti_by_homological_and_multidegree": {"0": {"0,0": 1}, "1": {"1,0": 1}},
+            "free_modules": free_modules,
+        },
+        "cas_artifacts": {
+            "differentials": [
+                {
+                    "homological_degree": 1,
+                    "rows": 1,
+                    "cols": 1,
+                    "source_degrees": [[1, 0]],
+                    "target_degrees": [[0, 0]],
+                    "matrix_text": "matrix {{x_level}}",
+                }
+            ],
+            "fitting_ideals": {"Fitt0": fitt0, "Fitt1": "ideal 1"},
+            "minors": {"minors_1": fitt0},
+            "buchsbaum_eisenbud_diagnostics": {
+                "available": True,
+                "multiplier_output_available": True,
+                "bemultipliers_status": "computed_aMultiplier_1",
+                "a_multiplier_1_shape": "1x1",
+                "a_multiplier_1_matrix": multiplier_matrix,
+            },
+        },
+    }
+    return {
+        "persistence": {"intervals": [{"dimension": 0, "birth": 0.0, "death": None, "infinite": True}]},
+        "derived_equivalence_signature": {
+            "betti_vector": [1, 0, 0, 0],
+            "persistence_finite_interval_count": 0,
+            "persistence_infinite_interval_count": 1,
+            "persistence_total_finite_length": 0.0,
+            "multiparameter_grid_points": 1,
+            "multiparameter_h0_rank_sample": [{"h0_rank": 1}],
+        },
+        "commutative_algebra": {
+            "two_parameter_chain_presentation_diagnostics": {
+                "ring": "F2[x_level,x_radius]",
+                "free_chain_modules": [
+                    {"homological_degree": 0, "rank": 1},
+                    {"homological_degree": 1, "rank": 1},
+                ],
+                "real_free_resolution": real,
+            }
+        },
+    }
+
+
+def test_analogical_memory_retrieval_scores_only_matching_certified_cas_evidence(tmp_path):
+    query_topology = _topology_with_certified_real_resolution()
+    matching_topology = _topology_with_certified_real_resolution()
+    mismatched_topology = _topology_with_certified_real_resolution(
+        input_hash="hash-b",
+        fitt0="ideal(x_level)",
+        multiplier_matrix="matrix {{0}}",
+    )
+    bank = AnalogicalMemoryBank(tmp_path / "certified_cas_memory.jsonl", max_records=8)
+    bank.extend(
+        [
+            _memory_record("mismatch", mismatched_topology),
+            _memory_record("match", matching_topology),
+        ]
+    )
+    hits = bank.retrieve(
+        [1.0, 0.0, 0.0],
+        [1.0, 0.0, 0.0],
+        top_k=2,
+        embedding_weight=0.0,
+        signature_weight=0.0,
+        score_weight=0.0,
+        landscape_weight=0.0,
+        vector_representation_weight=0.0,
+        probability_map_weight=0.0,
+        certified_cas_weight=1.0,
+        diversity_weight=0.0,
+        query_topology=query_topology,
+    )
+    assert [row["record_id"] for row in hits] == ["match", "mismatch"]
+    assert hits[0]["retrieval_weights"]["certified_cas_weight"] == 1.0
+    assert hits[0]["certified_cas_evidence_available"] is True
+    assert hits[0]["certified_cas_evidence_match"] is True
+    assert hits[0]["certified_cas_retrieval_similarity"] == 1.0
+    assert hits[0]["certified_cas_score_contribution"] == 1.0
+    assert hits[0]["retrieval_score_components"]["certified_cas_evidence"] == 1.0
+    assert hits[0]["certified_cas_evidence"]["safe_for_derived_category_claims"] is False
+    assert hits[0]["certified_cas_evidence"]["derived_category_claim"] == "not_asserted_by_retrieval_scoring"
+    assert math.isclose(hits[0]["retrieval_score"], hits[0]["certified_cas_score_contribution"], rel_tol=1e-9)
+
+    assert hits[1]["certified_cas_evidence_available"] is True
+    assert hits[1]["certified_cas_evidence_match"] is False
+    assert hits[1]["certified_cas_score_contribution"] == 0.0
+    assert hits[1]["certified_cas_retrieval_similarity"] == 0.0
+    assert 0.0 < hits[1]["certified_cas_evidence_similarity"] < 1.0
+    assert {"input_sha256", "artifact_hash", "fitting_ideals", "minors", "buchsbaum_eisenbud"}.issubset(
+        set(hits[1]["certified_cas_mismatched_components"])
+    )
+
+    unavailable_hits = bank.retrieve(
+        [1.0, 0.0, 0.0],
+        [1.0, 0.0, 0.0],
+        top_k=2,
+        embedding_weight=0.0,
+        signature_weight=0.0,
+        score_weight=0.0,
+        landscape_weight=0.0,
+        vector_representation_weight=0.0,
+        probability_map_weight=0.0,
+        certified_cas_weight=1.0,
+        diversity_weight=0.0,
+        query_topology={},
+    )
+    assert unavailable_hits
+    assert all(row["certified_cas_score_contribution"] == 0.0 for row in unavailable_hits)
+    assert all(row["certified_cas_evidence_available"] is False for row in unavailable_hits)
+
+
+
 def _probability_complex(prefix, *, probabilities=None):
     labels = [f"{prefix}0", f"{prefix}1", f"{prefix}2"]
     probabilities = probabilities or [
