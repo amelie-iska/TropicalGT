@@ -377,7 +377,7 @@ TropicalGT-I/outputs/train_full_dataset_active/periodic/step_XXXXXXXX/got_audit 
 For the live b60 run, the latest completed periodic audit can be served read-only on the review port:
 
 ```bash
-AUDIT=TropicalGT-I/outputs/tropicalgt_i_pg_bpb_step0_full24b_b60_20260616T053631Z_fresh_bpb112_casrows_5k_gate/periodic/step_00002500/got_audit
+AUDIT=TropicalGT-I/outputs/tropicalgt_i_pg_bpb_step0_full24b_b60_20260616T053631Z_fresh_bpb112_casrows_5k_gate/periodic/step_00002750/got_audit
 ln -sf inference_audit.html "$AUDIT/index.html"
 python -m http.server 8991 --bind 127.0.0.1 --directory "$AUDIT"
 ```

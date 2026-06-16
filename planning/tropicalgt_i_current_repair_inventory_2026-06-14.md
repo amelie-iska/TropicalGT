@@ -95,9 +95,9 @@ Repair `trajectory_persistence/two_parameter_bifiltration.html` so it is mathema
 ## Present Status
 
 - Current branch: `tropicalgt-i-real-cas-no-proxy-20260614`.
-- Active training: fresh b59 step-0 run `tropicalgt_i_pg_bpb_step0_full24b_b59_20260616T001122Z_fresh_bpb112_5k_gate`, PID `73189`, W&B `itxgxj40`, config under `TropicalGT-I/outputs/launch_configs/`, output dir under `TropicalGT-I/outputs/`.
-- b59 is under the 5K evidence gate: do not restart before step `5000` unless it crashes, OOMs, or logs nonfinite/invalid losses. Galileo (`019ecdc9-a3b8-7761-b0e5-36e6adad8e15`) owns the post-5K analysis/visualization review and evidence-backed step-0 restart.
-- Focused tests currently pass for certified CAS/analogical memory/training metrics paths after commit `70c2e93`.
+- Active training: fresh b60 step-0 run `tropicalgt_i_pg_bpb_step0_full24b_b60_20260616T053631Z_fresh_bpb112_casrows_5k_gate`, PID `378962`, watcher PID `379304`, W&B `ld5u55p5`, config under `TropicalGT-I/outputs/launch_configs/`, output dir under `TropicalGT-I/outputs/`.
+- b60 is under the 5K evidence gate: do not restart before step `5000` unless it crashes, OOMs, or logs nonfinite/invalid losses. The post-5K analysis/visualization review must use the Codex evidence-review/subagent workflow and the evidence-bound restart schema before any step-0 restart.
+- Focused tests currently pass for certified CAS, analogical memory, training metrics, post-5K review bundle, legacy audit backfill, and evidence-bound restart-schema paths after commit `db3a5d2`.
 - Tropical support readability now includes strict/near-wall margin diagnostics, per-token wall buckets, and threshold guide traces after the 2026-06-16 pass; remaining visual/math items are NLL/fitness density polish, simplex-tree/browser inspection, and CAS-rendered algebra panels as real backend evidence becomes available.
 
 ## 2026-06-14 Bifiltration Figure Repair Pass
@@ -252,9 +252,9 @@ Verification:
 - `PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_losses_and_model.py TropicalGT-I/tests/test_training_metrics.py -q` -> `19 passed`.
 
 Training gate note:
-- b59 continues running toward the required step `5000` minimum review gate. The new hook is for the next evidence-backed restart or ablation, not a mid-run mutation.
+- b60 continues running toward the required step `5000` minimum review gate. The new hook is for the next evidence-backed restart or ablation, not a mid-run mutation.
 
-Next sequential item: continue source-side audit repairs that do not interfere with b59, then use the step-5000 metrics, sidecars, topology/geometric/algebraic visualizations, and Galileo review to choose restart coefficients and hyperparameters.
+Next sequential item: continue source-side audit repairs that do not interfere with b60, then use the step-5000 metrics, sidecars, topology/geometric/algebraic visualizations, Codex subagent review, and evidence-bound restart schema to choose restart coefficients and hyperparameters.
 
 ## 2026-06-16 Chart-Local BPB Partition Pass
 
@@ -380,14 +380,14 @@ Verification:
 - `python -m py_compile TropicalGT-I/scripts/monitor_training_step_gate.py` passed.
 - `PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_training_step_gate_monitor.py -q` -> `8 passed`.
 
-Next sequential item: relaunch the 5K watcher for b59 with required step-5000 artifact paths, notify Galileo of the new source commit, then keep hardening non-interfering audit paths while b59 trains.
+Next sequential item: keep the active b60 watcher running with required step-5000 artifact paths, then keep hardening non-interfering audit paths while b60 trains.
 
 ## 2026-06-16 Post-5K Review Bundle Helper Pass
 
 Status: implemented and focused-tested.
 
 Changes made:
-- Added a post-5K review-bundle helper that prepares the Codex/Galileo handoff from an already-trained run without launching training.
+- Added a post-5K review-bundle helper that prepares the Codex evidence-review handoff from an already-trained run without launching training.
 - The bundle includes the active training contract, Codex review prompt, stop-record payload, bounded artifact inventory, eval/visualization command, and interactive-audit validator commands.
 - The bundle is path-only and keeps generated artifacts/checkpoints out of git.
 
@@ -395,7 +395,7 @@ Verification:
 - `python -m py_compile TropicalGT-I/scripts/prepare_5k_review_bundle.py` passed.
 - `PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_prepare_5k_review_bundle.py TropicalGT-I/tests/test_parameter_golf_review_loop.py -q` -> `4 passed`.
 
-Next sequential item: when the b59 watcher writes a target-reached stop record, run the helper against the b59 config/report/checkpoint/stop-record and hand the resulting bundle to Galileo for the evidence-backed restart.
+Next sequential item: when the b60 watcher writes a target-reached stop record, run the helper against the b60 config/report/checkpoint/stop-record and hand the resulting bundle to the Codex evidence-review/subagent workflow before any evidence-backed restart.
 
 ## 2026-06-16 Bivariate Staircase Visual Contract Pass
 

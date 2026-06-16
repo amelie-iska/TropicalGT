@@ -13,7 +13,7 @@ This checklist merges the browser/photo review, the current active training stat
 
 ## 2. Browser QA and Visual Evidence
 
-- Keep the served audit bundle at `127.0.0.1:8990` pointed to the latest real model-output artifacts.
+- Keep the served audit bundle at `127.0.0.1:8991` pointed to the latest completed real b60 periodic audit; current browser serving was reattached to step `2750` without copying generated artifacts.
 - Every visual change should be regenerated from `inference_audit.json` or live periodic audit payloads, never from synthetic examples.
 - Review pages visually after edits when browser access is available; keep screenshots/evidence for before/after when possible.
 - If browser navigation is blocked by the app policy, continue regenerating the served artifact files and record the blocked browser step in status rather than using a workaround.
