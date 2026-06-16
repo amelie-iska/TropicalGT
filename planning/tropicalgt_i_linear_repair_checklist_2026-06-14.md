@@ -243,3 +243,13 @@ Status: complete and focused-tested.
 - Verification: focused post-5K bundle tests -> `9 passed`; coupled post-5K/review/readiness/monitor suite -> `45 passed`.
 
 Next sequential implementation item remains Item 9 source-side evidence hardening while b61 trains: continue closing restart/review evidence bypasses, then proceed to CAS/visual/math repairs item-by-item without interrupting the active 5K run.
+
+### 2026-06-16 Dataset Path Fallback Resolver Removal
+
+Status: complete and focused-tested.
+
+- Removed the remaining resolver-level fallback candidate parameter from dataset path resolution. Source configs must provide one explicit existing root/tokenizer path, and legacy fallback keys are rejected before resolution.
+- Renamed the dataset manifest root parameter to `data_root` to avoid treating primary data provenance as fallback evidence.
+- Verification: data-loader/provenance/readiness tests -> `31 passed`, with the known SentencePiece/SWIG warnings.
+
+Next sequential implementation item remains Item 9 source-side evidence hardening while b61 trains: continue closing restart/review evidence bypasses, then proceed to CAS/visual/math repairs item-by-item without interrupting the active 5K run.

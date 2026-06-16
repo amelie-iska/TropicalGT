@@ -763,21 +763,18 @@ def make_dataset_from_config(cfg: dict[str, Any], split: str) -> Dataset:
     )
 
 
-def dataset_manifest(dataset: Dataset, fallback_root: str | Path | None = None, splits: Iterable[str] = ("train", "validation")) -> dict[str, Any]:
+def dataset_manifest(dataset: Dataset, data_root: str | Path | None = None, splits: Iterable[str] = ("train", "validation")) -> dict[str, Any]:
     if hasattr(dataset, "manifest"):
         return dataset.manifest()
-    return parquet_manifest(fallback_root, splits, include_shards=False) if fallback_root else {"type": type(dataset).__name__, "rows": len(dataset)}
+    return parquet_manifest(data_root, splits, include_shards=False) if data_root else {"type": type(dataset).__name__, "rows": len(dataset)}
 
 
 def _make_dataset_source(cfg: dict[str, Any], source: dict[str, Any], split: str, split_limit: int | None) -> Dataset:
     kind = str(source.get("kind", "parquet"))
     limit = source.get(f"{split}_limit", source.get("limit", split_limit))
     if kind in {"parquet", "hf_parquet", "graph_parquet"}:
-        root = _resolve_existing_config_path(
-            source.get("root", cfg.get("data_root")),
-            _strict_config_path_candidates(cfg, source, "fallback_roots", "parquet root"),
-            "parquet root",
-        )
+        _reject_config_path_fallbacks(source, "fallback_roots", "parquet root")
+        root = _resolve_existing_config_path(source.get("root", cfg.get("data_root")), "parquet root")
         return ParquetGraphDataset(
             root,
             split=source.get("split", split),
@@ -785,18 +782,12 @@ def _make_dataset_source(cfg: dict[str, Any], source: dict[str, Any], split: str
             cache_shards=int(source.get("cache_shards", cfg.get("cache_shards", 2))),
         )
     if kind in {"parameter_golf_bin", "oai_parameter_golf", "openai_parameter_golf"}:
-        root = _resolve_existing_config_path(
-            source["root"],
-            _strict_config_path_candidates(cfg, source, "fallback_roots", "Parameter Golf root"),
-            "Parameter Golf root",
-        )
+        _reject_config_path_fallbacks(source, "fallback_roots", "Parameter Golf root")
+        root = _resolve_existing_config_path(source["root"], "Parameter Golf root")
         tokenizer_path = source.get("tokenizer_path")
         if tokenizer_path:
-            tokenizer_path = _resolve_existing_config_path(
-                tokenizer_path,
-                _strict_config_path_candidates(cfg, source, "tokenizer_fallback_paths", "Parameter Golf tokenizer"),
-                "Parameter Golf tokenizer",
-            )
+            _reject_config_path_fallbacks(source, "tokenizer_fallback_paths", "Parameter Golf tokenizer")
+            tokenizer_path = _resolve_existing_config_path(tokenizer_path, "Parameter Golf tokenizer")
         return ParameterGolfBinGraphDataset(
             root,
             split=source.get("split", split),
@@ -810,7 +801,7 @@ def _make_dataset_source(cfg: dict[str, Any], source: dict[str, Any], split: str
     raise ValueError(f"Unsupported dataset source kind: {kind}")
 
 
-def _strict_config_path_candidates(cfg: dict[str, Any], source: dict[str, Any], key: str, label: str) -> list[str | Path]:
+def _reject_config_path_fallbacks(source: dict[str, Any], key: str, label: str) -> None:
     raw = source.get(key, ())
     if raw is None:
         values: list[str | Path] = []
@@ -820,16 +811,12 @@ def _strict_config_path_candidates(cfg: dict[str, Any], source: dict[str, Any], 
         values = [value for value in raw if value]
     if values:
         raise ValueError(f"{label} configured {key}, but config path fallbacks are disabled by no_proxy_no_fallback policy")
-    return values
 
 
-def _resolve_existing_config_path(primary: str | Path | None, fallbacks: Iterable[str | Path] = (), label: str = "path") -> Path:
-    candidates = [Path(primary)] if primary else []
-    candidates.extend(Path(path) for path in fallbacks if path)
-    for candidate in candidates:
-        if candidate.exists():
-            return candidate
-    if not candidates:
+def _resolve_existing_config_path(primary: str | Path | None, label: str = "path") -> Path:
+    if not primary:
         raise FileNotFoundError(f"No {label} configured")
-    joined = ", ".join(str(candidate) for candidate in candidates)
-    raise FileNotFoundError(f"No existing {label}; checked: {joined}")
+    candidate = Path(primary)
+    if candidate.exists():
+        return candidate
+    raise FileNotFoundError(f"No existing {label}; checked: {candidate}")

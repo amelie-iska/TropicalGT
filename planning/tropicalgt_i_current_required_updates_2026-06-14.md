@@ -949,3 +949,23 @@ PYTHONPATH=TropicalGT-I/scripts:TropicalGT-I/src /home/iska/miniconda3/envs/toke
 ```
 
 _Last updated: 2026-06-16T16:19:00Z_
+
+## 2026-06-16 Sequential Training/Readiness Update: Data Path Fallback Resolver Removal
+
+Status: complete for source-side dataset path fallback hardening; active b61 training remains running under the always-on rule.
+
+- Removed the dead alternate-candidate `fallbacks` parameter from `_resolve_existing_config_path`; dataset source resolution now accepts exactly one explicit primary path and fails if it is absent or missing.
+- Renamed the `dataset_manifest` optional root argument from `fallback_root` to `data_root`, eliminating misleading fallback terminology for the primary dataset root.
+- Replaced `_strict_config_path_candidates` with `_reject_config_path_fallbacks`, which explicitly rejects legacy `fallback_roots` and `tokenizer_fallback_paths` before any path resolution occurs.
+- Updated provenance registry terms so the audit tracks the explicit rejection guard rather than obsolete fallback-candidate plumbing.
+- Corrected stale planning text that implied an opt-in path fallback resolver was still allowed.
+- No datasets, checkpoints, generated outputs, caches, W&B folders, or secrets were staged.
+
+Verification:
+
+```bash
+PYTHONPATH=TropicalGT-I/scripts:TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_data_loader.py TropicalGT-I/tests/test_metric_provenance.py TropicalGT-I/tests/test_readiness_audit.py -q
+# 31 passed, 2 warnings in 4.05s
+```
+
+_Last updated: 2026-06-16T16:39:00Z_

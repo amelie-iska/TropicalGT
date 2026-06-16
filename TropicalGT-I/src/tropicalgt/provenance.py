@@ -258,15 +258,13 @@ PROVENANCE_REGISTRY: tuple[ProvenanceEntry, ...] = (
         replacement_or_guardrail="Training data roots and tokenizer paths must be explicit existing paths. Configured fallback_roots or tokenizer_fallback_paths fail closed under the no_proxy_no_fallback policy.",
         match_terms=(
             "fallback_shuffle",
-            "fallback_root",
             "fallback_roots",
             "loader_shuffle",
             "config fallback",
             "compatibility fallback",
             "tokenizer_fallback_paths",
-            "_resolve_existing_config_path",
-            "fallbacks: Iterable",
-            "candidates.extend(Path(path) for path in fallbacks",
+            "_reject_config_path_fallbacks",
+            "config path fallbacks are disabled",
         ),
     ),
     ProvenanceEntry(
