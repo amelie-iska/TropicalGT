@@ -810,3 +810,21 @@ CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/t
 CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_simplicial_visualization.py -q -p no:cacheprovider --basetemp=/tmp/tropicalgt-pytest-layout-provenance-viz -k "simplicial_svg_wraps_long_topological_paths or simplicial_svg_reports_model_vector_projection_evidence"
 # 2 passed, 42 deselected
 ```
+
+## 2026-06-16 Browser Static Preview Provenance Rename
+
+Sequential provenance/no-proxy item completed after the simplicial projection provenance rename:
+
+- Renamed the canonical browser rendering provenance entry from `browser_static_preview_rendering_fallback` to `browser_same_data_static_preview_rendering`.
+- Changed the entry kind from `rendering_fallback` to `same_data_rendering_contingency`, matching the current generated `webgl-static-preview` / `staticPreviewMarkup` UI contract.
+- Updated the standalone metric-provenance audit helper with current same-data hook names while retaining retired fallback-era names as legacy match terms, so stale generated renderer code is still classified instead of becoming an uncovered risk-word finding.
+- Updated the full-dataset visualization telemetry plan to describe static SVG panels as same-data rendering contingencies rather than data or geometry fallbacks.
+
+Validation:
+
+```text
+CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m py_compile TropicalGT-I/src/tropicalgt/provenance.py TropicalGT-I/scripts/audit_metric_provenance.py TropicalGT-I/tests/test_metric_provenance.py
+# passed
+CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_metric_provenance.py -q -p no:cacheprovider --basetemp=/tmp/tropicalgt-pytest-static-preview-provenance
+# 7 passed
+```

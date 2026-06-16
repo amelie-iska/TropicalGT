@@ -23,7 +23,7 @@ def test_metric_provenance_registry_covers_current_risky_terms(tmp_path: Path):
         "parameter_golf_token_id_fallback",
         "training_data_budget_estimate",
         "config_default_fallback",
-        "browser_static_preview_rendering_fallback",
+        "browser_same_data_static_preview_rendering",
         "simplicial_projection_display_layout_evidence",
         "gudhi_vectorizer_autograd_boundary",
     ]:
@@ -36,7 +36,7 @@ def test_metric_provenance_registry_covers_current_risky_terms(tmp_path: Path):
     assert registry["smooth_projected_nll_fitness_landscape"]["optimize_directly"] is False
     assert registry["persistence_landscape"]["kind"] == "fast_vectorized_topology"
     assert registry["persistence_vector_representation_similarity"]["optimize_directly"] is True
-    assert registry["browser_static_preview_rendering_fallback"]["kind"] == "rendering_fallback"
+    assert registry["browser_same_data_static_preview_rendering"]["kind"] == "same_data_rendering_contingency"
     assert registry["simplicial_projection_display_layout_evidence"]["kind"] == "visual_display_layout_boundary"
 
 
@@ -103,11 +103,11 @@ def test_metric_provenance_audit_covers_webgl_rendering_fallback_without_metric_
     assert report["finding_count"] == 3
     assert report["uncovered_finding_count"] == 0
     assert {row["matched_entry"] for row in report["covered_findings"]} == {
-        "browser_static_preview_rendering_fallback",
+        "browser_same_data_static_preview_rendering",
     }
     registry = provenance_by_name()
-    guardrail = registry["browser_static_preview_rendering_fallback"]["replacement_or_guardrail"]
-    assert "never substitutes model probabilities" in guardrail
+    guardrail = registry["browser_same_data_static_preview_rendering"]["replacement_or_guardrail"]
+    assert "never substitutes model" in guardrail
 
 
 def _audit_script_path() -> Path:
@@ -141,7 +141,7 @@ def test_audit_metric_provenance_script_covers_webgl_static_preview_only(tmp_pat
     covered = module._apply_script_local_rendering_coverage(report)
 
     assert any(
-        row.get("matched_entry") == "browser_static_preview_rendering_fallback"
+        row.get("matched_entry") == "browser_same_data_static_preview_rendering"
         for row in covered["covered_findings"]
     )
     assert covered["uncovered_finding_count"] == 1
@@ -177,7 +177,7 @@ def test_audit_metric_provenance_script_fail_gate_accepts_static_preview(tmp_pat
     assert result.returncode == 0, result.stderr + result.stdout
     report = json.loads(json_path.read_text(encoding="utf-8"))
     assert report["uncovered_finding_count"] == 0
-    assert {row["matched_entry"] for row in report["covered_findings"]} == {"browser_static_preview_rendering_fallback"}
+    assert {row["matched_entry"] for row in report["covered_findings"]} == {"browser_same_data_static_preview_rendering"}
 
 
 def test_metric_provenance_covers_cas_unavailable_and_degenerate_pca_guardrails(tmp_path: Path):
@@ -198,7 +198,7 @@ def test_metric_provenance_covers_cas_unavailable_and_degenerate_pca_guardrails(
     assert report["finding_count"] == 3
     assert report["uncovered_finding_count"] == 0
     assert {row["matched_entry"] for row in report["covered_findings"]} == {
-        "browser_static_preview_rendering_fallback",
+        "browser_same_data_static_preview_rendering",
         "determinantal_grade_depth_cas_unavailable",
         "embedding_coordinate_source_diagnostic",
     }

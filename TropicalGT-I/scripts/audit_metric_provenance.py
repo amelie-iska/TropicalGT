@@ -10,22 +10,29 @@ from tropicalgt.provenance import DEFAULT_EXCLUDED_PATH_SUFFIXES, write_provenan
 
 
 STATIC_PREVIEW_RENDERING_ENTRY = {
-    "name": "webgl_static_preview_rendering_fallback",
-    "kind": "rendering_fallback",
+    "name": "browser_same_data_static_preview_rendering",
+    "kind": "same_data_rendering_contingency",
     "surface": "interactive browser plot",
     "optimize_directly": False,
-    "description": "Display-only static filtered-complex preview shown when browser WebGL cannot render Plotly 3D panels.",
-    "replacement_or_guardrail": "Allowed only for browser rendering resilience; the preview must use the same serialized real simplicial object payload and must not create metric, model, or data fallback values.",
+    "description": "Display-only same-data static filtered-complex preview shown when browser WebGL cannot render Plotly 3D panels.",
+    "replacement_or_guardrail": "Allowed only for browser rendering resilience; the preview must use the same serialized real simplicial object payload and must not create metric, model, or data substitute values.",
     "match_terms": [
+        "webgl-static-preview",
+        "staticPreviewMarkup",
+        "renderPanelStaticPreview",
+        "promoteMainStaticPreview",
+        "WebGL unavailable: same-data static complex preview shown",
+        "Interactive WebGL rendering is unavailable",
+        "same serialized simplicial object payload",
+        "selected real filtered-complex payload",
+        "document.createElement(\"div\")",
+        "chartEl.prepend(preview)",
+        # Retired names remain covered so stale fallback-era renderer code still fails visibly.
         "webgl-fallback",
         "staticFallbackMarkup",
         "renderPanelStaticFallback",
         "promoteMainStaticFallback",
         "WebGL unavailable: static complex preview shown",
-        "Interactive WebGL rendering is unavailable",
-        "same serialized simplicial object payload",
-        "selected real filtered-complex payload",
-        "document.createElement(\"div\")",
         "chartEl.prepend(fallback)",
     ],
 }

@@ -476,14 +476,14 @@ Persistence and dashboard side panels currently expose static SVG previews from
 filtered-complex payloads. Replace default previews with embedded interactive
 Plotly 3D PCA filtered simplicial objects using the same payload, with a
 left-to-right radius/filtration slider from minimum to maximum. Static SVG may
-remain only as an explicit unavailable fallback when valid vertices/edges are
-absent.
+remain only as an explicit same-data rendering contingency when WebGL is
+unavailable; missing valid vertices/edges must render an unavailable state.
 
 Implemented in the shared Plotly dark HTML panel: the interactive selected
 filtered-complex panel remains primary, while the static SVG is collapsed under
-`Static SVG fallback preview from the same filtered-complex payload`. Focused
+`Static SVG same-data preview from the same filtered-complex payload`. Focused
 tests passed, and browser QA screenshot:
-`/tmp/tropicalgt_full_complex_static_fallback_collapsed.png`.
+`/tmp/tropicalgt_full_complex_static_same_data_preview_collapsed.png`.
 
 - [x] **Step 8.8: Add per-step directionality**
 

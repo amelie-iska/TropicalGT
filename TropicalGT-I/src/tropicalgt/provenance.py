@@ -313,25 +313,40 @@ PROVENANCE_REGISTRY: tuple[ProvenanceEntry, ...] = (
         match_terms=("unavailable_gudhi_simplex_tree", "simplex_tree_no_proxy_or_fallback", "safe_to_render_simplex_tree"),
     ),
     ProvenanceEntry(
-        name="browser_static_preview_rendering_fallback",
-        kind="rendering_fallback",
+        name="browser_same_data_static_preview_rendering",
+        kind="same_data_rendering_contingency",
         surface="interactive browser plot",
         optimize_directly=False,
-        description="Static SVG/HTML preview displayed when the browser cannot create a WebGL context for a Plotly 3D panel.",
-        replacement_or_guardrail="Rendering-only contingency from the same serialized simplicial payload; never substitutes model probabilities, embeddings, losses, topology metrics, or training data.",
+        description=(
+            "Same-data static SVG/HTML preview displayed when the browser cannot create a WebGL context "
+            "for a Plotly 3D panel."
+        ),
+        replacement_or_guardrail=(
+            "Rendering-only contingency from the same serialized simplicial payload; never substitutes model "
+            "probabilities, embeddings, losses, topology metrics, or training data."
+        ),
         match_terms=(
+            "webgl-static-preview",
+            "main-static-preview",
+            "staticPreviewMarkup",
+            "renderPanelStaticPreview",
+            "promoteMainStaticPreview",
+            "WebGL unavailable: same-data static complex preview shown",
+            "same-data preview below comes from the selected real filtered-complex payload",
+            "Static SVG same-data preview from the same filtered-complex payload",
+            "same serialized simplicial object payload",
+            "Interactive WebGL rendering is unavailable",
+            "webgl_failures",
+            # Retired names remain covered so the audit catches stale fallback-era renderer code.
             "webgl-fallback",
             "main-fallback",
             "staticFallbackMarkup",
             "renderPanelStaticFallback",
             "promoteMainStaticFallback",
             "WebGL unavailable: static complex preview shown",
-            "Interactive WebGL rendering is unavailable",
             "static preview below comes from the selected real filtered-complex payload",
-            "same serialized simplicial object payload",
             "Static SVG fallback preview from the same filtered-complex payload",
             "webgl fallback test",
-            "webgl_failures",
         ),
     ),
     ProvenanceEntry(
