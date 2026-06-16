@@ -1222,6 +1222,23 @@ def test_level_radius_bifiltration_reports_scoped_real_staircase_resolution(tmp_
     assert visual_payload["axes"] == {"horizontal": "x_radius", "vertical": "x_level", "coordinate_one_dimensional_cones": ["rho_x_radius", "rho_x_level"]}
     assert visual_payload["actual_data_only"] is True
     assert visual_payload["no_proxy_resolution_claim"] is True
+    contract = visual_payload["module_visual_contract"]
+    assert contract["schema_version"] == "tropicalgt.two_parameter_module_staircase_contract.v1"
+    assert contract["no_proxy_or_fallback"] is True
+    assert contract["primary_view"] == "miller_sturmfels_bivariate_staircase"
+    assert contract["rank_slabs_removed_as_primary_view"] is True
+    assert contract["secondary_rank_diagnostics_labeled"] is True
+    assert contract["x_radius_horizontal"] is True
+    assert contract["x_level_vertical"] is True
+    assert contract["raw_bifiltration_payload"] == "../trajectory_level_radius_bifiltration.json"
+    assert "chain-presentation diagnostics are never substituted" in contract["safe_resolution_policy"]
+    assert set(contract["raw_bifiltration_required_fields"]) >= {
+        "fiber_rank_profile",
+        "chain_module_generators",
+        "rank_invariant_samples",
+        "structure_maps",
+        "grid_fiber_provenance",
+    }
     assert "rank_invariant_samples_table" in visual_payload["secondary_views"]
     assert "certified_fitting_minor_tables" in visual_payload["secondary_views"]
     assert "buchsbaum_eisenbud_diagnostic_tables" in visual_payload["secondary_views"]
@@ -1230,6 +1247,11 @@ def test_level_radius_bifiltration_reports_scoped_real_staircase_resolution(tmp_
     staircase_cards = visual_payload["staircase_cards"]
     assert staircase_cards
     assert any(card["primary_card"] for card in staircase_cards)
+    assert all(card["schema_version"] == "tropicalgt.two_parameter_staircase_card.v1" for card in staircase_cards)
+    assert all(card["actual_generator_bidegrees_source"] == "bifiltration.chain_module_generators[*].multidegree grouped by homological_degree" for card in staircase_cards)
+    assert all(card["x_radius_horizontal"] is True and card["x_level_vertical"] is True for card in staircase_cards)
+    assert all(card["shaded_regions_are_upward_closed_generated_submodules"] is True for card in staircase_cards)
+    assert all(card["white_points_are_displayed_quotient_basis_lattice_points"] is True for card in staircase_cards)
     assert all("generator_labels" in card for card in staircase_cards)
     assert all("upward_closed_regions" in card for card in staircase_cards)
     assert all("quotient_basis_lattice_points" in card for card in staircase_cards)

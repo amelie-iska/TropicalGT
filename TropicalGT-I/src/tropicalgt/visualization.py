@@ -5780,8 +5780,15 @@ def _write_two_parameter_bifiltration_staircase_html(
             if isinstance(row, Mapping)
         ]
         return {
+            "schema_version": "tropicalgt.two_parameter_staircase_card.v1",
             "homological_degree": int(dim),
             "primary_card": bool(primary),
+            "actual_generator_bidegrees_source": "bifiltration.chain_module_generators[*].multidegree grouped by homological_degree",
+            "x_radius_horizontal": True,
+            "x_level_vertical": True,
+            "shaded_regions_are_upward_closed_generated_submodules": True,
+            "white_points_are_displayed_quotient_basis_lattice_points": True,
+            "minimal_antichain_boundary_source": "minimal elements under product order on actual generator bidegrees",
             "actual_generator_bidegree_count": int(len(items)),
             "minimal_antichain": [[int(lvl), int(rg)] for lvl, rg in mins],
             "generator_labels": generator_labels,
@@ -5933,6 +5940,26 @@ td {{ background:#07111f; color:#d7e8ff; }}
         },
         "actual_data_only": True,
         "no_proxy_resolution_claim": True,
+        "module_visual_contract": {
+            "schema_version": "tropicalgt.two_parameter_module_staircase_contract.v1",
+            "no_proxy_or_fallback": True,
+            "primary_view": "miller_sturmfels_bivariate_staircase",
+            "rank_slabs_removed_as_primary_view": True,
+            "secondary_rank_diagnostics_labeled": True,
+            "x_radius_horizontal": True,
+            "x_level_vertical": True,
+            "shaded_regions_are_upward_closed_generated_submodules": True,
+            "white_points_are_displayed_quotient_basis_lattice_points": True,
+            "raw_bifiltration_required_fields": [
+                "fiber_rank_profile",
+                "chain_module_generators",
+                "rank_invariant_samples",
+                "structure_maps",
+                "grid_fiber_provenance",
+            ],
+            "raw_bifiltration_payload": "../trajectory_level_radius_bifiltration.json",
+            "safe_resolution_policy": "Only scoped two-variable monomial staircase resolutions or certified CAS free resolutions may be rendered; chain-presentation diagnostics are never substituted as a free resolution.",
+        },
         "grid": {
             "x_level_grades": levels,
             "x_radius_grades": radius_grades,

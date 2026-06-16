@@ -530,3 +530,23 @@ PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m py_
 # passed
 ```
 
+## 2026-06-16 Two-Parameter Module Visual Contract Repair
+
+Sequential visual/math item started after the CAS free-resolution contract repair:
+
+- Added a first-class `tropicalgt.two_parameter_module_staircase_contract.v1` JSON contract to the two-parameter bifiltration visual payload.
+- The contract makes the Miller-Sturmfels staircase the enforceable primary view, records that rank slabs are removed as the primary representation, and keeps 3D rank/fiber plots labeled as secondary diagnostics only.
+- The contract requires raw bifiltration fields (`fiber_rank_profile`, `chain_module_generators`, `rank_invariant_samples`, `structure_maps`, and `grid_fiber_provenance`) and points reviewers back to the exact raw bifiltration JSON.
+- Each staircase card now declares `tropicalgt.two_parameter_staircase_card.v1`, its actual generator-bidegree source, x_radius/x_level orientation, shaded upward-closed submodule semantics, white quotient-basis lattice-point semantics, and product-order minimal-antichain boundary source.
+- Regression coverage locks down the no-proxy/staircase semantics so future rank surfaces or chain diagnostics cannot silently become the primary module or a fake free resolution.
+
+Validation:
+
+```text
+PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_algebraic_persistence.py -q -p no:cacheprovider --basetemp=/tmp/tropicalgt-pytest-two-param-contract -k "level_radius_bifiltration_reports_scoped_real_staircase_resolution"
+# 1 passed, 29 deselected
+PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_algebraic_persistence.py -q -p no:cacheprovider --basetemp=/tmp/tropicalgt-pytest-algebraic-two-param-full
+# 30 passed
+PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m py_compile TropicalGT-I/src/tropicalgt/visualization.py TropicalGT-I/tests/test_algebraic_persistence.py
+# passed
+```
