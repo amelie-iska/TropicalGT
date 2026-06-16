@@ -1193,3 +1193,26 @@ CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/t
 CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_simplicial_visualization.py TropicalGT-I/tests/test_interactive_artifact_validator.py -q -p no:cacheprovider --basetemp=/tmp/tropicalgt-pytest-ms-staircase-evidence-visual-full
 # 73 passed
 ```
+
+## 2026-06-16 Nested CAS Guard Validator Contract
+
+Sequential real-CAS integration repair began after the Miller-Sturmfels aggregate evidence contract:
+
+- Added an interactive-artifact validator guard for nested `tropicalgt.real_free_resolution.v1` sidecars inside `trajectory_level_radius_bifiltration.json` chain-presentation diagnostics.
+- The validator now requires the CAS certificate contract, BE/Fitting paper method contract, CAS execution manifest, backend entries with `certificate_required_before_rendering`, command templates, and strict no-proxy/no-fallback flags before an audit artifact can pass.
+- Unavailable CAS states must now carry an exact reason, empty `cas_artifacts`, false certification/render flags, `safe_unavailable_render=true`, and an unavailable diagnostic whose policy forbids substituting chain diagnostics, rank samples, Fitting ideals, minors, or BEMultipliers output for a certified free resolution.
+- Certified CAS states must carry attached certificates, exactness, a real free-resolution summary, artifacts, and grading-consistent safe-render flags; total/ungraded output cannot be silently promoted to multigraded persistence-module output.
+- Added validator rejection tests for missing nested CAS guards and proxy-like render/artifact flags on unavailable CAS states.
+
+Validation:
+
+```text
+CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m py_compile TropicalGT-I/scripts/validate_interactive_audit_artifacts.py TropicalGT-I/tests/test_interactive_artifact_validator.py
+# passed
+CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_interactive_artifact_validator.py::test_validate_audit_root_accepts_three_interactive_rows TropicalGT-I/tests/test_interactive_artifact_validator.py::test_validate_audit_root_rejects_missing_bifiltration_real_cas_guard TropicalGT-I/tests/test_interactive_artifact_validator.py::test_validate_audit_root_rejects_bifiltration_real_cas_proxy_flags -q -p no:cacheprovider --basetemp=/tmp/tropicalgt-pytest-cas-guard-validator
+# 3 passed
+CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_interactive_artifact_validator.py -q -p no:cacheprovider --basetemp=/tmp/tropicalgt-pytest-cas-guard-validator-full
+# 30 passed
+CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_algebraic_persistence.py -q -p no:cacheprovider --basetemp=/tmp/tropicalgt-pytest-cas-guard-algebra
+# 31 passed
+```

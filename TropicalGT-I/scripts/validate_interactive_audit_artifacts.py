@@ -109,6 +109,67 @@ def _assert(condition: bool, errors: list[str], message: str) -> None:
         errors.append(message)
 
 
+def _validate_real_free_resolution_guard(real: Any, errors: list[str], label: str) -> None:
+    _assert(isinstance(real, dict), errors, f"{label} missing nested real free-resolution guard")
+    if not isinstance(real, dict):
+        return
+    _assert(real.get("schema_version") == "tropicalgt.real_free_resolution.v1", errors, f"{label} real free-resolution guard has wrong schema")
+    contract = real.get("certificate_contract", {}) if isinstance(real.get("certificate_contract"), dict) else {}
+    _assert(contract.get("schema_version") == "tropicalgt.cas_free_resolution_contract.v1", errors, f"{label} real free-resolution guard lacks CAS certificate contract")
+    _assert(contract.get("no_proxy_or_fallback") is True, errors, f"{label} CAS certificate contract allows proxy/fallback data")
+    _assert("finite chain diagnostics" in str(contract.get("no_proxy_policy", "")), errors, f"{label} CAS certificate contract lacks finite-chain no-proxy policy")
+    paper = real.get("paper_method_contract") if isinstance(real.get("paper_method_contract"), dict) else contract.get("paper_method_contract", {})
+    paper = paper if isinstance(paper, dict) else {}
+    _assert(paper.get("schema_version") == "tropicalgt.be_fitting_method_contract.v1", errors, f"{label} lacks BE/Fitting paper method contract")
+    _assert(paper.get("arxiv_id") == "2210.11433v1", errors, f"{label} BE/Fitting paper method contract has wrong arXiv id")
+    _assert(paper.get("no_proxy_or_fallback") is True, errors, f"{label} BE/Fitting method contract allows proxy/fallback data")
+    manifest = real.get("cas_execution_manifest", {}) if isinstance(real.get("cas_execution_manifest"), dict) else {}
+    _assert(manifest.get("schema_version") == "tropicalgt.cas_execution_manifest.v1", errors, f"{label} lacks CAS execution manifest")
+    _assert(manifest.get("no_proxy_or_fallback") is True, errors, f"{label} CAS execution manifest allows proxy/fallback data")
+    entries = manifest.get("backend_entries", []) if isinstance(manifest.get("backend_entries"), list) else []
+    _assert(bool(entries), errors, f"{label} CAS execution manifest lacks backend entries")
+    _assert(all(isinstance(row, dict) and row.get("certificate_required_before_rendering") is True for row in entries), errors, f"{label} CAS execution manifest does not require certificates before rendering")
+    _assert(isinstance(real.get("command_templates"), dict), errors, f"{label} lacks CAS command templates")
+    available = real.get("available") is True
+    cert_flags = [
+        "certificate_attached",
+        "real_free_resolution_certified",
+        "total_graded_resolution_certified",
+        "ungraded_resolution_certified",
+        "multigraded_free_resolution_certified",
+        "exactness_certified",
+        "minimality_certified",
+        "safe_to_render_as_real_free_resolution",
+        "safe_to_render_as_total_graded_resolution",
+        "safe_to_render_as_multigraded_free_resolution",
+    ]
+    for key in cert_flags:
+        _assert(key in real, errors, f"{label} real free-resolution guard lacks {key}")
+    if available:
+        _assert(real.get("status") == "certified", errors, f"{label} available CAS guard is not marked certified")
+        _assert(real.get("certificate_attached") is True, errors, f"{label} available CAS guard lacks attached certificate")
+        _assert(real.get("exactness_certified") is True, errors, f"{label} available CAS guard lacks exactness certificate")
+        _assert(real.get("real_free_resolution_certified") is True, errors, f"{label} available CAS guard does not certify a real free resolution")
+        artifacts = real.get("cas_artifacts", {}) if isinstance(real.get("cas_artifacts"), dict) else {}
+        _assert(bool(artifacts), errors, f"{label} certified CAS guard lacks artifacts")
+        _assert(isinstance(real.get("free_resolution_summary"), dict) and real.get("free_resolution_summary", {}).get("available") is True, errors, f"{label} certified CAS guard lacks renderable resolution summary")
+        if real.get("safe_to_render_as_multigraded_free_resolution") is True:
+            _assert(real.get("multigraded_free_resolution_certified") is True, errors, f"{label} multigraded render flag is not backed by multigraded certification")
+        if real.get("total_graded_resolution_certified") is True or real.get("ungraded_resolution_certified") is True:
+            _assert(real.get("safe_to_render_as_multigraded_free_resolution") is not True, errors, f"{label} non-multigraded CAS output is incorrectly renderable as multigraded")
+        cert_summary = artifacts.get("certificate_summary", {}) if isinstance(artifacts.get("certificate_summary"), dict) else {}
+        _assert(cert_summary.get("no_proxy_policy"), errors, f"{label} certified CAS artifact lacks certificate no-proxy summary")
+    else:
+        _assert(str(real.get("status", "")) in {"unavailable_no_certificate", "backend_not_installed", "backend_error", "timeout", "unsupported_ring", "invalid_grading", "parse_error", "certificate_failed", "disabled_by_environment", "complexity_guard"}, errors, f"{label} unavailable CAS guard has invalid status")
+        _assert(str(real.get("reason", "")).strip() != "", errors, f"{label} unavailable CAS guard lacks exact reason")
+        _assert(real.get("safe_unavailable_render") is True, errors, f"{label} unavailable CAS guard is not safe to render as unavailable")
+        _assert(real.get("cas_artifacts") == {}, errors, f"{label} unavailable CAS guard contains CAS artifacts")
+        _assert(all(real.get(key) is False for key in cert_flags), errors, f"{label} unavailable CAS guard sets certified/render flags")
+        unavailable = real.get("unavailable_diagnostic", {}) if isinstance(real.get("unavailable_diagnostic"), dict) else {}
+        _assert(unavailable.get("safe_to_render_only_as_unavailable") is True, errors, f"{label} unavailable diagnostic is not restricted to unavailable rendering")
+        _assert("Do not substitute chain diagnostics" in str(unavailable.get("no_proxy_policy", "")), errors, f"{label} unavailable diagnostic lacks chain-diagnostic no-proxy policy")
+
+
 def _slider_contract_path(html_path: Path) -> Path:
     return html_path.with_name(f"{html_path.stem}_slider_contract.json")
 
@@ -652,6 +713,7 @@ def validate_row(row_dir: Path, *, min_candidates: int = 8, min_depth: int = 2, 
     if isinstance(diagnostics, dict):
         _assert(diagnostics.get("ring") == "F2[x_level,x_radius]", errors, "chain-presentation diagnostics have the wrong ring")
         _assert(diagnostics.get("real_free_resolution_certified") is not True, errors, "validator expected uncertified chain presentation, but payload claims a real free resolution without CAS validation")
+        _validate_real_free_resolution_guard(diagnostics.get("real_free_resolution"), errors, "trajectory bifiltration chain-presentation")
 
     _assert(landscapes_payload_path.exists(), errors, "trajectory persistence landscapes payload is missing")
     _assert(isinstance(landscapes_payload, dict), errors, "trajectory persistence landscapes payload is not an object")

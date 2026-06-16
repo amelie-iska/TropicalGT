@@ -947,6 +947,71 @@ def _row(root: Path, name: str) -> Path:
                     "ring": "F2[x_level,x_radius]",
                     "real_free_resolution_certified": False,
                     "resolution_status": "computed finite presentation; minimality not certified",
+                    "real_free_resolution": {
+                        "schema_version": "tropicalgt.real_free_resolution.v1",
+                        "available": False,
+                        "status": "backend_not_installed",
+                        "reason": "Macaulay2, Sage, and Singular unavailable in validator fixture.",
+                        "coefficient_ring": "F2[x_level,x_radius]",
+                        "module_schema_version": "tropicalgt.level_radius_module.v1",
+                        "input_sha256": "fixture-cas-input",
+                        "module_summary": {"coefficient_ring": "F2[x_level,x_radius]", "variables": ["x_level", "x_radius"], "generators": 2, "boundary_monomials": 1, "presentation_shape": [1, 1]},
+                        "backend_attempts": [],
+                        "backend_probe": {"backends": [], "preferred_order": ["M2", "sage", "Singular"]},
+                        "bemultipliers_probe": {"is_resolution_backend": False, "execution_policy": "never substitute BEMultipliers for a free-resolution certificate"},
+                        "certificate_contract": {
+                            "schema_version": "tropicalgt.cas_free_resolution_contract.v1",
+                            "required_input_schema": "tropicalgt.level_radius_module.v1",
+                            "no_proxy_or_fallback": True,
+                            "no_proxy_policy": "Only backend-emitted exactness certificates may render as a free resolution; finite chain diagnostics cannot substitute.",
+                            "paper_method_contract": {
+                                "schema_version": "tropicalgt.be_fitting_method_contract.v1",
+                                "paper_reference": "references/2210.11433v1.pdf",
+                                "arxiv_id": "2210.11433v1",
+                                "no_proxy_or_fallback": True,
+                            },
+                        },
+                        "paper_method_contract": {
+                            "schema_version": "tropicalgt.be_fitting_method_contract.v1",
+                            "paper_reference": "references/2210.11433v1.pdf",
+                            "arxiv_id": "2210.11433v1",
+                            "no_proxy_or_fallback": True,
+                        },
+                        "cas_artifacts": {},
+                        "command_templates": {"macaulay2": "-- fixture", "sage": "# fixture", "singular": "// fixture"},
+                        "cas_execution_manifest": {
+                            "schema_version": "tropicalgt.cas_execution_manifest.v1",
+                            "coefficient_ring": "F2[x_level,x_radius]",
+                            "backend_order": ["M2", "sage", "Singular"],
+                            "backend_entries": [
+                                {"name": "M2", "template_key": "macaulay2", "template_available": True, "certificate_required_before_rendering": True},
+                                {"name": "sage", "template_key": "sage", "template_available": True, "certificate_required_before_rendering": True},
+                                {"name": "Singular", "template_key": "singular", "template_available": True, "certificate_required_before_rendering": True},
+                            ],
+                            "no_proxy_or_fallback": True,
+                            "render_rule": "Render a free resolution only after returned certificate flags are true.",
+                        },
+                        "certificate_attached": False,
+                        "real_free_resolution_certified": False,
+                        "total_graded_resolution_certified": False,
+                        "ungraded_resolution_certified": False,
+                        "multigraded_free_resolution_certified": False,
+                        "exactness_certified": False,
+                        "minimality_certified": False,
+                        "safe_to_render_as_real_free_resolution": False,
+                        "safe_to_render_as_total_graded_resolution": False,
+                        "safe_to_render_as_multigraded_free_resolution": False,
+                        "safe_unavailable_render": True,
+                        "unavailable_diagnostic": {
+                            "available": True,
+                            "status": "backend_not_installed",
+                            "reason": "fixture unavailable state",
+                            "safe_to_render_only_as_unavailable": True,
+                            "no_proxy_policy": "Do not substitute chain diagnostics, rank samples, Fitting ideals, minors, or BEMultipliers output for a certified free resolution.",
+                        },
+                        "unavailable_dependency_action": "Install a real CAS backend before rendering a free resolution.",
+                        "render_warning": "No certified CAS free resolution is available for this module.",
+                    },
                 },
             }
         ),
@@ -1310,6 +1375,36 @@ def test_validate_audit_root_rejects_missing_bifiltration_structure_map_summary(
     report = validator.validate_audit_root(audit, min_rows=1, min_candidates=4, min_depth=2)
     assert not report["ok"]
     assert any("structure-map summary" in err for err in report["errors"])
+
+
+def test_validate_audit_root_rejects_missing_bifiltration_real_cas_guard(tmp_path: Path):
+    validator = _load_validator()
+    audit = tmp_path / "step_00000001" / "got_audit"
+    row = _row(audit, ".")
+    payload_path = row / "trajectory_level_radius_bifiltration.json"
+    payload = json.loads(payload_path.read_text(encoding="utf-8"))
+    payload["chain_presentation_diagnostics"].pop("real_free_resolution")
+    payload_path.write_text(json.dumps(payload), encoding="utf-8")
+    _write(audit / "codex_browser_index.html", _codex_browser_html(_browser_samples(audit, ["."])))
+    report = validator.validate_audit_root(audit, min_rows=1, min_candidates=4, min_depth=2)
+    assert not report["ok"]
+    assert any("real free-resolution guard" in err for err in report["errors"])
+
+
+def test_validate_audit_root_rejects_bifiltration_real_cas_proxy_flags(tmp_path: Path):
+    validator = _load_validator()
+    audit = tmp_path / "step_00000001" / "got_audit"
+    row = _row(audit, ".")
+    payload_path = row / "trajectory_level_radius_bifiltration.json"
+    payload = json.loads(payload_path.read_text(encoding="utf-8"))
+    guard = payload["chain_presentation_diagnostics"]["real_free_resolution"]
+    guard["safe_to_render_as_multigraded_free_resolution"] = True
+    guard["cas_artifacts"] = {"fake": "proxy"}
+    payload_path.write_text(json.dumps(payload), encoding="utf-8")
+    _write(audit / "codex_browser_index.html", _codex_browser_html(_browser_samples(audit, ["."])))
+    report = validator.validate_audit_root(audit, min_rows=1, min_candidates=4, min_depth=2)
+    assert not report["ok"]
+    assert any("unavailable CAS guard" in err for err in report["errors"])
 
 
 def test_validate_audit_root_rejects_missing_miller_sturmfels_staircase_evidence(tmp_path: Path):
