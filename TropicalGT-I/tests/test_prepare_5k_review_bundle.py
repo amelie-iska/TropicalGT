@@ -75,6 +75,8 @@ def test_prepare_review_bundle_writes_prompt_contract_and_commands(tmp_path: Pat
     assert bundle["execution_readiness"]["ready"] is False
     assert any(issue.startswith("missing_checkpoint:") for issue in bundle["execution_readiness"]["issues"])
     assert bundle["commands"]["interactive_audit_backfills"] == []
+    assert bundle["advanced_bpb_contract"]["section"]["required"] is False
+    assert bundle["advanced_bpb_contract"]["safe_to_use_for_step0_bpb_restart"] is True
     assert bundle["restart_decision_schema"]["config_patch_contract"]["requires_evidence_paths"] is True
     assert "spawn_or_assign_codex_subagent_when_available" in bundle["review_requirements"]
     assert "review_metrics_advanced_sidecars_topological_geometric_algebraic_visualizations" in bundle["review_requirements"]
@@ -85,7 +87,9 @@ def test_prepare_review_bundle_writes_prompt_contract_and_commands(tmp_path: Pat
     assert "Restart from step 0" in prompt_text
     assert "No proxies or fallbacks" in prompt_text
     assert "restart_decision_schema" in prompt_text
-    for key in ("contract_json", "contract_markdown", "codex_prompt", "bundle_json", "bundle_markdown"):
+    bundle_markdown = (module.ROOT / artifacts["bundle_markdown"]).read_text(encoding="utf-8")
+    assert "Advanced BPB Contract" in bundle_markdown
+    for key in ("contract_json", "contract_markdown", "advanced_bpb_contract_json", "codex_prompt", "bundle_json", "bundle_markdown"):
         assert (module.ROOT / artifacts[key]).exists()
 
 def test_prepare_review_bundle_defaults_to_periodic_validation_artifacts(tmp_path: Path):
@@ -230,6 +234,63 @@ def test_prepare_review_bundle_blocks_command_execution_with_empty_checkpoint(tm
     )
     with pytest.raises(RuntimeError, match="empty_checkpoint"):
         module.prepare_review_bundle(args)
+
+
+def test_prepare_review_bundle_records_failed_advanced_bpb_contract(tmp_path: Path):
+    module = _load_bundle_module()
+    output_dir = tmp_path / "run"
+    checkpoint_dir = tmp_path / "ckpts"
+    output_dir.mkdir()
+    checkpoint_dir.mkdir()
+    report_path = output_dir / "train_report.json"
+    report_path.write_text(json.dumps({"final_step": 5000, "eval": {"bpb": 1.3, "graph_bpb": 2.0}}), encoding="utf-8")
+    cfg_path = tmp_path / "bad_bpb_config.json"
+    cfg_path.write_text(
+        json.dumps(
+            {
+                "run_name": "bad_bpb_review_bundle",
+                "parameter_golf_bpb_focus": True,
+                "target_bpb": 1.12,
+                "output_dir": str(output_dir),
+                "checkpoint_dir": str(checkpoint_dir),
+                "batch_size": 1,
+                "seq_len": 32,
+                "tokengt": {"feature_dim": 48},
+                "model": {"dim": 16, "hidden_dim": 16, "graph_feature_dim": 48},
+                "wandb": {"enabled": False},
+            }
+        ),
+        encoding="utf-8",
+    )
+    args = argparse.Namespace(
+        config=cfg_path,
+        report=report_path,
+        checkpoint=None,
+        stop_record=None,
+        output_dir=tmp_path / "bundle",
+        boundary_step=5000,
+        target_bpb=1.12,
+        metric="eval.bpb",
+        graph_metric="eval.graph_bpb",
+        python="python",
+        split="validation",
+        details_limit=2,
+        viz_limit=3,
+        audit_level="full",
+        audit_ph_backend="gudhi",
+        audit_max_simplices=128,
+    )
+
+    bundle = module.prepare_review_bundle(args)
+    contract = bundle["advanced_bpb_contract"]
+    assert contract["section"]["required"] is True
+    assert contract["safe_to_use_for_step0_bpb_restart"] is False
+    assert "advanced_bpb_real_data_required" in contract["failed_gates"]
+    assert "advanced_bpb_wandb_online_project" in contract["failed_gates"]
+    artifact_contract = json.loads((module.ROOT / bundle["artifacts"]["advanced_bpb_contract_json"]).read_text(encoding="utf-8"))
+    assert artifact_contract["failed_gates"] == contract["failed_gates"]
+    markdown = (module.ROOT / bundle["artifacts"]["bundle_markdown"]).read_text(encoding="utf-8")
+    assert "advanced_bpb_real_data_required" in markdown
 
 
 def test_run_shell_command_records_logs_and_return_code(tmp_path: Path):

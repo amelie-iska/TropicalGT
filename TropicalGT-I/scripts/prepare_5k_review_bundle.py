@@ -15,6 +15,7 @@ if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
 import parameter_golf_codex_review_loop as review_loop  # noqa: E402
+from tropicalgt.readiness_contracts import advanced_bpb_contract_report  # noqa: E402
 from tropicalgt.run import load_config  # noqa: E402
 
 
@@ -236,6 +237,11 @@ def _bundle_markdown(bundle: dict[str, Any]) -> str:
             json.dumps(bundle.get("execution_readiness", {}), indent=2),
             "```",
             "",
+            "## Advanced BPB Contract",
+            "```json",
+            json.dumps(bundle.get("advanced_bpb_contract", {}), indent=2),
+            "```",
+            "",
             "## Restart Decision Schema",
             "```json",
             json.dumps(bundle.get("restart_decision_schema", {}), indent=2),
@@ -272,6 +278,15 @@ def prepare_review_bundle(args: argparse.Namespace) -> dict[str, Any]:
         report_path=report_path,
         target_bpb=args.target_bpb,
     )
+    advanced_bpb_section, advanced_bpb_gates = advanced_bpb_contract_report(cfg)
+    advanced_bpb_failed = [gate for gate in advanced_bpb_gates if gate.get("status") == "fail"]
+    advanced_bpb_contract = {
+        "section": advanced_bpb_section,
+        "gates": advanced_bpb_gates,
+        "failed_gates": [str(gate.get("name", "")) for gate in advanced_bpb_failed],
+        "safe_to_use_for_step0_bpb_restart": not advanced_bpb_failed,
+        "policy": "Config-only advanced BPB restart contract; failed gates must be resolved before a step-0 BPB restart config is launched.",
+    }
     prompt = review_loop._review_prompt(
         cfg=cfg,
         report=report,
@@ -290,11 +305,13 @@ def prepare_review_bundle(args: argparse.Namespace) -> dict[str, Any]:
     )
     contract_path = bundle_dir / f"active_training_contract_step_{boundary_step:08d}.json"
     contract_md_path = bundle_dir / f"active_training_contract_step_{boundary_step:08d}.md"
+    advanced_bpb_contract_path = bundle_dir / f"advanced_bpb_contract_step_{boundary_step:08d}.json"
     prompt_path = bundle_dir / f"codex_review_step_{boundary_step:08d}.md"
     bundle_path = bundle_dir / f"review_bundle_step_{boundary_step:08d}.json"
     markdown_path = bundle_dir / f"review_bundle_step_{boundary_step:08d}.md"
     contract_path.write_text(json.dumps(contract, indent=2), encoding="utf-8")
     contract_md_path.write_text(review_loop._active_training_contract_markdown(contract), encoding="utf-8")
+    advanced_bpb_contract_path.write_text(json.dumps(advanced_bpb_contract, indent=2), encoding="utf-8")
     prompt_path.write_text(prompt, encoding="utf-8")
 
     inventory = contract.get("artifact_inventory", {})
@@ -327,6 +344,7 @@ def prepare_review_bundle(args: argparse.Namespace) -> dict[str, Any]:
             "triggered": bpb is None or bpb > args.target_bpb,
             "restart_policy": "beginning",
         },
+        "advanced_bpb_contract": advanced_bpb_contract,
         "restart_decision_schema": review_loop._restart_decision_schema(args.target_bpb),
         "review_requirements": [
             "spawn_or_assign_codex_subagent_when_available",
@@ -338,6 +356,7 @@ def prepare_review_bundle(args: argparse.Namespace) -> dict[str, Any]:
         "artifacts": {
             "contract_json": _relative_project_path(contract_path),
             "contract_markdown": _relative_project_path(contract_md_path),
+            "advanced_bpb_contract_json": _relative_project_path(advanced_bpb_contract_path),
             "codex_prompt": _relative_project_path(prompt_path),
             "bundle_json": _relative_project_path(bundle_path),
             "bundle_markdown": _relative_project_path(markdown_path),

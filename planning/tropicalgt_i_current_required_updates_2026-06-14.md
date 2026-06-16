@@ -763,4 +763,21 @@ PYTHONPATH=TropicalGT-I/scripts:TropicalGT-I/src /home/iska/miniconda3/envs/toke
 # 52 passed, 2 warnings in 5.53s
 ```
 
-_Last updated: 2026-06-16T14:46:31Z_
+## 2026-06-16 Sequential Training/Readiness Update: 5K Bundle Advanced Contract Evidence
+
+Status: complete for path-only post-5K review-bundle contract visibility; actual BPB restart remains blocked by the zero-byte b60 checkpoint.
+
+- `prepare_5k_review_bundle.py` now records the shared config-only advanced BPB contract in every review bundle under `advanced_bpb_contract` and writes `advanced_bpb_contract_step_<step>.json` beside the active training contract and Codex review prompt.
+- The bundle markdown now includes an `Advanced BPB Contract` section, so reviewers and subagents can see whether the config is safe to use for a step-0 BPB restart before proposing hyperparameter changes.
+- Failed contract gates are preserved by name, and `safe_to_use_for_step0_bpb_restart=false` is emitted when any required advanced BPB gate fails. This is evidence only; it does not fabricate checkpoint, CAS, topology, geometry, algebra, W&B, or visualization evidence.
+- No generated review bundles, checkpoints, datasets, W&B folders, caches, or secrets were staged.
+
+Verification:
+
+```bash
+PYTHONPATH=TropicalGT-I/scripts:TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_prepare_5k_review_bundle.py -q
+# 7 passed in 1.05s
+PYTHONPATH=TropicalGT-I/scripts:TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_prepare_5k_review_bundle.py TropicalGT-I/tests/test_parameter_golf_review_loop.py TropicalGT-I/tests/test_training_step_gate_monitor.py TropicalGT-I/tests/test_readiness_audit.py -q
+# 33 passed in 1.60s
+```
+_Last updated: 2026-06-16T14:54:12Z_

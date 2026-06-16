@@ -199,6 +199,7 @@
 - [x] Added source-level trainer enforcement so BPB-focused configs that fail the advanced readiness contract cannot start training or write a train report.
 - [x] Required explicit W&B organization/entity for BPB-focused runs and set tracked b54/b55 gate configs to `amelie-iska-math`.
 - [x] Closed wrapper/preflight bypasses: the Codex review-loop wrapper enforces the BPB contract before subprocess launch, readiness dry-run/CUDA preflight short-circuits before dataset/model work on failed BPB contracts, and ablation grids audit in-memory variants before writing analysis-only configs.
+- [x] Added advanced BPB contract evidence to post-5K review bundles so restart reviewers see `safe_to_use_for_step0_bpb_restart` and named failed gates before proposing a new step-0 BPB config.
 
 ### Current Remaining Implementation List - 2026-06-16
 
