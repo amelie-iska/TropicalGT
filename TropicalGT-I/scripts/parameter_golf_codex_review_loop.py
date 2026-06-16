@@ -733,7 +733,7 @@ def _active_training_contract(cfg: dict[str, Any], report: dict[str, Any], check
             "node_tokens_mean": metrics.get("node_tokens_mean"),
             "edge_tokens_mean": metrics.get("edge_tokens_mean"),
             "graph_token_node_edge_ratio": metrics.get("graph_token_node_edge_ratio"),
-            "graph_json_fallback_rate": metrics.get("graph_json_fallback_rate"),
+            "legacy_graph_json_substitution_guardrail_rate": metrics.get("graph_json_fallback_rate"),
             "graph_json_sequentialized_rate": metrics.get("graph_json_sequentialized_rate"),
             "causal_dag_ar_rate": metrics.get("causal_dag_ar_rate"),
             "random_graph_ar_rate": metrics.get("random_graph_ar_rate"),

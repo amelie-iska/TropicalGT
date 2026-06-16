@@ -42,6 +42,8 @@ def test_active_training_contract_reports_losses_and_graph_order_metrics():
             "gflownet_tb": 0.1,
             "graphcg_loss": 0.2,
             "sequence_tropical_margin_mean": 0.3,
+            "graph_json_fallback_rate": 0.0,
+            "graph_json_sequentialized_rate": 1.0,
             "causal_dag_ar_rate": 0.75,
             "random_graph_ar_rate": 0.25,
             "gpu_mem_mb": 18000.0,
@@ -53,6 +55,9 @@ def test_active_training_contract_reports_losses_and_graph_order_metrics():
     assert contract["compression_metrics"]["eval_bpb"] == 1.4
     assert contract["objective"]["primary_target"] == 1.12
     assert contract["active_losses"]["gflownet_trajectory_balance"] == 0.1
+    assert "graph_json_fallback_rate" not in contract["data_metrics"]
+    assert contract["data_metrics"]["legacy_graph_json_substitution_guardrail_rate"] == 0.0
+    assert contract["data_metrics"]["graph_json_sequentialized_rate"] == 1.0
     assert contract["data_metrics"]["causal_dag_ar_rate"] == 0.75
     assert contract["tropical_metrics"]["sequence_tropical_margin_mean"] == 0.3
     assert contract["restart_decision_schema"]["config_patch_contract"]["requires_evidence_paths"] is True

@@ -882,3 +882,20 @@ CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/t
 CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_training_metrics.py::test_wandb_metrics_are_namespaced_by_priority -q -p no:cacheprovider --basetemp=/tmp/tropicalgt-pytest-wandb-graph-json-alias
 # 1 passed
 ```
+
+## 2026-06-16 Graph JSON Readiness And Review Guardrail Alias
+
+Sequential readiness/review no-proxy item completed after the W&B alias repair:
+
+- Kept the JSON readiness key `graph_json_fallback_rate` stable as a legacy must-remain-zero compatibility field.
+- Changed readiness markdown and gate details to say `legacy graph-json substitution guardrail` instead of `legacy fallback`.
+- Changed the 5K review-loop `data_metrics` contract field to `legacy_graph_json_substitution_guardrail_rate`, while preserving active graph-data fields such as `graph_json_sequentialized_rate`.
+
+Validation:
+
+```text
+CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/scripts:TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m py_compile TropicalGT-I/scripts/audit_tropicalgt_i_readiness.py TropicalGT-I/scripts/parameter_golf_codex_review_loop.py TropicalGT-I/tests/test_readiness_audit.py TropicalGT-I/tests/test_parameter_golf_review_loop.py
+# passed
+CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/scripts:TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_readiness_audit.py::test_readiness_audit_fixture_without_checkpoint TropicalGT-I/tests/test_parameter_golf_review_loop.py::test_active_training_contract_reports_losses_and_graph_order_metrics -q -p no:cacheprovider --basetemp=/tmp/tropicalgt-pytest-readiness-review-graph-json-alias
+# 2 passed
+```

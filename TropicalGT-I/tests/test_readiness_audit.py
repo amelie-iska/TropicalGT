@@ -114,6 +114,10 @@ def test_readiness_audit_fixture_without_checkpoint(tmp_path):
     markdown = render_markdown(report)
     assert "TropicalGT-I Readiness Audit" in markdown
     assert "| config_loads | pass |" in markdown
+    assert "legacy graph-json substitution guardrail records" in markdown
+    assert "legacy fallback records" not in markdown
+    assert "Legacy graph-json substitution guardrail rate" in markdown
+    assert "Legacy fallback rate" not in markdown
 
 
 def test_readiness_audit_blocks_cross_run_memory_bank_path(tmp_path):
