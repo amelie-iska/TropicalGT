@@ -2346,8 +2346,33 @@ def _write_simplex_tree_3d_map(path: Path, obj: dict[str, object], title: str, s
     )
     summary = obj.get("summary", {}) if isinstance(obj.get("summary"), dict) else {}
     tree = obj.get("simplex_tree", {}) if isinstance(obj.get("simplex_tree"), dict) else {}
+    dimension_counts: dict[str, int] = {}
+    for dim in node_dim:
+        key = f"dim_{int(dim)}"
+        dimension_counts[key] = int(dimension_counts.get(key, 0) + 1)
+    simplex_tree_poset_contract = {
+        "schema_version": "tropicalgt.simplex_tree_poset.v1",
+        "backend": str(tree.get("backend", "json")),
+        "safe_to_render_simplex_tree": tree.get("available") is not False,
+        "layout": "model_embedding_barycentric_face_coface_poset",
+        "not_disconnected_simplex_columns": True,
+        "empty_simplex_root_present": root_key in positions,
+        "displayed_simplex_count": int(len(node_keys)),
+        "source_simplex_count": int(tree.get("num_simplices", len(simplex_rows)) or len(simplex_rows)),
+        "truncated": bool(truncated),
+        "max_nodes": int(max_nodes),
+        "dimension_counts": dimension_counts,
+        "actual_face_to_coface_cover_edges": int(len(hasse_pairs)),
+        "empty_root_vertex_cover_edges": int(sum(1 for source, target, _label in hasse_pairs if source == root_key and len(target) == 1)),
+        "optional_sorted_label_trie_prefix_edges": int(len(prefix_pairs)),
+        "primary_edges": "actual_face_to_coface_covers",
+        "optional_prefix_links_visible": "legendonly",
+        "position_source": "model_embedding_barycenters_with_dimension_and_filtration_lift",
+        "no_proxy_or_fallback": True,
+    }
     fig.update_layout(
         template="plotly_dark",
+        meta={"simplex_tree_poset_contract": simplex_tree_poset_contract},
         title=(
             f"{title}<br><sup>{html.escape(subtitle)} | backend={html.escape(str(tree.get('backend', 'json')))} "
             f"| displayed={len(node_keys)}/{int(tree.get('num_simplices', len(simplex_rows)) or len(simplex_rows))} "
@@ -7386,7 +7411,7 @@ def _write_analogical_topk_index(path: Path, pair_pages: list[dict[str, object]]
             f"<td>{float(report.get('edge_preservation_rate', 0.0)):.4f}</td>"
             "</tr>"
         )
-    body = "\n".join(rows) or "<tr><td colspan='20'>No retrieved memories.</td></tr>"
+    body = "\n".join(rows) or "<tr><td colspan='21'>No retrieved memories.</td></tr>"
     path.write_text(
         f"""<!doctype html>
 <html>

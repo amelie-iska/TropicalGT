@@ -294,3 +294,24 @@ Operational cleanup note: after b62 was verified active, the failed generated b6
 Operational note: b62 remained alive during verification and had advanced past step 372/5000 with train loss/NLL around 1.487/1.465 when checked.
 
 Next linear visual/math item: continue from the analogical-map claim contract into remaining no-proxy simplex-tree trie/face-coface-poset, NLL-density, and tropical-support readability repairs.
+
+
+## 2026-06-16 SimplexTree Poset Contract Repair
+
+Sequential visual/math item completed after the analogical-map claim contract repair:
+
+- The 3D SimplexTree renderer now emits a machine-readable `simplex_tree_poset_contract` in Plotly metadata.
+- The contract records the backend, safe-render state, empty-simplex root presence, displayed/source simplex counts, truncation, dimension counts, actual face-to-coface Hasse cover edge count, empty-root-to-vertex cover count, optional sorted-label trie prefix edge count, and the primary/secondary edge policy.
+- The renderer keeps actual face-to-coface covers as the primary graph and keeps sorted-label trie prefix links legend-only; the contract records `not_disconnected_simplex_columns=true` and `primary_edges=actual_face_to_coface_covers`.
+- Fixed the analogical top-k empty-table colspan to match the 21-column table introduced by the map-claim contract repair.
+
+Validation:
+
+```text
+/home/iska/miniconda3/envs/tokengt/bin/python -m py_compile TropicalGT-I/src/tropicalgt/visualization.py TropicalGT-I/tests/test_simplicial_visualization.py
+# passed
+CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/scripts:TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_simplicial_visualization.py TropicalGT-I/tests/test_interactive_artifact_validator.py -q
+# 49 passed
+```
+
+Next linear visual/math item: continue into remaining no-proxy NLL-density and tropical-support readability repairs while b62 trains to the 5K gate.

@@ -412,6 +412,42 @@ def test_simplex_tree_page_is_unavailable_without_gudhi_not_raw_json(monkeypatch
     assert "optional sorted-label trie prefix links" not in html
 
 
+def test_simplex_tree_poset_contract_records_actual_face_coface_covers(tmp_path: Path):
+    obj = {
+        "summary": {
+            "filtration_model": "embedding_vietoris_rips_2_skeleton",
+            "radius_filtration": True,
+        },
+        "simplices": [
+            {"simplex": ["a"], "dimension": 0, "filtration": 0.0, "type": "vertex"},
+            {"simplex": ["b"], "dimension": 0, "filtration": 0.0, "type": "vertex"},
+            {"simplex": ["c"], "dimension": 0, "filtration": 0.0, "type": "vertex"},
+            {"simplex": ["a", "b"], "dimension": 1, "filtration": 0.25, "type": "radius_edge"},
+            {"simplex": ["a", "c"], "dimension": 1, "filtration": 0.5, "type": "radius_edge"},
+            {"simplex": ["b", "c"], "dimension": 1, "filtration": 0.75, "type": "radius_edge"},
+            {"simplex": ["a", "b", "c"], "dimension": 2, "filtration": 1.0, "type": "radius_face"},
+        ],
+    }
+    out = tmp_path / "simplex_tree_poset.html"
+    _write_simplex_tree_3d_map(out, obj, "contracted simplex tree")
+    html = out.read_text(encoding="utf-8")
+    compact = html.replace(" ", "")
+    assert "simplex_tree_poset_contract" in html
+    assert '"schema_version":"tropicalgt.simplex_tree_poset.v1"' in compact
+    assert '"layout":"model_embedding_barycentric_face_coface_poset"' in compact
+    assert '"not_disconnected_simplex_columns":true' in compact
+    assert '"empty_simplex_root_present":true' in compact
+    assert '"displayed_simplex_count":7' in compact
+    assert '"actual_face_to_coface_cover_edges":12' in compact
+    assert '"empty_root_vertex_cover_edges":3' in compact
+    assert '"optional_sorted_label_trie_prefix_edges":7' in compact
+    assert '"primary_edges":"actual_face_to_coface_covers"' in compact
+    assert '"optional_prefix_links_visible":"legendonly"' in compact
+    assert "actual face-to-coface covers (12)" in html
+    assert "optional sorted-label trie prefix links (7)" in html
+    assert "not disconnected simplex columns" in html
+
+
 def test_complex_slider_contract_starts_with_disjoint_vertices_and_monotone_growth():
     obj = {
         "summary": {
