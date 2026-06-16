@@ -130,11 +130,11 @@
 
 ### 12. Training, BPB, and W&B
 
-- [ ] Keep the current BPB run alive until the 5K gate unless explicitly restarted.
+- [x] Keep the current BPB run alive until the 5K gate unless explicitly restarted.
 - [ ] Optimize for BPB with the advanced losses/metrics that are actually implemented.
 - [ ] Clean old local/online W&B runs and generated artifacts when they become irrelevant.
 - [x] Generate periodic visual audits every 250 steps.
-- [ ] Restart only after the requested 5K gate or explicit user request.
+- [x] Restart only after the requested 5K gate or explicit user request; the 5K review currently blocks restart because the checkpoint evidence is unavailable.
 
 ### 13. Docs, README, Tests, Push
 
@@ -647,4 +647,12 @@ The live item-by-item repair inventory is maintained in `planning/tropicalgt_i_c
 - [x] Hardened post-5K readiness so zero-byte checkpoints are explicit unavailable evidence, not load attempts or proxies. `parameter_golf_codex_review_loop.py` returns `checkpoint_file_is_empty`, and `prepare_5k_review_bundle.py --run-*` fails closed with `empty_checkpoint:TropicalGT-I/checkpoints/tropicalgt_i_pg_bpb_step0_full24b_b60_20260616T053631Z_fresh_bpb112_casrows_5k_gate.latest.pt`.
 - [x] Generated the path-only 5K review bundle at `TropicalGT-I/outputs/tropicalgt_i_pg_bpb_step0_full24b_b60_20260616T053631Z_fresh_bpb112_casrows_5k_gate/post_5k_review_bundle/review_bundle_step_00005000.json`; it records `execution_readiness.ready=false`, `issues=[empty_checkpoint:TropicalGT-I/checkpoints/tropicalgt_i_pg_bpb_step0_full24b_b60_20260616T053631Z_fresh_bpb112_casrows_5k_gate.latest.pt]`, `command_results=[]`, BPB `1.4304583543547733`, graph-BPB `20.122144813809587`, and `restart_policy=beginning`.
 - [x] Verification passed: py-compile for the touched bundle/review-loop scripts and tests; `pytest TropicalGT-I/tests/test_prepare_5k_review_bundle.py TropicalGT-I/tests/test_parameter_golf_review_loop.py -q` (`14 passed`); executable bundle attempt failed closed before running eval/backfill/validator commands with `empty_checkpoint`.
-- [ ] Next Section 12 item: route the path-only real evidence bundle to a Codex subagent for metric/sidecar/visualization review, with the empty checkpoint treated as a missing-evidence blocker for executable post-5K analysis and any restart claim that would rely on checkpoint-backed sidecars.
+- [x] Routed the path-only real evidence bundle to Codex subagent Lagrange for metric/sidecar/visualization review; the empty checkpoint was treated as a missing-evidence blocker for executable post-5K analysis and any restart claim that would rely on checkpoint-backed sidecars.
+
+### Current Objective Update - Codex 5K Evidence Review Result
+
+- [x] Codex subagent Lagrange reviewed the real b60 step-5000 evidence bundle and wrote `planning/tropicalgt_i_b60_step5000_codex_evidence_review_2026-06-16.md`.
+- [x] Recorded the restart-schema decision `blocked_missing_evidence_no_restart`: step-5000 BPB `1.4304583543547733` missed target `< 1.12`, but the required checkpoint `TropicalGT-I/checkpoints/tropicalgt_i_pg_bpb_step0_full24b_b60_20260616T053631Z_fresh_bpb112_casrows_5k_gate.latest.pt` is a zero-byte unavailable checkpoint and blocks checkpoint-dependent executable analysis/visualization evidence.
+- [x] Confirmed no hyperparameter/config changes were proposed, no training restart was launched, and no generated artifacts/checkpoints/W&B files were staged.
+- [x] Available review evidence includes the path-only bundle `TropicalGT-I/outputs/tropicalgt_i_pg_bpb_step0_full24b_b60_20260616T053631Z_fresh_bpb112_casrows_5k_gate/post_5k_review_bundle/review_bundle_step_00005000.json`, validation report, periodic artifact summary, step-5000 audit HTML/sidecars, topology/tropical/memory/GraphCG/tropical-support summaries where they exist, and explicit unavailable states for missing checkpoint/CAS/memory/W&B summary evidence.
+- [ ] Next Section 12 item: implement source-side checkpoint-write hardening so future 5K gates cannot leave a zero-byte `.latest.pt` as the only checkpoint evidence; keep this scoped to source/tests/docs and do not mutate generated checkpoints.

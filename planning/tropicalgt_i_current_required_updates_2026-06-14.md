@@ -573,4 +573,11 @@ Use "one dimensional cone" or "one dimensional cones" as the preferred fan-theor
 - The only discovered b60 checkpoint path `TropicalGT-I/checkpoints/tropicalgt_i_pg_bpb_step0_full24b_b60_20260616T053631Z_fresh_bpb112_casrows_5k_gate.latest.pt` is zero bytes. `parameter_golf_codex_review_loop.py` now reports that checkpoint as unavailable instead of attempting to load it, and `prepare_5k_review_bundle.py --run-*` refuses command execution with `empty_checkpoint:TropicalGT-I/checkpoints/tropicalgt_i_pg_bpb_step0_full24b_b60_20260616T053631Z_fresh_bpb112_casrows_5k_gate.latest.pt`.
 - The path-only evidence bundle exists at `TropicalGT-I/outputs/tropicalgt_i_pg_bpb_step0_full24b_b60_20260616T053631Z_fresh_bpb112_casrows_5k_gate/post_5k_review_bundle/review_bundle_step_00005000.json` with `execution_readiness.ready=false`, issue `empty_checkpoint:TropicalGT-I/checkpoints/tropicalgt_i_pg_bpb_step0_full24b_b60_20260616T053631Z_fresh_bpb112_casrows_5k_gate.latest.pt`, `command_results=[]`, and `restart_policy=beginning`. It may be reviewed by a Codex subagent, but no restart should be launched from unsupported checkpoint-sidecar claims.
 
-_Last updated: 2026-06-16T18:20:00Z_
+
+## 2026-06-16 Codex Step-5000 Evidence Review Result
+
+- Codex subagent Lagrange reviewed the real b60 step-5000 bundle and wrote `planning/tropicalgt_i_b60_step5000_codex_evidence_review_2026-06-16.md`.
+- The restart-schema result is `blocked_missing_evidence_no_restart`: BPB `1.4304583543547733` missed target `< 1.12`, but checkpoint-dependent executable analyses remain unavailable because `TropicalGT-I/checkpoints/tropicalgt_i_pg_bpb_step0_full24b_b60_20260616T053631Z_fresh_bpb112_casrows_5k_gate.latest.pt` is zero bytes.
+- No restart was launched and no hyperparameter/config patch was proposed. Under the no-proxy/no-fallback rule, the next source-side task is checkpoint-write hardening for future gates, not a BPB restart based on incomplete checkpoint-sidecar evidence.
+
+_Last updated: 2026-06-16T18:45:00Z_
