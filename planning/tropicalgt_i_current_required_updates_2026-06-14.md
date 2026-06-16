@@ -804,4 +804,29 @@ git diff --check
 # clean
 ```
 
-_Last updated: 2026-06-16T15:08:09Z_
+## 2026-06-16 Sequential Training/Readiness Update: Review Loop Same-Config Restart Halt
+
+Status: complete for loop-level no-proxy restart hardening; actual BPB restart remains blocked by the zero-byte b60 checkpoint and missing post-5K command evidence.
+
+- `parameter_golf_codex_review_loop.py` now halts by default after a triggered BPB review boundary instead of automatically scheduling another training run with the same config.
+- The loop records and prints `triggered_restart_block.v1` with `restart_action=blocked_pending_evidence_backed_config_patch`, forcing post-5K review evidence and a reviewed config patch before another step-0 launch.
+- Legacy same-config continuation is still available only through the explicit `--allow-same-config-restart-after-triggered-review` opt-in flag, making that behavior visible rather than accidental.
+- The restart decision schema now lists `reviewed_config_patch_before_any_same_config_restart` as required evidence and includes `blocked_pending_evidence_backed_config_patch` as an allowed blocked action.
+- A no-training dry-run probe written to `/tmp/tropicalgt_review_loop_halt_probe` with tracked b55 config prints the restart block directly and records it in `review_loop_state.json`; no training process was launched.
+- No generated review-loop state, checkpoints, datasets, W&B folders, caches, or secrets were staged.
+
+Verification:
+
+```bash
+PYTHONPATH=TropicalGT-I/scripts:TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m py_compile TropicalGT-I/scripts/parameter_golf_codex_review_loop.py TropicalGT-I/tests/test_parameter_golf_review_loop.py
+PYTHONPATH=TropicalGT-I/scripts:TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_parameter_golf_review_loop.py -q
+# 11 passed in 1.01s
+PYTHONPATH=TropicalGT-I/scripts:TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python TropicalGT-I/scripts/parameter_golf_codex_review_loop.py --config TropicalGT-I/configs/train_full_dataset_pg_bpb_step0_full24b_b55_v11_bpb_5k_gate.json --dry-run --max-reviews 1 --max-total-steps 5000 --output-dir /tmp/tropicalgt_review_loop_halt_probe
+# printed restart_block.restart_action=blocked_pending_evidence_backed_config_patch
+PYTHONPATH=TropicalGT-I/scripts:TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_prepare_5k_review_bundle.py TropicalGT-I/tests/test_parameter_golf_review_loop.py TropicalGT-I/tests/test_training_step_gate_monitor.py TropicalGT-I/tests/test_readiness_audit.py -q
+# 37 passed in 1.53s
+git diff --check
+# clean
+```
+
+_Last updated: 2026-06-16T15:14:28Z_

@@ -1,3 +1,4 @@
+import argparse
 import importlib.util
 from pathlib import Path
 
@@ -124,13 +125,41 @@ def test_review_prompt_requires_subagent_evidence_review_and_step0_restart():
     assert "evidence_paths" in prompt
     assert "No proxies or fallbacks" in prompt
 
+def test_review_loop_blocks_same_config_restart_after_target_miss_by_default():
+    loop = _load_review_loop()
+    args = argparse.Namespace(allow_same_config_restart_after_triggered_review=False)
+    decision = {"triggered": True, "boundary_step": 5000, "bpb": 1.3, "target_bpb": 1.12, "prompt": "review.md"}
+
+    block = loop._triggered_restart_block(args, decision)
+
+    assert block is not None
+    assert block["restart_action"] == "blocked_pending_evidence_backed_config_patch"
+    assert block["boundary_step"] == 5000
+    assert block["bpb"] == 1.3
+    assert "reviewed config patch" in block["policy"]
+
+
+def test_review_loop_same_config_restart_requires_explicit_opt_in():
+    loop = _load_review_loop()
+    decision = {"triggered": True, "boundary_step": 5000, "bpb": 1.3, "target_bpb": 1.12}
+    blocked_args = argparse.Namespace(allow_same_config_restart_after_triggered_review=False)
+    opt_in_args = argparse.Namespace(allow_same_config_restart_after_triggered_review=True)
+
+    assert loop._triggered_restart_block(blocked_args, decision) is not None
+    assert loop._triggered_restart_block(opt_in_args, decision) is None
+    assert loop._triggered_restart_block(blocked_args, {"triggered": False}) is None
+
+
 def test_restart_decision_schema_requires_real_evidence_paths():
     loop = _load_review_loop()
     schema = loop._restart_decision_schema(1.12)
     assert schema["primary_metric"] == "eval.bpb"
     assert schema["primary_target"] == 1.12
     assert schema["config_patch_contract"]["requires_real_metric_or_artifact_for_each_change"] is True
+    assert "reviewed_config_patch_before_any_same_config_restart" in schema["required_evidence"]
+    assert "blocked_pending_evidence_backed_config_patch" in schema["allowed_actions"]
     assert "blocked_missing_required_evidence_no_restart" in schema["allowed_actions"]
+    assert "halt on a missed target" in schema["no_proxy_policy"]
     assert "Unavailable CAS" in schema["no_proxy_policy"]
 
 

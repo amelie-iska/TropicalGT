@@ -41,6 +41,14 @@ def main() -> None:
     parser.add_argument("--invoke-codex", action="store_true", help="Actually run the configured Codex command. Without this, prompts are written only.")
     parser.add_argument("--once", action="store_true", help="Review the current report/checkpoint once without launching training.")
     parser.add_argument("--dry-run", action="store_true", help="Print intended train/review actions without executing them.")
+    parser.add_argument(
+        "--allow-same-config-restart-after-triggered-review",
+        action="store_true",
+        help=(
+            "Opt in to legacy same-config loop continuation after a missed BPB target. "
+            "Default is to halt after writing review artifacts so a reviewed config patch can be applied first."
+        ),
+    )
     parser.add_argument("--max-reviews", type=int, default=32)
     args = parser.parse_args()
 
@@ -113,6 +121,13 @@ def main() -> None:
         reviews += 1
         _write_state(output_dir, state)
         if decision.get("triggered"):
+            restart_block = _triggered_restart_block(args, decision)
+            if restart_block is not None:
+                decision["restart_block"] = restart_block
+                state.setdefault("restart_blocks", []).append(restart_block)
+                print(json.dumps({"restart_block": restart_block}, indent=2))
+                _write_state(output_dir, state)
+                break
             if args.restart_policy == "beginning":
                 resume_from = None
                 boundary_step = args.review_every_steps
@@ -195,6 +210,26 @@ def _review_boundary(
     state.setdefault("reviews", []).append(decision)
     print(json.dumps(decision, indent=2))
     return decision
+
+
+def _triggered_restart_block(args: argparse.Namespace, decision: dict[str, Any]) -> dict[str, Any] | None:
+    if not bool(decision.get("triggered", False)):
+        return None
+    if bool(getattr(args, "allow_same_config_restart_after_triggered_review", False)):
+        return None
+    return {
+        "schema_version": "tropicalgt.triggered_restart_block.v1",
+        "restart_action": "blocked_pending_evidence_backed_config_patch",
+        "reason": "target_missed_requires_reviewed_config_patch_before_another_training_launch",
+        "boundary_step": int(decision.get("boundary_step", 0) or 0),
+        "bpb": decision.get("bpb"),
+        "target_bpb": decision.get("target_bpb"),
+        "prompt": decision.get("prompt", ""),
+        "policy": (
+            "Do not automatically restart the same config after a missed BPB target. "
+            "Run the post-5K review, cite real evidence for every config change, then launch an explicit revised step-0 config from a reviewed config patch."
+        ),
+    }
 
 
 def _train_command(python: str, train_script: Path, config: Path, max_steps: int, resume_from: Path | None) -> list[str]:
@@ -324,6 +359,7 @@ def _restart_decision_schema(target_bpb: float) -> dict[str, Any]:
             "interactive_audit_validator_results_after_legacy_backfill",
             "advanced_sidecars_and_topological_geometric_algebraic_visualizations",
             "wandb_summary_or_local_metric_history_when_available",
+            "reviewed_config_patch_before_any_same_config_restart",
         ],
         "config_patch_contract": {
             "format": "list of config patch rows with dot_path, old_value, new_value, reason, evidence_paths, expected_bpb_effect, and risk",
@@ -334,10 +370,12 @@ def _restart_decision_schema(target_bpb: float) -> dict[str, Any]:
         "allowed_actions": [
             "target_met_keep_or_continue_without_restart",
             "target_not_met_restart_from_step_0_with_evidence_backed_config_patch",
+            "blocked_pending_evidence_backed_config_patch",
             "blocked_missing_required_evidence_no_restart",
         ],
         "no_proxy_policy": (
             "Every hyperparameter/config change must cite real metrics, command results, sidecars, or visual audit artifacts. "
+            "The loop must halt on a missed target until a reviewed config patch exists, unless legacy same-config restart is explicitly requested. "
             "Unavailable CAS, topology, geometry, algebra, memory, or visualization evidence remains unavailable with exact reasons."
         ),
     }
