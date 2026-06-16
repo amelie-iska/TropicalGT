@@ -7408,6 +7408,15 @@ def write_analogical_memory_visualization(
         query_complex_source=query_complex_source,
     )
     _write_analogical_topk_index(index_path, pair_pages, map_reports, contract=topk_contract)
+    simplex_tree_path = output_dir / "analogical_simplex_tree_analogy.html"
+    simplex_tree_payload_path = output_dir / "analogical_simplex_tree_analogy.json"
+    simplex_tree_analogy = _write_analogical_simplex_tree_analogy(
+        simplex_tree_path,
+        simplex_tree_payload_path,
+        pair_pages,
+        map_reports,
+        topk_contract=topk_contract,
+    )
 
     map_path.write_text(
         json.dumps(
@@ -7417,6 +7426,8 @@ def write_analogical_memory_visualization(
                 "query_complex_source": query_complex_source,
                 "query_derived_signature": query_topology.get("derived_equivalence_signature", {}) if isinstance(query_topology, dict) else {},
                 "topk_contract": topk_contract,
+                "simplex_tree_analogy_contract": simplex_tree_analogy.get("contract", {}),
+                "simplex_tree_analogy_path": simplex_tree_path.name,
                 "maps": map_reports,
             },
             indent=2,
@@ -7427,6 +7438,8 @@ def write_analogical_memory_visualization(
         "analogical_memory_retrieval_html": str(path),
         "analogical_simplicial_maps": str(map_path),
         "analogical_memory_topk_index_html": str(index_path),
+        "analogical_simplex_tree_analogy_html": str(simplex_tree_path),
+        "analogical_simplex_tree_analogy_json": str(simplex_tree_payload_path),
     }
     for page in pair_pages:
         result[f"analogical_memory_map_{int(page['rank']):02d}_html"] = str(page["path"])
@@ -7990,13 +8003,219 @@ def _write_analogical_unavailable_outputs(
     }
     if query_complex_source:
         payload["query_complex_source"] = query_complex_source
+    simplex_tree_path = output_dir / "analogical_simplex_tree_analogy.html"
+    simplex_tree_payload_path = output_dir / "analogical_simplex_tree_analogy.json"
+    simplex_tree_analogy = _write_analogical_simplex_tree_analogy(
+        simplex_tree_path,
+        simplex_tree_payload_path,
+        [],
+        [],
+        topk_contract=contract,
+        unavailable_reason=reason,
+    )
+    payload["simplex_tree_analogy_contract"] = simplex_tree_analogy.get("contract", {})
+    payload["simplex_tree_analogy_path"] = simplex_tree_path.name
     map_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
     return {
         "analogical_memory_retrieval_html": str(retrieval_path),
         "analogical_simplicial_maps": str(map_path),
         "analogical_memory_topk_index_html": str(index_path),
         "analogical_memory_map_02_html": str(map02_path),
+        "analogical_simplex_tree_analogy_html": str(simplex_tree_path),
+        "analogical_simplex_tree_analogy_json": str(simplex_tree_payload_path),
     }
+
+
+def _analogical_simplex_key(values: object) -> str:
+    if not isinstance(values, (list, tuple)):
+        return "{}"
+    return "{" + ", ".join(str(value) for value in values) + "}"
+
+
+def _analogical_simplex_chain_rows(rows: list[dict[str, object]]) -> list[dict[str, object]]:
+    by_domain = {
+        tuple(str(value) for value in row.get("domain_simplex", [])): row
+        for row in rows
+        if isinstance(row.get("domain_simplex"), list)
+    }
+    chains: list[dict[str, object]] = []
+    for row in rows:
+        domain = tuple(str(value) for value in row.get("domain_simplex", [])) if isinstance(row.get("domain_simplex"), list) else ()
+        if len(domain) < 2:
+            continue
+        face_rows: list[dict[str, object]] = []
+        all_faces_preserved = True
+        for face in combinations(domain, len(domain) - 1):
+            face_key = tuple(sorted(face))
+            face_row = by_domain.get(face_key)
+            face_rows.append(
+                {
+                    "domain_face": list(face_key),
+                    "image_face": list(face_row.get("image_simplex", [])) if isinstance(face_row, dict) and isinstance(face_row.get("image_simplex"), list) else [],
+                    "preserved_in_simplex_tree": bool(face_row.get("preserved_in_simplex_tree")) if isinstance(face_row, dict) else False,
+                    "missing_from_certificate": not isinstance(face_row, dict),
+                }
+            )
+            all_faces_preserved = bool(all_faces_preserved and isinstance(face_row, dict) and face_row.get("preserved_in_simplex_tree"))
+        chains.append(
+            {
+                "domain_coface": list(domain),
+                "image_coface": list(row.get("image_simplex", [])) if isinstance(row.get("image_simplex"), list) else [],
+                "dimension": int(row.get("dimension", len(domain) - 1) or 0),
+                "coface_preserved_in_simplex_tree": bool(row.get("preserved_in_simplex_tree")),
+                "all_boundary_faces_present_and_preserved": bool(all_faces_preserved),
+                "boundary_faces": face_rows,
+            }
+        )
+    return chains
+
+
+def _write_analogical_simplex_tree_analogy(
+    path: Path,
+    payload_path: Path,
+    pair_pages: list[dict[str, object]],
+    map_reports: list[dict[str, object]],
+    *,
+    topk_contract: Mapping[str, object] | None = None,
+    unavailable_reason: str = "",
+) -> dict[str, object]:
+    pair_payloads: list[dict[str, object]] = []
+    total_checked = 0
+    total_preserved = 0
+    for page, report in zip(pair_pages, map_reports, strict=False):
+        tree = report.get("simplex_tree_map") if isinstance(report.get("simplex_tree_map"), dict) else {}
+        rows = [row for row in tree.get("rows", []) if isinstance(row, dict)] if isinstance(tree, dict) else []
+        display_rows = rows[:160]
+        chains = _analogical_simplex_chain_rows(display_rows)
+        checked = int(report.get("simplex_tree_map_checked", tree.get("checked_simplices", len(rows))) or 0)
+        preserved = int(report.get("simplex_tree_map_preserved", tree.get("preserved_simplices", 0)) or 0)
+        total_checked += checked
+        total_preserved += preserved
+        pair_payloads.append(
+            {
+                "rank": int(page.get("rank", report.get("rank", 0)) or 0),
+                "pair_page": Path(str(page.get("path", report.get("pair_page", "")))).name,
+                "memory_id": str(page.get("memory_id", report.get("memory_id", "memory"))),
+                "map_render_claim": str(report.get("map_render_claim", "unavailable")),
+                "map_claim_failure_reason": report.get("map_claim_failure_reason"),
+                "checked_simplices": checked,
+                "preserved_simplices": preserved,
+                "preservation_rate": float(report.get("simplex_tree_map_preservation_rate", tree.get("preservation_rate", 0.0)) or 0.0),
+                "dimension_counts": tree.get("dimension_counts", {}) if isinstance(tree, dict) else {},
+                "positive_filtration_distortion_summary": tree.get("positive_filtration_distortion_summary", {}) if isinstance(tree, dict) else {},
+                "simplex_rows_truncated": bool(len(rows) > len(display_rows)),
+                "simplex_rows": display_rows,
+                "preserved_face_coface_chains": chains,
+            }
+        )
+    contract = {
+        "schema_version": "tropicalgt.analogical_simplex_tree_analogy.v1",
+        "available": bool(pair_payloads),
+        "status": "available" if pair_payloads else "unavailable_insufficient_model_probability_memory",
+        "reason_detail": unavailable_reason,
+        "source": "probability_simplicial_map.simplex_tree_map.rows",
+        "simplex_tree_source": "finite GUDHI SimplexTree enumeration from trajectory_probability_filtered_simplicial_object pairs",
+        "no_proxy_or_fallback": True,
+        "compares_query_and_memory_simplex_trees": True,
+        "renders_hasse_face_to_coface_rows": True,
+        "preserved_face_coface_chains_highlighted": True,
+        "failed_or_distorted_chains_labeled_not_maps": True,
+        "chain_map_claim_requires_certified_filtered_simplicial_map": True,
+        "persistence_module_morphism_claim_requires_certified_filtered_simplicial_map": True,
+        "pair_count": int(len(pair_payloads)),
+        "total_checked_simplices": int(total_checked),
+        "total_preserved_simplices": int(total_preserved),
+        "topk_contract_schema": (topk_contract or {}).get("schema_version") if isinstance(topk_contract, Mapping) else None,
+    }
+    payload = {"contract": contract, "pairs": pair_payloads}
+    payload_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+
+    if pair_payloads:
+        rows_html: list[str] = []
+        for pair in pair_payloads:
+            rows_html.append(
+                "<tr class='pair-head'>"
+                f"<td colspan='9'>rank {int(pair.get('rank', 0))}: <a href='{html.escape(str(pair.get('pair_page', '')))}'>{html.escape(str(pair.get('memory_id', 'memory')))}</a> | "
+                f"claim={html.escape(str(pair.get('map_render_claim', 'unavailable')))} | "
+                f"simplex-tree preservation={int(pair.get('preserved_simplices', 0))}/{int(pair.get('checked_simplices', 0))} = {float(pair.get('preservation_rate', 0.0)):.4f}</td>"
+                "</tr>"
+            )
+            simplex_rows = pair.get("simplex_rows", []) if isinstance(pair.get("simplex_rows"), list) else []
+            chain_by_domain = {
+                tuple(str(v) for v in chain.get("domain_coface", [])): chain
+                for chain in pair.get("preserved_face_coface_chains", [])
+                if isinstance(chain, dict)
+            }
+            for row in simplex_rows[:80]:
+                if not isinstance(row, dict):
+                    continue
+                domain = row.get("domain_simplex", []) if isinstance(row.get("domain_simplex"), list) else []
+                image = row.get("image_simplex", []) if isinstance(row.get("image_simplex"), list) else []
+                chain = chain_by_domain.get(tuple(str(v) for v in domain), {})
+                face_count = len(chain.get("boundary_faces", [])) if isinstance(chain, dict) and isinstance(chain.get("boundary_faces"), list) else 0
+                chain_status = "boundary preserved" if chain and chain.get("all_boundary_faces_present_and_preserved") else ("boundary failed/unavailable" if chain else "vertex row")
+                preserved = bool(row.get("preserved_in_simplex_tree"))
+                rows_html.append(
+                    f"<tr class={'preserved' if preserved else 'failed'}>"
+                    f"<td>{int(pair.get('rank', 0))}</td>"
+                    f"<td>{int(row.get('dimension', 0) or 0)}</td>"
+                    f"<td>{html.escape(_analogical_simplex_key(domain))}</td>"
+                    f"<td>{html.escape(_analogical_simplex_key(image))}</td>"
+                    f"<td>{float(row.get('domain_filtration', 0.0) or 0.0):.5g}</td>"
+                    f"<td>{html.escape(str(row.get('codomain_filtration')))}</td>"
+                    f"<td>{html.escape(str(row.get('signed_filtration_distortion')))}</td>"
+                    f"<td>{'preserved' if preserved else html.escape(str(row.get('failure_reason') or 'failed'))}</td>"
+                    f"<td>{html.escape(chain_status)} ({face_count} faces)</td>"
+                    "</tr>"
+                )
+        body = "\n".join(rows_html)
+    else:
+        body = (
+            "<tr class='failed'><td colspan='9'><strong>Simplex-tree analogy unavailable.</strong> "
+            f"{html.escape(unavailable_reason or 'No qualified model-probability memories were rendered.')} "
+            "No Hasse rows, chain maps, or persistence-module morphisms are fabricated.</td></tr>"
+        )
+    path.write_text(
+        f"""<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Analogical simplex-tree analogy</title>
+  <style>
+    :root {{ color-scheme: dark; }}
+    body {{ margin: 0; background: #090b12; color: #e8eef8; font-family: Inter, ui-sans-serif, system-ui, sans-serif; }}
+    main {{ max-width: 1180px; margin: 0 auto; padding: 32px 24px; }}
+    h1 {{ font-size: 23px; margin: 0 0 8px; }}
+    p {{ color: #a8b3c7; line-height: 1.55; }}
+    table {{ width: 100%; border-collapse: collapse; margin-top: 18px; border: 1px solid rgba(148,163,184,0.26); background: #0f172a; }}
+    th, td {{ padding: 8px 10px; border-bottom: 1px solid rgba(148,163,184,0.16); text-align: left; font-size: 12px; vertical-align: top; }}
+    th {{ color: #99f6e4; font-weight: 650; }}
+    a {{ color: #7dd3fc; text-decoration: none; }}
+    a:hover {{ text-decoration: underline; }}
+    .contract {{ border: 1px solid rgba(125,211,252,0.28); background: #0d1626; padding: 14px 16px; margin-top: 18px; }}
+    .badge {{ display: inline-block; margin: 0 8px 8px 0; padding: 3px 8px; border: 1px solid rgba(153,246,228,0.35); color: #99f6e4; font-size: 11px; text-transform: uppercase; letter-spacing: 0; }}
+    tr.pair-head td {{ background: #111827; color: #e0f2fe; font-weight: 650; }}
+    tr.preserved td {{ color: #d1fae5; }}
+    tr.failed td {{ color: #fecdd3; background: rgba(127,29,29,0.16); }}
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Analogical simplex-tree analogy</h1>
+    <p>This view compares query and memory GUDHI SimplexTree finite Hasse rows using the stored model-probability Jensen-Shannon vertex assignment. Preserved rows are actual domain simplex to image simplex checks from the certificate; failed rows remain correspondences and are not called chain maps or persistence-module morphisms.</p>
+    <aside class="contract"><span class="badge">no proxy</span><span class="badge">finite simplex-tree rows</span><span class="badge">preserved face-to-coface chains</span><p><strong>Contract:</strong> {html.escape(contract['schema_version'])}; source {html.escape(str(contract['source']))}; checked {int(total_checked)} simplices, preserved {int(total_preserved)}. Chain and module morphism claims require a certified filtered simplicial map.</p></aside>
+    <table>
+      <thead><tr><th>rank</th><th>dim</th><th>domain simplex</th><th>image simplex</th><th>domain filtration</th><th>codomain filtration</th><th>distortion</th><th>simplex-tree status</th><th>face-to-coface chain</th></tr></thead>
+      <tbody>{body}</tbody>
+    </table>
+  </main>
+</body>
+</html>
+""",
+        encoding="utf-8",
+    )
+    return payload
 
 
 def _analogical_contract_value(value: object) -> object:

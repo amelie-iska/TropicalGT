@@ -657,3 +657,24 @@ CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/t
 CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_simplicial_visualization.py -q -p no:cacheprovider --basetemp=/tmp/tropicalgt-pytest-analogical-simplicial-full
 # 43 passed
 ```
+
+## 2026-06-16 Analogical Simplex-Tree Analogy View Repair
+
+Sequential analogical-memory item completed after the top-k readability contract:
+
+- Added `analogical_simplex_tree_analogy.html` and `analogical_simplex_tree_analogy.json` generation to analogical memory visualization outputs.
+- Added a machine-readable `tropicalgt.analogical_simplex_tree_analogy.v1` contract proving the view is built from `probability_simplicial_map.simplex_tree_map.rows`, not from embedding-only correspondence or invented geometry.
+- The view compares query and memory GUDHI SimplexTree finite Hasse rows, lists domain simplex to image simplex checks, highlights preserved rows, labels missing/filtration-distorted rows as failed correspondences, and summarizes preserved face-to-coface chains.
+- Chain-map and persistence-module morphism claims remain gated by certified filtered simplicial-map preservation; failed or incomplete simplex-tree checks are explicitly not promoted.
+- The interactive artifact validator now requires the simplex-tree analogy HTML/JSON, checks contract schema/source/no-proxy flags, requires Hasse face-to-coface rows and preserved-chain metadata, and verifies pair counts match rendered analogical maps.
+
+Validation:
+
+```text
+CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_simplicial_visualization.py TropicalGT-I/tests/test_interactive_artifact_validator.py -q -p no:cacheprovider --basetemp=/tmp/tropicalgt-pytest-analogical-tree -k "analogical"
+# 12 passed, 45 deselected
+CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_interactive_artifact_validator.py -q -p no:cacheprovider --basetemp=/tmp/tropicalgt-pytest-analogical-tree-validator-full
+# 14 passed
+CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_simplicial_visualization.py -q -p no:cacheprovider --basetemp=/tmp/tropicalgt-pytest-analogical-tree-simplicial-full
+# 43 passed
+```

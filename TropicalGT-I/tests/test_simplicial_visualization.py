@@ -1532,8 +1532,12 @@ def test_analogical_memory_visualization_renders_simplicial_maps(tmp_path: Path)
     assert "memory 2" not in html
     assert "analogical_memory_topk_index_html" in paths
     assert "analogical_memory_map_02_html" in paths
+    assert "analogical_simplex_tree_analogy_html" in paths
+    assert "analogical_simplex_tree_analogy_json" in paths
     index_html = Path(paths["analogical_memory_topk_index_html"]).read_text(encoding="utf-8")
     rank2_html = Path(paths["analogical_memory_map_02_html"]).read_text(encoding="utf-8")
+    tree_html = Path(paths["analogical_simplex_tree_analogy_html"]).read_text(encoding="utf-8")
+    tree_payload = json.loads(Path(paths["analogical_simplex_tree_analogy_json"]).read_text(encoding="utf-8"))
     assert "Analogical top-k probability correspondences" in index_html
     assert "Edge, face, and filtration preservation can fail" in index_html
     assert "Index readability contract" in index_html
@@ -1553,6 +1557,20 @@ def test_analogical_memory_visualization_renders_simplicial_maps(tmp_path: Path)
     assert "vector contrib." in index_html
     assert "rank 2" in rank2_html
     assert '<input id="filtration-slider"' in rank2_html
+    assert "Analogical simplex-tree analogy" in tree_html
+    assert "finite simplex-tree rows" in tree_html
+    assert "preserved face-to-coface chains" in tree_html
+    assert "No Hasse rows" not in tree_html
+    assert tree_payload["contract"]["schema_version"] == "tropicalgt.analogical_simplex_tree_analogy.v1"
+    assert tree_payload["contract"]["no_proxy_or_fallback"] is True
+    assert tree_payload["contract"]["compares_query_and_memory_simplex_trees"] is True
+    assert tree_payload["contract"]["preserved_face_coface_chains_highlighted"] is True
+    assert tree_payload["contract"]["failed_or_distorted_chains_labeled_not_maps"] is True
+    assert tree_payload["contract"]["chain_map_claim_requires_certified_filtered_simplicial_map"] is True
+    assert tree_payload["contract"]["pair_count"] == 2
+    assert len(tree_payload["pairs"]) == 2
+    assert tree_payload["pairs"][0]["simplex_rows"]
+    assert "preserved_face_coface_chains" in tree_payload["pairs"][0]
     assert len(maps["maps"]) == 2
     assert maps["topk_contract"]["schema_version"] == "tropicalgt.analogical_topk.v1"
     assert maps["topk_contract"]["no_proxy_or_fallback"] is True
@@ -1562,6 +1580,8 @@ def test_analogical_memory_visualization_renders_simplicial_maps(tmp_path: Path)
     assert maps["topk_contract"]["qualified_model_probability_memory_count"] == 2
     assert maps["topk_contract"]["top_k_rendered"] == 2
     assert maps["topk_contract"]["query_complex_source"] == "trajectory_probability_filtered_simplicial_object"
+    assert maps["simplex_tree_analogy_contract"]["schema_version"] == "tropicalgt.analogical_simplex_tree_analogy.v1"
+    assert maps["simplex_tree_analogy_path"] == "analogical_simplex_tree_analogy.html"
     readability = maps["topk_contract"]["readability_contract"]
     assert readability["schema_version"] == "tropicalgt.analogical_topk_readability.v1"
     assert readability["topk_index_has_readable_table"] is True

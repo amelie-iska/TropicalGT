@@ -27,6 +27,7 @@ REQUIRED_HTML = {
     "graphcg": ("graphcg_direction_cosines.html", ("GraphCG", "full-rank direction audit")),
     "analogical_index": ("analogical_memory_topk_index.html", ("Analogical top-k probability correspondences",)),
     "analogical_map": ("analogical_memory_map_02.html", ("Analogical", "probability-matched correspondence", "filtered-complex certificate")),
+    "analogical_simplex_tree": ("analogical_simplex_tree_analogy.html", ("Analogical simplex-tree analogy", "finite simplex-tree rows", "preserved face-to-coface chains")),
     "trajectory_barcode": ("trajectory_persistence/persistence_barcode.html", ("Trajectory", "barcode")),
     "trajectory_bifiltration": ("trajectory_persistence/two_parameter_bifiltration.html", ("Trajectory 2-parameter persistence over F2[x_level,x_radius]", "2-parameter module fibers", "Miller-Sturmfels staircase", "H0 fiber rank")),
     "trajectory_betti": ("trajectory_persistence/persistence_module_betti.html", ("Trajectory", "Betti", "2D matrix", "decorative 3D")),
@@ -45,6 +46,7 @@ REQUIRED_JSON = {
     "tropical_support_payload": "tropical_support_payload.json",
     "tropical_fan_diagnostics": "tropical_fan_diagnostics.json",
     "graphcg_payload": "graphcg_direction_cosines_payload.json",
+    "analogical_simplex_tree_analogy": "analogical_simplex_tree_analogy.json",
     "trajectory_bifiltration_payload": "trajectory_level_radius_bifiltration.json",
 }
 
@@ -334,6 +336,7 @@ def validate_row(row_dir: Path, *, min_candidates: int = 8, min_depth: int = 2, 
 
     support_payload = _read_json(row_dir / REQUIRED_JSON["tropical_support_payload"]) if (row_dir / REQUIRED_JSON["tropical_support_payload"]).exists() else {}
     graphcg_payload = _read_json(row_dir / REQUIRED_JSON["graphcg_payload"]) if (row_dir / REQUIRED_JSON["graphcg_payload"]).exists() else {}
+    analogical_simplex_tree_payload = _read_json(row_dir / REQUIRED_JSON["analogical_simplex_tree_analogy"]) if (row_dir / REQUIRED_JSON["analogical_simplex_tree_analogy"]).exists() else {}
     bifiltration_payload = _read_json(row_dir / REQUIRED_JSON["trajectory_bifiltration_payload"]) if (row_dir / REQUIRED_JSON["trajectory_bifiltration_payload"]).exists() else {}
     bifiltration_visual_path = row_dir / "trajectory_persistence" / "two_parameter_bifiltration.json"
     bifiltration_visual_payload = _read_json(bifiltration_visual_path) if bifiltration_visual_path.exists() else {}
@@ -772,6 +775,22 @@ def validate_row(row_dir: Path, *, min_candidates: int = 8, min_depth: int = 2, 
     if maps_path.exists():
         map_payload = _read_json(maps_path)
         maps = map_payload.get("maps", [])
+        analogy_contract = analogical_simplex_tree_payload.get("contract", {}) if isinstance(analogical_simplex_tree_payload, dict) else {}
+        analogy_pairs = analogical_simplex_tree_payload.get("pairs", []) if isinstance(analogical_simplex_tree_payload, dict) else []
+        _assert(
+            isinstance(analogy_contract, dict) and analogy_contract.get("schema_version") == "tropicalgt.analogical_simplex_tree_analogy.v1",
+            errors,
+            "analogical simplex-tree analogy contract is missing or has wrong schema",
+        )
+        if isinstance(analogy_contract, dict):
+            _assert(analogy_contract.get("no_proxy_or_fallback") is True, errors, "analogical simplex-tree analogy contract is missing no-proxy flag")
+            _assert(analogy_contract.get("compares_query_and_memory_simplex_trees") is True, errors, "analogical simplex-tree analogy does not compare query and memory trees")
+            _assert(analogy_contract.get("renders_hasse_face_to_coface_rows") is True, errors, "analogical simplex-tree analogy omits Hasse face-to-coface rows")
+            _assert(analogy_contract.get("preserved_face_coface_chains_highlighted") is True, errors, "analogical simplex-tree analogy does not highlight preserved face/coface chains")
+            _assert(analogy_contract.get("failed_or_distorted_chains_labeled_not_maps") is True, errors, "analogical simplex-tree analogy overclaims failed chains as maps")
+            _assert(analogy_contract.get("chain_map_claim_requires_certified_filtered_simplicial_map") is True, errors, "analogical simplex-tree analogy permits uncertified chain-map claims")
+            _assert(analogy_contract.get("persistence_module_morphism_claim_requires_certified_filtered_simplicial_map") is True, errors, "analogical simplex-tree analogy permits uncertified persistence-module morphisms")
+            _assert(str(analogy_contract.get("source", "")) == "probability_simplicial_map.simplex_tree_map.rows", errors, "analogical simplex-tree analogy has wrong source rows")
         topk_contract = map_payload.get("topk_contract", {}) if isinstance(map_payload, dict) else {}
         topk_readability = topk_contract.get("readability_contract", {}) if isinstance(topk_contract, dict) else {}
         _assert(isinstance(topk_contract, dict) and topk_contract.get("schema_version") == "tropicalgt.analogical_topk.v1", errors, "analogical top-k contract is missing or has wrong schema")
@@ -808,9 +827,30 @@ def validate_row(row_dir: Path, *, min_candidates: int = 8, min_depth: int = 2, 
             _assert(map_payload.get("reason") in {"missing_model_probability_query_complex", "missing_model_probability_codomain_complex", "no_non_self_model_memory"}, errors, "analogical maps are unavailable for an unrecognized reason")
             if isinstance(topk_contract, dict):
                 _assert(int(_finite_float(topk_contract.get("top_k_rendered"), -1.0)) == 0, errors, "unavailable analogical top-k contract renders map rows")
+            if isinstance(analogy_contract, dict):
+                _assert(analogy_contract.get("available") is False and int(_finite_float(analogy_contract.get("pair_count"), -1.0)) == 0, errors, "unavailable analogical simplex-tree analogy renders pair rows")
         else:
             allowed_sources = {"trajectory_probability_filtered_simplicial_object"}
             _assert(bool(maps), errors, "analogical_simplicial_maps.json contains no maps")
+            _assert(isinstance(analogy_pairs, list) and len(analogy_pairs) == len(maps), errors, "analogical simplex-tree analogy pair count does not match maps")
+            if isinstance(analogy_contract, dict):
+                _assert(analogy_contract.get("available") is True, errors, "available analogical simplex-tree analogy is not marked available")
+                _assert(int(_finite_float(analogy_contract.get("pair_count"), -1.0)) == len(maps), errors, "analogical simplex-tree analogy contract pair_count does not match maps")
+                _assert(int(_finite_float(analogy_contract.get("total_checked_simplices"), -1.0)) >= len(maps), errors, "analogical simplex-tree analogy checked no simplices")
+            for pair in analogy_pairs if isinstance(analogy_pairs, list) else []:
+                if not isinstance(pair, dict):
+                    errors.append("analogical simplex-tree analogy pair is not an object")
+                    continue
+                _assert(isinstance(pair.get("simplex_rows"), list) and bool(pair.get("simplex_rows")), errors, "analogical simplex-tree analogy pair lacks simplex rows")
+                _assert(isinstance(pair.get("preserved_face_coface_chains"), list), errors, "analogical simplex-tree analogy pair lacks face/coface chain rows")
+                _assert(int(_finite_float(pair.get("checked_simplices"), -1.0)) >= len(pair.get("simplex_rows", [])) or pair.get("simplex_rows_truncated") is True, errors, "analogical simplex-tree analogy checked count is inconsistent with rows")
+                for simplex_row in pair.get("simplex_rows", [])[:12] if isinstance(pair.get("simplex_rows"), list) else []:
+                    if not isinstance(simplex_row, dict):
+                        errors.append("analogical simplex-tree analogy simplex row is not an object")
+                        continue
+                    _assert(isinstance(simplex_row.get("domain_simplex"), list), errors, "analogical simplex-tree analogy row lacks domain simplex")
+                    _assert(isinstance(simplex_row.get("image_simplex"), list), errors, "analogical simplex-tree analogy row lacks image simplex")
+                    _assert("preserved_in_simplex_tree" in simplex_row, errors, "analogical simplex-tree analogy row lacks preservation flag")
             if isinstance(topk_contract, dict):
                 _assert(int(_finite_float(topk_contract.get("top_k_rendered"), -1.0)) == len(maps), errors, "analogical top-k rendered count does not match maps")
                 _assert(int(_finite_float(topk_contract.get("qualified_model_probability_memory_count"), -1.0)) >= len(maps), errors, "analogical top-k qualified count is smaller than rendered maps")

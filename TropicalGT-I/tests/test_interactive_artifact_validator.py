@@ -357,6 +357,69 @@ def _row(root: Path, name: str) -> Path:
             "preserved_edge_query_vertices": ["a", "b"],
         },
     ]}))
+    analogical_simplex_tree_payload = {
+        "contract": {
+            "schema_version": "tropicalgt.analogical_simplex_tree_analogy.v1",
+            "available": True,
+            "status": "available",
+            "reason_detail": "",
+            "source": "probability_simplicial_map.simplex_tree_map.rows",
+            "simplex_tree_source": "finite GUDHI SimplexTree enumeration from trajectory_probability_filtered_simplicial_object pairs",
+            "no_proxy_or_fallback": True,
+            "compares_query_and_memory_simplex_trees": True,
+            "renders_hasse_face_to_coface_rows": True,
+            "preserved_face_coface_chains_highlighted": True,
+            "failed_or_distorted_chains_labeled_not_maps": True,
+            "chain_map_claim_requires_certified_filtered_simplicial_map": True,
+            "persistence_module_morphism_claim_requires_certified_filtered_simplicial_map": True,
+            "pair_count": 2,
+            "total_checked_simplices": 4,
+            "total_preserved_simplices": 2,
+            "topk_contract_schema": "tropicalgt.analogical_topk.v1",
+        },
+        "pairs": [
+            {
+                "rank": 1,
+                "pair_page": "analogical_memory_retrieval.html",
+                "memory_id": "mem-1",
+                "map_render_claim": "probability_correspondence_not_a_simplicial_map",
+                "checked_simplices": 2,
+                "preserved_simplices": 1,
+                "preservation_rate": 0.5,
+                "dimension_counts": {"dim_0": {"checked": 1, "preserved": 1, "missing_codomain": 0}, "dim_1": {"checked": 1, "preserved": 0, "missing_codomain": 1}},
+                "positive_filtration_distortion_summary": {"count": 1, "max": 0.07},
+                "simplex_rows_truncated": False,
+                "simplex_rows": [
+                    {"domain_simplex": ["a"], "image_simplex": ["x"], "dimension": 0, "domain_filtration": 0.0, "codomain_filtration": 0.0, "signed_filtration_distortion": 0.0, "preserved_in_simplex_tree": True, "failure_reason": None},
+                    {"domain_simplex": ["a", "b"], "image_simplex": ["x", "y"], "dimension": 1, "domain_filtration": 0.2, "codomain_filtration": None, "signed_filtration_distortion": None, "preserved_in_simplex_tree": False, "failure_reason": "missing_codomain_simplex"},
+                ],
+                "preserved_face_coface_chains": [
+                    {"domain_coface": ["a", "b"], "image_coface": ["x", "y"], "dimension": 1, "coface_preserved_in_simplex_tree": False, "all_boundary_faces_present_and_preserved": False, "boundary_faces": []}
+                ],
+            },
+            {
+                "rank": 2,
+                "pair_page": "analogical_memory_map_02.html",
+                "memory_id": "mem-2",
+                "map_render_claim": "probability_correspondence_not_a_simplicial_map",
+                "checked_simplices": 2,
+                "preserved_simplices": 1,
+                "preservation_rate": 0.5,
+                "dimension_counts": {"dim_0": {"checked": 1, "preserved": 1, "missing_codomain": 0}, "dim_1": {"checked": 1, "preserved": 0, "missing_codomain": 0}},
+                "positive_filtration_distortion_summary": {"count": 1, "max": 0.02},
+                "simplex_rows_truncated": False,
+                "simplex_rows": [
+                    {"domain_simplex": ["a"], "image_simplex": ["x"], "dimension": 0, "domain_filtration": 0.0, "codomain_filtration": 0.0, "signed_filtration_distortion": 0.0, "preserved_in_simplex_tree": True, "failure_reason": None},
+                    {"domain_simplex": ["a", "b"], "image_simplex": ["x", "y"], "dimension": 1, "domain_filtration": 0.2, "codomain_filtration": 0.22, "signed_filtration_distortion": 0.02, "preserved_in_simplex_tree": False, "failure_reason": "filtration_not_preserved"},
+                ],
+                "preserved_face_coface_chains": [
+                    {"domain_coface": ["a", "b"], "image_coface": ["x", "y"], "dimension": 1, "coface_preserved_in_simplex_tree": False, "all_boundary_faces_present_and_preserved": True, "boundary_faces": [{"domain_face": ["a"], "image_face": ["x"], "preserved_in_simplex_tree": True, "missing_from_certificate": False}]}
+                ],
+            },
+        ],
+    }
+    _write(row / "analogical_simplex_tree_analogy.json", json.dumps(analogical_simplex_tree_payload))
+    _write(row / "analogical_simplex_tree_analogy.html", _html("Analogical simplex-tree analogy", "finite simplex-tree rows preserved face-to-coface chains no proxy"))
     _write(
         row / "tropical_fan_diagnostics.json",
         json.dumps(
@@ -623,6 +686,7 @@ def _row(root: Path, name: str) -> Path:
         "analogical_memory_topk_index.html": "<!doctype html><title>Analogical top-k probability correspondences</title><body>Analogical top-k probability correspondences Index readability contract <a href='analogical_memory_retrieval.html'>rank 1</a> <a href='analogical_memory_map_02.html'>rank 2</a></body>",
         "analogical_memory_retrieval.html": _html("Analogical probability-matched correspondence filtered-complex certificate", "Plotly.newPlot query trajectory complex retrieved memory complex slider filters domain and codomain sliders vertex-only correspondences preserved 1-simplex map simplicial-object-plot selected-complex-graph plotly_click"),
         "analogical_memory_map_02.html": _html("Analogical probability-matched correspondence filtered-complex certificate", "Plotly.newPlot query trajectory complex retrieved memory complex slider filters domain and codomain sliders vertex-only correspondences preserved 1-simplex map simplicial-object-plot selected-complex-graph plotly_click"),
+        "analogical_simplex_tree_analogy.html": _html("Analogical simplex-tree analogy", "Plotly.newPlot finite simplex-tree rows preserved face-to-coface chains no proxy"),
         "trajectory_persistence/persistence_barcode.html": _html("Trajectory persistence barcode", "Plotly.newPlot simplicial-object-plot selected-complex-graph plotly_click"),
         "trajectory_persistence/two_parameter_bifiltration.html": _html("Trajectory 2-parameter persistence over F2[x_level,x_radius]", "Plotly.newPlot 2-parameter module fibers Miller-Sturmfels staircase H0 fiber rank"),
         "trajectory_persistence/persistence_module_betti.html": _html("Trajectory persistence Betti", "Plotly.newPlot 2D matrix decorative 3D simplicial-object-plot selected-complex-graph plotly_click"),
@@ -769,6 +833,20 @@ def test_validate_audit_root_rejects_missing_tropical_support_readability_contra
     report = validator.validate_audit_root(audit, min_rows=1, min_candidates=4, min_depth=2)
     assert not report["ok"]
     assert any("tropical support payload is missing readability contract" in err for err in report["errors"])
+
+
+def test_validate_audit_root_rejects_missing_analogical_simplex_tree_analogy_contract(tmp_path: Path):
+    validator = _load_validator()
+    audit = tmp_path / "step_00000001" / "got_audit"
+    row = _row(audit, ".")
+    payload_path = row / "analogical_simplex_tree_analogy.json"
+    payload = json.loads(payload_path.read_text(encoding="utf-8"))
+    payload.pop("contract")
+    payload_path.write_text(json.dumps(payload), encoding="utf-8")
+    _write(audit / "codex_browser_index.html", _codex_browser_html(_browser_samples(audit, ["."])))
+    report = validator.validate_audit_root(audit, min_rows=1, min_candidates=4, min_depth=2)
+    assert not report["ok"]
+    assert any("analogical simplex-tree analogy contract" in err for err in report["errors"])
 
 
 def test_validate_audit_root_rejects_missing_analogical_topk_readability_contract(tmp_path: Path):
