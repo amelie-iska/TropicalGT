@@ -829,4 +829,25 @@ git diff --check
 # clean
 ```
 
-_Last updated: 2026-06-16T15:14:28Z_
+## 2026-06-16 Sequential Training/Readiness Update: Explicit Checkpoint Load Evidence
+
+Status: complete for shared checkpoint-load evidence hardening; actual BPB restart remains blocked by the zero-byte b60 checkpoint.
+
+- `load_checkpoint()` now checks file size and payload schema before building a model, and raises explicit `checkpoint_file_empty`, `checkpoint_load_failed`, or `checkpoint_invalid_payload` errors instead of leaking raw `torch.load` failures to inference/eval/readiness callers.
+- `_verify_checkpoint_file()` now supports `expected_step=None` for load-time structural validation while preserving exact-step verification for checkpoint writes.
+- Regression tests cover empty checkpoint load and malformed payload load, alongside the existing atomic-save test that prevents empty temporary files from replacing an existing target.
+- A real b60 load probe now reports `checkpoint_file_empty:TropicalGT-I/checkpoints/tropicalgt_i_pg_bpb_step0_full24b_b60_20260616T053631Z_fresh_bpb112_casrows_5k_gate.latest.pt`, matching the no-proxy restart blocker.
+- No checkpoints, generated bundles, datasets, W&B folders, caches, or secrets were staged.
+
+Verification:
+
+```bash
+PYTHONPATH=TropicalGT-I/scripts:TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_training_resume.py -q
+# 6 passed in 1.49s
+PYTHONPATH=TropicalGT-I/scripts:TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_training_resume.py TropicalGT-I/tests/test_readiness_audit.py TropicalGT-I/tests/test_training_metrics.py TropicalGT-I/tests/test_data_loader.py -q
+# 43 passed, 2 warnings in 1.68s
+git diff --check
+# clean
+```
+
+_Last updated: 2026-06-16T15:18:33Z_

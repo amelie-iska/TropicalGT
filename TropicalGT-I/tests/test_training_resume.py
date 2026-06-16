@@ -120,6 +120,22 @@ def test_train_blocks_bpb_config_that_fails_advanced_contract(tmp_path: Path, mo
     assert not (tmp_path / "outputs" / "train_report.json").exists()
 
 
+def test_load_checkpoint_reports_empty_checkpoint_explicitly(tmp_path: Path):
+    checkpoint = tmp_path / "empty.latest.pt"
+    checkpoint.write_bytes(b"")
+
+    with pytest.raises(RuntimeError, match="checkpoint_file_empty"):
+        run_module.load_checkpoint(checkpoint, torch.device("cpu"))
+
+
+def test_load_checkpoint_reports_invalid_payload_explicitly(tmp_path: Path):
+    checkpoint = tmp_path / "invalid.latest.pt"
+    torch.save({"config": {}, "step": 1}, checkpoint)
+
+    with pytest.raises(RuntimeError, match="checkpoint_invalid_payload:.*missing_model"):
+        run_module.load_checkpoint(checkpoint, torch.device("cpu"))
+
+
 def test_checkpoint_save_does_not_replace_existing_target_with_empty_temp(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     cfg = {
         "run_name": "atomic_save_test",

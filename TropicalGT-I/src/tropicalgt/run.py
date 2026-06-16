@@ -1658,7 +1658,18 @@ def evaluate_model(
 
 
 def load_checkpoint(path: str | Path, device: torch.device):
-    obj = torch.load(path, map_location=device)
+    checkpoint_path = Path(path)
+    _verify_checkpoint_file(checkpoint_path, expected_step=None, verify_load=False)
+    try:
+        obj = torch.load(checkpoint_path, map_location=device)
+    except Exception as exc:
+        raise RuntimeError(f"checkpoint_load_failed:{checkpoint_path}:{exc.__class__.__name__}") from exc
+    if not isinstance(obj, dict):
+        raise RuntimeError(f"checkpoint_invalid_payload:{checkpoint_path}:not_dict")
+    missing = [key for key in ("model", "config", "step") if key not in obj]
+    if missing:
+        missing_keys = ",".join(missing)
+        raise RuntimeError(f"checkpoint_invalid_payload:{checkpoint_path}:missing_{missing_keys}")
     model = build_model(obj["config"]).to(device)
     model.load_state_dict(obj["model"], strict=False)
     model.eval()
@@ -1705,7 +1716,7 @@ def _fsync_parent_dir(path: Path) -> None:
         os.close(fd)
 
 
-def _verify_checkpoint_file(path: Path, *, expected_step: int, verify_load: bool = True) -> int:
+def _verify_checkpoint_file(path: Path, *, expected_step: int | None, verify_load: bool = True) -> int:
     try:
         size = path.stat().st_size
     except OSError as exc:
@@ -1723,7 +1734,7 @@ def _verify_checkpoint_file(path: Path, *, expected_step: int, verify_load: bool
         if missing:
             raise RuntimeError(f"checkpoint_invalid_payload:{path}:missing_{','.join(missing)}")
         observed_step = int(obj.get("step", -1))
-        if observed_step != int(expected_step):
+        if expected_step is not None and observed_step != int(expected_step):
             raise RuntimeError(f"checkpoint_step_mismatch:{path}:{observed_step}!={int(expected_step)}")
     return int(size)
 
