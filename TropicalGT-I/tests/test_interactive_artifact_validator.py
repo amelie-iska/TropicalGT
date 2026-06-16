@@ -118,19 +118,43 @@ def _row(root: Path, name: str) -> Path:
         {"source": "root", "target": "b", "action": "verify", "source_nll": 1.0, "target_nll": 1.1, "nll_delta": 0.1, "improves": False},
         {"source": "a", "target": "c", "action": "refine", "source_nll": 0.9, "target_nll": 0.8, "nll_delta": -0.1, "improves": True},
     ]
+    density_visual_contract = {
+        "schema_version": "tropicalgt.nll_density_render.v1",
+        "page": "standalone_density_cloud",
+        "coordinate_space": "actual 3D PCA coordinates of model graph-state embeddings",
+        "z_axis_policy": "z is PC3(graph_state embedding); raw NLL is encoded by color, hover, and density metadata",
+        "actual_model_anchor_count": 4,
+        "support_sample_count": 440,
+        "kernel": "isotropic Gaussian in 3D PCA coordinates",
+        "kernel_bandwidth": 0.25,
+        "actual_anchor_trace_name": "actual model GoT state anchors",
+        "actual_anchor_layer_visible_by_default": True,
+        "support_sample_trace_name": "audit samples from the Gaussian NLL field (hidden by default)",
+        "support_sample_trace_visibility": "legendonly",
+        "support_samples_are_model_states": False,
+        "support_samples_hidden_as_model_states": True,
+        "visible_density_layers": ["density_volume", "anchor_gaussian_neighborhoods", "actual_model_anchor_markers"],
+        "audit_sample_layer_role": "legend-only Gaussian support samples for local NLL density inspection",
+        "camera_eye": {"x": 1.8, "y": 1.8, "z": 1.2},
+        "no_proxy_or_fallback": True,
+    }
     _write(
         row / "got_nll_density_cloud_payload.json",
         json.dumps(
             {
                 "available": True,
                 "render_contract": "Gaussian cloud points are not model states; they visualize local NLL density around actual embedding vectors, while only large labeled markers are model states",
+                "visual_layer_contract": density_visual_contract,
                 "density_contract": {
                     "actual_model_anchor_layer": True,
                     "support_samples_hidden_as_model_states": True,
                     "sample_points_are_model_states": False,
+                    "support_sample_trace_visibility": "legendonly",
                     "support_sample_count": 440,
                     "actual_model_anchor_count": 4,
                     "kernel_bandwidth": 0.25,
+                    "visible_density_layers": ["density_volume", "anchor_gaussian_neighborhoods", "actual_model_anchor_markers"],
+                    "z_axis_policy": "z is PC3(graph_state embedding); raw NLL is encoded by color, hover, and density metadata",
                     "edge_delta_rule": "target raw NLL minus source raw NLL over actual GoT tree edges",
                 },
                 "anchor_count": 4,
@@ -138,6 +162,9 @@ def _row(root: Path, name: str) -> Path:
                 "support_sample_count": 440,
                 "support_samples_hidden_as_model_states": True,
                 "sample_points_are_model_states": False,
+                "support_sample_trace_visibility": "legendonly",
+                "visible_density_layers": ["density_volume", "anchor_gaussian_neighborhoods", "actual_model_anchor_markers"],
+                "z_axis_policy": "z is PC3(graph_state embedding); raw NLL is encoded by color, hover, and density metadata",
                 "kernel_bandwidth": 0.25,
                 "nll_range": {"min": 0.8, "max": 1.1, "span": 0.3},
                 "local_nll_summary": {"count": 440, "min": 0.8, "max": 1.1, "mean": 0.95, "std": 0.1},
@@ -155,6 +182,10 @@ def _row(root: Path, name: str) -> Path:
                     "nll_min": 0.8,
                     "nll_max": 1.1,
                     "render_contract": "Gaussian cloud points are not model states; they visualize local NLL density around actual embedding vectors, while only large labeled markers are model states",
+                    "visual_layer_contract": density_visual_contract,
+                    "support_sample_trace_visibility": "legendonly",
+                    "visible_density_layers": ["density_volume", "anchor_gaussian_neighborhoods", "actual_model_anchor_markers"],
+                    "z_axis_policy": "z is PC3(graph_state embedding); raw NLL is encoded by color, hover, and density metadata",
                     "density_volume": {"available": True, "support_samples_are_not_model_states": True},
                 },
                 "anchors": [
@@ -607,6 +638,9 @@ def test_validate_audit_root_rejects_nll_density_state_provenance_gaps(tmp_path:
         ("missing_anchor_layer", lambda payload: payload["density_contract"].pop("actual_model_anchor_layer"), "actual-anchor layer provenance"),
         ("wrong_anchor_count", lambda payload: payload.__setitem__("anchor_count", 3), "anchor count does not match"),
         ("missing_density_volume_provenance", lambda payload: payload.__setitem__("density_volume", {"available": True}), "density volume is missing non-model-state provenance"),
+        ("missing_visual_layer_contract", lambda payload: payload.pop("visual_layer_contract"), "visual-layer render contract"),
+        ("visible_support_samples", lambda payload: payload["visual_layer_contract"].__setitem__("support_sample_trace_visibility", True), "support samples must render legend-only"),
+        ("missing_pc3_z_axis_policy", lambda payload: payload["visual_layer_contract"].__setitem__("z_axis_policy", "raw NLL z axis"), "PC3 z-axis policy"),
     ]
     for case_name, mutate, expected in cases:
         audit = tmp_path / case_name / "got_audit"

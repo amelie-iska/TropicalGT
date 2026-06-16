@@ -566,6 +566,10 @@ def write_got_trajectory_visualization(scaling_report: dict[str, object], output
         {
             "coordinate_space": "actual 3D PCA coordinates of model graph-state embeddings (PC1, PC2, PC3); raw NLL is color/density metadata",
             "separate_true_3d_pca_density_page": "got_nll_density_cloud_pca_3d.html",
+            "support_sample_trace_visibility": "legendonly",
+            "support_samples_hidden_as_model_states": True,
+            "sample_points_are_model_states": False,
+            "visible_density_layers": ["density_volume", "anchor_gaussian_neighborhoods", "actual_model_anchor_markers"],
         }
     )
     if density_cloud is not None:
@@ -609,7 +613,8 @@ def write_got_trajectory_visualization(scaling_report: dict[str, object], output
                     "nearest actual state index=%{customdata[3]:.0f}<br>"
                     "not a model state; visualization-only Gaussian neighborhood around actual embedding anchors<extra></extra>"
                 ),
-                name="continuous NLL density around actual embeddings",
+                name="audit samples from the Gaussian NLL field (hidden by default)",
+                visible="legendonly",
                 showlegend=True,
             )
         )
@@ -661,6 +666,17 @@ def write_got_trajectory_visualization(scaling_report: dict[str, object], output
     density_blob_count = _add_gaussian_nll_blob_meshes(fig, energy_anchor_coords, nll_values, float(density_cloud_meta.get("sigma", 0.0) or 0.0))
     density_cloud_meta["nll_gaussian_blob_count"] = int(density_blob_count)
     fig.add_trace(_nll_anchor_trace(pca[:, 0], pca[:, 1], trajectory_plot_z, nll_values, name="model-evaluated GoT NLL anchors"))
+    main_density_camera_eye = dict(x=1.52, y=-1.72, z=1.18)
+    main_density_render_contract = _nll_density_render_contract(
+        anchor_count=len(candidates),
+        support_sample_count=int(density_cloud_meta.get("sample_count", 0) or 0),
+        sigma=float(density_cloud_meta.get("sigma", 0.0) or 0.0),
+        page="main_trajectory",
+        camera_eye=main_density_camera_eye,
+        anchor_trace_name="model-evaluated GoT NLL anchors",
+        support_sample_trace_name="audit samples from the Gaussian NLL field (hidden by default)",
+    )
+    density_cloud_meta["visual_layer_contract"] = main_density_render_contract
     for idx, row in enumerate(candidates):
         parent = row.get("parent")
         if isinstance(parent, str) and parent in id_to_idx:
@@ -747,13 +763,14 @@ def write_got_trajectory_visualization(scaling_report: dict[str, object], output
     )
     fig.update_layout(
         template="plotly_dark",
+        meta={"nll_density_render_contract": main_density_render_contract},
         title="Graph-of-thought branching trajectory with Gaussian NLL density cloud",
         scene=dict(
             xaxis_title="PC1",
             yaxis_title="PC2",
             zaxis_title="PC3(graph_state embedding)",
             aspectmode="cube",
-            camera=dict(eye=dict(x=1.52, y=-1.72, z=1.18)),
+            camera=dict(eye=main_density_camera_eye),
         ),
     )
     unique_ratio = float(pca_report.get("unique_embedding_ratio_rounded8", 1.0))
@@ -1264,6 +1281,38 @@ def _gaussian_density_volume_trace(
     }
 
 
+def _nll_density_render_contract(
+    *,
+    anchor_count: int,
+    support_sample_count: int,
+    sigma: float,
+    page: str,
+    camera_eye: Mapping[str, float],
+    anchor_trace_name: str,
+    support_sample_trace_name: str,
+) -> dict[str, object]:
+    return {
+        "schema_version": "tropicalgt.nll_density_render.v1",
+        "page": str(page),
+        "coordinate_space": "actual 3D PCA coordinates of model graph-state embeddings",
+        "z_axis_policy": "z is PC3(graph_state embedding); raw NLL is encoded by color, hover, and density metadata",
+        "actual_model_anchor_count": int(anchor_count),
+        "support_sample_count": int(support_sample_count),
+        "kernel": "isotropic Gaussian in 3D PCA coordinates",
+        "kernel_bandwidth": float(sigma),
+        "actual_anchor_trace_name": str(anchor_trace_name),
+        "actual_anchor_layer_visible_by_default": True,
+        "support_sample_trace_name": str(support_sample_trace_name),
+        "support_sample_trace_visibility": "legendonly",
+        "support_samples_are_model_states": False,
+        "support_samples_hidden_as_model_states": True,
+        "visible_density_layers": ["density_volume", "anchor_gaussian_neighborhoods", "actual_model_anchor_markers"],
+        "audit_sample_layer_role": "legend-only Gaussian support samples for local NLL density inspection",
+        "camera_eye": {key: float(value) for key, value in dict(camera_eye).items()},
+        "no_proxy_or_fallback": True,
+    }
+
+
 def _write_got_nll_density_cloud_map(
     output_dir: Path,
     candidates: list[dict[str, object]],
@@ -1377,8 +1426,20 @@ def _write_got_nll_density_cloud_map(
             name="actual model GoT state anchors",
         )
     )
+    density_camera_eye = dict(x=1.55, y=-1.65, z=1.08)
+    visual_layer_contract = _nll_density_render_contract(
+        anchor_count=len(candidates),
+        support_sample_count=int(cloud_meta.get("sample_count", int(cloud_points.shape[0])) or int(cloud_points.shape[0])),
+        sigma=float(cloud_meta.get("sigma", 0.0) or 0.0),
+        page="standalone_density_cloud",
+        camera_eye=density_camera_eye,
+        anchor_trace_name="actual model GoT state anchors",
+        support_sample_trace_name="audit samples from the Gaussian NLL field (hidden by default)",
+    )
+    cloud_meta["visual_layer_contract"] = visual_layer_contract
     fig.update_layout(
         template="plotly_dark",
+        meta={"nll_density_render_contract": visual_layer_contract},
         title=dict(
             text=(
                 "3D PCA NLL density around actual GoT embeddings"
@@ -1394,7 +1455,7 @@ def _write_got_nll_density_cloud_map(
             yaxis_title="PC2(graph_state)",
             zaxis_title="PC3(graph_state)",
             aspectmode="cube",
-            camera=dict(eye=dict(x=1.55, y=-1.65, z=1.08)),
+            camera=dict(eye=density_camera_eye),
         ),
         margin=dict(t=178, r=150, b=42, l=42),
         legend=dict(orientation="v", x=0.015, y=0.91, xanchor="left", yanchor="top", bgcolor="rgba(2,6,23,0.76)", bordercolor="rgba(125,211,252,0.25)", borderwidth=1, font=dict(size=11)),
@@ -1465,6 +1526,9 @@ def _write_got_nll_density_cloud_map(
         "kernel_bandwidth": float(cloud_meta.get("sigma", 0.0) or 0.0),
         "local_nll_rule": str(cloud_meta.get("local_nll_rule", "kernel-weighted mean of measured NLL at actual GoT states")),
         "edge_delta_rule": "target raw NLL minus source raw NLL over actual GoT tree edges",
+        "support_sample_trace_visibility": "legendonly",
+        "visible_density_layers": visual_layer_contract["visible_density_layers"],
+        "z_axis_policy": visual_layer_contract["z_axis_policy"],
     }
     support_samples = {
         "available": True,
@@ -1507,6 +1571,7 @@ def _write_got_nll_density_cloud_map(
         },
         "pca_diagnostics": pca_diagnostics,
         "density_volume": cloud_meta.get("density_volume", {}),
+        "visual_layer_contract": visual_layer_contract,
         "density_cloud": cloud_meta,
         "anchors": node_payload,
         "support_samples": support_samples,

@@ -729,6 +729,10 @@ def test_got_trajectory_visualization_renders_simplicial_panel_and_nll_surface(t
     assert payload["nll_surface"]["max_point_residual"] < 1e-5
     assert "3D PCA NLL density cloud around actual GoT embeddings" in density_cloud_html
     assert "not a model state" in density_cloud_html
+    assert "nll_density_render_contract" in html
+    assert "nll_density_render_contract" in density_cloud_html
+    assert "audit samples from the Gaussian NLL field (hidden by default)" in html
+    assert "audit samples from the Gaussian NLL field (hidden by default)" in density_cloud_html
     assert density_cloud_payload["available"] is True
     density_cloud = density_cloud_payload["density_cloud"]
     assert density_cloud["available"] is True
@@ -738,8 +742,23 @@ def test_got_trajectory_visualization_renders_simplicial_panel_and_nll_surface(t
     assert density_cloud["anchor_count"] == len(scaling["candidates"])
     assert density_cloud["local_nll_rule"].startswith("kernel-weighted mean")
     assert density_cloud["density_volume"]["support_samples_are_not_model_states"] is True
+    main_density_cloud = payload["nll_density_cloud"]
+    assert main_density_cloud["support_sample_trace_visibility"] == "legendonly"
+    assert main_density_cloud["sample_points_are_model_states"] is False
+    assert main_density_cloud["support_samples_hidden_as_model_states"] is True
+    assert main_density_cloud["visual_layer_contract"]["schema_version"] == "tropicalgt.nll_density_render.v1"
+    assert main_density_cloud["visual_layer_contract"]["support_sample_trace_visibility"] == "legendonly"
+    assert main_density_cloud["visual_layer_contract"]["support_samples_are_model_states"] is False
+    assert "density_volume" in main_density_cloud["visual_layer_contract"]["visible_density_layers"]
     assert density_cloud_payload["render_contract"] == density_cloud["render_contract"]
+    assert density_cloud_payload["visual_layer_contract"]["schema_version"] == "tropicalgt.nll_density_render.v1"
+    assert density_cloud_payload["visual_layer_contract"]["page"] == "standalone_density_cloud"
+    assert density_cloud_payload["visual_layer_contract"]["support_sample_trace_visibility"] == "legendonly"
+    assert density_cloud_payload["visual_layer_contract"]["support_samples_are_model_states"] is False
+    assert density_cloud_payload["visual_layer_contract"]["actual_model_anchor_count"] == len(scaling["candidates"])
     assert density_cloud_payload["density_contract"]["actual_model_anchor_layer"] is True
+    assert density_cloud_payload["density_contract"]["support_sample_trace_visibility"] == "legendonly"
+    assert density_cloud_payload["density_contract"]["z_axis_policy"].startswith("z is PC3")
     assert density_cloud_payload["density_contract"]["sample_points_are_model_states"] is False
     assert density_cloud_payload["support_samples_hidden_as_model_states"] is True
     assert density_cloud_payload["sample_points_are_model_states"] is False

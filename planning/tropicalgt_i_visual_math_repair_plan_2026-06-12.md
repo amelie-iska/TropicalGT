@@ -315,3 +315,26 @@ CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/scripts:TropicalGT-I/src /home/i
 ```
 
 Next linear visual/math item: continue into remaining no-proxy NLL-density and tropical-support readability repairs while b62 trains to the 5K gate.
+
+## 2026-06-16 NLL Density Render Contract Repair
+
+Sequential visual/math item completed after the SimplexTree poset contract repair:
+
+- The main trajectory density overlay and standalone NLL-density cloud now carry a machine-readable `nll_density_render_contract` / `visual_layer_contract` with schema `tropicalgt.nll_density_render.v1`.
+- The contract states that plotted coordinates are actual 3D PCA coordinates of model graph-state embeddings, with z fixed to PC3; raw NLL is encoded through color, hover, local density metadata, and explicit summaries rather than by moving model-state markers onto a fake NLL z-axis.
+- Gaussian support samples are now audit-only density support, hidden by default as a legend-only trace named `audit samples from the Gaussian NLL field (hidden by default)`. The contract records `support_samples_are_model_states=false`, `support_samples_hidden_as_model_states=true`, and `support_sample_trace_visibility=legendonly`.
+- The visible default layers are explicitly enumerated as density volume, anchor Gaussian neighborhoods, and actual model anchor markers. Actual model anchors remain visible by default and carry the counted model-state layer provenance.
+- The interactive artifact validator now requires the top-level portable NLL-density payload to include this visual-layer contract, verifies the PC3 z-axis policy, legend-only support samples, support-vs-anchor provenance, visible layer list, counts, bandwidth, and no-proxy flag. Nested or textual render notes alone are no longer accepted as sufficient evidence.
+
+Validation:
+
+```text
+/home/iska/miniconda3/envs/tokengt/bin/python -m py_compile TropicalGT-I/src/tropicalgt/visualization.py TropicalGT-I/scripts/validate_interactive_audit_artifacts.py TropicalGT-I/tests/test_simplicial_visualization.py TropicalGT-I/tests/test_interactive_artifact_validator.py
+# passed
+CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/scripts:TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_simplicial_visualization.py TropicalGT-I/tests/test_interactive_artifact_validator.py -q
+# 49 passed
+```
+
+Operational note: b62 remained alive during verification and had advanced past step 566/5000 with train loss/NLL around 1.395/1.375 when checked.
+
+Next linear visual/math item: continue into the remaining no-proxy tropical-support readability repair while b62 trains to the 5K gate.

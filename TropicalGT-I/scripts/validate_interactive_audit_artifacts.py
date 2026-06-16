@@ -508,6 +508,7 @@ def validate_row(row_dir: Path, *, min_candidates: int = 8, min_depth: int = 2, 
     density_contract = nll_density_payload.get("density_contract", {}) if isinstance(nll_density_payload, dict) else {}
     density_support = nll_density_payload.get("support_samples", {}) if isinstance(nll_density_payload, dict) else {}
     density_render_contract = str(nll_density_payload.get("render_contract") or density_cloud.get("render_contract") or "")
+    density_visual_contract = nll_density_payload.get("visual_layer_contract") if isinstance(nll_density_payload, dict) else {}
     density_anchor_count = nll_density_payload.get("anchor_count", density_cloud.get("anchor_count"))
     density_actual_anchor_count = nll_density_payload.get("actual_model_anchor_count", density_cloud.get("anchor_count"))
     density_sample_count = nll_density_payload.get("support_sample_count", density_cloud.get("sample_count"))
@@ -518,6 +519,18 @@ def validate_row(row_dir: Path, *, min_candidates: int = 8, min_depth: int = 2, 
         density_cloud.get("support_samples_are_not_model_states"),
     )
     density_samples_are_states = nll_density_payload.get("sample_points_are_model_states")
+    density_support_trace_visibility = nll_density_payload.get(
+        "support_sample_trace_visibility",
+        density_cloud.get("support_sample_trace_visibility", density_contract.get("support_sample_trace_visibility")),
+    )
+    if isinstance(density_visual_contract, dict):
+        density_support_trace_visibility = density_visual_contract.get("support_sample_trace_visibility", density_support_trace_visibility)
+    density_z_axis_policy = nll_density_payload.get("z_axis_policy", density_cloud.get("z_axis_policy"))
+    if isinstance(density_visual_contract, dict):
+        density_z_axis_policy = density_visual_contract.get("z_axis_policy", density_z_axis_policy)
+    density_visible_layers = nll_density_payload.get("visible_density_layers", density_cloud.get("visible_density_layers"))
+    if isinstance(density_visual_contract, dict):
+        density_visible_layers = density_visual_contract.get("visible_density_layers", density_visible_layers)
     nll_range = nll_density_payload.get("nll_range", {}) if isinstance(nll_density_payload, dict) else {}
     if not isinstance(nll_range, dict) or "span" not in nll_range:
         nll_min = density_cloud.get("nll_min")
@@ -527,10 +540,24 @@ def validate_row(row_dir: Path, *, min_candidates: int = 8, min_depth: int = 2, 
     _assert(nll_density_payload.get("available") is True, errors, "NLL density payload is unavailable")
     _assert(isinstance(density_cloud, dict) and density_cloud.get("available") is True, errors, "NLL density cloud metadata is unavailable")
     _assert("not model states" in density_render_contract or "not model state" in density_render_contract, errors, "NLL density payload render contract does not distinguish density samples from model states")
+    _assert(isinstance(density_visual_contract, dict) and density_visual_contract.get("schema_version") == "tropicalgt.nll_density_render.v1", errors, "NLL density payload is missing visual-layer render contract")
+    if isinstance(density_visual_contract, dict):
+        _assert(density_visual_contract.get("no_proxy_or_fallback") is True, errors, "NLL density visual-layer contract is missing no-proxy flag")
+        _assert(density_visual_contract.get("actual_anchor_layer_visible_by_default") is True, errors, "NLL density visual-layer contract is missing visible actual-anchor layer")
+        _assert(density_visual_contract.get("support_samples_are_model_states") is False, errors, "NLL density visual-layer contract incorrectly treats support samples as model states")
+        _assert(density_visual_contract.get("support_samples_hidden_as_model_states") is True, errors, "NLL density visual-layer contract does not hide support samples as model states")
+        _assert(int(_finite_float(density_visual_contract.get("actual_model_anchor_count"), 0.0)) == len(nodes), errors, "NLL density visual-layer contract anchor count does not match trajectory node count")
+        _assert(int(_finite_float(density_visual_contract.get("support_sample_count"), 0.0)) >= len(nodes), errors, "NLL density visual-layer contract has too few support samples")
+        _assert(_finite_float(density_visual_contract.get("kernel_bandwidth"), -1.0) > 0.0, errors, "NLL density visual-layer contract has non-positive kernel bandwidth")
+    _assert(density_support_trace_visibility == "legendonly", errors, "NLL density support samples must render legend-only")
+    _assert(isinstance(density_z_axis_policy, str) and density_z_axis_policy.startswith("z is PC3"), errors, "NLL density visual-layer contract is missing PC3 z-axis policy")
+    _assert(isinstance(density_visible_layers, list) and {"density_volume", "actual_model_anchor_markers"}.issubset(set(density_visible_layers)), errors, "NLL density visual-layer contract is missing visible density layers")
     if density_contract:
         _assert(density_contract.get("actual_model_anchor_layer") is True, errors, "NLL density contract is missing actual-anchor layer provenance")
         _assert(density_contract.get("support_samples_hidden_as_model_states") is True, errors, "NLL density contract does not hide support samples as model states")
         _assert(density_contract.get("sample_points_are_model_states") is False, errors, "NLL density contract incorrectly treats sample points as model states")
+        if "support_sample_trace_visibility" in density_contract:
+            _assert(density_contract.get("support_sample_trace_visibility") == "legendonly", errors, "NLL density contract support samples must render legend-only")
     _assert(density_samples_hidden is True, errors, "NLL density payload does not hide support samples as model states")
     if density_samples_are_states is not None:
         _assert(density_samples_are_states is False, errors, "NLL density payload incorrectly treats support samples as model states")
