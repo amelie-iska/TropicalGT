@@ -338,3 +338,27 @@ CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/scripts:TropicalGT-I/src /home/i
 Operational note: b62 remained alive during verification and had advanced past step 566/5000 with train loss/NLL around 1.395/1.375 when checked.
 
 Next linear visual/math item: continue into the remaining no-proxy tropical-support readability repair while b62 trains to the 5K gate.
+
+## 2026-06-16 Tropical Support No-Proxy Render Contract Repair
+
+Sequential visual/math item completed after the NLL-density render contract repair:
+
+- Added a structured `tropical_support_render_contract` with schema `tropicalgt.tropical_support_render.v1` to the tropical active-support payload and Plotly metadata.
+- The contract records that support columns are only observed valid `graph_token_trace.tokens[*].active_support_index` values emitted by the model, that the assignment matrix is a binary argmax support-selection mask, and that zero assignment cells are unselected cells rather than zero tropical margins.
+- `selected_margin_matrix` is now documented as the margin-evidence matrix: finite model tropical margins appear only on selected observed support cells, with unselected cells null. The legacy zero-filled `margin_matrix` remains for backward compatibility and is explicitly marked display-only in the contract.
+- Mixed invalid `active_support_index` rows are now preserved as invalid evidence. They receive `invalid_active_support_index` status in `support_assignment_status_by_token` and `support_flow_edges`, are not rendered as assignment cells, and do not create fabricated support columns.
+- The support artifact now records valid/invalid support-assignment counts, invalid row details, no-proxy flags, and the non-certified wall-margin scope `margin_threshold_audit_not_certified_normal_fan_wall_crossing`.
+- The interactive artifact validator now requires the no-proxy support render contract, support-assignment status rows, consistent invalid-support counts, assignment-mask semantics, observed-support column policy, and explicit invalid status before accepting out-of-range support indices.
+
+Validation:
+
+```text
+/home/iska/miniconda3/envs/tokengt/bin/python -m py_compile TropicalGT-I/src/tropicalgt/visualization.py TropicalGT-I/scripts/validate_interactive_audit_artifacts.py TropicalGT-I/tests/test_simplicial_visualization.py TropicalGT-I/tests/test_interactive_artifact_validator.py
+# passed
+CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/scripts:TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_simplicial_visualization.py TropicalGT-I/tests/test_interactive_artifact_validator.py -q
+# 50 passed
+```
+
+Operational note: b62 remained alive during verification and had advanced past step 702/5000 with train loss/NLL around 1.369/1.347 when checked.
+
+Next linear visual/math item: continue the remaining visual/math repair queue after a cleanup/diff/push cycle, keeping b62 active until the 5K gate.

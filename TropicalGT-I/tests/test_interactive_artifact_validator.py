@@ -329,10 +329,32 @@ def _row(root: Path, name: str) -> Path:
             }
         ),
     )
+    support_render_contract = {
+        "schema_version": "tropicalgt.tropical_support_render.v1",
+        "source_trace": "graph_token_trace.tokens",
+        "support_index_source": "token.active_support_index emitted by the model tropical attention trace",
+        "support_columns_policy": "observed_valid_active_support_indices_only",
+        "assignment_matrix_semantics": "binary argmax support-selection mask; zeros are unselected cells, not zero margins",
+        "assignment_matrix_binary": True,
+        "selected_margin_matrix_policy": "finite model tropical margins are stored only on selected observed support cells; unselected cells are null",
+        "legacy_margin_matrix_policy": "zero-filled display matrix retained for backward compatibility; use selected_margin_matrix for margin evidence",
+        "support_flow_edge_policy": "one edge per query token; invalid active_support_index rows are marked invalid and no support column is fabricated",
+        "normal_fan_wall_crossing_certified": False,
+        "wall_margin_metric_scope": "margin_threshold_audit_not_certified_normal_fan_wall_crossing",
+        "support_probability_source": "model_tropical_support_probabilities",
+        "observed_support_count": 1,
+        "token_count": 4,
+        "valid_support_assignment_count": 4,
+        "invalid_support_count": 0,
+        "invalid_support_rows": [],
+        "assignment_matrix_shape": [4, 1],
+        "no_proxy_or_fallback": True,
+    }
     _write(
         row / "tropical_support_payload.json",
         json.dumps(
             {
+                "tropical_support_render_contract": support_render_contract,
                 "metrics": {
                     "available": True,
                     "token_count": 4,
@@ -350,11 +372,22 @@ def _row(root: Path, name: str) -> Path:
                     "active_support_probability_summary": {"available": True, "count": 4, "min": 0.7, "max": 0.9, "mean": 0.8, "p05": 0.7, "p50": 0.8, "p95": 0.9},
                     "support_probability_entropy_bits_summary": {"available": True, "count": 4, "min": 0.2, "max": 0.6, "mean": 0.4, "p05": 0.2, "p50": 0.4, "p95": 0.6},
                     "support_probability_source": "model_tropical_support_probabilities",
+                    "valid_support_assignment_count": 4,
+                    "invalid_support_count": 0,
+                    "invalid_support_rows": [],
+                    "support_columns_policy": "observed_valid_active_support_indices_only",
+                    "render_contract_schema_version": "tropicalgt.tropical_support_render.v1",
+                    "normal_fan_wall_crossing_certified": False,
+                    "no_proxy_or_fallback": True,
                     "render_contract": "assignment_matrix is binary model argmax support; selected_margin_matrix is model tropical margin only on selected cells; probability summaries come from model_tropical_support_probabilities and are not fabricated scores",
-                    "interpretation": "Uniform blocks indicate true active-support collapse or nearly constant margins.",
+                    "interpretation": "Uniform blocks indicate true active-support collapse or nearly constant margins. No support-token proxies are introduced for invalid active_support_index rows.",
                 },
+                "support_assignment_status_by_token": [
+                    {"query_index": idx, "query_label": f"q{idx}", "active_support_index": 0, "status": "selected_observed_support", "rendered_as_assignment_cell": True, "reason": None}
+                    for idx in range(4)
+                ],
                 "support_flow_edges": [
-                    {"query_index": idx, "query_label": f"q{idx}", "support_index": 0, "support_label": "q0", "margin": [0.0004, 0.004, 0.1, 0.4][idx], "active_support_probability": 0.8, "support_probability_entropy_bits": 0.4, "support_probability_source": "model_tropical_support_probabilities", "top_model_support_probabilities": [{"index": 0, "probability": 0.8}], "strict_wall_hit": idx == 0, "near_wall_hit": idx in (0, 1), "wall_margin_bucket": ["strict_wall", "near_wall", "interior", "interior"][idx], "wall_margin_threshold": 0.001, "near_wall_margin_threshold": 0.01}
+                    {"query_index": idx, "query_label": f"q{idx}", "support_index": 0, "support_label": "q0", "margin": [0.0004, 0.004, 0.1, 0.4][idx], "active_support_probability": 0.8, "support_probability_entropy_bits": 0.4, "support_probability_source": "model_tropical_support_probabilities", "top_model_support_probabilities": [{"index": 0, "probability": 0.8}], "strict_wall_hit": idx == 0, "near_wall_hit": idx in (0, 1), "wall_margin_bucket": ["strict_wall", "near_wall", "interior", "interior"][idx], "wall_margin_threshold": 0.001, "near_wall_margin_threshold": 0.01, "support_assignment_status": "selected_observed_support", "rendered_as_assignment_cell": True, "no_proxy_or_fallback": True}
                     for idx in range(4)
                 ],
             }
@@ -477,7 +510,7 @@ def _row(root: Path, name: str) -> Path:
         "got_full_trajectory_complex_jensen_shannon.html": _html("Full graph-of-thought trajectory probability filtered simplicial complex", "Plotly.newPlot Jensen-Shannon probability filtered simplicial complex"),
         "got_full_trajectory_simplex_tree_3d_jensen_shannon.html": _html("Full graph-of-thought trajectory probability SimplexTree", "Plotly.newPlot Jensen-Shannon probability SimplexTree actual face-to-coface covers optional sorted-label trie prefix links not disconnected simplex columns"),
         "reasoning_step_complex_maps/index.html": _html("Reasoning step filtered simplicial complex maps", "table"),
-        "tropical_support_heatmap.html": _html("Tropical active support", "Plotly.newPlot observed supports only top-support collapse rate"),
+        "tropical_support_heatmap.html": _html("Tropical active support", "Plotly.newPlot observed supports only top-support collapse rate No support-token proxies tropical_support_render_contract"),
         "tropical_fan_diagnostics.html": _html("Tropical fan diagnostics unavailable", "Plotly.newPlot Macaulay2 one dimensional cones not a multigraded free-resolution"),
         "graphcg_direction_cosines.html": _html("GraphCG full-rank direction audit", "Plotly.newPlot Readable top-direction heatmap"),
         "analogical_memory_topk_index.html": "<!doctype html><title>Analogical top-k probability correspondences</title><body>Analogical top-k probability correspondences <a href='analogical_memory_retrieval.html'>rank 1</a> <a href='analogical_memory_map_02.html'>rank 2</a></body>",

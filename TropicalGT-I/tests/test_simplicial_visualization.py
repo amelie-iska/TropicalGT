@@ -1082,7 +1082,17 @@ def test_tropical_support_heatmap_layout_keeps_legend_out_of_margin(tmp_path: Pa
     assert payload["metrics"]["top_support_summary"]["support_group"] == "graph:graph"
     assert payload["metrics"]["grouped_token_label_policy"].startswith("query/support labels are grouped")
     assert payload["support_flow_edges"][0]["active_support_probability"] == 0.91
+    assert payload["support_flow_edges"][0]["support_assignment_status"] == "selected_observed_support"
+    assert payload["support_assignment_status_by_token"][0]["rendered_as_assignment_cell"] is True
     assert payload["metrics"]["render_contract"].startswith("assignment_matrix is binary model argmax support")
+    contract = payload["tropical_support_render_contract"]
+    assert contract["schema_version"] == "tropicalgt.tropical_support_render.v1"
+    assert contract["support_columns_policy"] == "observed_valid_active_support_indices_only"
+    assert contract["assignment_matrix_binary"] is True
+    assert contract["normal_fan_wall_crossing_certified"] is False
+    assert contract["invalid_support_count"] == 0
+    assert payload["metrics"]["render_contract_schema_version"] == contract["schema_version"]
+    assert payload["metrics"]["no_proxy_or_fallback"] is True
     audit = payload["metrics"]["wall_margin_audit"]
     assert audit["strict_wall_hit_count"] == 1
     assert audit["near_wall_hit_count"] == 2
@@ -1098,10 +1108,44 @@ def test_tropical_support_heatmap_layout_keeps_legend_out_of_margin(tmp_path: Pa
     assert "Wall audit scope" in html
     assert "strict wall threshold" in html
     assert "Tropical active-support audit" in html
+    assert "No support-token proxies" in html
+    assert "tropical_support_render_contract" in html
     compact = html.replace(" ", "")
     assert '"showlegend":false' in compact
     assert '"r":190' in compact
     assert "Support frequency and mean selected margin" in html
+
+
+def test_tropical_support_mixed_invalid_active_support_indices_are_not_fabricated(tmp_path: Path):
+    result = {
+        "graph_token_trace": {
+            "tokens": [
+                {"index": 0, "text": "valid root", "kind": "node", "node_type": "root", "active_support_index": 0, "margin": 0.7},
+                {"index": 1, "text": "invalid negative", "kind": "node", "node_type": "leaf", "active_support_index": -1, "margin": 0.2},
+                {"index": 2, "text": "invalid high", "kind": "edge", "edge_type": "causal", "active_support_index": 99, "margin": 0.3},
+                {"index": 3, "text": "valid self", "kind": "node", "node_type": "answer", "active_support_index": 3, "margin": 0.4},
+            ]
+        }
+    }
+    paths = write_tropical_support_heatmap(result, tmp_path)
+    html = Path(paths["tropical_support_heatmap"]).read_text(encoding="utf-8")
+    payload = json.loads(Path(paths["tropical_support_payload"]).read_text(encoding="utf-8"))
+    assert payload["metrics"]["available"] is True
+    assert payload["metrics"]["support_indices"] == [0, 3]
+    assert payload["metrics"]["invalid_support_count"] == 2
+    assert payload["metrics"]["valid_support_assignment_count"] == 2
+    assert payload["tropical_support_render_contract"]["invalid_support_count"] == 2
+    assert payload["tropical_support_render_contract"]["valid_support_assignment_count"] == 2
+    assert payload["tropical_support_render_contract"]["no_proxy_or_fallback"] is True
+    assert payload["support_assignment_status_by_token"][1]["status"] == "invalid_active_support_index"
+    assert payload["support_assignment_status_by_token"][1]["rendered_as_assignment_cell"] is False
+    assert payload["support_flow_edges"][1]["support_assignment_status"] == "invalid_active_support_index"
+    assert payload["support_flow_edges"][1]["rendered_as_assignment_cell"] is False
+    assert payload["support_flow_edges"][2]["support_label"] == "invalid"
+    assert payload["assignment_matrix"][1] == [0.0, 0.0]
+    assert payload["selected_margin_matrix"][1] == [None, None]
+    assert "invalid_active_support_index" in html
+    assert "No support-token proxies" in html
 
 
 def test_tropical_support_wall_audit_preserves_explicit_zero_threshold(tmp_path: Path):

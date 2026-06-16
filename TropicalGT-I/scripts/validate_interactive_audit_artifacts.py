@@ -581,11 +581,20 @@ def validate_row(row_dir: Path, *, min_candidates: int = 8, min_depth: int = 2, 
     _assert(isinstance(density_volume, dict) and density_volume.get("support_samples_are_not_model_states") is True, errors, "NLL density volume is missing non-model-state provenance")
 
     support_metrics = support_payload.get("metrics", {}) if isinstance(support_payload, dict) else {}
+    support_render_contract = support_payload.get("tropical_support_render_contract", {}) if isinstance(support_payload, dict) else {}
     _assert(support_metrics.get("available") is True, errors, "tropical support payload is unavailable")
     _assert(_finite_float(support_metrics.get("token_count"), 0.0) > 0, errors, "tropical support payload has no tokens")
     _assert(_finite_float(support_metrics.get("unique_support_count"), 0.0) >= 1, errors, "tropical support payload has no observed supports")
     _assert("interpretation" in support_metrics, errors, "tropical support payload is missing collapse interpretation")
     _assert(isinstance(support_metrics.get("margin_summary"), dict), errors, "tropical support payload is missing margin summary")
+    _assert(isinstance(support_render_contract, dict) and support_render_contract.get("schema_version") == "tropicalgt.tropical_support_render.v1", errors, "tropical support payload is missing no-proxy render contract")
+    if isinstance(support_render_contract, dict):
+        _assert(support_render_contract.get("no_proxy_or_fallback") is True, errors, "tropical support render contract is missing no-proxy flag")
+        _assert(support_render_contract.get("support_columns_policy") == "observed_valid_active_support_indices_only", errors, "tropical support render contract has wrong support-column policy")
+        _assert(support_render_contract.get("assignment_matrix_binary") is True, errors, "tropical support render contract does not mark assignment matrix as binary")
+        _assert(str(support_render_contract.get("assignment_matrix_semantics", "")).startswith("binary argmax support-selection mask"), errors, "tropical support render contract is missing assignment-mask semantics")
+        _assert(support_render_contract.get("normal_fan_wall_crossing_certified") is False, errors, "tropical support render contract incorrectly certifies normal-fan wall crossings")
+        _assert(support_render_contract.get("wall_margin_metric_scope") == "margin_threshold_audit_not_certified_normal_fan_wall_crossing", errors, "tropical support render contract is missing wall-margin metric scope")
     support_probability_source = support_metrics.get("support_probability_source")
     active_prob_summary = support_metrics.get("active_support_probability_summary")
     probability_trace_available = (
@@ -612,16 +621,28 @@ def validate_row(row_dir: Path, *, min_candidates: int = 8, min_depth: int = 2, 
     _assert(isinstance(support_metrics.get("active_support_probability_summary"), dict), errors, "tropical support payload is missing active-support probability summary")
     _assert(isinstance(support_metrics.get("support_probability_entropy_bits_summary"), dict), errors, "tropical support payload is missing support-probability entropy summary")
     flow_edges = support_payload.get("support_flow_edges", []) if isinstance(support_payload, dict) else []
+    status_by_token = support_payload.get("support_assignment_status_by_token", []) if isinstance(support_payload, dict) else []
     token_count = int(_finite_float(support_metrics.get("token_count"), 0.0))
+    invalid_support_count = int(_finite_float(support_metrics.get("invalid_support_count"), 0.0))
     _assert(isinstance(flow_edges, list) and len(flow_edges) >= token_count, errors, "tropical support payload is missing query-to-support flow edges")
+    _assert(isinstance(status_by_token, list) and len(status_by_token) >= token_count, errors, "tropical support payload is missing support assignment status rows")
+    if isinstance(support_render_contract, dict):
+        _assert(int(_finite_float(support_render_contract.get("token_count"), 0.0)) == token_count, errors, "tropical support render contract token count does not match metrics")
+        _assert(int(_finite_float(support_render_contract.get("invalid_support_count"), -1.0)) == invalid_support_count, errors, "tropical support render contract invalid-support count does not match metrics")
     for edge in flow_edges if isinstance(flow_edges, list) else []:
         if not isinstance(edge, dict):
             errors.append("tropical support payload contains non-object support-flow edge")
             continue
         query_idx = int(_finite_float(edge.get("query_index"), -1.0))
         support_idx = int(_finite_float(edge.get("support_index"), -1.0))
+        assignment_status = edge.get("support_assignment_status")
         _assert(0 <= query_idx < token_count, errors, "tropical support flow has out-of-range query_index")
-        _assert(0 <= support_idx < token_count, errors, "tropical support flow has out-of-range support_index")
+        if 0 <= support_idx < token_count:
+            _assert(assignment_status in {"selected_observed_support", None}, errors, "tropical support flow has valid support index but wrong assignment status")
+            _assert(edge.get("rendered_as_assignment_cell") is not False, errors, "tropical support flow has valid support index but is not rendered as assignment cell")
+        else:
+            _assert(assignment_status == "invalid_active_support_index", errors, "tropical support flow with out-of-range support index is not marked invalid")
+            _assert(edge.get("rendered_as_assignment_cell") is False, errors, "tropical support flow fabricates an assignment cell for invalid support index")
         if probability_trace_available:
             _assert(_finite_float(edge.get("active_support_probability"), -1.0) >= 0.0, errors, "tropical support flow is missing active support probability")
             _assert(edge.get("support_probability_source") == "model_tropical_support_probabilities", errors, "tropical support flow is missing probability provenance")

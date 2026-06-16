@@ -3371,6 +3371,17 @@ def write_tropical_support_heatmap(result: dict[str, object], output_dir: str | 
             encoding="utf-8",
         )
         return {"tropical_support_heatmap": str(path), "tropical_support_payload": str(payload_path)}
+    active_indices = [active_support_index(token) if isinstance(token, dict) else -1 for token in tokens]
+    invalid_support_rows = [
+        {
+            "query_index": int(idx),
+            "query_label": _support_token_label(idx, token if isinstance(token, dict) else {}),
+            "active_support_index": int(active),
+            "reason": "active_support_index_out_of_range",
+        }
+        for idx, (token, active) in enumerate(zip(tokens, active_indices))
+        if not (0 <= int(active) < n)
+    ]
     z = np.zeros((n, len(support_indices)), dtype=float)
     assignment_z = np.zeros((n, len(support_indices)), dtype=float)
     selected_margin_matrix = np.full((n, len(support_indices)), np.nan, dtype=float)
@@ -3378,21 +3389,29 @@ def write_tropical_support_heatmap(result: dict[str, object], output_dir: str | 
     query_labels = []
     for row_idx, token in enumerate(tokens):
         active = active_support_index(token) if isinstance(token, dict) else -1
+        active_valid = 0 <= active < n
         margin = float(token.get("margin", 0.0) or 0.0)
         query_labels.append(_support_token_label(row_idx, token))
         hover_row = []
         for col_idx, support_idx in enumerate(support_indices):
             support = tokens[support_idx] if 0 <= support_idx < n else {}
             selected = active == support_idx
+            assignment_status = (
+                "selected_observed_support"
+                if selected
+                else ("unselected_observed_support_column" if active_valid else "invalid_active_support_index")
+            )
             if selected:
                 assignment_z[row_idx, col_idx] = 1.0
                 z[row_idx, col_idx] = margin
                 selected_margin_matrix[row_idx, col_idx] = margin
+            margin_text = f"{margin:.5f}" if active_valid else "unavailable (invalid active_support_index; no support column fabricated)"
             hover_row.append(
                 f"query={html.escape(_support_token_label(row_idx, token, long=True))}<br>"
                 f"candidate support={html.escape(_support_token_label(support_idx, support, long=True))}<br>"
                 f"selected={str(selected).lower()}<br>"
-                f"selected-support margin={margin:.5f}" + ("" if selected else " (shown only on the selected support column)") + "<br>"
+                f"assignment status={assignment_status}<br>"
+                f"selected-support margin={margin_text}" + ("" if selected else " (shown only on the selected support column)") + "<br>"
                 f"active support probability={finite_token_float(token, 'active_support_probability') if finite_token_float(token, 'active_support_probability') is not None else 'unavailable'}<br>"
                 f"support probability entropy={finite_token_float(token, 'support_probability_entropy_bits') if finite_token_float(token, 'support_probability_entropy_bits') is not None else 'unavailable'} bits<br>"
                 f"wall margin bucket={wall_margin_bucket(margin)} (strict <= {wall_threshold:.4g}; near <= {near_wall_threshold:.4g})<br>"
@@ -3545,15 +3564,29 @@ def write_tropical_support_heatmap(result: dict[str, object], output_dir: str | 
         "definition": "strict_wall_hit_rate counts margin <= wall_margin_threshold; near_wall_hit_rate counts margin <= near_wall_margin_threshold so low strict wall-hit rate can still reveal near-wall ambiguity. This is a model tropical-margin threshold audit, not a certified normal-fan wall-crossing count.",
     }
     support_flow_edges = []
+    support_assignment_status_by_token = []
     for row_idx, token in enumerate(tokens):
         active = active_support_index(token) if isinstance(token, dict) else -1
-        support = tokens[active] if 0 <= active < n else {}
+        active_valid = 0 <= active < n
+        support = tokens[active] if active_valid else {}
+        assignment_status = "selected_observed_support" if active_valid else "invalid_active_support_index"
+        rendered_as_assignment_cell = bool(active in support_indices)
+        support_assignment_status_by_token.append(
+            {
+                "query_index": int(row_idx),
+                "query_label": _support_token_label(row_idx, token),
+                "active_support_index": int(active),
+                "status": assignment_status,
+                "rendered_as_assignment_cell": rendered_as_assignment_cell,
+                "reason": None if active_valid else "active_support_index_out_of_range",
+            }
+        )
         support_flow_edges.append(
             {
                 "query_index": int(row_idx),
                 "query_label": _support_token_label(row_idx, token),
                 "support_index": int(active),
-                "support_label": _support_token_label(active, support) if 0 <= active < n else "invalid",
+                "support_label": _support_token_label(active, support) if active_valid else "invalid",
                 "margin": float(token.get("margin", 0.0) or 0.0),
                 "active_support_probability": finite_token_float(token, "active_support_probability"),
                 "support_probability_entropy_bits": finite_token_float(token, "support_probability_entropy_bits"),
@@ -3566,6 +3599,9 @@ def write_tropical_support_heatmap(result: dict[str, object], output_dir: str | 
                 "near_wall_margin_threshold": float(near_wall_threshold),
                 "query_kind": str(token.get("kind", "?")),
                 "support_kind": str(support.get("kind", "?")) if isinstance(support, dict) else "?",
+                "support_assignment_status": assignment_status,
+                "rendered_as_assignment_cell": rendered_as_assignment_cell,
+                "no_proxy_or_fallback": True,
             }
         )
     collapse_rate = float(counts.max() / max(float(n), 1.0)) if counts.size else 0.0
@@ -3573,6 +3609,27 @@ def write_tropical_support_heatmap(result: dict[str, object], output_dir: str | 
     support_entropy = float(-np.sum(support_probs * np.log2(np.maximum(support_probs, 1e-12)))) if counts.size else 0.0
     effective_supports = float(2.0 ** support_entropy) if counts.size else 0.0
     collapse_like_layout = bool(len(support_indices) == 1 or collapse_rate >= 0.70)
+    support_render_contract = {
+        "schema_version": "tropicalgt.tropical_support_render.v1",
+        "source_trace": "graph_token_trace.tokens",
+        "support_index_source": "token.active_support_index emitted by the model tropical attention trace",
+        "support_columns_policy": "observed_valid_active_support_indices_only",
+        "assignment_matrix_semantics": "binary argmax support-selection mask; zeros are unselected cells, not zero margins",
+        "assignment_matrix_binary": True,
+        "selected_margin_matrix_policy": "finite model tropical margins are stored only on selected observed support cells; unselected cells are null",
+        "legacy_margin_matrix_policy": "zero-filled display matrix retained for backward compatibility; use selected_margin_matrix for margin evidence",
+        "support_flow_edge_policy": "one edge per query token; invalid active_support_index rows are marked invalid and no support column is fabricated",
+        "normal_fan_wall_crossing_certified": False,
+        "wall_margin_metric_scope": "margin_threshold_audit_not_certified_normal_fan_wall_crossing",
+        "support_probability_source": "model_tropical_support_probabilities" if active_probability_values or entropy_values else "unavailable_in_trace",
+        "observed_support_count": int(len(support_indices)),
+        "token_count": int(n),
+        "valid_support_assignment_count": int(n - len(invalid_support_rows)),
+        "invalid_support_count": int(len(invalid_support_rows)),
+        "invalid_support_rows": invalid_support_rows,
+        "assignment_matrix_shape": [int(n), int(len(support_indices))],
+        "no_proxy_or_fallback": True,
+    }
     support_metrics = {
         "available": True,
         "token_count": int(n),
@@ -3584,6 +3641,10 @@ def write_tropical_support_heatmap(result: dict[str, object], output_dir: str | 
         "support_labels": support_labels,
         "support_counts": [int(c) for c in counts.tolist()],
         "mean_margins": [float(v) for v in mean_margins],
+        "valid_support_assignment_count": int(n - len(invalid_support_rows)),
+        "invalid_support_count": int(len(invalid_support_rows)),
+        "invalid_support_rows": invalid_support_rows,
+        "support_columns_policy": "observed_valid_active_support_indices_only",
         "query_token_group_summary": query_token_group_summary,
         "support_token_group_summary": support_token_group_summary,
         "top_support_summary": top_support_summary,
@@ -3600,19 +3661,24 @@ def write_tropical_support_heatmap(result: dict[str, object], output_dir: str | 
         "support_probability_source": "model_tropical_support_probabilities" if active_probability_values or entropy_values else "unavailable_in_trace",
         "layout_mode": "collapse_diagnostic" if collapse_like_layout else "observed_support_matrix",
         "raw_token_labels_truncated": True,
+        "render_contract_schema_version": support_render_contract["schema_version"],
+        "normal_fan_wall_crossing_certified": False,
+        "no_proxy_or_fallback": True,
         "render_contract": "assignment_matrix is binary model argmax support; selected_margin_matrix is model tropical margin only on selected cells; probability summaries come from model_tropical_support_probabilities and are not fabricated scores",
-        "interpretation": "The heatmap is an assignment matrix: yellow cells mean the model selected that support token. Confidence lives in the separate selected-margin profile, distribution, and model support-probability summaries.",
+        "interpretation": "The heatmap is an assignment matrix: yellow cells mean the model selected that support token. Confidence lives in the separate selected-margin profile, distribution, and model support-probability summaries. No support-token proxies are introduced for invalid active_support_index rows.",
     }
     payload_path.write_text(
         json.dumps(
             {
                 "metrics": support_metrics,
+                "tropical_support_render_contract": support_render_contract,
                 "query_labels": query_labels,
                 "support_labels": support_labels,
                 "assignment_matrix": assignment_z.tolist(),
                 "selected_margin_matrix": [[None if not np.isfinite(value) else float(value) for value in row] for row in selected_margin_matrix.tolist()],
                 "margin_matrix": z.tolist(),
                 "tokens": tokens,
+                "support_assignment_status_by_token": support_assignment_status_by_token,
                 "support_flow_edges": support_flow_edges,
             },
             indent=2,
@@ -3747,8 +3813,9 @@ def write_tropical_support_heatmap(result: dict[str, object], output_dir: str | 
             template="plotly_dark",
             title=(
                 "Tropical active-support collapse diagnostic: observed supports only"
-                f"<br><sup>top-support collapse rate={collapse_rate:.3f}; top support {html.escape(top_support_label)} captures {100.0 * collapse_rate:.1f}% of tokens. Strict wall-hit rate={wall_margin_audit['strict_wall_hit_rate']:.3f}; near-wall hit rate={wall_margin_audit['near_wall_hit_rate']:.3f}. Wall audit scope: {html.escape(str(wall_margin_audit.get('metric_scope', 'unavailable')))}; interpretation: {html.escape(str(wall_margin_audit.get('low_strict_wall_interpretation_status', 'unavailable')))}. Yellow cells are selected-support assignments; margins are plotted separately.</sup>"
+                f"<br><sup>top-support collapse rate={collapse_rate:.3f}; top support {html.escape(top_support_label)} captures {100.0 * collapse_rate:.1f}% of tokens. Strict wall-hit rate={wall_margin_audit['strict_wall_hit_rate']:.3f}; near-wall hit rate={wall_margin_audit['near_wall_hit_rate']:.3f}. Wall audit scope: {html.escape(str(wall_margin_audit.get('metric_scope', 'unavailable')))}; interpretation: {html.escape(str(wall_margin_audit.get('low_strict_wall_interpretation_status', 'unavailable')))}. Yellow cells are selected-support assignments; margins are plotted separately. No support-token proxies.</sup>"
             ),
+            meta={"tropical_support_render_contract": support_render_contract},
             margin=dict(t=126, l=88, r=48, b=96),
             height=max(960, min(1420, 620 + 10 * n)),
         )
@@ -3850,8 +3917,9 @@ def write_tropical_support_heatmap(result: dict[str, object], output_dir: str | 
         template="plotly_dark",
         title=(
             "Tropical active-support audit: observed supports only"
-            f"<br><sup>observed supports={len(support_indices)}/{n}; top-support collapse rate={collapse_rate:.3f}; effective={effective_supports:.2f}; entropy={support_entropy:.3f} bits. Grouped token labels: {html.escape(grouped_label_summary or 'unavailable')}; top support group={html.escape(str(top_support_summary.get('support_group', 'unavailable')))}. Strict wall-hit rate={wall_margin_audit['strict_wall_hit_rate']:.3f}; near-wall hit rate={wall_margin_audit['near_wall_hit_rate']:.3f}. Wall audit scope: {html.escape(str(wall_margin_audit.get('metric_scope', 'unavailable')))}; interpretation: {html.escape(str(wall_margin_audit.get('low_strict_wall_interpretation_status', 'unavailable')))}. Yellow cells mark selected support assignments only.</sup>"
+            f"<br><sup>observed supports={len(support_indices)}/{n}; top-support collapse rate={collapse_rate:.3f}; effective={effective_supports:.2f}; entropy={support_entropy:.3f} bits. Grouped token labels: {html.escape(grouped_label_summary or 'unavailable')}; top support group={html.escape(str(top_support_summary.get('support_group', 'unavailable')))}. Strict wall-hit rate={wall_margin_audit['strict_wall_hit_rate']:.3f}; near-wall hit rate={wall_margin_audit['near_wall_hit_rate']:.3f}. Wall audit scope: {html.escape(str(wall_margin_audit.get('metric_scope', 'unavailable')))}; interpretation: {html.escape(str(wall_margin_audit.get('low_strict_wall_interpretation_status', 'unavailable')))}. Yellow cells mark selected support assignments only. No support-token proxies.</sup>"
         ),
+        meta={"tropical_support_render_contract": support_render_contract},
         height=max(1040, min(1660, 700 + 12 * n)),
         margin=dict(t=150, l=112, r=190, b=124),
         showlegend=False,
