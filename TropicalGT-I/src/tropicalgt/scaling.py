@@ -22,17 +22,25 @@ def _has_real_probability_complex(obj: Any) -> bool:
     model = str(summary.get("filtration_model", summary.get("metric", ""))).lower()
     if "probability" not in model and "jensen" not in model and "js" not in model:
         return False
-    if int(summary.get("num_edges", summary.get("edges", 0)) or 0) <= 0:
+    if summary.get("radius_filtration") is not True:
         return False
     simplices = obj.get("simplices", [])
     if not isinstance(simplices, list):
         return False
+    vertices = []
     for simplex in simplices:
-        if not isinstance(simplex, dict) or int(simplex.get("dimension", -1) or -1) != 0:
+        if not isinstance(simplex, dict):
             continue
-        if any(key in simplex for key in ("probability", "probability_vector", "model_probability_vector", "token_probability")):
-            return True
-    return False
+        try:
+            dimension = int(simplex.get("dimension", -1))
+        except (TypeError, ValueError):
+            continue
+        if dimension == 0:
+            vertices.append(simplex)
+    if not vertices:
+        return False
+    probability_keys = ("probability", "probability_vector", "model_probability_vector", "token_probability")
+    return all(any(_probability_vector_is_valid(simplex.get(key)) for key in probability_keys) for simplex in vertices)
 
 
 

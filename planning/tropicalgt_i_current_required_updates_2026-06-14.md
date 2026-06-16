@@ -232,7 +232,7 @@ git diff --check
 - CAS package survey: look for Sage, Macaulay2, Singular, RIVET/multipers, polymake, Normaliz, and related packages that compute real multigraded modules, minimal resolutions, Betti tables, Fitting ideals, minors, Buchsbaum-Eisenbud diagnostics, tropical fans, toric varieties, and stable intersections.
 - Maclagan-style toric embedding research direction: investigate whether the transformer graph-state and tropical-attention coordinate system can be embedded into a toric variety via model-derived monomial coordinates, Newton polytopes, fan data, and one dimensional cone data. Any resulting implementation must distinguish theorem-level certified constructions from diagnostic embeddings or visual probes.
 
-_Last updated: 2026-06-16T06:02:00Z_
+_Last updated: 2026-06-16T06:12:00Z_
 
 
 ## 2026-06-16 Fresh b59 5K Review Gate and Worker Handoff
@@ -295,10 +295,19 @@ _Last updated: 2026-06-16T06:02:00Z_
 - Focused and full verification completed: `py_compile` on memory/visualization/tests, `pytest TropicalGT-I/tests/test_metrics_and_memory.py -q` (`11 passed`), `pytest TropicalGT-I/tests/test_simplicial_visualization.py -q` (`28 passed`), and `git diff --check`.
 
 
+## 2026-06-16 Simplex-Tree Radius Start-State Addendum
+
+- Reasoning-trajectory radius complexes now treat a single model-evaluated GoT state as a valid radius filtration when every displayed vertex has the required real metric vector. The complex starts as disjoint zero-simplices at filtration `0.0`; edges and 2-simplices appear only when actual embedding/probability distances exist.
+- `build_reasoning_trajectory_complex` records `radius_filtration`, `metric_vertex_count`, `metric_vertices_complete`, and `single_vertex_radius_filtration` in the summary. Missing required metric/probability vectors still render unavailable with `unavailable_missing_<metric>_radius_vertices`.
+- The scaling and visualization probability-complex gates now accept real vertex-only Jensen-Shannon radius complexes and require every 0-simplex to carry a valid model probability vector. They no longer require an edge before recognizing a real probability filtration.
+- Fixed a zero-simplex gate bug where `dimension=0` was treated as missing by an `or -1` expression during probability-complex validation.
+- Verification completed: `py_compile` on simplicial/scaling/visualization/tests, `pytest TropicalGT-I/tests/test_simplicial_visualization.py -q` (`29 passed`), `pytest TropicalGT-I/tests/test_metrics_and_memory.py TropicalGT-I/tests/test_interactive_artifact_validator.py -q` (`21 passed`), and `git diff --check`.
+
+
 ## Real Implementations Only Policy
 
 No TropicalGT-I metric, loss, visualization, analogical map, persistence module, free resolution, derived comparison, tropical-cycle diagnostic, or CAS artifact should be presented as a mathematical object unless it is computed from the actual model outputs, graph states, embeddings, probabilities, simplex trees, bifiltrations, or certified CAS/backend output that define that object. Temporary placeholders, synthetic fallback objects, mock charts, fabricated simplices, and convenience stand-ins are not acceptable. When a requested object cannot yet be computed, the artifact must render an explicit unavailable/uncertified state and the training metric must either be disabled or logged under an audit-only unavailable flag. Finite chain-presentation diagnostics may be shown only as chain diagnostics, never as free resolutions. Total-graded or ungraded CAS output may be shown as real CAS output only under its actual grading; it must not be advertised as a multigraded `F2[x_level,x_radius]` free resolution unless the backend certifies that multigraded structure.
 
 Use "one dimensional cone" or "one dimensional cones" as the preferred fan-theoretic language whenever the intended object is a cone of a fan or a cone-indexed filtration datum. Use singular or plural according to ordinary grammar.
 
-_Last updated: 2026-06-16T06:02:00Z_
+_Last updated: 2026-06-16T06:12:00Z_

@@ -419,7 +419,10 @@ def build_reasoning_trajectory_complex(
     edge_rows: list[dict[str, Any]] = []
     edge_distance_values: list[float] = []
 
-    if any(embedding_by_id.get(record_id) is not None for record_id in ids):
+    metric_vertex_count = sum(1 for record_id in ids if _metric_vector_available(embedding_by_id.get(record_id)))
+    metric_vertices_complete = bool(ids) and metric_vertex_count == len(ids)
+
+    if metric_vertex_count > 0:
         for a, b in combinations(ids, 2):
             distance = (
                 _jensen_shannon_distance(embedding_by_id.get(a), embedding_by_id.get(b))
@@ -520,35 +523,40 @@ def build_reasoning_trajectory_complex(
 
     simplices = vertices + one_simplices + two_simplices
     thresholds = sorted({simplex["filtration"] for simplex in simplices})
-    unavailable_reason = None if edge_distance_values else "unavailable_no_embedding_or_probability_radius_edges"
+    unavailable_reason = None if metric_vertices_complete else f"unavailable_missing_{metric_name}_radius_vertices"
+    filtration_model = (
+        "model_candidate_probability_jensen_shannon_vietoris_rips_2_skeleton"
+        if metric_vertices_complete and metric_name == "jensen_shannon"
+        else (
+            "embedding_vietoris_rips_2_skeleton"
+            if metric_vertices_complete
+            else f"unavailable_missing_{metric_name}_radius_vertices"
+        )
+    )
     return _with_serialized_simplex_tree({
         "record_id": "graph_of_thought_trajectory",
         "available": unavailable_reason is None,
         **({"reason": unavailable_reason} if unavailable_reason else {}),
         "summary": {
             "num_vertices": len(vertices),
+            "metric_vertex_count": int(metric_vertex_count),
+            "metric_vertices_complete": bool(metric_vertices_complete),
             "num_edges": len(one_simplices),
             "num_two_simplices": len(two_simplices),
             "num_thresholds": len(thresholds),
             "max_level": max((int(row.get("level", 0) or 0) for _, row in usable), default=0),
-            "filtration_model": (
-                "model_candidate_probability_jensen_shannon_vietoris_rips_2_skeleton"
-                if edge_distance_values and metric_name == "jensen_shannon"
-                else (
-                    "embedding_vietoris_rips_2_skeleton"
-                    if edge_distance_values
-                    else "unavailable_no_embedding_or_probability_radius_edges"
-                )
-            ),
+            "filtration_model": filtration_model,
+            "radius_filtration": bool(metric_vertices_complete),
+            "single_vertex_radius_filtration": bool(metric_vertices_complete and len(vertices) == 1 and not one_simplices),
             "zero_distance_edges": zero_distance_edges,
             "embedding_edge_count": len(edge_distance_values),
-            "embedding_metric": metric_name if edge_distance_values else None,
+            "embedding_metric": metric_name if metric_vertices_complete else None,
             "probability_transform": (
                 {
                     "kind": "model_candidate_probability_vector",
                     "temperature": None,
                 }
-                if edge_distance_values and metric_name == "jensen_shannon"
+                if metric_vertices_complete and metric_name == "jensen_shannon"
                 else None
             ),
             "reasoning_transition_edge_count": sum(1 for row in one_simplices if row.get("reasoning_transition")),
@@ -556,6 +564,13 @@ def build_reasoning_trajectory_complex(
         "thresholds": thresholds,
         "simplices": simplices,
     })
+
+
+def _metric_vector_available(value: Any) -> bool:
+    if not isinstance(value, list) or not value:
+        return False
+    return all(isinstance(item, (int, float)) and math.isfinite(float(item)) for item in value)
+
 
 def _with_serialized_simplex_tree(obj: dict[str, Any]) -> dict[str, Any]:
     """Attach a real GUDHI SimplexTree serialization to a finite complex.

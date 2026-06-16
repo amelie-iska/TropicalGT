@@ -6,9 +6,9 @@ import torch
 
 from tropicalgt.data import FixtureGraphDataset
 from tropicalgt.model import TropicalGTConfig, TropicalGTModel
-from tropicalgt.scaling import apply_reasoning_action
+from tropicalgt.scaling import _has_real_probability_complex, apply_reasoning_action
 from tropicalgt.memory import probability_simplicial_map_diagnostics
-from tropicalgt.simplicial import build_embedding_radius_simplicial_object, build_filtered_simplicial_object
+from tropicalgt.simplicial import build_embedding_radius_simplicial_object, build_filtered_simplicial_object, build_reasoning_trajectory_complex
 from tropicalgt.tokenizer import TokenGTTokenizer
 from tropicalgt.visualization import (
     _attach_graph_token_direction_overlay,
@@ -149,6 +149,7 @@ def test_real_probability_filtration_requires_vertex_probability_vectors():
         "available": True,
         "summary": {
             "filtration_model": "model_candidate_probability_jensen_shannon_vietoris_rips_2_skeleton",
+            "radius_filtration": True,
             "num_edges": 1,
         },
         "simplices": [
@@ -277,6 +278,46 @@ def test_visualization_payload_contains_topology_when_audited(tmp_path: Path):
     payload = json.loads(Path(paths["payloads"]).read_text(encoding="utf-8"))
     assert "topological_algebra_diagnostics" in payload
     assert payload["topological_algebra_diagnostics"][0]["topological_algebra"]["multiparameter_persistence"]["num_parameters"] == 3
+
+
+def test_reasoning_trajectory_radius_complex_starts_with_disjoint_vertex_simplex_tree():
+    candidate = {
+        "record_id": "root",
+        "embedding": [0.0, 0.0, 0.0],
+        "action_probability_vector": [0.8, 0.2],
+        "level": 0,
+        "score": 0.1,
+        "nll": 1.0,
+        "path": [],
+    }
+    embedding_complex = build_reasoning_trajectory_complex([candidate])
+    assert embedding_complex["available"] is True
+    assert embedding_complex["summary"]["radius_filtration"] is True
+    assert embedding_complex["summary"]["single_vertex_radius_filtration"] is True
+    assert embedding_complex["summary"]["num_vertices"] == 1
+    assert embedding_complex["summary"]["num_edges"] == 0
+    assert embedding_complex["thresholds"] == [0.0]
+    assert embedding_complex["simplex_tree"]["backend"] == "gudhi.SimplexTree"
+    assert embedding_complex["simplex_tree"]["available"] is True
+    assert embedding_complex["simplex_tree"]["num_vertices"] == 1
+
+    probability_complex = build_reasoning_trajectory_complex([candidate], metric="jensen_shannon")
+    assert probability_complex["available"] is True
+    assert probability_complex["summary"]["radius_filtration"] is True
+    assert probability_complex["summary"]["embedding_metric"] == "jensen_shannon"
+    assert probability_complex["summary"]["single_vertex_radius_filtration"] is True
+    assert probability_complex["summary"]["probability_transform"]["kind"] == "model_candidate_probability_vector"
+    assert _has_real_probability_filtration(probability_complex) is True
+    assert _has_real_probability_complex(probability_complex) is True
+
+    missing_probability = build_reasoning_trajectory_complex(
+        [{**candidate, "record_id": "missing-prob", "action_probability_vector": []}],
+        metric="jensen_shannon",
+    )
+    assert missing_probability["available"] is False
+    assert missing_probability["reason"] == "unavailable_missing_jensen_shannon_radius_vertices"
+    assert missing_probability["summary"]["radius_filtration"] is False
+    assert _has_real_probability_filtration(missing_probability) is False
 
 
 def test_simplicial_object_svg_uses_3d_pca_radius_filtration():

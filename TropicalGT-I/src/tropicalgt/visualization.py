@@ -1861,13 +1861,14 @@ def _has_real_probability_filtration(obj: object) -> bool:
     }
     if summary.get("filtration_model") not in allowed_models:
         return False
-    if int(summary.get("num_edges", 0) or 0) <= 0:
+    if summary.get("radius_filtration") is not True:
         return False
-    return any(
-        _probability_feature_vector(simplex) is not None
+    vertices = [
+        simplex
         for simplex in obj.get("simplices", [])
         if isinstance(simplex, dict) and int(simplex.get("dimension", -1)) == 0
-    )
+    ]
+    return bool(vertices) and all(_probability_feature_vector(simplex) is not None for simplex in vertices)
 
 
 def _unavailable_complex(reason: str, *, source: str = "model_probability_jensen_shannon") -> dict[str, object]:
