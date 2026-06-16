@@ -74,12 +74,12 @@
 
 ### 5. Derived and Analogical Maps
 
-- [ ] Base analogical retrieval on model-predicted probability vectors and Jensen-Shannon distance, not arbitrary embedding-only assignment.
-- [ ] Compute vertex assignments between query and memory filtered complexes using probability-vector optimal assignment.
-- [ ] Validate simplicial map preservation on vertices, edges, faces, simplex-tree inclusions, and bifiltration grades.
-- [ ] Compare free resolutions and derived objects only from certified CAS output.
-- [ ] Remove contradictory outputs such as high derived similarity with zero resolution similarity unless a mathematically explicit reason is displayed.
-- [ ] Retrieve many top-k analogies when memory is active; render insufficient-memory states early in training.
+- [x] Base analogical retrieval on model-predicted probability vectors and Jensen-Shannon distance, not arbitrary embedding-only assignment.
+- [x] Compute vertex assignments between query and memory filtered complexes using probability-vector optimal assignment.
+- [x] Validate simplicial map preservation on vertices, edges, faces, simplex-tree inclusions, and bifiltration grades.
+- [x] Compare free resolutions and derived objects only from certified CAS output.
+- [x] Remove contradictory outputs such as high derived similarity with zero resolution similarity unless a mathematically explicit reason is displayed.
+- [x] Retrieve many top-k analogies when memory is active; render insufficient-memory states early in training.
 
 ### 6. Simplex Trees and Simplicial Complexes
 
@@ -271,6 +271,15 @@ The live item-by-item repair inventory is maintained in `planning/tropicalgt_i_c
 - [x] The unavailable diagnostic states available backend names, backend attempt statuses, whether BEMultipliers is a resolution backend, safe unavailable rendering, and the no-proxy policy forbidding chain/rank/Fitting/minor/BEMultipliers substitution for a free resolution.
 - [x] Added a deterministic no-backend regression proving `backend_not_installed` reports an install/activation action and remains renderable only as an unavailable diagnostic.
 - [x] Focused verification passed: no-backend unavailable diagnostic `1 passed`; full algebraic persistence `24 passed`; full simplicial visualization `33 passed`; artifact validator `10 passed`.
+
+
+### Current Objective Update - Derived Analogical Maps Completion Audit
+
+- [x] Confirmed `AnalogicalMemoryBank.retrieve` uses retrieval-side `probability_simplicial_map_diagnostics`, model-probability Jensen-Shannon distances, and positive probability-map score only when the assignment extends to a filtration-preserving simplex-tree map.
+- [x] Confirmed vertex assignment is solved over probability vectors, with edge and 2-simplex preservation counts, simplex-tree preservation rate, chain-map diagnostics, persistence-module morphism diagnostics, and transported persistence-landscape diagnostics serialized into retrieval rows.
+- [x] Confirmed certified CAS evidence contributes to retrieval score only for exact certified real-free-resolution artifact matches; mismatched or unavailable CAS evidence is serialized with reasons and contributes `0.0`.
+- [x] Confirmed the browser analogical-memory pages render top-k probability correspondences and explicit unavailable states for missing retrieval certificates, missing query probabilities, and no retrieved memories.
+- [x] Verification passed: metrics/memory `11 passed`; full simplicial visualization `33 passed`; artifact validator `10 passed`.
 
 
 ### Current Objective Update - Rank-Invariant Table And 2-Parameter Persistence Pass

@@ -395,10 +395,20 @@ git diff --check
 - Verification completed: `python -m py_compile TropicalGT-I/src/tropicalgt/cas_free_resolution.py TropicalGT-I/tests/test_algebraic_persistence.py`, `pytest TropicalGT-I/tests/test_algebraic_persistence.py::test_real_cas_free_resolution_caches_deterministic_unavailable_probe -q` (`1 passed`), `pytest TropicalGT-I/tests/test_algebraic_persistence.py -q` (`24 passed`), `pytest TropicalGT-I/tests/test_simplicial_visualization.py -q` (`33 passed`), `pytest TropicalGT-I/tests/test_interactive_artifact_validator.py -q` (`10 passed`), and `git diff --check`.
 
 
+## 2026-06-16 Derived Analogical Maps Completion Addendum
+
+- Section 5 is complete by audit of current source and tests. Retrieval uses model-predicted probability-vector complexes and Jensen-Shannon assignment certificates; embedding/signature similarity remains a score component but is not allowed to certify a simplicial map.
+- Retrieval rows include probability-map certificate fields for vertex assignments, JS/assignment summaries, edge and 2-simplex preservation, simplex-tree preservation, chain-map certification, persistence-module morphism certification, and transported persistence-landscape diagnostics.
+- Certified CAS retrieval evidence is exact-match only over certified real-free-resolution artifacts. Mismatches and unavailable evidence are reported with reasons, produce zero CAS score contribution, and do not assert derived-category equivalence.
+- The analogical browser views render top-k probability correspondences and explicit unavailable states for no memory, missing retrieval-side probability certificates, missing query probability complexes, and non-trajectory probability fallbacks.
+- b60 latest checked training state reached step `1000` with train loss/NLL `1.230/1.208`; trainer PID `378962` and watcher PID `379304` remain alive under the step-5000 gate, with GPU allocation `22381/24564` MiB during the pulse.
+- Verification completed: `pytest TropicalGT-I/tests/test_metrics_and_memory.py -q` (`11 passed`), `pytest TropicalGT-I/tests/test_simplicial_visualization.py -q` (`33 passed`), `pytest TropicalGT-I/tests/test_interactive_artifact_validator.py -q` (`10 passed`), and `git diff --check`.
+
+
 ## Real Implementations Only Policy
 
 No TropicalGT-I metric, loss, visualization, analogical map, persistence module, free resolution, derived comparison, tropical-cycle diagnostic, or CAS artifact should be presented as a mathematical object unless it is computed from the actual model outputs, graph states, embeddings, probabilities, simplex trees, bifiltrations, or certified CAS/backend output that define that object. Temporary placeholders, synthetic fallback objects, mock charts, fabricated simplices, and convenience stand-ins are not acceptable. When a requested object cannot yet be computed, the artifact must render an explicit unavailable/uncertified state and the training metric must either be disabled or logged under an audit-only unavailable flag. Finite chain-presentation diagnostics may be shown only as chain diagnostics, never as free resolutions. Total-graded or ungraded CAS output may be shown as real CAS output only under its actual grading; it must not be advertised as a multigraded `F2[x_level,x_radius]` free resolution unless the backend certifies that multigraded structure.
 
 Use "one dimensional cone" or "one dimensional cones" as the preferred fan-theoretic language whenever the intended object is a cone of a fan or a cone-indexed filtration datum. Use singular or plural according to ordinary grammar.
 
-_Last updated: 2026-06-16T08:05:00Z_
+_Last updated: 2026-06-16T08:10:00Z_
