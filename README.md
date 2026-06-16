@@ -196,7 +196,7 @@ PYTHONPATH=TropicalGT-I/src python TropicalGT-I/scripts/train_tropicalgt_i.py --
 
 ### Current full-dataset BPB repair run
 
-The live fresh step-0 Parameter-Golf BPB repair run is the b60 5K-gate run:
+The latest completed fresh step-0 Parameter-Golf BPB repair run is the b60 5K-gate run:
 
 ```text
 config: TropicalGT-I/outputs/launch_configs/tropicalgt_i_pg_bpb_step0_full24b_b60_20260616T053631Z_fresh_bpb112_casrows_5k_gate.json
@@ -208,6 +208,13 @@ seq_len: 1024
 W&B run id: ld5u55p5
 W&B project: amelie-iska-math/TropicalGT-I
 required step-5000 artifacts: periodic/step_00005000/validation_report.json and periodic/step_00005000/got_audit/inference_audit.html
+step-5000 BPB/exact BPB: 1.4304583543547733
+step-5000 graph-BPB: 20.122144813809587
+step-5000 graph-conditioned BPB without side cost: 1.2576335315794374
+step-5000 NLL: 0.9915181752294302
+step-5000 invalid graph rate: 0.0
+stop record: TropicalGT-I/outputs/training_stop_records/b60_fresh_step0_casrows_step5000_gate.json
+checkpoint status: unavailable, TropicalGT-I/checkpoints/tropicalgt_i_pg_bpb_step0_full24b_b60_20260616T053631Z_fresh_bpb112_casrows_5k_gate.latest.pt is zero bytes
 ```
 
 The committed templates are strict: `allow_config_path_fallbacks` is false, `allow_token_id_fallback` is false for the OpenAI Parameter-Golf source, and both `tropicalgt_hf_reasoning` plus `openai_parameter_golf` are required. Do not describe a run as full-dataset unless it uses both data roots and the full audited token-slot budget.
@@ -308,7 +315,7 @@ TropicalGT-I/scripts/parameter_golf_codex_review_loop.py \
 --restart-policy beginning
 ```
 
-At every 5K boundary it writes a Codex prompt plus `active_training_contract_step_*.json/.md` containing active hyperparameters, losses, objective weights, BPB/graph-BPB metrics, tropical metrics, GFlowNet metrics, GraphCG full-rank metrics, algebra/topology metrics, memory metrics, data-source rates, throughput, VRAM, and visualization paths. If `eval.bpb` is missing or above `1.12`, the boundary is marked for review and restart according to the chosen policy. For an already-stopped 5K run, use `TropicalGT-I/scripts/prepare_5k_review_bundle.py` with the launch config, checkpoint, stop record, and step-5000 periodic report; it prefers `periodic_validation_artifacts.json`, falls back to `validation_report.json`, and writes a path-only review bundle without copying generated artifacts. Add the explicit execution flags only after the 5K artifacts exist and the checkpoint path is ready:
+At every 5K boundary it writes a Codex prompt plus `active_training_contract_step_*.json/.md` containing active hyperparameters, losses, objective weights, BPB/graph-BPB metrics, tropical metrics, GFlowNet metrics, GraphCG full-rank metrics, algebra/topology metrics, memory metrics, data-source rates, throughput, VRAM, and visualization paths. If `eval.bpb` is missing or above `1.12`, the boundary is marked for review and restart according to the chosen policy. For an already-stopped 5K run, use `TropicalGT-I/scripts/prepare_5k_review_bundle.py` with the launch config, checkpoint, stop record, and step-5000 periodic report; it prefers `periodic_validation_artifacts.json`, falls back to `validation_report.json`, and writes a path-only review bundle without copying generated artifacts. For the current b60 run, the path-only bundle is `TropicalGT-I/outputs/tropicalgt_i_pg_bpb_step0_full24b_b60_20260616T053631Z_fresh_bpb112_casrows_5k_gate/post_5k_review_bundle/review_bundle_step_00005000.json` and records BPB `1.4304583543547733` above target with `execution_readiness.ready=false` because `TropicalGT-I/checkpoints/tropicalgt_i_pg_bpb_step0_full24b_b60_20260616T053631Z_fresh_bpb112_casrows_5k_gate.latest.pt` is empty. Add the explicit execution flags only after the 5K artifacts exist and the checkpoint path is present, nonempty, and loadable:
 
 ```bash
 PYTHONPATH=TropicalGT-I/src \
@@ -324,7 +331,7 @@ python TropicalGT-I/scripts/prepare_5k_review_bundle.py \
 --command-timeout-seconds 3600
 ```
 
-Executed command stdout/stderr is recorded under the generated review bundle `command_logs/` directory and summarized in `command_results`; these logs are generated artifacts and must not be staged. The legacy audit backfill command runs before strict validators and may only write explicit unavailable diagnostics or rerender visual contracts from existing raw payloads. If any `--run-*` execution flag is supplied before the boundary report, checkpoint, or required audit directory exists, the helper refuses to execute and records the missing evidence in `execution_readiness`.
+Executed command stdout/stderr is recorded under the generated review bundle `command_logs/` directory and summarized in `command_results`; these logs are generated artifacts and must not be staged. The legacy audit backfill command runs before strict validators and may only write explicit unavailable diagnostics or rerender visual contracts from existing raw payloads. If any `--run-*` execution flag is supplied before the boundary report, a nonempty loadable checkpoint, or required audit directory exists, the helper refuses to execute and records the missing evidence in `execution_readiness`; the current b60 executable attempt fails closed with `empty_checkpoint`, so no post-5K eval/visualization/backfill/validator command output exists for that run.
 
 ## Eval, inference, validation, visualization
 
@@ -377,7 +384,7 @@ TropicalGT-I/outputs/train_full_dataset_active/periodic/step_XXXXXXXX/got_audit 
 For the live b60 run, the latest completed periodic audit can be served read-only on the review port:
 
 ```bash
-AUDIT=TropicalGT-I/outputs/tropicalgt_i_pg_bpb_step0_full24b_b60_20260616T053631Z_fresh_bpb112_casrows_5k_gate/periodic/step_00004750/got_audit
+AUDIT=TropicalGT-I/outputs/tropicalgt_i_pg_bpb_step0_full24b_b60_20260616T053631Z_fresh_bpb112_casrows_5k_gate/periodic/step_00005000/got_audit
 ln -sf inference_audit.html "$AUDIT/index.html"
 python -m http.server 8991 --bind 127.0.0.1 --directory "$AUDIT"
 ```

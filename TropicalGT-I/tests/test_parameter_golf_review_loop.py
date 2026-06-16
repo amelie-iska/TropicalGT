@@ -86,6 +86,16 @@ def test_active_training_contract_inventories_latest_periodic_artifacts(tmp_path
     assert "validate_interactive_audit_artifacts.py" in inventory["interactive_audit_validator_commands"][0]
     assert "generated artifacts are not staged or copied" in inventory["inventory_policy"]
 
+
+def test_load_checkpoint_summary_reports_empty_checkpoint_unavailable(tmp_path: Path):
+    loop = _load_review_loop()
+    checkpoint = tmp_path / "empty.pt"
+    checkpoint.write_bytes(b"")
+    summary = loop._load_checkpoint_summary(checkpoint)
+    assert summary["available"] is False
+    assert summary["unavailable_reason"] == "checkpoint_file_is_empty"
+    assert summary["path"].endswith("empty.pt")
+
 def test_review_prompt_requires_subagent_evidence_review_and_step0_restart():
     loop = _load_review_loop()
     prompt = loop._review_prompt(

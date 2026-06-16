@@ -208,11 +208,24 @@ def _load_report(path: Path) -> dict[str, Any]:
 def _load_checkpoint_summary(path: Path) -> dict[str, Any]:
     if not path.exists():
         return {}
-    obj = torch.load(path, map_location="cpu")
+    unavailable = {"path": str(path), "available": False}
+    if not path.is_file():
+        return {**unavailable, "unavailable_reason": "checkpoint_path_is_not_a_file"}
+    try:
+        size = path.stat().st_size
+    except OSError as exc:
+        return {**unavailable, "unavailable_reason": f"checkpoint_stat_failed:{exc.__class__.__name__}"}
+    if size <= 0:
+        return {**unavailable, "unavailable_reason": "checkpoint_file_is_empty"}
+    try:
+        obj = torch.load(path, map_location="cpu")
+    except Exception as exc:  # explicit unavailable evidence; do not substitute checkpoint metrics.
+        return {**unavailable, "unavailable_reason": f"checkpoint_load_failed:{exc.__class__.__name__}"}
     metrics = obj.get("metrics", {}) if isinstance(obj, dict) else {}
     history = obj.get("history", []) if isinstance(obj, dict) else []
     return {
         "path": str(path),
+        "available": True,
         "step": int(obj.get("step", metrics.get("step", 0))) if isinstance(obj, dict) else 0,
         "metrics": metrics,
         "history_tail": history[-20:] if isinstance(history, list) else [],

@@ -119,6 +119,16 @@ def _execution_readiness(args: argparse.Namespace, report_path: Path, checkpoint
         issues.append(f"report_step_before_boundary:{observed_step}< {int(boundary_step)}")
     if not checkpoint_path.exists():
         issues.append(f"missing_checkpoint:{_relative_project_path(checkpoint_path)}")
+    elif not checkpoint_path.is_file():
+        issues.append(f"invalid_checkpoint_not_file:{_relative_project_path(checkpoint_path)}")
+    else:
+        try:
+            checkpoint_size = checkpoint_path.stat().st_size
+        except OSError as exc:
+            issues.append(f"unreadable_checkpoint:{_relative_project_path(checkpoint_path)}:{exc.__class__.__name__}")
+        else:
+            if checkpoint_size <= 0:
+                issues.append(f"empty_checkpoint:{_relative_project_path(checkpoint_path)}")
     needs_audit = bool(getattr(args, "run_legacy_audit_backfill", False) or getattr(args, "run_interactive_audit_validators", False))
     latest_audit = str(inventory.get("latest_got_audit_dir") or "")
     if needs_audit and not latest_audit:
