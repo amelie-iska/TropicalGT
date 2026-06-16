@@ -15,13 +15,51 @@ from .cas_free_resolution import (
 
 TROPICAL_SCHEMA_VERSION = "tropicalgt.cas_tropical_fan.v1"
 TROPICAL_CACHE_SCHEMA_VERSION = "tropicalgt.cas_tropical_fan.cache.v1"
-TROPICAL_CACHE_VERSION = "2026-06-16.macaulay2-tropical-v1"
+TROPICAL_CACHE_VERSION = "2026-06-16.macaulay2-tropical-contract-v2"
 _ALLOWED_M2_POLYNOMIAL_CHARS = frozenset(
     "abcdefghijklmnopqrstuvwxyz"
     "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
     "0123456789"
     "_+-*/^(),[] 	"
 )
+
+TROPICAL_FAN_CERTIFICATE_CONTRACT = {
+    "certificate_source": "Macaulay2 Tropical tropicalVariety on an explicit QQ polynomial ideal",
+    "ordinary_to_laurent_torus_scope": (
+        "The Macaulay2 input ideal is written in QQ[x_i]; the Tropical package certificate is interpreted "
+        "as the tropical variety/cycle of the associated torus-side Laurent extension, not as a global "
+        "neural toric variety."
+    ),
+    "required_macaulay2_methods": [
+        "needsPackage Tropical",
+        "tropicalVariety",
+        "rays",
+        "maxCones",
+        "linealitySpace",
+        "multiplicities",
+        "isBalanced",
+        "isPure",
+        "isSimplicial",
+        "fan",
+    ],
+    "side_diagnostic_methods": ["isTropicalBasis", "tropicalPrevariety"],
+    "sage_scope": (
+        "Sage tropical polynomial/variety APIs may support polynomial, curve, hypersurface, and plotting "
+        "checks, but are not accepted here as a replacement for the Macaulay2 ideal-to-tropical-cycle fan certificate."
+    ),
+    "maclagan_toric_scheme_scope": (
+        "Maclagan-Rincon tropical-ideal and toric-scheme language is used only as research scope unless a "
+        "backend certifies the exported fan, ideal, grading, or sheaf/module object."
+    ),
+    "no_proxy_policy": (
+        "No support-token, chain-presentation, rank-sample, embedding-only, or visualization diagnostic may substitute "
+        "for the real Macaulay2 Tropical certificate."
+    ),
+}
+
+
+def tropical_fan_certificate_contract() -> dict[str, Any]:
+    return json.loads(json.dumps(TROPICAL_FAN_CERTIFICATE_CONTRACT))
 
 
 def _validate_macaulay2_polynomial_text(text: str) -> None:
@@ -86,6 +124,7 @@ def unavailable_tropical_fan_diagnostics(
         "backend": "Macaulay2",
         "backend_probe": probe_tropical_backends(),
         "backend_attempts": attempts or [],
+        "certificate_contract": tropical_fan_certificate_contract(),
         "command_template": command_template,
         "certificate_attached": False,
         "tropical_cycle_certified": False,
@@ -224,6 +263,7 @@ def _certified_tropical_result(schema: dict[str, Any], parsed: dict[str, Any], t
         "backend_probe": probe_tropical_backends(),
         "backend_attempts": attempts,
         "command_template": build_macaulay2_tropical_script(schema),
+        "certificate_contract": tropical_fan_certificate_contract(),
         "certificate_attached": True,
         "certificate_type": parsed.get("certificate_type", "Macaulay2 Tropical tropicalVariety fan diagnostics"),
         "tropical_cycle_certified": True,

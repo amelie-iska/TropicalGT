@@ -740,8 +740,10 @@ def test_tropical_fan_diagnostics_unavailable_without_explicit_ideal(tmp_path: P
     assert payload["available"] is False
     assert payload["safe_to_render_as_tropical_fan"] is False
     assert payload["diagnostics"]["status"] == "unavailable_no_model_derived_tropical_ideal"
+    assert "No support-token" in payload["diagnostics"]["certificate_contract"]["no_proxy_policy"]
     assert "support-token proxies" in payload["render_contract"]
     assert "Tropical fan diagnostics unavailable" in markup
+    assert "Sage tropical polynomial" in markup
     assert "one dimensional cones" in markup
     assert "not a multigraded free-resolution" in markup
     assert "Plotly.newPlot" in markup
@@ -763,6 +765,14 @@ def test_tropical_fan_diagnostics_renders_certified_explicit_ideal(tmp_path: Pat
             "tropical_cycle_certified": True,
             "fan_diagnostics_certified": True,
             "safe_to_render_as_tropical_fan": True,
+            "certificate_contract": {
+                "certificate_source": "Macaulay2 Tropical tropicalVariety on an explicit QQ polynomial ideal",
+                "ordinary_to_laurent_torus_scope": "explicit QQ ideal interpreted as a torus-side Laurent certificate",
+                "sage_scope": (
+                    "Sage tropical polynomial/variety APIs may support exact polynomial checks, but are not a substitute certificate."
+                ),
+                "no_proxy_policy": "No support-token proxies or chain diagnostics may substitute for this certificate.",
+            },
             "ideal_schema": {"variables": ["x", "y"], "generators": ["x+y+1"]},
             "cas_artifacts": {"raw_tagged_output": "rays=matrix {{1,-1,0},{0,-1,1}}"},
             "tropical_basis_check": {"available": True, "is_tropical_basis": True, "error": None},
@@ -801,6 +811,8 @@ def test_tropical_fan_diagnostics_renders_certified_explicit_ideal(tmp_path: Pat
     assert "prevariety rays" in markup
     assert "one dimensional cones" in markup
     assert "not a multigraded free-resolution" in markup
+    assert "Sage tropical polynomial" in markup
+    assert "No support-token proxies" in markup
 
 
 

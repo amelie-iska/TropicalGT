@@ -122,7 +122,7 @@
 
 ### 11. Tropical/Toric Embedding Research and Paper Updates
 
-- [ ] Research Macaulay2 `Tropical` package, Sage tropical polynomial/variety APIs, Maclagan tropical schemes in toric varieties, and `references/1710.10651v2.pdf`.
+- [x] Research Macaulay2 `Tropical` package, Sage tropical polynomial/variety APIs, Maclagan tropical schemes in toric varieties, and `references/1710.10651v2.pdf`.
 - [ ] Implement toric embeddings only where the embedding is mathematically correct and tool-backed.
 - [ ] Use "one dimensional cone(s)" terminology in the paper/plans where rays/cone generators are meant.
 - [ ] Add scheme/sheaf-theoretic and vector-bundle material to `TropicalGT-I/assets/tropicalgt_neurips_research_paper.tex` as implementations mature.
@@ -433,3 +433,14 @@ The live item-by-item repair inventory is maintained in `planning/tropicalgt_i_c
 - [x] Section 10 is complete: meet-in-the-middle toggle semantics, causal forward/reverse decoding, ROAR/random-order decoding, dataset causal/noncausal preservation, and dotted visualization overlays are covered.
 - [x] b60 latest checked training state reached step `1769` with train loss/NLL `1.174/1.150`; trainer PID `378962` and watcher PID `379304` remain alive under the step-5000 gate.
 - [x] Verification passed: compile check for `test_simplicial_visualization.py`; focused decoding overlay tests `2 passed`; `pytest TropicalGT-I/tests/test_simplicial_visualization.py -q` (`36 passed`).
+
+### Current Objective Update - Tropical/Toric Research Contract Pass
+
+- [x] Reviewed the local `references/1710.10651v2.pdf` text and current official Macaulay2/Sage tropical APIs for Section 11 scope.
+- [x] Recorded the strict certificate contract: Macaulay2 `Tropical` `tropicalVariety` is the fan/cycle certificate path; `isTropicalBasis` and `tropicalPrevariety` are side diagnostics; Sage tropical polynomial/variety APIs may support exact polynomial and hypersurface checks but do not replace this fan certificate.
+- [x] Added machine-readable no-proxy contract fields to tropical fan diagnostics so support tokens, chain presentations, rank samples, embedding-only assignments, or visualization rows cannot be rendered as tropical fan certificates.
+- [x] Added regression coverage for certified and unavailable tropical fan reports, including Sage-scope and no-proxy wording in the browser payload.
+- [x] Verified the generated Plotly tropical fan diagnostic smoke artifact contains the certificate source, Sage scope, no-proxy policy, and one dimensional cone language without committing generated output.
+- [x] Verification completed: py-compile for touched Python/test files, focused tropical-fan tests (`3 passed` + `2 passed`), `pytest TropicalGT-I/tests/test_algebraic_persistence.py -q` (`24 passed`), `pytest TropicalGT-I/tests/test_simplicial_visualization.py -q` (`36 passed`), `pytest TropicalGT-I/tests/test_interactive_artifact_validator.py -q` (`10 passed`), generated HTML smoke, and `git diff --check`.
+- [x] b60 latest checked training state reached step `1947` with train loss/NLL `1.129/1.105`; trainer PID `378962` and watcher PID `379304` remain alive under the step-5000 gate.
+- [ ] Next Section 11 item: implement toric embeddings only where the embedding is mathematically correct and tool-backed.

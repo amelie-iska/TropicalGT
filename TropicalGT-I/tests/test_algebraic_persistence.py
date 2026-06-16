@@ -691,6 +691,12 @@ def test_macaulay2_tropical_fan_diagnostic_parser_and_script():
     assert pre["max_cones"] == [[1], [0], [2]]
     assert pre["is_simplicial"] is True
     assert "not a multigraded free-resolution" in report["render_warning"]
+    contract = report["certificate_contract"]
+    assert contract["certificate_source"].startswith("Macaulay2 Tropical tropicalVariety")
+    assert "tropicalVariety" in contract["required_macaulay2_methods"]
+    assert "tropicalPrevariety" in contract["side_diagnostic_methods"]
+    assert "not accepted" in contract["sage_scope"]
+    assert "No support-token" in contract["no_proxy_policy"]
 
 
 def test_macaulay2_tropical_fan_diagnostic_live_or_unavailable():
@@ -713,6 +719,8 @@ def test_macaulay2_tropical_fan_diagnostic_live_or_unavailable():
         assert report["status"] in {"backend_not_installed", "timeout", "backend_error", "certificate_failed", "invalid_input"}
         assert report["certificate_attached"] is False
         assert report["safe_to_render_as_tropical_fan"] is False
+        assert "certificate_contract" in report
+        assert "No support-token" in report["certificate_contract"]["no_proxy_policy"]
 
 
 def test_macaulay2_tropical_fan_diagnostic_invalid_input_unavailable():

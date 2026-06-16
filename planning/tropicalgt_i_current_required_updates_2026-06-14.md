@@ -531,10 +531,21 @@ git diff --check
 - b60 latest checked training state reached step `1769` with train loss/NLL `1.174/1.150`; trainer PID `378962` and watcher PID `379304` remain alive under the step-5000 gate.
 - Verification completed: `/home/iska/miniconda3/envs/tokengt/bin/python -m py_compile TropicalGT-I/tests/test_simplicial_visualization.py`, focused decoding overlay tests (`2 passed`), and `pytest TropicalGT-I/tests/test_simplicial_visualization.py -q` (`36 passed`).
 
+## 2026-06-16 Tropical/Toric Research Contract Addendum
+
+- Section 11 research checkpoint complete for Macaulay2 `Tropical`, Sage tropical polynomial/variety APIs, Maclagan-Rincon tropical-ideal/toric-scheme scope, and `references/1710.10651v2.pdf`.
+- The implemented fan certificate path is Macaulay2 `Tropical` on an explicit `QQ[x_i]` ideal: `needsPackage "Tropical"`, `tropicalVariety`, `rays`, `maxCones`, `linealitySpace`, `multiplicities`, `isBalanced`, `isPure`, `isSimplicial`, and `fan` are the required source methods; `isTropicalBasis` and `tropicalPrevariety` remain side diagnostics with their own availability states.
+- Sage tropical polynomial/variety APIs are documented as useful for exact tropical polynomial, curve, hypersurface, and plotting checks, but they are not accepted as replacements for the Macaulay2 ideal-to-tropical-cycle fan certificate in the current browser view.
+- Maclagan-Rincon tropical-ideal and tropical toric-scheme language remains research scope unless a backend certifies the exported fan, ideal, grading, or sheaf/module object. The paper may use the language for scope, but implementation claims must stay certificate-backed.
+- Tropical fan diagnostic payloads now carry a machine-readable `certificate_contract` with source method, ordinary-to-Laurent torus scope, Sage scope, Maclagan toric-scheme scope, and no-proxy policy. The browser table renders those fields for both certified and unavailable states.
+- No support-token, chain-presentation, rank-sample, embedding-only, or visualization diagnostic can be treated as a tropical fan/cycle certificate. Unavailable remains unavailable.
+- b60 latest checked training state reached step `1947` with train loss/NLL `1.129/1.105`; trainer PID `378962` and watcher PID `379304` remain alive under the step-5000 gate.
+- Verification completed: py-compile for touched Python/test files, focused tropical-fan tests (`3 passed` + `2 passed`), `pytest TropicalGT-I/tests/test_algebraic_persistence.py -q` (`24 passed`), `pytest TropicalGT-I/tests/test_simplicial_visualization.py -q` (`36 passed`), `pytest TropicalGT-I/tests/test_interactive_artifact_validator.py -q` (`10 passed`), generated Plotly HTML smoke, and `git diff --check`.
+
 ## Real Implementations Only Policy
 
 No TropicalGT-I metric, loss, visualization, analogical map, persistence module, free resolution, derived comparison, tropical-cycle diagnostic, or CAS artifact should be presented as a mathematical object unless it is computed from the actual model outputs, graph states, embeddings, probabilities, simplex trees, bifiltrations, or certified CAS/backend output that define that object. Temporary placeholders, synthetic fallback objects, mock charts, fabricated simplices, and convenience stand-ins are not acceptable. When a requested object cannot yet be computed, the artifact must render an explicit unavailable/uncertified state and the training metric must either be disabled or logged under an audit-only unavailable flag. Finite chain-presentation diagnostics may be shown only as chain diagnostics, never as free resolutions. Total-graded or ungraded CAS output may be shown as real CAS output only under its actual grading; it must not be advertised as a multigraded `F2[x_level,x_radius]` free resolution unless the backend certifies that multigraded structure.
 
 Use "one dimensional cone" or "one dimensional cones" as the preferred fan-theoretic language whenever the intended object is a cone of a fan or a cone-indexed filtration datum. Use singular or plural according to ordinary grammar.
 
-_Last updated: 2026-06-16T07:36:00Z_
+_Last updated: 2026-06-16T07:48:00Z_

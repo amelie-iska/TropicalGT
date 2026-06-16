@@ -3742,6 +3742,16 @@ def _unavailable_tropical_fan_payload(reason: str, *, source_path: str = "unavai
         "fan_diagnostics_certified": False,
         "safe_to_render_as_tropical_fan": False,
         "cas_artifacts": {},
+        "certificate_contract": {
+            "certificate_source": "Macaulay2 Tropical tropicalVariety on an explicit model-derived QQ ideal",
+            "sage_scope": (
+                "Sage tropical polynomial/variety diagnostics are not a replacement for the Macaulay2 "
+                "ideal-to-tropical-cycle fan certificate."
+            ),
+            "no_proxy_policy": (
+                "No support-token, chain-presentation, rank-sample, embedding-only, or visualization diagnostic may substitute for the real certificate."
+            ),
+        },
     }
     return {
         "schema_version": "tropicalgt.tropical_fan_visual_audit.v1",
@@ -3813,9 +3823,12 @@ def _write_tropical_fan_html(path: Path, payload: Mapping[str, Any]) -> None:
         multiplicities = summary.get("multiplicities") if isinstance(summary.get("multiplicities"), list) else []
         basis_check = diagnostics.get("tropical_basis_check") if isinstance(diagnostics.get("tropical_basis_check"), Mapping) else {}
         prevariety = diagnostics.get("tropical_prevariety_summary") if isinstance(diagnostics.get("tropical_prevariety_summary"), Mapping) else {}
+        contract = diagnostics.get("certificate_contract") if isinstance(diagnostics.get("certificate_contract"), Mapping) else {}
         table_rows = [
             ("status", diagnostics.get("status", "certified")),
             ("backend", diagnostics.get("backend", "Macaulay2")),
+            ("certificate source", contract.get("certificate_source", "Macaulay2 Tropical tropicalVariety certificate required")),
+            ("tool scope", contract.get("ordinary_to_laurent_torus_scope", "explicit ideal-to-tropical-cycle fan diagnostics only")),
             ("source", payload.get("source_path", "unknown")),
             ("ray count", summary.get("ray_count", len(ray_rows))),
             ("ambient dimension", summary.get("ambient_dimension", "")),
@@ -3829,6 +3842,8 @@ def _write_tropical_fan_html(path: Path, payload: Mapping[str, Any]) -> None:
             ("prevariety available", bool(prevariety.get("available"))),
             ("prevariety rays", _json_clip(prevariety.get("rays", []), 180)),
             ("prevariety max cones", _json_clip(prevariety.get("max_cones", []), 180)),
+            ("Sage scope", contract.get("sage_scope", "not a substitute certificate for this fan view")),
+            ("no-proxy policy", contract.get("no_proxy_policy", "no proxy diagnostics may substitute for the certificate")),
             ("warning", diagnostics.get("render_warning", "not a multigraded free-resolution certificate")),
         ]
         fig.add_trace(
@@ -3851,11 +3866,15 @@ def _write_tropical_fan_html(path: Path, payload: Mapping[str, Any]) -> None:
         fig.update_layout(title=title, height=720, margin=dict(t=118, l=70, r=44, b=80))
     else:
         diagnostics_reason = str(diagnostics.get("reason", "No explicit model-derived tropical ideal spec was exported."))
+        contract = diagnostics.get("certificate_contract") if isinstance(diagnostics.get("certificate_contract"), Mapping) else {}
         table_rows = [
             ("status", diagnostics.get("status", "unavailable_no_model_derived_tropical_ideal")),
             ("source", payload.get("source_path", "unavailable")),
             ("safe_to_render_as_tropical_fan", False),
             ("reason", diagnostics_reason),
+            ("certificate source", contract.get("certificate_source", "Macaulay2 Tropical tropicalVariety certificate required")),
+            ("Sage scope", contract.get("sage_scope", "not a substitute certificate for this fan view")),
+            ("no-proxy policy", contract.get("no_proxy_policy", "no proxy diagnostics may substitute for the certificate")),
             ("render contract", payload.get("render_contract", "unavailable")),
             ("one dimensional cones", "not rendered without a real Macaulay2 Tropical certificate"),
             ("warning", "not a multigraded free-resolution or derived-equivalence certificate"),
