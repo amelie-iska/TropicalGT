@@ -133,7 +133,7 @@
 - [ ] Keep the current BPB run alive until the 5K gate unless explicitly restarted.
 - [ ] Optimize for BPB with the advanced losses/metrics that are actually implemented.
 - [ ] Clean old local/online W&B runs and generated artifacts when they become irrelevant.
-- [ ] Generate periodic visual audits every 250 steps.
+- [x] Generate periodic visual audits every 250 steps.
 - [ ] Restart only after the requested 5K gate or explicit user request.
 
 ### 13. Docs, README, Tests, Push
@@ -516,3 +516,13 @@ The live item-by-item repair inventory is maintained in `planning/tropicalgt_i_c
 - [x] Verified with `python -m py_compile` on the touched scripts/tests and `python -m pytest TropicalGT-I/tests/test_parameter_golf_review_loop.py TropicalGT-I/tests/test_prepare_5k_review_bundle.py -q` (`8 passed`).
 - [x] Latest live pulse during this pass: trainer PID `378962` and watcher PID `379304` are alive; progress reached step `2434/5000` with train loss/NLL `1.142/1.119`; step-5000 validation/audit artifacts are not present yet.
 - [ ] Section 12 5K gate remains open: keep the run alive, wait for required step-5000 artifacts, then run analyses/visualizations and route the evidence review through a Codex subagent before any step-0 restart.
+
+### Current Objective Update - Section 12 Strict No-Fallback Data Config Pass
+
+- [x] Audited the active b60 launch config and confirmed the live command is still capped by `--max-steps 5000`, with `validation_every_steps=250`, `visualization_every_steps=250`, `checkpoint_every=250`, online W&B run `ld5u55p5`, TokenGT graph-token config, hybrid HF plus OpenAI Parameter-Golf data, GFlowNet/GraphCG/tropical weights, causal forward+reverse DAG decoding, ROAR random-order decoding, and a 5K restart-review policy.
+- [x] Found legacy dataset path-search fields (`fallback_roots`, `tokenizer_fallback_paths`) in full-dataset configs even though token-id fallback was disabled; implemented strict path handling so those fields are rejected by default unless `allow_config_path_fallbacks=true` is explicitly set.
+- [x] Removed those fallback path fields from committed full-dataset training configs and set `allow_config_path_fallbacks=false` for strict future launches.
+- [x] Preserved the old path-search behavior only in an explicit opt-in test fixture, and added regression tests proving path and tokenizer fallback fields are rejected by default.
+- [x] Verified the live step-2500 periodic audit completed after its settle window: `validation_report.json`, `periodic_validation_artifacts.json`, and `got_audit/inference_audit.html` all exist under `periodic/step_00002500`; training resumed at step `2503/5000`.
+- [x] Verified with `python -m py_compile TropicalGT-I/src/tropicalgt/data.py TropicalGT-I/tests/test_data_loader.py` and `PYTHONPATH=TropicalGT-I/src python -m pytest TropicalGT-I/tests/test_data_loader.py -q` (`15 passed`, only external SWIG deprecation warnings).
+- [ ] Section 12 5K gate remains open: keep the current run alive until step 5000, then run analyses/visualizations and subagent evidence review before any step-0 restart.

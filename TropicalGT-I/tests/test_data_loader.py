@@ -188,6 +188,7 @@ def test_hybrid_config_resolves_fallback_roots_and_reports_budget(tmp_path: Path
         "seq_len": 4,
         "batch_size": 2,
         "max_steps": 3,
+        "allow_config_path_fallbacks": True,
         "hybrid_data": {
             "enabled": True,
             "sources": [
@@ -207,6 +208,59 @@ def test_hybrid_config_resolves_fallback_roots_and_reports_budget(tmp_path: Path
     assert any("available train token slots" in error for error in errors)
     assert any("configured training token slots" in error for error in errors)
 
+
+def test_hybrid_config_rejects_path_fallbacks_by_default(tmp_path: Path):
+    pg_root = tmp_path / "pg"
+    pg_root.mkdir()
+    _write_parameter_golf_bin(pg_root / "fineweb_train_000000.bin", b"abcdefgh")
+    cfg = {
+        "seq_len": 4,
+        "hybrid_data": {
+            "enabled": True,
+            "sources": [
+                {
+                    "kind": "parameter_golf_bin",
+                    "name": "openai_parameter_golf",
+                    "root": str(tmp_path / "missing_pg"),
+                    "fallback_roots": [str(pg_root)],
+                    "weight": 1.0,
+                    "required": True,
+                    "window_tokens": 4,
+                }
+            ],
+        },
+    }
+    with pytest.raises(ValueError, match="allow_config_path_fallbacks"):
+        make_dataset_from_config(cfg, "train")
+
+
+def test_hybrid_config_rejects_tokenizer_fallback_paths_by_default(tmp_path: Path):
+    pg_root = tmp_path / "pg"
+    pg_root.mkdir()
+    _write_parameter_golf_bin(pg_root / "fineweb_train_000000.bin", b"abcdefgh")
+    tokenizer = tmp_path / "tokenizer.model"
+    tokenizer.write_bytes(b"not used")
+    cfg = {
+        "seq_len": 4,
+        "hybrid_data": {
+            "enabled": True,
+            "sources": [
+                {
+                    "kind": "parameter_golf_bin",
+                    "name": "openai_parameter_golf",
+                    "root": str(pg_root),
+                    "tokenizer_path": str(tmp_path / "missing.model"),
+                    "tokenizer_fallback_paths": [str(tokenizer)],
+                    "allow_token_id_fallback": False,
+                    "weight": 1.0,
+                    "required": True,
+                    "window_tokens": 4,
+                }
+            ],
+        },
+    }
+    with pytest.raises(ValueError, match="allow_config_path_fallbacks"):
+        make_dataset_from_config(cfg, "train")
 
 def test_dataset_budget_validates_per_source_requirements(tmp_path: Path):
     parquet_root = tmp_path / "shards" / "train"

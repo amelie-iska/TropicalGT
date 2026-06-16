@@ -3,6 +3,7 @@
   "seed": 1729,
   "data_root": "TropicalGT-I/data/toricgt/curated_hf_shards",
   "require_data": true,
+  "allow_config_path_fallbacks": false,
   "cache_shards": 4,
   "graph_autoregressive_decoding": true,
   "shuffle": false,
@@ -95,12 +96,6 @@
         "required": true,
         "window_tokens": 1025,
         "max_graph_chunks": 64,
-        "fallback_roots": [
-          "external/parameter-golf/data/datasets/fineweb10B_sp1024"
-        ],
-        "tokenizer_fallback_paths": [
-          "external/parameter-golf/data/tokenizers/fineweb_1024_bpe.model"
-        ],
         "allow_token_id_fallback": false
       }
     ]

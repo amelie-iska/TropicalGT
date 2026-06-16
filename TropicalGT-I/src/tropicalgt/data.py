@@ -791,7 +791,11 @@ def _make_dataset_source(cfg: dict[str, Any], source: dict[str, Any], split: str
     kind = str(source.get("kind", "parquet"))
     limit = source.get(f"{split}_limit", source.get("limit", split_limit))
     if kind in {"parquet", "hf_parquet", "graph_parquet"}:
-        root = _resolve_existing_config_path(source.get("root", cfg.get("data_root")), source.get("fallback_roots", ()), "parquet root")
+        root = _resolve_existing_config_path(
+            source.get("root", cfg.get("data_root")),
+            _strict_config_path_candidates(cfg, source, "fallback_roots", "parquet root"),
+            "parquet root",
+        )
         return ParquetGraphDataset(
             root,
             split=source.get("split", split),
@@ -799,10 +803,18 @@ def _make_dataset_source(cfg: dict[str, Any], source: dict[str, Any], split: str
             cache_shards=int(source.get("cache_shards", cfg.get("cache_shards", 2))),
         )
     if kind in {"parameter_golf_bin", "oai_parameter_golf", "openai_parameter_golf"}:
-        root = _resolve_existing_config_path(source["root"], source.get("fallback_roots", ()), "Parameter Golf root")
+        root = _resolve_existing_config_path(
+            source["root"],
+            _strict_config_path_candidates(cfg, source, "fallback_roots", "Parameter Golf root"),
+            "Parameter Golf root",
+        )
         tokenizer_path = source.get("tokenizer_path")
         if tokenizer_path:
-            tokenizer_path = _resolve_existing_config_path(tokenizer_path, source.get("tokenizer_fallback_paths", ()), "Parameter Golf tokenizer")
+            tokenizer_path = _resolve_existing_config_path(
+                tokenizer_path,
+                _strict_config_path_candidates(cfg, source, "tokenizer_fallback_paths", "Parameter Golf tokenizer"),
+                "Parameter Golf tokenizer",
+            )
         return ParameterGolfBinGraphDataset(
             root,
             split=source.get("split", split),
@@ -814,6 +826,19 @@ def _make_dataset_source(cfg: dict[str, Any], source: dict[str, Any], split: str
             allow_token_id_fallback=bool(source.get("allow_token_id_fallback", tokenizer_path is None)),
         )
     raise ValueError(f"Unsupported dataset source kind: {kind}")
+
+
+def _strict_config_path_candidates(cfg: dict[str, Any], source: dict[str, Any], key: str, label: str) -> list[str | Path]:
+    raw = source.get(key, ())
+    if raw is None:
+        values: list[str | Path] = []
+    elif isinstance(raw, (str, Path)):
+        values = [raw]
+    else:
+        values = [value for value in raw if value]
+    if values and not bool(source.get("allow_config_path_fallbacks", cfg.get("allow_config_path_fallbacks", False))):
+        raise ValueError(f"{label} configured {key}, but allow_config_path_fallbacks is false")
+    return values
 
 
 def _resolve_existing_config_path(primary: str | Path | None, fallbacks: Iterable[str | Path] = (), label: str = "path") -> Path:

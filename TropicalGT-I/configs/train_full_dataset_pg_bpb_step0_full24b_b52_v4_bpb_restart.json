@@ -35,17 +35,11 @@
       },
       {
         "allow_token_id_fallback": false,
-        "fallback_roots": [
-          "external/parameter-golf/data/datasets/fineweb10B_sp1024"
-        ],
         "kind": "parameter_golf_bin",
         "max_graph_chunks": 64,
         "name": "openai_parameter_golf",
         "required": true,
         "root": "external/oai-parameter-golf/data/datasets/fineweb10B_sp1024",
-        "tokenizer_fallback_paths": [
-          "external/parameter-golf/data/tokenizers/fineweb_1024_bpe.model"
-        ],
         "tokenizer_path": "external/oai-parameter-golf/data/tokenizers/fineweb_1024_bpe.model",
         "weight": 0.3,
         "window_tokens": 1025
@@ -154,6 +148,7 @@
   "periodic_viz_scale_width": 16,
   "ph_backend": "gudhi",
   "require_data": true,
+  "allow_config_path_fallbacks": false,
   "required_hybrid_sources": [
     "tropicalgt_hf_reasoning",
     "openai_parameter_golf"
