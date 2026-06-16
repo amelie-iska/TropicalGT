@@ -292,6 +292,37 @@ def _snapshot_checkpoint(path: Path, output_dir: Path, boundary_step: int) -> Pa
     return snapshot
 
 
+def _restart_decision_schema(target_bpb: float) -> dict[str, Any]:
+    return {
+        "schema_version": "tropicalgt.restart_decision.v1",
+        "primary_metric": "eval.bpb",
+        "primary_target": float(target_bpb),
+        "secondary_metric": "eval.graph_bpb",
+        "required_evidence": [
+            "step_5000_periodic_validation_artifacts_or_validation_report",
+            "eval_visualization_command_results",
+            "interactive_audit_validator_results_after_legacy_backfill",
+            "advanced_sidecars_and_topological_geometric_algebraic_visualizations",
+            "wandb_summary_or_local_metric_history_when_available",
+        ],
+        "config_patch_contract": {
+            "format": "list of config patch rows with dot_path, old_value, new_value, reason, evidence_paths, expected_bpb_effect, and risk",
+            "requires_evidence_paths": True,
+            "requires_real_metric_or_artifact_for_each_change": True,
+            "forbidden_inputs": ["secrets", "datasets", "checkpoints", "wandb_run_dirs", "generated_artifact_bundles"],
+        },
+        "allowed_actions": [
+            "target_met_keep_or_continue_without_restart",
+            "target_not_met_restart_from_step_0_with_evidence_backed_config_patch",
+            "blocked_missing_required_evidence_no_restart",
+        ],
+        "no_proxy_policy": (
+            "Every hyperparameter/config change must cite real metrics, command results, sidecars, or visual audit artifacts. "
+            "Unavailable CAS, topology, geometry, algebra, memory, or visualization evidence remains unavailable with exact reasons."
+        ),
+    }
+
+
 def _review_prompt(
     *,
     cfg: dict[str, Any],
@@ -329,6 +360,7 @@ def _review_prompt(
         "eval": report.get("eval", {}),
         "history_tail": history_tail,
         "active_training_contract": active_contract,
+        "restart_decision_schema": _restart_decision_schema(target_bpb),
     }
     return (
         "# TropicalGT-I Parameter-Golf 5K Review\n\n"
@@ -340,8 +372,9 @@ def _review_prompt(
         "artifact inventory.\n"
         "If the target is not met, use the subagent observations plus your own verification to adjust hyperparameters "
         "and configs for a better BPB run, prioritizing ordinary BPB first and graph-BPB second while retaining only "
-        "advanced TropicalGT methods that have real evidence. Restart from step 0 under the beginning restart policy "
-        "unless the user explicitly changes that policy.\n\n"
+        "advanced TropicalGT methods that have real evidence. Fill the restart_decision_schema with cited evidence "
+        "paths for every config change. Restart from step 0 under the beginning restart policy unless the user "
+        "explicitly changes that policy.\n\n"
         "No proxies or fallbacks: unavailable CAS, topology, geometry, algebra, memory, or visualization evidence must "
         "remain unavailable with exact reasons. Do not expose secrets. Do not commit datasets, checkpoints, W&B runs, "
         "caches, or generated artifacts. After edits, run the relevant tests/readiness checks and leave a concise "
@@ -532,6 +565,7 @@ def _active_training_contract(cfg: dict[str, Any], report: dict[str, Any], check
             "grad_norm": metrics.get("grad_norm"),
         },
         "history_tail": history_tail,
+        "restart_decision_schema": _restart_decision_schema(primary_target),
         "artifact_inventory": _review_artifact_inventory(cfg, report, report_path, boundary_step),
         "report_visualizations": report.get("visualizations", {}),
     }
@@ -557,6 +591,11 @@ def _active_training_contract_markdown(contract: dict[str, Any]) -> str:
         "## Regularizer Weights",
         "```json",
         json.dumps(contract.get("regularizer_weights", {}), indent=2),
+        "```",
+        "",
+        "## Restart Decision Schema",
+        "```json",
+        json.dumps(contract.get("restart_decision_schema", {}), indent=2),
         "```",
         "",
         "## Metrics",

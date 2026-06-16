@@ -70,6 +70,7 @@ def test_prepare_review_bundle_writes_prompt_contract_and_commands(tmp_path: Pat
     assert "--render-visualizations" in bundle["commands"]["eval_validation_visualizations"]
     assert bundle["command_results"] == []
     assert bundle["commands"]["interactive_audit_backfills"] == []
+    assert bundle["restart_decision_schema"]["config_patch_contract"]["requires_evidence_paths"] is True
     assert "spawn_or_assign_codex_subagent_when_available" in bundle["review_requirements"]
     assert "review_metrics_advanced_sidecars_topological_geometric_algebraic_visualizations" in bundle["review_requirements"]
     assert "run_legacy_audit_backfill_before_strict_validation_when_available" in bundle["review_requirements"]
@@ -78,6 +79,7 @@ def test_prepare_review_bundle_writes_prompt_contract_and_commands(tmp_path: Pat
     assert "topological, geometric, algebraic" in prompt_text
     assert "Restart from step 0" in prompt_text
     assert "No proxies or fallbacks" in prompt_text
+    assert "restart_decision_schema" in prompt_text
     for key in ("contract_json", "contract_markdown", "codex_prompt", "bundle_json", "bundle_markdown"):
         assert (module.ROOT / artifacts[key]).exists()
 

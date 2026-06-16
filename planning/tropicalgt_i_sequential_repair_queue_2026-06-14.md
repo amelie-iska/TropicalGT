@@ -550,3 +550,11 @@ The live item-by-item repair inventory is maintained in `planning/tropicalgt_i_c
 - [x] Kept the default review bundle path-only; command execution remains explicit and generated backfill reports/logs must not be staged.
 - [x] Documented that legacy audit backfill may only write explicit unavailable diagnostics or rerender visual contracts from existing raw payloads; no CAS, tropical-fan, persistence-module, or visualization proxy is allowed.
 - [ ] Section 12 5K gate remains open: wait for step-5000 artifacts before running eval visualizations, legacy backfill, strict validators, and Codex subagent evidence review.
+
+### Current Objective Update - Evidence-Bound Restart Schema Pass
+
+- [x] Added a machine-readable `tropicalgt.restart_decision.v1` schema to the 5K review loop and post-5K review bundle.
+- [x] Required every proposed post-5K hyperparameter/config change to include `dot_path`, old/new values, reason, evidence paths, expected BPB effect, and risk.
+- [x] Added explicit allowed actions for target-met continuation, target-missed step-0 restart with evidence-backed config patch, and blocked missing-evidence/no-restart states.
+- [x] Kept restart planning no-proxy: unavailable CAS/topology/geometry/algebra/memory/visual evidence remains unavailable with exact reasons and cannot justify a config change.
+- [ ] Section 12 5K gate remains open: do not populate or execute the restart schema until step-5000 metrics, sidecars, visual audits, validators, and Codex subagent review exist.

@@ -51,9 +51,12 @@ def test_active_training_contract_reports_losses_and_graph_order_metrics():
     assert contract["active_losses"]["gflownet_trajectory_balance"] == 0.1
     assert contract["data_metrics"]["causal_dag_ar_rate"] == 0.75
     assert contract["tropical_metrics"]["sequence_tropical_margin_mean"] == 0.3
+    assert contract["restart_decision_schema"]["config_patch_contract"]["requires_evidence_paths"] is True
     assert "artifact_inventory" in contract
-    assert "artifact_inventory" in loop._active_training_contract_markdown(contract)
-    assert "Active Losses" in loop._active_training_contract_markdown(contract)
+    markdown = loop._active_training_contract_markdown(contract)
+    assert "artifact_inventory" in markdown
+    assert "Restart Decision Schema" in markdown
+    assert "Active Losses" in markdown
 
 
 def test_active_training_contract_inventories_latest_periodic_artifacts(tmp_path: Path):
@@ -105,7 +108,19 @@ def test_review_prompt_requires_subagent_evidence_review_and_step0_restart():
     assert "advanced sidecars" in prompt
     assert "topological, geometric, algebraic" in prompt
     assert "Restart from step 0" in prompt
+    assert "restart_decision_schema" in prompt
+    assert "evidence_paths" in prompt
     assert "No proxies or fallbacks" in prompt
+
+def test_restart_decision_schema_requires_real_evidence_paths():
+    loop = _load_review_loop()
+    schema = loop._restart_decision_schema(1.12)
+    assert schema["primary_metric"] == "eval.bpb"
+    assert schema["primary_target"] == 1.12
+    assert schema["config_patch_contract"]["requires_real_metric_or_artifact_for_each_change"] is True
+    assert "blocked_missing_required_evidence_no_restart" in schema["allowed_actions"]
+    assert "Unavailable CAS" in schema["no_proxy_policy"]
+
 
 def test_review_loop_reads_periodic_and_validation_report_metrics():
     loop = _load_review_loop()
