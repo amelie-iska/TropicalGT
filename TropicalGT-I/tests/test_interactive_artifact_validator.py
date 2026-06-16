@@ -402,6 +402,31 @@ def _row(root: Path, name: str) -> Path:
                 },
                 "actual_data_only": True,
                 "no_proxy_resolution_claim": True,
+                "staircase_cards": [
+                    {
+                        "homological_degree": 1,
+                        "primary_card": True,
+                        "actual_generator_bidegree_count": 2,
+                        "minimal_antichain": [[2, 1], [1, 2]],
+                        "generator_labels": [
+                            {"label": "g1", "bidegree": [2, 1], "monomial": "x_level^2 x_radius^1", "homological_degree": 1},
+                            {"label": "g2", "bidegree": [1, 2], "monomial": "x_level^1 x_radius^2", "homological_degree": 1},
+                        ],
+                        "dominated_generator_bidegrees": [],
+                        "upward_closed_regions": [
+                            {"generator_label": "g1", "generator_bidegree": [2, 1], "x_radius_min": 1, "x_level_min": 2, "x_radius_max_displayed": 4, "x_level_max_displayed": 4},
+                            {"generator_label": "g2", "generator_bidegree": [1, 2], "x_radius_min": 2, "x_level_min": 1, "x_radius_max_displayed": 4, "x_level_max_displayed": 4},
+                        ],
+                        "quotient_basis_lattice_points": [[0, 0], [0, 1], [1, 0]],
+                        "quotient_basis_lattice_count": 3,
+                        "display_grid_extent": {"x_radius_max": 4, "x_level_max": 4, "coordinate_axes": ["rho_x_radius", "rho_x_level"]},
+                        "hilbert_numerator_terms": [{"sign": 1, "bidegree": [2, 1], "monomial": "x_level^2*x_radius"}],
+                        "adjacent_lcm_syzygies": [{"index": 0, "lcm_bidegree": [2, 2], "relation": "x_radius*g1 + x_level*g2"}],
+                        "resolution_available": True,
+                        "resolution_scope": "displayed_two_variable_staircase_monomial_ideal",
+                        "theorem_scope": "exact two-variable monomial-ideal staircase resolution when adjacent-LCM theorem applies; not a full persistence-module free resolution without CAS certification",
+                    }
+                ],
             }
         ),
     )

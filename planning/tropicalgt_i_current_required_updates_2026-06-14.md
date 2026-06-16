@@ -969,3 +969,24 @@ PYTHONPATH=TropicalGT-I/scripts:TropicalGT-I/src /home/iska/miniconda3/envs/toke
 ```
 
 _Last updated: 2026-06-16T16:39:00Z_
+
+## 2026-06-16 Sequential Visual/Math Update: Bivariate Staircase Sidecar Contract
+
+Status: complete for the two-parameter bifiltration sidecar contract and validator hardening; active b61 training remains running under the always-on rule.
+
+- `write_two_parameter_bifiltration_visualization` now emits explicit per-staircase JSON contracts for actual generator labels, minimal antichains, upward-closed generated regions, displayed quotient-basis lattice points, Hilbert numerator terms, adjacent LCM syzygies, and theorem scope.
+- Primary staircase selection now chooses the first nonprincipal Miller-Sturmfels staircase when available, instead of leaving every card secondary when a principal card sorts first.
+- The interactive audit validator now requires these staircase-card contracts and checks that quotient-basis counts match the listed lattice points and that theorem scope preserves the no-proxy boundary against full persistence-module free-resolution claims.
+- Tests pin the rendered JSON sidecar, the validator fixture, and the scoped two-variable monomial-ideal resolution behavior.
+- No generated audit bundles, browser artifacts, datasets, checkpoints, caches, W&B folders, or secrets were staged.
+
+Verification:
+
+```bash
+PYTHONPATH=TropicalGT-I/scripts:TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_algebraic_persistence.py::test_level_radius_bifiltration_reports_scoped_real_staircase_resolution TropicalGT-I/tests/test_interactive_artifact_validator.py -q
+# 11 passed in 1.94s
+PYTHONPATH=TropicalGT-I/scripts:TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_algebraic_persistence.py TropicalGT-I/tests/test_backfill_interactive_audit_artifacts.py TropicalGT-I/tests/test_interactive_artifact_validator.py -q
+# 39 passed in 6.36s
+```
+
+_Last updated: 2026-06-16T16:55:00Z_

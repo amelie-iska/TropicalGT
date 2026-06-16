@@ -4890,7 +4890,7 @@ def _write_two_parameter_bifiltration_staircase_html(
         legend=dict(orientation="h", y=1.02, x=0, font=dict(size=10)),
     )
 
-    def _staircase_resolution_html(dim: int, pts: Sequence[tuple[int, int]]) -> str:
+    def _selected_staircase_resolution(dim: int, pts: Sequence[tuple[int, int]]) -> dict[str, Any]:
         variables = ["x_level", "x_radius"]
         raw_pts = [(int(lvl), int(rg)) for lvl, rg in pts]
         res = _bivariate_staircase_resolution_from_points(
@@ -4900,19 +4900,24 @@ def _write_two_parameter_bifiltration_staircase_html(
             source=f"actual C{dim} chain-generator bidegrees displayed in the staircase panel",
             auxiliary=False,
         )
-        positive_res = {}
-        if not res.get("available"):
-            positive_pts = [pnt for pnt in raw_pts if pnt != (0, 0) and (pnt[0] > 0 or pnt[1] > 0)]
-            positive_res = _bivariate_staircase_resolution_from_points(
-                positive_pts,
-                variables,
-                ideal_name=f"I_C{dim}_positive_event",
-                source=f"positive nonunit C{dim} bidegrees; the full ideal is unit, so this is a scoped event ideal",
-                auxiliary=True,
-            )
-        chosen = res if res.get("available") else positive_res
+        if res.get("available"):
+            return res
+        positive_pts = [pnt for pnt in raw_pts if pnt != (0, 0) and (pnt[0] > 0 or pnt[1] > 0)]
+        positive_res = _bivariate_staircase_resolution_from_points(
+            positive_pts,
+            variables,
+            ideal_name=f"I_C{dim}_positive_event",
+            source=f"positive nonunit C{dim} bidegrees; the full ideal is unit, so this is a scoped event ideal",
+            auxiliary=True,
+        )
+        if positive_res.get("available"):
+            return positive_res
+        return positive_res if positive_res else res
+
+    def _staircase_resolution_html(dim: int, pts: Sequence[tuple[int, int]]) -> str:
+        chosen = _selected_staircase_resolution(dim, pts)
         if not chosen.get("available"):
-            reason = html.escape(str(chosen.get("reason", res.get("reason", "no nontrivial bivariate monomial ideal"))))
+            reason = html.escape(str(chosen.get("reason", "no nontrivial bivariate monomial ideal")))
             return f"<div class='resolution-block unavailable'><h4>Exact bivariate monomial-ideal resolution</h4><p>{reason}</p></div>"
 
         def _rows_table(headers: Sequence[str], rows: Sequence[Sequence[Any]], caption: str) -> str:
@@ -5125,6 +5130,81 @@ def _write_two_parameter_bifiltration_staircase_html(
         </article>
         """
 
+    def _staircase_visual_contract(dim: int, items: Sequence[tuple[int, int, int, str]], *, primary: bool = False) -> dict[str, Any]:
+        pts = [(int(lvl), int(rg)) for lvl, rg, _count, _ex in items]
+        mins = _minimal_antichain(pts)
+        x_max = max([max_radius] + [rg for _lvl, rg in pts] + [rg for _lvl, rg in mins] + [8])
+        y_max = max([max_level] + [lvl for lvl, _rg in pts] + [lvl for lvl, _rg in mins] + [3])
+        x_axis_max = x_max + max(2, int(math.ceil(0.04 * max(1, x_max))))
+        y_axis_max = y_max + 1
+
+        def point_in_upset(lvl: int, rg: int) -> bool:
+            return any(m_lvl <= lvl and m_rg <= rg for m_lvl, m_rg in mins)
+
+        quotient_basis_lattice_points = [
+            [int(lvl), int(rg)]
+            for lvl in range(0, int(y_axis_max) + 1)
+            for rg in range(0, int(x_axis_max) + 1)
+            if not point_in_upset(int(lvl), int(rg))
+        ]
+        minimal_set = set(mins)
+        generator_labels = [
+            {
+                "label": f"g{index}",
+                "bidegree": [int(lvl), int(rg)],
+                "monomial": f"x_level^{int(lvl)} x_radius^{int(rg)}",
+                "homological_degree": int(dim),
+            }
+            for index, (lvl, rg) in enumerate(mins, start=1)
+        ]
+        dominated = [
+            {"bidegree": [int(lvl), int(rg)], "multiplicity": int(count), "example_simplex": str(ex)[:240]}
+            for lvl, rg, count, ex in sorted(items, key=lambda t: (t[0], t[1]))
+            if (int(lvl), int(rg)) not in minimal_set
+        ]
+        resolution = _selected_staircase_resolution(dim, pts)
+        hilbert_terms = [
+            dict(term)
+            for term in resolution.get("hilbert_series_numerator_terms", [])
+            if isinstance(term, Mapping)
+        ]
+        syzygies = [
+            dict(row)
+            for row in resolution.get("adjacent_lcm_syzygies", [])
+            if isinstance(row, Mapping)
+        ]
+        return {
+            "homological_degree": int(dim),
+            "primary_card": bool(primary),
+            "actual_generator_bidegree_count": int(len(items)),
+            "minimal_antichain": [[int(lvl), int(rg)] for lvl, rg in mins],
+            "generator_labels": generator_labels,
+            "dominated_generator_bidegrees": dominated,
+            "upward_closed_regions": [
+                {
+                    "generator_label": row["label"],
+                    "generator_bidegree": row["bidegree"],
+                    "x_radius_min": row["bidegree"][1],
+                    "x_level_min": row["bidegree"][0],
+                    "x_radius_max_displayed": int(x_axis_max),
+                    "x_level_max_displayed": int(y_axis_max),
+                }
+                for row in generator_labels
+            ],
+            "quotient_basis_lattice_points": quotient_basis_lattice_points,
+            "quotient_basis_lattice_count": int(len(quotient_basis_lattice_points)),
+            "display_grid_extent": {
+                "x_radius_max": int(x_axis_max),
+                "x_level_max": int(y_axis_max),
+                "coordinate_axes": ["rho_x_radius", "rho_x_level"],
+            },
+            "hilbert_numerator_terms": hilbert_terms,
+            "adjacent_lcm_syzygies": syzygies,
+            "resolution_available": bool(resolution.get("available", False)),
+            "resolution_scope": str(resolution.get("scope", "")),
+            "theorem_scope": "exact two-variable monomial-ideal staircase resolution when adjacent-LCM theorem applies; not a full persistence-module free resolution without CAS certification",
+        }
+
     def _staircase_sort_key(pair: tuple[int, Sequence[tuple[int, int, int, str]]]) -> tuple[int, int, int, int]:
         dim, items = pair
         pts = [(int(lvl), int(rg)) for lvl, rg, _count, _ex in items]
@@ -5132,11 +5212,20 @@ def _write_two_parameter_bifiltration_staircase_html(
         return (0 if len(mins) > 1 else 1, -len(mins), -len(items), int(dim))
 
     ordered_staircases = sorted(generator_points_by_dim.items(), key=_staircase_sort_key)
-    staircase_parts: list[str] = []
-    for idx, (dim, items) in enumerate(ordered_staircases):
+    primary_staircase_index = -1
+    for idx, (_dim, items) in enumerate(ordered_staircases):
         pts = [(int(lvl), int(rg)) for lvl, rg, _count, _ex in items]
-        primary = idx == 0 and len(_minimal_antichain(pts)) > 1
+        if len(_minimal_antichain(pts)) > 1:
+            primary_staircase_index = idx
+            break
+    if primary_staircase_index < 0 and ordered_staircases:
+        primary_staircase_index = 0
+    staircase_parts: list[str] = []
+    staircase_contracts: list[dict[str, Any]] = []
+    for idx, (dim, items) in enumerate(ordered_staircases):
+        primary = idx == primary_staircase_index
         staircase_parts.append(_svg_chain_staircase(dim, items, primary=primary))
+        staircase_contracts.append(_staircase_visual_contract(dim, items, primary=primary))
     staircase_svgs = "".join(staircase_parts)
     if not staircase_svgs:
         staircase_svgs = "<p class='lede'>No chain-generator bidegrees were available for a bivariate staircase diagram.</p>"
@@ -5252,14 +5341,7 @@ td {{ background:#07111f; color:#d7e8ff; }}
             "homological_dimensions": sorted({int(dim) for _lvl, _rg, dim in generator_counts}),
             "minimal_antichain": [[int(lvl), int(rg)] for lvl, rg in chain_minimal],
         },
-        "staircase_cards": [
-            {
-                "homological_degree": int(dim),
-                "generator_bidegree_count": int(len(items)),
-                "minimal_antichain": [[int(lvl), int(rg)] for lvl, rg in _minimal_antichain([(int(lvl), int(rg)) for lvl, rg, _count, _ex in items])],
-            }
-            for dim, items in ordered_staircases
-        ],
+        "staircase_cards": staircase_contracts,
         "rendered_html": path.name,
         "raw_bifiltration_payload": "../trajectory_level_radius_bifiltration.json",
     }

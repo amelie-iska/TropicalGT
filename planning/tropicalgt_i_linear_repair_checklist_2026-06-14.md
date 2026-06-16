@@ -253,3 +253,14 @@ Status: complete and focused-tested.
 - Verification: data-loader/provenance/readiness tests -> `31 passed`, with the known SentencePiece/SWIG warnings.
 
 Next sequential implementation item remains Item 9 source-side evidence hardening while b61 trains: continue closing restart/review evidence bypasses, then proceed to CAS/visual/math repairs item-by-item without interrupting the active 5K run.
+
+### 2026-06-16 Bivariate Staircase Sidecar Contract
+
+Status: complete and focused-tested.
+
+- Extended the two-parameter bifiltration visual sidecar so each staircase card records actual generator labels, upward-closed regions, quotient-basis lattice points, Hilbert numerator terms, adjacent LCM syzygies, resolution scope, and no-proxy theorem scope.
+- Fixed primary-card selection so the first nonprincipal Miller-Sturmfels staircase becomes the primary card when present.
+- Hardened `validate_interactive_audit_artifacts.py` to require those sidecar contracts in generated audit bundles.
+- Verification: focused bifiltration/validator tests -> `11 passed`; broader algebra/backfill/validator slice -> `39 passed`.
+
+Next sequential implementation item: continue Item 4/5/6 visual-math repairs by auditing real CAS/free-resolution and analogical-memory sidecar evidence while b61 trains uninterrupted to 5K.

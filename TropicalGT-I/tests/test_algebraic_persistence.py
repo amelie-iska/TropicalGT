@@ -1152,6 +1152,19 @@ def test_level_radius_bifiltration_reports_scoped_real_staircase_resolution(tmp_
     assert "buchsbaum_eisenbud_diagnostic_tables" in visual_payload["secondary_views"]
     assert visual_payload["rank_invariant_sample_count"] == len(report["rank_invariant_samples"])
     assert visual_payload["rank_invariant_sample_count"] > 0
+    staircase_cards = visual_payload["staircase_cards"]
+    assert staircase_cards
+    assert any(card["primary_card"] for card in staircase_cards)
+    assert all("generator_labels" in card for card in staircase_cards)
+    assert all("upward_closed_regions" in card for card in staircase_cards)
+    assert all("quotient_basis_lattice_points" in card for card in staircase_cards)
+    assert all(card["quotient_basis_lattice_count"] == len(card["quotient_basis_lattice_points"]) for card in staircase_cards)
+    assert all("hilbert_numerator_terms" in card for card in staircase_cards)
+    assert any(card["adjacent_lcm_syzygies"] for card in staircase_cards)
+    primary_card = next(card for card in staircase_cards if card["primary_card"])
+    assert primary_card["generator_labels"][0]["label"].startswith("g")
+    assert primary_card["upward_closed_regions"][0]["x_radius_max_displayed"] >= primary_card["upward_closed_regions"][0]["x_radius_min"]
+    assert "not a full persistence-module free resolution" in primary_card["theorem_scope"]
     assert "horizontal lattice coordinates are x_radius" in html
     assert "The primary view is the Miller-Sturmfels staircase" in html
     assert "Columns are radius grades" in html

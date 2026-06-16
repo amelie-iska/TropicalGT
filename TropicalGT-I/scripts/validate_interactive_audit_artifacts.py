@@ -353,6 +353,20 @@ def validate_row(row_dir: Path, *, min_candidates: int = 8, min_depth: int = 2, 
         _assert("rho_x_radius" in axes.get("coordinate_one_dimensional_cones", []) and "rho_x_level" in axes.get("coordinate_one_dimensional_cones", []), errors, "trajectory bifiltration visual payload lacks coordinate one dimensional cone records")
         _assert(bifiltration_visual_payload.get("actual_data_only") is True, errors, "trajectory bifiltration visual payload does not assert actual-data-only rendering")
         _assert(bifiltration_visual_payload.get("no_proxy_resolution_claim") is True, errors, "trajectory bifiltration visual payload allows proxy resolution claims")
+        staircase_cards = bifiltration_visual_payload.get("staircase_cards", [])
+        _assert(isinstance(staircase_cards, list) and bool(staircase_cards), errors, "trajectory bifiltration visual payload lacks staircase card contracts")
+        if isinstance(staircase_cards, list):
+            for index, card in enumerate(staircase_cards[:6]):
+                if not isinstance(card, dict):
+                    errors.append(f"trajectory bifiltration staircase card {index} is not an object")
+                    continue
+                _assert(isinstance(card.get("generator_labels"), list), errors, f"trajectory bifiltration staircase card {index} lacks generator labels")
+                _assert(isinstance(card.get("upward_closed_regions"), list), errors, f"trajectory bifiltration staircase card {index} lacks upward-closed region contracts")
+                _assert(isinstance(card.get("quotient_basis_lattice_points"), list), errors, f"trajectory bifiltration staircase card {index} lacks quotient-basis lattice points")
+                _assert(int(_finite_float(card.get("quotient_basis_lattice_count"), -1.0)) == len(card.get("quotient_basis_lattice_points", [])), errors, f"trajectory bifiltration staircase card {index} quotient-basis count mismatch")
+                _assert(isinstance(card.get("hilbert_numerator_terms"), list), errors, f"trajectory bifiltration staircase card {index} lacks Hilbert numerator terms")
+                _assert(isinstance(card.get("adjacent_lcm_syzygies"), list), errors, f"trajectory bifiltration staircase card {index} lacks adjacent LCM syzygy terms")
+                _assert("not a full persistence-module free resolution" in str(card.get("theorem_scope", "")), errors, f"trajectory bifiltration staircase card {index} theorem scope lacks no-proxy resolution boundary")
     _assert(all(_finite_float(radius, float("nan")) >= 0.0 for radius in bif_radii), errors, "trajectory bifiltration contains negative radius grades")
     _assert(all(_finite_float(bif_radii[i], float("nan")) <= _finite_float(bif_radii[i + 1], float("nan")) for i in range(max(0, len(bif_radii) - 1))), errors, "trajectory bifiltration radius grades are not sorted min-to-max")
     rank_samples = bifiltration_payload.get("rank_invariant_samples", [])
