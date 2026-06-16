@@ -92,11 +92,11 @@
 
 ### 7. NLL / Fitness / Density Landscapes
 
-- [ ] Replace flat triangular NLL surfaces with a real 3D PCA NLL density cloud around actual trajectory/token embeddings.
-- [ ] Generate local Gaussian support vectors around actual embeddings only for density estimation; do not render support vectors as model states.
-- [ ] Color density by local NLL/fitness and keep actual model states/trajectory vertices visible and anchored.
-- [ ] Retain a 2D surface when it genuinely interpolates around the trajectory neighborhood.
-- [ ] Show edge-wise NLL improvement and terminal improvement statistics.
+- [x] Replace flat triangular NLL surfaces with a real 3D PCA NLL density cloud around actual trajectory/token embeddings.
+- [x] Generate local Gaussian support vectors around actual embeddings only for density estimation; do not render support vectors as model states.
+- [x] Color density by local NLL/fitness and keep actual model states/trajectory vertices visible and anchored.
+- [x] Retain a 2D surface when it genuinely interpolates around the trajectory neighborhood.
+- [x] Show edge-wise NLL improvement and terminal improvement statistics.
 
 ### 8. Tropical Support and Wall Crossing
 
@@ -222,3 +222,12 @@ The live item-by-item repair inventory is maintained in `planning/tropicalgt_i_c
 - [x] Preserved the Jensen-Shannon probability SimplexTree unavailable state when model probability vectors are absent.
 - [x] Focused verification passed: visualization plus artifact validator `33 passed`.
 - [x] Pushed this simplex-tree contract repair on the non-main branch.
+
+
+### Current Objective Update - NLL Density Contract Pass
+
+- [x] Confirmed the graph-of-thought audit writes `got_nll_density_cloud_pca_3d.html` and `got_nll_density_cloud_payload.json` from actual model graph-state PCA anchors and measured raw NLL values.
+- [x] Added regression coverage proving Gaussian support samples are marked as visualization-only density samples, not model states.
+- [x] Regression now requires exact model anchors, kernel-weighted local NLL metadata, density-volume provenance, and edge-wise NLL deltas.
+- [x] Focused verification passed: visualization plus artifact validator `33 passed`.
+- [x] Pushed this NLL density contract repair on the non-main branch.

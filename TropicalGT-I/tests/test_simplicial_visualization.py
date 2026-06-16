@@ -411,10 +411,12 @@ def test_got_trajectory_visualization_renders_simplicial_panel_and_nll_surface(t
     full_complex_html = Path(paths["got_full_trajectory_complex"]).read_text(encoding="utf-8")
     full_tree_html = Path(paths["got_full_trajectory_simplex_tree_3d"]).read_text(encoding="utf-8")
     probability_tree_html = Path(paths["got_full_trajectory_simplex_tree_3d_jensen_shannon"]).read_text(encoding="utf-8")
+    density_cloud_html = Path(paths["got_nll_density_cloud_pca_3d"]).read_text(encoding="utf-8")
     step_index_html = Path(paths["got_reasoning_step_complex_index"]).read_text(encoding="utf-8")
     step_manifest = json.loads(Path(paths["got_reasoning_step_complex_manifest"]).read_text(encoding="utf-8"))
     payload = json.loads(Path(paths["got_payloads"]).read_text(encoding="utf-8"))
     full_complex_payload = json.loads(Path(paths["got_full_trajectory_complex_payload"]).read_text(encoding="utf-8"))
+    density_cloud_payload = json.loads(Path(paths["got_nll_density_cloud_payload"]).read_text(encoding="utf-8"))
     assert "simplicial-object-panel" in html
     assert "hover-simplicial-card" in html
     assert 'aria-label="hovered filtered simplicial object"' in html
@@ -451,6 +453,20 @@ def test_got_trajectory_visualization_renders_simplicial_panel_and_nll_surface(t
     assert local_sheet.get("available") is False
     assert local_sheet.get("reason") == "disabled_to_preserve_exact_reasoning_point_surface_contact"
     assert payload["nll_surface"]["max_point_residual"] < 1e-5
+    assert "3D PCA NLL density cloud around actual GoT embeddings" in density_cloud_html
+    assert "not a model state" in density_cloud_html
+    assert density_cloud_payload["available"] is True
+    density_cloud = density_cloud_payload["density_cloud"]
+    assert density_cloud["available"] is True
+    assert density_cloud["source"] == "actual model-evaluated graph_state PCA anchors and measured raw NLL values"
+    assert density_cloud["support_samples_are_not_model_states"] is True
+    assert density_cloud["exact_anchor_layer"] is True
+    assert density_cloud["anchor_count"] == len(scaling["candidates"])
+    assert density_cloud["local_nll_rule"].startswith("kernel-weighted mean")
+    assert density_cloud["density_volume"]["support_samples_are_not_model_states"] is True
+    assert len(density_cloud_payload["nodes"]) == len(scaling["candidates"])
+    assert len(density_cloud_payload["edges"]) == 3
+    assert all("nll_delta" in edge for edge in density_cloud_payload["edges"])
     assert payload["nll_progress"]["edge_count"] == 3
     assert payload["nll_progress"]["improving_edge_fraction"] > 0.0
     assert len(payload["edges"]) == 3

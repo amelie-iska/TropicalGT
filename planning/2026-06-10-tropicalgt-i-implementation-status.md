@@ -267,3 +267,12 @@
 - The primary edges are actual face-to-coface covers; optional sorted-label trie-prefix links remain available as legend-only reference edges.
 - Regression coverage now requires the full trajectory SimplexTree page to contain actual face/coface cover text, optional trie-prefix link text, the not-disconnected-columns warning, and the empty-simplex root. The probability SimplexTree test preserves the explicit unavailable state when model probability vectors are absent.
 - Verification: visualization plus artifact validator `33 passed`.
+
+
+## Iteration 36: NLL Density Contract
+
+- Added regression coverage for the 3D PCA NLL density cloud emitted by graph-of-thought audits.
+- The test now requires density-cloud HTML and payloads to come from actual model graph-state PCA anchors and measured raw NLL values.
+- Gaussian support samples are explicitly verified as visualization-only density samples, not model states; exact anchors remain the model-evaluated states.
+- The payload contract now checks kernel-weighted local NLL metadata, density-volume provenance, anchor count, and edge-wise NLL deltas.
+- Verification: visualization plus artifact validator `33 passed`.

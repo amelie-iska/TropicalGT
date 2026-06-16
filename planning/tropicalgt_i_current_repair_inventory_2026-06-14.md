@@ -205,3 +205,17 @@ Verification:
 - `PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_simplicial_visualization.py TropicalGT-I/tests/test_interactive_artifact_validator.py -q` -> `33 passed`.
 
 Next sequential item: continue NLL density and tropical-support repairs.
+
+
+## 2026-06-16 NLL Density Contract Pass
+
+Status: implemented and focused-tested.
+
+Changes made:
+- Added regression coverage for `got_nll_density_cloud_pca_3d.html` and `got_nll_density_cloud_payload.json`.
+- The payload is now tested for actual model graph-state PCA anchors, measured raw NLL values, visualization-only Gaussian support samples, exact anchor layers, kernel-weighted local NLL metadata, density-volume provenance, and edge-wise NLL deltas.
+
+Verification:
+- `PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_simplicial_visualization.py TropicalGT-I/tests/test_interactive_artifact_validator.py -q` -> `33 passed`.
+
+Next sequential item: continue tropical-support heatmap and wall-crossing repairs.
