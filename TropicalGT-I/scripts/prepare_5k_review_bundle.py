@@ -88,6 +88,57 @@ def _eval_command(args: argparse.Namespace, checkpoint_path: Path, bundle_dir: P
     return "PYTHONPATH=TropicalGT-I/src " + _shell_join(cmd)
 
 
+def _execution_requested(args: argparse.Namespace) -> bool:
+    return any(
+        bool(getattr(args, name, False))
+        for name in ("run_eval_visualizations", "run_legacy_audit_backfill", "run_interactive_audit_validators")
+    )
+
+
+def _report_step(report: dict[str, Any]) -> int | None:
+    for key in ("final_step", "step", "global_step"):
+        value = report.get(key)
+        if isinstance(value, int):
+            return int(value)
+    metrics = report.get("metrics")
+    if isinstance(metrics, dict):
+        value = metrics.get("step") or metrics.get("global_step")
+        if isinstance(value, int):
+            return int(value)
+    return None
+
+
+def _execution_readiness(args: argparse.Namespace, report_path: Path, checkpoint_path: Path, report: dict[str, Any], inventory: dict[str, Any], boundary_step: int) -> dict[str, Any]:
+    issues: list[str] = []
+    if not report_path.exists():
+        issues.append(f"missing_report:{_relative_project_path(report_path)}")
+    observed_step = _report_step(report)
+    if observed_step is None:
+        issues.append("missing_report_step_for_execution")
+    elif int(observed_step) < int(boundary_step):
+        issues.append(f"report_step_before_boundary:{observed_step}< {int(boundary_step)}")
+    if not checkpoint_path.exists():
+        issues.append(f"missing_checkpoint:{_relative_project_path(checkpoint_path)}")
+    needs_audit = bool(getattr(args, "run_legacy_audit_backfill", False) or getattr(args, "run_interactive_audit_validators", False))
+    latest_audit = str(inventory.get("latest_got_audit_dir") or "")
+    if needs_audit and not latest_audit:
+        issues.append("missing_latest_got_audit_for_interactive_commands")
+    elif needs_audit:
+        audit_path = _project_path(latest_audit, latest_audit)
+        if not audit_path.is_dir():
+            issues.append(f"missing_latest_got_audit_dir:{latest_audit}")
+    return {
+        "execution_requested": _execution_requested(args),
+        "ready": not issues,
+        "issues": issues,
+        "boundary_step": int(boundary_step),
+        "observed_report_step": observed_step,
+        "report": _relative_project_path(report_path),
+        "checkpoint": _relative_project_path(checkpoint_path),
+        "latest_got_audit_dir": latest_audit,
+    }
+
+
 def _run_shell_command(command: str, log_dir: Path, name: str, timeout_seconds: float = 0.0) -> dict[str, Any]:
     log_dir.mkdir(parents=True, exist_ok=True)
     safe_name = "".join(ch if ch.isalnum() or ch in "._-" else "_" for ch in name).strip("_") or "command"
@@ -170,6 +221,11 @@ def _bundle_markdown(bundle: dict[str, Any]) -> str:
             json.dumps(inventory, indent=2),
             "```",
             "",
+            "## Execution Readiness",
+            "```json",
+            json.dumps(bundle.get("execution_readiness", {}), indent=2),
+            "```",
+            "",
             "## Restart Decision Schema",
             "```json",
             json.dumps(bundle.get("restart_decision_schema", {}), indent=2),
@@ -237,6 +293,12 @@ def prepare_review_bundle(args: argparse.Namespace) -> dict[str, Any]:
         "interactive_audit_backfills": inventory.get("interactive_audit_backfill_commands", []),
         "interactive_audit_validators": inventory.get("interactive_audit_validator_commands", []),
     }
+    execution_readiness = _execution_readiness(args, report_path, checkpoint_path, report, inventory, boundary_step)
+    if execution_readiness["execution_requested"] and not execution_readiness["ready"]:
+        raise RuntimeError(
+            "Cannot execute post-5K review commands before required evidence exists: "
+            + ", ".join(execution_readiness["issues"])
+        )
     command_results = _run_requested_commands(args, commands, bundle_dir)
     bundle = {
         "schema_version": "tropicalgt.post_5k_review_bundle.v1",
@@ -272,6 +334,7 @@ def prepare_review_bundle(args: argparse.Namespace) -> dict[str, Any]:
         },
         "artifact_inventory": inventory,
         "commands": commands,
+        "execution_readiness": execution_readiness,
         "command_results": command_results,
         "policy": "Path-only review bundle by default; explicit command execution writes logs under the generated review bundle. Legacy audit backfill must run before strict validators when requested and may only write explicit unavailable diagnostics or rerender visual contracts from raw payloads. Do not stage generated run artifacts, checkpoints, datasets, caches, W&B data, or secrets.",
     }

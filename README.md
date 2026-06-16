@@ -324,7 +324,7 @@ python TropicalGT-I/scripts/prepare_5k_review_bundle.py \
 --command-timeout-seconds 3600
 ```
 
-Executed command stdout/stderr is recorded under the generated review bundle `command_logs/` directory and summarized in `command_results`; these logs are generated artifacts and must not be staged. The legacy audit backfill command runs before strict validators and may only write explicit unavailable diagnostics or rerender visual contracts from existing raw payloads.
+Executed command stdout/stderr is recorded under the generated review bundle `command_logs/` directory and summarized in `command_results`; these logs are generated artifacts and must not be staged. The legacy audit backfill command runs before strict validators and may only write explicit unavailable diagnostics or rerender visual contracts from existing raw payloads. If any `--run-*` execution flag is supplied before the boundary report, checkpoint, or required audit directory exists, the helper refuses to execute and records the missing evidence in `execution_readiness`.
 
 ## Eval, inference, validation, visualization
 

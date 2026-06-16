@@ -2,6 +2,8 @@ import argparse
 import importlib.util
 import json
 import sys
+
+import pytest
 from pathlib import Path
 
 
@@ -69,6 +71,9 @@ def test_prepare_review_bundle_writes_prompt_contract_and_commands(tmp_path: Pat
     assert "eval_tropicalgt_i.py" in bundle["commands"]["eval_validation_visualizations"]
     assert "--render-visualizations" in bundle["commands"]["eval_validation_visualizations"]
     assert bundle["command_results"] == []
+    assert bundle["execution_readiness"]["execution_requested"] is False
+    assert bundle["execution_readiness"]["ready"] is False
+    assert any(issue.startswith("missing_checkpoint:") for issue in bundle["execution_readiness"]["issues"])
     assert bundle["commands"]["interactive_audit_backfills"] == []
     assert bundle["restart_decision_schema"]["config_patch_contract"]["requires_evidence_paths"] is True
     assert "spawn_or_assign_codex_subagent_when_available" in bundle["review_requirements"]
@@ -144,6 +149,46 @@ def test_prepare_review_bundle_defaults_to_periodic_validation_artifacts(tmp_pat
     assert bundle["commands"]["interactive_audit_backfills"]
     assert "backfill_interactive_audit_artifacts.py" in bundle["commands"]["interactive_audit_backfills"][0]
     assert bundle["commands"]["interactive_audit_validators"]
+
+def test_prepare_review_bundle_blocks_command_execution_without_checkpoint(tmp_path: Path):
+    module = _load_bundle_module()
+    output_dir = tmp_path / "run"
+    checkpoint_dir = tmp_path / "ckpts"
+    got_audit = output_dir / "periodic" / "step_00005000" / "got_audit"
+    got_audit.mkdir(parents=True)
+    checkpoint_dir.mkdir()
+    report_path = output_dir / "train_report.json"
+    report_path.write_text(json.dumps({"final_step": 5000, "eval": {"bpb": 1.3}}), encoding="utf-8")
+    cfg_path = tmp_path / "config.json"
+    cfg_path.write_text(
+        json.dumps({"output_dir": str(output_dir), "checkpoint_dir": str(checkpoint_dir), "run_name": "unit_run", "model": {}}),
+        encoding="utf-8",
+    )
+    args = argparse.Namespace(
+        config=cfg_path,
+        report=report_path,
+        checkpoint=None,
+        stop_record=None,
+        output_dir=tmp_path / "bundle",
+        boundary_step=5000,
+        target_bpb=1.12,
+        metric="eval.bpb",
+        graph_metric="eval.graph_bpb",
+        python="python",
+        split="validation",
+        details_limit=2,
+        viz_limit=3,
+        audit_level="full",
+        audit_ph_backend="gudhi",
+        audit_max_simplices=128,
+        run_eval_visualizations=True,
+        run_legacy_audit_backfill=True,
+        run_interactive_audit_validators=True,
+        command_timeout_seconds=5,
+    )
+    with pytest.raises(RuntimeError, match="missing_checkpoint"):
+        module.prepare_review_bundle(args)
+
 
 def test_run_shell_command_records_logs_and_return_code(tmp_path: Path):
     module = _load_bundle_module()

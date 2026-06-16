@@ -558,3 +558,10 @@ The live item-by-item repair inventory is maintained in `planning/tropicalgt_i_c
 - [x] Added explicit allowed actions for target-met continuation, target-missed step-0 restart with evidence-backed config patch, and blocked missing-evidence/no-restart states.
 - [x] Kept restart planning no-proxy: unavailable CAS/topology/geometry/algebra/memory/visual evidence remains unavailable with exact reasons and cannot justify a config change.
 - [ ] Section 12 5K gate remains open: do not populate or execute the restart schema until step-5000 metrics, sidecars, visual audits, validators, and Codex subagent review exist.
+
+### Current Objective Update - Post-5K Execution Readiness Gate Pass
+
+- [x] Added an `execution_readiness` report to the post-5K review bundle with boundary step, observed report step, checkpoint path, latest audit path, and exact missing-evidence issues.
+- [x] Kept path-only bundles available before the gate, but blocked all `--run-*` command execution until the boundary report is at/after step 5000, the checkpoint exists, and the latest audit directory exists when backfill/validators are requested.
+- [x] Added regression coverage proving execution flags fail closed with `missing_checkpoint` instead of running eval/visualization/backfill/validator commands against incomplete evidence.
+- [ ] Section 12 5K gate remains open: executable review commands stay blocked until the real step-5000 report, checkpoint, and audit artifacts exist.
