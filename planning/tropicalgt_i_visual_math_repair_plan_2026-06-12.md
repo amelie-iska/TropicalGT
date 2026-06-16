@@ -933,3 +933,20 @@ CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/t
 CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_training_metrics.py::test_training_history_contains_certificate_and_throughput_metrics -q -p no:cacheprovider --basetemp=/tmp/tropicalgt-pytest-training-report-graph-json-alias
 # 1 passed
 ```
+
+## 2026-06-16 Graph JSON Per-Record Guardrail Alias
+
+Sequential per-record diagnostics no-proxy item completed after the training report guardrail alias:
+
+- Added `legacy_graph_json_substitution_guardrail` beside the compatibility `graph_json_fallback` flag in per-record diagnostic rows.
+- Added the same explicit guardrail alias to `validate_tropicalgt_i.py` sample rows, preserving the old field for generated-artifact compatibility.
+- Added regressions for both model diagnostic rows and validator sample output.
+
+Validation:
+
+```text
+CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/scripts:TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m py_compile TropicalGT-I/src/tropicalgt/diagnostics.py TropicalGT-I/scripts/validate_tropicalgt_i.py TropicalGT-I/tests/test_diagnostics.py TropicalGT-I/tests/test_readiness_audit.py
+# passed
+CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/scripts:TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_diagnostics.py::test_record_gfn_graphcg_diagnostics TropicalGT-I/tests/test_readiness_audit.py::test_validate_tropicalgt_i_reports_legacy_graph_json_guardrail_alias -q -p no:cacheprovider --basetemp=/tmp/tropicalgt-pytest-per-record-graph-json-alias
+# 2 passed
+```

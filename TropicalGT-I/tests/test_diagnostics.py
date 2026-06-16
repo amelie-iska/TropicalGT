@@ -40,6 +40,8 @@ def test_record_gfn_graphcg_diagnostics():
     out = model(x[None, :], gb, y[None, :])
     rows = record_diagnostics([record], gb, out, tok, target_ids=y[None, :])
     assert rows[0]["filtered_simplicial_object"]["summary"]["num_vertices"] >= 1
+    assert rows[0]["graph_json_fallback"] is False
+    assert rows[0]["legacy_graph_json_substitution_guardrail"] is False
     assert rows[0]["tropical"]["margin_mean"] >= 0
     gfn = gflownet_diagnostics(model, out["graph_state"])
     graphcg = graphcg_diagnostics(model, out["graph_state"])

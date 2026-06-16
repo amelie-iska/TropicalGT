@@ -295,6 +295,7 @@ def record_diagnostics(
             "edge_tokens": int(graph_batch.edge_counts[idx].item()),
             "graph_json_source": (records[idx].metadata or {}).get("graph_json_source", "unknown"),
             "graph_json_fallback": bool((records[idx].metadata or {}).get("graph_json_fallback", False)),
+            "legacy_graph_json_substitution_guardrail": bool((records[idx].metadata or {}).get("graph_json_fallback", False)),
             "graph_json_derived_from_text": bool((records[idx].metadata or {}).get("graph_json_derived_from_text", False)),
             "graph_json_sequentialized": bool((records[idx].metadata or {}).get("graph_json_sequentialized", False)),
             "graph_json_parse_unavailable_reason": (records[idx].metadata or {}).get("graph_json_parse_unavailable_reason"),

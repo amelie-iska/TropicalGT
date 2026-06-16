@@ -47,6 +47,8 @@ def test_validate_tropicalgt_i_reports_legacy_graph_json_guardrail_alias(tmp_pat
     assert report["graph_json_fallback_records"] == 0
     assert report["legacy_graph_json_substitution_guardrail_records"] == 0
     assert report["legacy_graph_json_substitution_guardrail_rate"] == report["invalid_graph_rate"] == 0.0
+    assert report["samples"][0]["graph_json_fallback"] is False
+    assert report["samples"][0]["legacy_graph_json_substitution_guardrail"] is False
 
 
 def test_advanced_bpb_contract_passes_current_b54_gate_config():

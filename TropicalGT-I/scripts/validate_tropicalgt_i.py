@@ -88,6 +88,7 @@ def main() -> None:
                 "record_id": record.record_id,
                 "graph_json_source": (record.metadata or {}).get("graph_json_source", "unknown"),
                 "graph_json_fallback": bool((record.metadata or {}).get("graph_json_fallback", False)),
+                "legacy_graph_json_substitution_guardrail": bool((record.metadata or {}).get("graph_json_fallback", False)),
                 "graph_json_derived_from_text": bool((record.metadata or {}).get("graph_json_derived_from_text", False)),
                 "graph_json_parse_unavailable": bool((record.metadata or {}).get("graph_json_parse_unavailable", False)),
                 "graph_json_parse_unavailable_reason": (record.metadata or {}).get("graph_json_parse_unavailable_reason"),
