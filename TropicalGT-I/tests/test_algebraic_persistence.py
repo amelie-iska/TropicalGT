@@ -882,6 +882,44 @@ def test_inference_scaling_emits_step_and_trajectory_algebra():
     }
 
 
+def test_inference_scaling_bifiltration_uses_vertex_only_probability_start_state():
+    record = FixtureGraphDataset(1)[0]
+    tok = TokenGTTokenizer(feature_dim=48)
+    model = TropicalGTModel(TropicalGTConfig(dim=32, hidden_dim=32, graph_feature_dim=48))
+    report = run_inference_scaling(
+        model,
+        record,
+        tok,
+        seq_len=32,
+        device=torch.device("cpu"),
+        depth=0,
+        width=1,
+        branch_factor=1,
+        trace_limit=4,
+        audit_level="none",
+        ph_backend="gudhi",
+        audit_max_simplices=128,
+    )
+
+    growth = report["trajectory_growth"]
+    assert len(growth) == 1
+    prob_complex = growth[0]["probability_filtered_simplicial_object"]
+    assert prob_complex["available"] is True
+    assert prob_complex["summary"]["radius_filtration"] is True
+    assert prob_complex["summary"]["single_vertex_radius_filtration"] is True
+    assert prob_complex["summary"]["num_vertices"] == 1
+    assert prob_complex["summary"]["num_edges"] == 0
+
+    bif = report["trajectory_level_radius_bifiltration"]
+    assert bif["available"] is True
+    assert bif["coefficient_ring"] == "F2[x_level,x_radius]"
+    assert bif["object_key_selected"] == "probability_filtered_simplicial_object"
+    assert "vertex-only start states" in bif["object_key_policy"]
+    assert bif["grid_fiber_provenance"]["object_key"] == "probability_filtered_simplicial_object"
+    assert bif["grid_fiber_provenance"]["all_growth_rows_have_gudhi_simplex_tree"] is True
+    assert bif["fiber_rank_profile"][0]["fiber_basis"]["total_basis_count"] == 1
+
+
 def test_sequential_text_is_always_graphified():
     record = GraphRecord.from_mapping({"record_id": "plain", "text": "alpha beta gamma delta"})
     types = {node["type"] for node in record.graph_json["nodes"]}

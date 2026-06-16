@@ -232,7 +232,7 @@ git diff --check
 - CAS package survey: look for Sage, Macaulay2, Singular, RIVET/multipers, polymake, Normaliz, and related packages that compute real multigraded modules, minimal resolutions, Betti tables, Fitting ideals, minors, Buchsbaum-Eisenbud diagnostics, tropical fans, toric varieties, and stable intersections.
 - Maclagan-style toric embedding research direction: investigate whether the transformer graph-state and tropical-attention coordinate system can be embedded into a toric variety via model-derived monomial coordinates, Newton polytopes, fan data, and one dimensional cone data. Any resulting implementation must distinguish theorem-level certified constructions from diagnostic embeddings or visual probes.
 
-_Last updated: 2026-06-16T07:03:00Z_
+_Last updated: 2026-06-16T07:12:00Z_
 
 
 ## 2026-06-16 Fresh b59 5K Review Gate and Worker Handoff
@@ -316,10 +316,18 @@ _Last updated: 2026-06-16T07:03:00Z_
 - Verification completed: `python -m py_compile TropicalGT-I/src/tropicalgt/visualization.py TropicalGT-I/tests/test_simplicial_visualization.py TropicalGT-I/tests/test_algebraic_persistence.py`, `pytest TropicalGT-I/tests/test_simplicial_visualization.py::test_certified_cas_diagnostic_tables_require_explicit_structured_certificates -q` (`1 passed`), `pytest TropicalGT-I/tests/test_algebraic_persistence.py::test_level_radius_bifiltration_reports_scoped_real_staircase_resolution -q` (`1 passed`), `pytest TropicalGT-I/tests/test_simplicial_visualization.py -q` (`32 passed`), `pytest TropicalGT-I/tests/test_algebraic_persistence.py -q` (`19 passed`), `pytest TropicalGT-I/tests/test_interactive_artifact_validator.py -q` (`10 passed`), and `git diff --check`.
 
 
+## 2026-06-16 Bifiltration Vertex-Only Probability Start-State Addendum
+
+- The inference-scaling bifiltration selection policy now explicitly accepts real Jensen-Shannon probability radius complexes whose start state is a single vertex with a valid model probability vector and no edges yet. This keeps the `F2[x_level,x_radius]` report aligned with radius filtrations that start as disjoint vertices and grow only when real radius distances add edges/faces.
+- The selected bifiltration object key remains `probability_filtered_simplicial_object` whenever every growth row has real probability-vector evidence on all displayed vertices. Embedding radius complexes are selected only when that probability-vector evidence is unavailable; no proxy probability or synthetic edge is introduced.
+- b60 latest checked training state reached step `515` with train loss/NLL `1.382/1.360`; trainer PID `378962` and watcher PID `379304` remain alive under the step-5000 gate.
+- Verification completed: `python -m py_compile TropicalGT-I/src/tropicalgt/scaling.py TropicalGT-I/tests/test_algebraic_persistence.py`, `pytest TropicalGT-I/tests/test_algebraic_persistence.py::test_inference_scaling_bifiltration_uses_vertex_only_probability_start_state -q` (`1 passed`), `pytest TropicalGT-I/tests/test_algebraic_persistence.py -q` (`20 passed`), `pytest TropicalGT-I/tests/test_simplicial_visualization.py -q` (`32 passed`), `pytest TropicalGT-I/tests/test_interactive_artifact_validator.py -q` (`10 passed`), and `git diff --check`.
+
+
 ## Real Implementations Only Policy
 
 No TropicalGT-I metric, loss, visualization, analogical map, persistence module, free resolution, derived comparison, tropical-cycle diagnostic, or CAS artifact should be presented as a mathematical object unless it is computed from the actual model outputs, graph states, embeddings, probabilities, simplex trees, bifiltrations, or certified CAS/backend output that define that object. Temporary placeholders, synthetic fallback objects, mock charts, fabricated simplices, and convenience stand-ins are not acceptable. When a requested object cannot yet be computed, the artifact must render an explicit unavailable/uncertified state and the training metric must either be disabled or logged under an audit-only unavailable flag. Finite chain-presentation diagnostics may be shown only as chain diagnostics, never as free resolutions. Total-graded or ungraded CAS output may be shown as real CAS output only under its actual grading; it must not be advertised as a multigraded `F2[x_level,x_radius]` free resolution unless the backend certifies that multigraded structure.
 
 Use "one dimensional cone" or "one dimensional cones" as the preferred fan-theoretic language whenever the intended object is a cone of a fan or a cone-indexed filtration datum. Use singular or plural according to ordinary grammar.
 
-_Last updated: 2026-06-16T07:03:00Z_
+_Last updated: 2026-06-16T07:12:00Z_

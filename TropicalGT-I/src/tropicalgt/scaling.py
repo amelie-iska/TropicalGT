@@ -267,7 +267,7 @@ def run_inference_scaling(
     ) if trajectory_growth else {"available": False, "reason": "trajectory growth unavailable only for empty or invalid trajectory"}
     if isinstance(trajectory_level_radius_bifiltration, dict):
         trajectory_level_radius_bifiltration["object_key_policy"] = (
-            "probability Jensen-Shannon complexes only when every growth row has real model probability vertices/edges; otherwise embedding radius complexes"
+            "probability Jensen-Shannon radius complexes are selected when every growth row has real model probability vectors on all vertices, including vertex-only start states; embedding radius complexes are selected only when probability-vector evidence is unavailable"
         )
         trajectory_level_radius_bifiltration["object_key_selected"] = "probability_filtered_simplicial_object" if probability_growth_available else "filtered_simplicial_object"
 

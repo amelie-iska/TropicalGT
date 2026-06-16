@@ -41,10 +41,10 @@
 
 ### 1. Bifiltration Guarantees
 
-- [ ] Guarantee every nonempty reasoning trajectory emits grades over `F2[x_level,x_radius]`.
+- [x] Guarantee every nonempty reasoning trajectory emits grades over `F2[x_level,x_radius]`.
 - [ ] Remove missing-bifiltration paths except empty/invalid trajectory errors.
-- [ ] Add tests proving radius grades and reasoning-level grades are present for every nonempty trajectory.
-- [ ] Ensure all reasoning-step complexes begin as disjoint embedding vertices and grow by radius.
+- [x] Add tests proving radius grades and reasoning-level grades are present for every nonempty trajectory.
+- [x] Ensure all reasoning-step complexes begin as disjoint embedding vertices and grow by radius.
 
 ### 2. Actual 2-Parameter Persistence
 
@@ -222,6 +222,13 @@ The live item-by-item repair inventory is maintained in `planning/tropicalgt_i_c
 - [x] Preserved the Jensen-Shannon probability SimplexTree unavailable state when model probability vectors are absent.
 - [x] Focused verification passed: visualization plus artifact validator `33 passed`.
 - [x] Pushed this simplex-tree contract repair on the non-main branch.
+
+
+### Current Objective Update - Bifiltration Vertex-Only Start-State Pass
+
+- [x] Updated the inference-scaling bifiltration policy so probability Jensen-Shannon radius complexes remain selected for nonempty vertex-only start states when every vertex has a real model probability vector.
+- [x] Added regression coverage for a depth-0 trajectory proving the probability complex is a real single-vertex radius filtration, the `F2[x_level,x_radius]` bifiltration is available, and the selected object key is `probability_filtered_simplicial_object`.
+- [x] Focused verification passed: new algebraic persistence test `1 passed`; full algebraic persistence `20 passed`; full simplicial visualization `32 passed`; artifact validator `10 passed`.
 
 
 ### Current Objective Update - Certified CAS Diagnostic Table Pass
