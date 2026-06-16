@@ -112,6 +112,22 @@ def test_real_cas_free_resolution_disabled_by_environment(monkeypatch):
     assert real["command_templates"]["macaulay2"]
 
 
+def test_cas_backend_probe_reports_detected_executable_paths():
+    probe = cas_free_resolution.probe_cas_backends()
+    backends = {row["name"]: row for row in probe["backends"]}
+    assert set(backends) == {"M2", "Singular", "sage"}
+    assert probe["preferred_order"] == ["M2", "sage", "Singular"]
+    for name in ("M2", "Singular", "sage"):
+        expected = cas_free_resolution._candidate_executable(name)
+        assert backends[name]["available"] is (expected is not None)
+        assert backends[name]["executable"] == expected
+        if expected is not None:
+            assert backends[name]["version"]
+    bem = cas_free_resolution.probe_bemultipliers()
+    assert bem["is_resolution_backend"] is False
+    assert "never substitute" in bem["execution_policy"]
+
+
 def test_bemultipliers_probe_reports_local_macaulay2_loader():
     probe = cas_free_resolution.probe_bemultipliers()
     assert probe["is_resolution_backend"] is False

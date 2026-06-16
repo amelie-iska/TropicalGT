@@ -65,7 +65,7 @@
 
 ### 4. CAS Integration: Only Real Resolutions
 
-- [ ] Detect Macaulay2, SageMath, Singular, and optional `amelie-iska/BEMultipliers` availability on `iska`.
+- [x] Detect Macaulay2, SageMath, Singular, and optional `amelie-iska/BEMultipliers` availability on `iska`.
 - [ ] Implement a CAS bridge module with strict provenance and no fabricated algebra.
 - [ ] Compute minimal multigraded free resolutions over `F2[x_level,x_radius]` when CAS is available.
 - [ ] Compute Betti tables, differential matrices, multidegree shifts, Fitting ideals, minors, Buchsbaum-Eisenbud diagnostics, and exactness/minimality certificates.
@@ -230,6 +230,14 @@ The live item-by-item repair inventory is maintained in `planning/tropicalgt_i_c
 - [x] Added exact known-ideal regression coverage for singleton, two-generator, and three-generator bivariate monomial staircase resolutions, including adjacent-LCM first syzygies and one dimensional cone language.
 - [x] Marked the 2210 review/implementation checklist complete for the paper-derived Fitting/minor/BE/rank-invariant objects already wired into the certified CAS and visualization path. Remaining CAS hardening stays in section 4.
 - [x] Focused verification passed: known monomial-ideal test `1 passed`; full algebraic persistence `21 passed`; full simplicial visualization `33 passed`; artifact validator `10 passed`.
+
+
+### Current Objective Update - CAS Backend Probe Contract Pass
+
+- [x] Added regression coverage for the real CAS backend probe contract so Macaulay2, Singular, and Sage availability is compared against the adapter's deterministic executable detector, including fixed remote paths such as `/usr/bin/M2` and `/usr/bin/Singular`.
+- [x] Confirmed the BEMultipliers probe remains a diagnostic-layer report only: it is not treated as a resolution backend and its policy explicitly says never to substitute multiplier output for a free-resolution certificate.
+- [x] Marked the section-4 backend-detection item complete while keeping broader CAS bridge, multigraded-resolution, certificate-content, and unavailable-rendering hardening items open for their own tested passes.
+- [x] Focused verification passed: probe test `1 passed`; full algebraic persistence `22 passed`; full simplicial visualization `33 passed`; artifact validator `10 passed`.
 
 
 ### Current Objective Update - Rank-Invariant Table And 2-Parameter Persistence Pass
