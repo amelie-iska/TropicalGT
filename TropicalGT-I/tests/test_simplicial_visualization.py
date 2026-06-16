@@ -6,6 +6,7 @@ import torch
 
 from tropicalgt.data import FixtureGraphDataset
 from tropicalgt.model import TropicalGTConfig, TropicalGTModel
+from tropicalgt.records import GraphRecord
 from tropicalgt.scaling import _has_real_probability_complex, apply_reasoning_action
 from tropicalgt.memory import probability_simplicial_map_diagnostics
 from tropicalgt.simplicial import build_embedding_radius_simplicial_object, build_filtered_simplicial_object, build_reasoning_trajectory_complex
@@ -455,6 +456,43 @@ def test_decoding_causal_overlay_uses_graph_decoding_order_report():
     payload = _simplicial_plot_payload(updated)
     assert payload["directed_edge_count"] == overlay["edge_count"]
     assert all(edge["style"] == "dotted" for edge in payload["directed_edges"])
+
+
+def test_decoding_causal_overlay_dots_roar_edges_for_cyclic_graph():
+    from tropicalgt.scaling import _decoding_order_report
+    from tropicalgt.visualization import _attach_decoding_causal_overlay, _simplicial_plot_payload
+
+    record = GraphRecord.from_mapping(
+        {
+            "record_id": "cyclic-overlay",
+            "text": "cycle",
+            "graph_json": {
+                "nodes": [
+                    {"id": "a", "text": "alpha"},
+                    {"id": "b", "text": "beta"},
+                    {"id": "c", "text": "gamma"},
+                ],
+                "edges": [
+                    {"source": "a", "target": "b", "type": "depends_on"},
+                    {"source": "b", "target": "a", "type": "depends_on"},
+                ],
+            },
+        }
+    )
+    obj = build_filtered_simplicial_object(record)
+    report = _decoding_order_report(record)
+    assert report["decoding_order_kind"] == "random_autoregressive"
+    assert report["decoding_reverse_order_kind"] == "reverse_random_autoregressive"
+
+    updated = _attach_decoding_causal_overlay(obj, {"level": 0, "decoding_order_report": report})
+    overlay = updated["decoding_causal_overlay"]
+    roles = {edge["role"] for edge in overlay["edges"]}
+    assert {"forward_decoding_order", "reverse_decoding_order"} <= roles
+    assert all(edge["style"] == "dotted" for edge in overlay["edges"])
+
+    payload = _simplicial_plot_payload(updated)
+    assert all(edge["style"] == "dotted" for edge in payload["directed_edges"])
+    assert {edge["role"] for edge in payload["directed_edges"]} >= {"forward_decoding_order", "reverse_decoding_order"}
 
 
 def test_graph_token_direction_overlay_uses_model_trace_edges():

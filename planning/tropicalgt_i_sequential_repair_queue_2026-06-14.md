@@ -118,7 +118,7 @@
 - [x] For causal DAGs, decode using forward plus reverse causal directions.
 - [x] For cyclic/noncausal graphs, use ROAR/random-order autoregressive decoding.
 - [x] Annotate dataset graphs that should have causal structure; preserve noncausal/cyclic graphs correctly.
-- [ ] Add dotted decoding/causal edges to relevant visualizations.
+- [x] Add dotted decoding/causal edges to relevant visualizations.
 
 ### 11. Tropical/Toric Embedding Research and Paper Updates
 
@@ -425,3 +425,11 @@ The live item-by-item repair inventory is maintained in `planning/tropicalgt_i_c
 - [x] Added mixed-edge regression coverage proving a graph with causal reasoning edges plus an explicit noncausal similarity edge keeps the noncausal edge, avoids causal-DAG decoding, and uses ROAR/random-order forward and reverse contexts.
 - [x] b60 latest checked training state remained at the latest parsed step `1750` with train loss/NLL `1.151/1.128`; trainer PID `378962` and watcher PID `379304` remain alive under the step-5000 gate.
 - [x] Verification passed: compile check for `test_data_loader.py`; `pytest TropicalGT-I/tests/test_data_loader.py -q` (`13 passed`, `2 warnings`); `pytest TropicalGT-I/tests/test_meet_in_middle_decoding.py -q` (`12 passed`).
+
+### Current Objective Update - Dotted Decoding/Causal Visualization Overlay Pass
+
+- [x] Confirmed visualization payloads keep causal graph edges, forward decoding edges, and reverse decoding edges as dotted directed overlays, not as radius-filtration simplices.
+- [x] Added cyclic-graph visualization regression coverage proving ROAR forward/reverse decoding edges remain dotted in the overlay payload and browser plot payload.
+- [x] Section 10 is complete: meet-in-the-middle toggle semantics, causal forward/reverse decoding, ROAR/random-order decoding, dataset causal/noncausal preservation, and dotted visualization overlays are covered.
+- [x] b60 latest checked training state reached step `1769` with train loss/NLL `1.174/1.150`; trainer PID `378962` and watcher PID `379304` remain alive under the step-5000 gate.
+- [x] Verification passed: compile check for `test_simplicial_visualization.py`; focused decoding overlay tests `2 passed`; `pytest TropicalGT-I/tests/test_simplicial_visualization.py -q` (`36 passed`).
