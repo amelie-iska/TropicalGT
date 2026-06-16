@@ -1371,11 +1371,11 @@ def test_plotly_dark_html_promotes_static_preview_for_webgl_failures(tmp_path: P
     )
     from tropicalgt.visualization import _write_plotly_dark_html  # local import keeps public imports tidy
 
-    path = tmp_path / "webgl_fallback.html"
-    _write_plotly_dark_html(path, fig, "WebGL fallback test", _simplicial_panel_items([obj], ["panel hover"]))
+    path = tmp_path / "webgl_static_preview.html"
+    _write_plotly_dark_html(path, fig, "WebGL static preview test", _simplicial_panel_items([obj], ["panel hover"]))
     html = path.read_text(encoding="utf-8")
     assert 'class="static-preview"' in html
-    assert "Static SVG fallback preview" in html
+    assert "Static SVG same-data preview" in html
     assert "same filtered-complex payload" in html
 
 

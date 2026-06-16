@@ -10606,7 +10606,7 @@ def _write_plotly_dark_html(path: Path, fig: go.Figure, title: str, panel_items:
     )
     static_preview_html = (
         f"""<details class="static-preview">
-	        <summary>Static SVG fallback preview from the same filtered-complex payload</summary>
+	        <summary>Static SVG same-data preview from the same filtered-complex payload</summary>
 	        <div class="simplicial-object-panel" id="simplicial-svg">{initial["svg"]}</div>
 	      </details>"""
         if has_panel and not show_selected_complex_panel
@@ -10753,7 +10753,7 @@ def _write_plotly_dark_html(path: Path, fig: go.Figure, title: str, panel_items:
 	      font-size: 11px;
 	      margin-bottom: 8px;
 	    }}
-	    .webgl-fallback {{
+	    .webgl-static-preview {{
 	      margin: 16px;
 	      padding: 14px;
 	      border: 1px solid rgba(251, 191, 36, 0.35);
@@ -10761,18 +10761,18 @@ def _write_plotly_dark_html(path: Path, fig: go.Figure, title: str, panel_items:
 	      background: rgba(30, 41, 59, 0.94);
 	      color: var(--ink);
 	    }}
-	    .webgl-fallback h2 {{
+	    .webgl-static-preview h2 {{
 	      margin: 0 0 6px;
 	      font-size: 14px;
 	      line-height: 1.25;
 	    }}
-	    .webgl-fallback p {{
+	    .webgl-static-preview p {{
 	      margin: 0 0 10px;
 	      color: var(--muted);
 	      font-size: 12px;
 	      line-height: 1.45;
 	    }}
-	    .webgl-fallback .simplicial-object-panel {{ margin-top: 8px; }}
+	    .webgl-static-preview .simplicial-object-panel {{ margin-top: 8px; }}
     .hover-simplicial-card {{
       position: fixed;
       z-index: 40;
@@ -11039,24 +11039,24 @@ def _write_plotly_dark_html(path: Path, fig: go.Figure, title: str, panel_items:
 	      const text = root && root.textContent ? root.textContent : "";
 	      return text.includes("WebGL is not supported") || text.includes("webgl is not supported");
 	    }}
-	    function staticFallbackMarkup(item, reason) {{
+	    function staticPreviewMarkup(item, reason) {{
 	      const svg = item && item.svg ? item.svg : "<div class='simplicial-object-panel'>No static filtered-complex SVG preview is available for this selected object.</div>";
 	      const title = item && item.title ? item.title : "selected filtered simplicial object";
-	      return `<div class="webgl-fallback"><h2>Static filtered-complex preview</h2><p>${{reason}} This preview is generated from the same serialized simplicial object payload as the interactive 3D panel.</p><div class="summary">${{title}}</div><div class="simplicial-object-panel">${{svg}}</div></div>`;
+	      return `<div class="webgl-static-preview"><h2>Static filtered-complex preview</h2><p>${{reason}} This preview is generated from the same serialized simplicial object payload as the interactive 3D panel.</p><div class="summary">${{title}}</div><div class="simplicial-object-panel">${{svg}}</div></div>`;
 	    }}
-	    function renderPanelStaticFallback(item, reason) {{
+	    function renderPanelStaticPreview(item, reason) {{
 	      if (!panelPlot) return;
-	      panelPlot.innerHTML = staticFallbackMarkup(item, reason);
+	      panelPlot.innerHTML = staticPreviewMarkup(item, reason);
 	    }}
-	    function promoteMainStaticFallback() {{
+	    function promoteMainStaticPreview() {{
 	      const chartEl = document.getElementById("chart");
-	      if (!chartEl || !simplicialPanels.length || chartEl.querySelector(".webgl-fallback.main-fallback")) return;
+	      if (!chartEl || !simplicialPanels.length || chartEl.querySelector(".webgl-static-preview.main-static-preview")) return;
 	      if (!webglUnsupportedText(chartEl)) return;
 	      const item = simplicialPanels[activePanelIndex] || simplicialPanels[initialPanelIndex] || simplicialPanels[0];
-	      const fallback = document.createElement("div");
-	      fallback.className = "webgl-fallback main-fallback";
-	      fallback.innerHTML = `<h2>WebGL unavailable: static complex preview shown</h2><p>The browser could not create a WebGL context for the 3D Plotly view. The data were still loaded; the static preview below comes from the selected real filtered-complex payload.</p>${{staticFallbackMarkup(item, "Interactive WebGL rendering is unavailable in this browser context.")}}`;
-	      chartEl.prepend(fallback);
+	      const preview = document.createElement("div");
+	      preview.className = "webgl-static-preview main-static-preview";
+	      preview.innerHTML = `<h2>WebGL unavailable: same-data static complex preview shown</h2><p>The browser could not create a WebGL context for the 3D Plotly view. The data were still loaded; the same-data preview below comes from the selected real filtered-complex payload.</p>${{staticPreviewMarkup(item, "Interactive WebGL rendering is unavailable in this browser context.")}}`;
+	      chartEl.prepend(preview);
 	    }}
 	    function renderPanelComplex(item) {{
 	      if (!panelPlot || typeof Plotly === "undefined") return;
@@ -11091,13 +11091,13 @@ def _write_plotly_dark_html(path: Path, fig: go.Figure, title: str, panel_items:
 	        const rendered = Plotly.newPlot(selectedGraph, buildPanelTraces(item), layout, {{displaylogo: false, responsive: false}});
 	        Promise.resolve(rendered).then(() => {{
 	          window.setTimeout(() => {{
-	            if (webglUnsupportedText(selectedGraph)) renderPanelStaticFallback(item, "Interactive WebGL rendering is unavailable in this browser context.");
+	            if (webglUnsupportedText(selectedGraph)) renderPanelStaticPreview(item, "Interactive WebGL rendering is unavailable in this browser context.");
 	          }}, 120);
 	        }}).catch((err) => {{
-	          renderPanelStaticFallback(item, `Could not render the interactive 3D panel: ${{err && err.message ? err.message : err}}.`);
+	          renderPanelStaticPreview(item, `Could not render the interactive 3D panel: ${{err && err.message ? err.message : err}}.`);
 	        }});
 	      }} catch (err) {{
-	        renderPanelStaticFallback(item, `Could not render the interactive 3D panel: ${{err && err.message ? err.message : err}}.`);
+	        renderPanelStaticPreview(item, `Could not render the interactive 3D panel: ${{err && err.message ? err.message : err}}.`);
 	      }}
 	    }}
     function positionHoverCard(pointerEvent) {{
@@ -11175,8 +11175,8 @@ def _write_plotly_dark_html(path: Path, fig: go.Figure, title: str, panel_items:
     }}
 	    window.setTimeout(forceConfiguredPlotlyFrame, 150);
 	    window.setTimeout(forceConfiguredPlotlyFrame, 650);
-	    window.setTimeout(promoteMainStaticFallback, 900);
-	    window.setTimeout(promoteMainStaticFallback, 1800);
+	    window.setTimeout(promoteMainStaticPreview, 900);
+	    window.setTimeout(promoteMainStaticPreview, 1800);
 	  </script>
 </body>
 </html>

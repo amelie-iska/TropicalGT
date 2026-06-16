@@ -750,3 +750,23 @@ CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/t
 CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m py_compile TropicalGT-I/src/tropicalgt/cas_free_resolution.py TropicalGT-I/tests/test_algebraic_persistence.py
 # passed
 ```
+
+## 2026-06-16 Same-Data Static Preview Terminology Repair
+
+Sequential browser/visual no-fallback item completed after the CAS Fitting/BE paper-method contract repair:
+
+- Renamed the WebGL-unavailable rendering contingency in generated Plotly pages from fallback terminology to same-data static-preview terminology.
+- Updated the generated CSS/JS hooks from `webgl-fallback`, `main-fallback`, `staticFallbackMarkup`, `renderPanelStaticFallback`, and `promoteMainStaticFallback` to `webgl-static-preview`, `main-static-preview`, `staticPreviewMarkup`, `renderPanelStaticPreview`, and `promoteMainStaticPreview`.
+- The rendered disclosure now says `Static SVG same-data preview from the same filtered-complex payload`, making clear that the preview is drawn from the same serialized real filtered-complex payload and does not substitute proxy geometry, model states, metrics, or topology.
+- The legacy provenance audit coverage remains in place so old rendering-fallback strings are still caught and classified if they reappear, but current generated browser pages no longer expose fallback wording for this same-payload rendering path.
+
+Validation:
+
+```text
+CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m py_compile TropicalGT-I/src/tropicalgt/visualization.py TropicalGT-I/tests/test_simplicial_visualization.py
+# passed
+CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_simplicial_visualization.py::test_plotly_dark_html_promotes_static_preview_for_webgl_failures -q -p no:cacheprovider --basetemp=/tmp/tropicalgt-pytest-static-preview
+# 1 passed
+CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_simplicial_visualization.py -q -p no:cacheprovider --basetemp=/tmp/tropicalgt-pytest-static-preview-full
+# 43 passed
+```
