@@ -364,7 +364,7 @@ def test_singular_certified_result_structures_ungraded_betti_rows_without_multig
     assert be_rank["is_independent_certificate"] is False
 
 
-def test_real_cas_free_resolution_smoke_when_backend_available():
+def test_macaulay2_rejects_nonhomogeneous_stored_multigrading(monkeypatch):
     module = {
         "coefficient_ring": "F2[x_level,x_radius]",
         "chain_module_generators": [
@@ -378,11 +378,46 @@ def test_real_cas_free_resolution_smoke_when_backend_available():
         ],
     }
     schema = canonicalize_module(module)
+    script = cas_free_resolution.build_macaulay2_script(schema)
+    assert "presentation matrix is not homogeneous for stored multidegrees" in script
+    m2_executable = cas_free_resolution._candidate_executable("M2")
+    if m2_executable is None:
+        return
+
+    monkeypatch.setattr(cas_free_resolution, "_candidate_executable", lambda name: m2_executable if name == "M2" else None)
+    real = cas_free_resolution.try_compute_real_free_resolution(module, timeout_s=10, use_cache=False)
+    assert real["available"] is False
+    assert real["status"] == "certificate_failed"
+    assert real["input_sha256"] == schema["input_sha256"]
+    assert real["module_summary"]["presentation_shape"] == [2, 1]
+    assert real["cas_artifacts"] == {}
+    assert real["certificate_attached"] is False
+    assert real["backend_attempts"][0]["status"] == "ran"
+
+
+def test_real_cas_free_resolution_smoke_when_backend_available():
+    module = {
+        "coefficient_ring": "F2[x_level,x_radius]",
+        "chain_module_generators": [
+            {"simplex": ["a"], "homological_degree": 0, "multidegree": [0, 1]},
+            {"simplex": ["b"], "homological_degree": 0, "multidegree": [1, 0]},
+            {"simplex": ["a", "b"], "homological_degree": 1, "multidegree": [1, 1]},
+        ],
+        "boundary_monomials": [
+            {"source_simplex": ["a", "b"], "target_face": ["a"], "monomial_exponent": [1, 0]},
+            {"source_simplex": ["a", "b"], "target_face": ["b"], "monomial_exponent": [0, 1]},
+        ],
+    }
+    schema = canonicalize_module(module)
     singular_script = build_singular_script(schema)
     assert "matrix PM[2][1]" in singular_script
     assert "minor(PM,1)" in singular_script
     assert "Fitt0=" in singular_script
     assert "minors_1=" in singular_script
+    m2_script = cas_free_resolution.build_macaulay2_script(schema)
+    assert "F0 = R^{{0,-1},{-1,0}}" in m2_script
+    assert "F1 = R^{{-1,-1}}" in m2_script
+    assert "homogeneousPresentation = isHomogeneous M" in m2_script
     real = try_compute_real_free_resolution(module, timeout_s=10)
     _assert_real_resolution_guard(real, "F2[x_level,x_radius]")
     if real["available"]:
@@ -408,6 +443,11 @@ def test_real_cas_free_resolution_smoke_when_backend_available():
             assert summary["grading"] == "multigraded_bidegree_shifts_over_F2_polynomial_ring"
             assert summary["not_multigraded"] is False
             assert summary["safe_for_multigraded_claims"] is True
+            betti_rows = {(row["homological_degree"], tuple(row["multidegree"]), row["rank"]) for row in summary["betti_table_rows"]}
+            assert (0, (0, 1), 1) in betti_rows
+            assert (0, (1, 0), 1) in betti_rows
+            assert (1, (1, 1), 1) in betti_rows
+            assert real["cas_artifacts"]["macaulay2_multigraded"]["safe_for_multigraded_claims"] is True
             assert summary["free_modules"]
             assert real["cas_artifacts"]["differentials"]
             assert real["cas_artifacts"]["fitting_ideals"]

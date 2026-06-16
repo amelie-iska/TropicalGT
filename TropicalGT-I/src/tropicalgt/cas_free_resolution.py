@@ -395,6 +395,8 @@ def build_macaulay2_script(module_schema: dict[str, Any]) -> str:
     cols = int(pmat.get("cols", 0))
     entries = pmat.get("entries", [])
     degree_spec = "{" + ",".join("{" + ",".join("1" if i == j else "0" for i in range(len(variables))) + "}" for j in range(len(variables))) + "}"
+    row_degrees = _presentation_generator_degrees(module_schema, pmat.get("row_generators", []))
+    col_degrees = _presentation_generator_degrees(module_schema, pmat.get("col_generators", []))
     if rows <= 0:
         return "\n".join(
             [
@@ -411,11 +413,12 @@ def build_macaulay2_script(module_schema: dict[str, Any]) -> str:
             ]
         )
     if cols <= 0:
-        zero_degrees = "{" + ",".join("{" + ",".join("0" for _ in variables) + "}" for _ in range(rows)) + "}"
+        row_shift_spec = _macaulay2_free_module_shift_spec(row_degrees)
         return "\n".join(
             [
                 "-- TropicalGT Macaulay2 multigraded resolution probe",
                 f"R = ZZ/2[{','.join(variables)}, Degrees=>{degree_spec}]",
+                f"F0 = R^{row_shift_spec}",
                 "print \"TROPICALGT_RESOLUTION_BEGIN\"",
                 "print \"backend=Macaulay2\"",
                 "print \"exactness_certified=true\"",
@@ -423,7 +426,7 @@ def build_macaulay2_script(module_schema: dict[str, Any]) -> str:
                 "print \"certificate_type=Macaulay2 trivial free cokernel with no relations\"",
                 f"print \"presentation_shape={rows}x{cols}\"",
                 "print \"macaulay2_free_modules_begin\"",
-                f"print \"F0_degrees={zero_degrees}\"",
+                "print concatenate(\"F0_degrees=\", toString degrees F0)",
                 "print \"macaulay2_free_modules_end\"",
                 "print \"fitting_ideals_begin\"",
                 "print \"Fitt0=ideal 0_R\"",
@@ -446,6 +449,8 @@ def build_macaulay2_script(module_schema: dict[str, Any]) -> str:
     for entry in entries:
         matrix_rows[int(entry["row"])][int(entry["col"])] = _m2_monomial(entry["exponent"], variables)
     matrix_literal = "{" + ",".join("{" + ",".join(row) + "}" for row in matrix_rows) + "}"
+    row_shift_spec = _macaulay2_free_module_shift_spec(row_degrees)
+    col_shift_spec = _macaulay2_free_module_shift_spec(col_degrees)
     max_minors = min(rows, cols)
     differential_lines: list[str] = []
     max_resolution_len = min(cols + len(variables) + 3, 24)
@@ -471,7 +476,22 @@ def build_macaulay2_script(module_schema: dict[str, Any]) -> str:
         [
             "-- TropicalGT certified multigraded free resolution probe generated from model audit data",
             f"R = ZZ/2[{','.join(variables)}, Degrees=>{degree_spec}]",
-            f"M = matrix {matrix_literal}",
+            f"F0 = R^{row_shift_spec}",
+            f"F1 = R^{col_shift_spec}",
+            f"M = map(F0, F1, matrix {matrix_literal})",
+            "homogeneousPresentation = isHomogeneous M",
+            "if not homogeneousPresentation then (",
+            "  print \"TROPICALGT_RESOLUTION_BEGIN\";",
+            "  print \"backend=Macaulay2\";",
+            "  print \"exactness_certified=false\";",
+            "  print \"minimality_certified=false\";",
+            "  print \"certificate_error=presentation matrix is not homogeneous for stored multidegrees\";",
+            f"  print \"presentation_shape={rows}x{cols}\";",
+            "  print concatenate(\"row_generator_degrees=\", toString degrees F0);",
+            "  print concatenate(\"col_generator_degrees=\", toString degrees F1);",
+            "  print \"TROPICALGT_RESOLUTION_END\";",
+            "  exit 0;",
+            ")",
             "N = coker M",
             "C = res N",
             "higherHomologyGeneratorCount = 0",
@@ -485,6 +505,7 @@ def build_macaulay2_script(module_schema: dict[str, Any]) -> str:
             "print \"backend=Macaulay2\"",
             "print concatenate(\"exactness_certified=\", toString okExact)",
             "print \"minimality_certified=true\"",
+            "print concatenate(\"homogeneous_presentation=\", toString homogeneousPresentation)",
             "print \"certificate_type=Macaulay2 res coker presentation over multigraded F2 polynomial ring\"",
             f"print \"presentation_shape={rows}x{cols}\"",
             "print \"betti_table_begin\"",
@@ -1919,6 +1940,28 @@ def _m2_monomial(exponent: list[int], variables: list[str]) -> str:
             continue
         factors.append(variable if power == 1 else f"{variable}^{power}")
     return "*".join(factors) if factors else "1_R"
+
+
+def _presentation_generator_degrees(module_schema: dict[str, Any], generator_ids: list[Any]) -> list[list[int]]:
+    variables = list(module_schema.get("variables", []))
+    degree_by_id = {
+        str(generator.get("generator_id")): [int(v) for v in generator.get("multidegree", [])]
+        for generator in module_schema.get("generators", [])
+    }
+    degrees: list[list[int]] = []
+    for generator_id in generator_ids:
+        key = str(generator_id)
+        if key not in degree_by_id:
+            raise ValueError(f"presentation generator {key!r} is missing a multidegree")
+        degree = list(degree_by_id[key])[: len(variables)]
+        if len(degree) < len(variables):
+            degree.extend([0] * (len(variables) - len(degree)))
+        degrees.append(degree)
+    return degrees
+
+
+def _macaulay2_free_module_shift_spec(degrees: list[list[int]]) -> str:
+    return "{" + ",".join("{" + ",".join(str(-int(value)) for value in degree) + "}" for degree in degrees) + "}"
 
 
 def _singular_monomial(exponent: list[int], variables: list[str]) -> str:

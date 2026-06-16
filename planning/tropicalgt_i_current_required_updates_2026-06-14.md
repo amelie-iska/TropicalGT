@@ -367,10 +367,19 @@ git diff --check
 - Verification completed: `python -m py_compile TropicalGT-I/src/tropicalgt/cas_free_resolution.py TropicalGT-I/tests/test_algebraic_persistence.py`, `pytest TropicalGT-I/tests/test_algebraic_persistence.py::test_failed_cas_certificate_preserves_module_provenance_without_artifacts -q` (`1 passed`), `pytest TropicalGT-I/tests/test_algebraic_persistence.py -q` (`23 passed`), `pytest TropicalGT-I/tests/test_simplicial_visualization.py -q` (`33 passed`), `pytest TropicalGT-I/tests/test_interactive_artifact_validator.py -q` (`10 passed`), and `git diff --check`.
 
 
+## 2026-06-16 Explicit Macaulay2 Multigraded Resolution Addendum
+
+- The Macaulay2 bridge now builds the presentation map as `M = map(F0, F1, matrix ...)`, where `F0` and `F1` are shifted free modules derived from the canonical row and column generator multidegrees. This ties `res coker M` to the actual stored `F2[x_level,x_radius]` bifiltration grades instead of allowing Macaulay2 to infer shifts from an ungraded matrix shell.
+- The generated script checks `homogeneousPresentation = isHomogeneous M` before resolving. Nonhomogeneous stored presentations emit an uncertified tagged response with no multigraded-resolution claim.
+- The live homogeneous smoke fixture now asserts the exact shifted module contract (`F0 = R^{{0,-1},{-1,0}}`, `F1 = R^{{-1,-1}}`) and the certified multigraded Betti rows `(0,(0,1),1)`, `(0,(1,0),1)`, and `(1,(1,1),1)` when Macaulay2 is available. A paired nonhomogeneous fixture asserts `certificate_failed` with empty `cas_artifacts`.
+- b60 latest checked training state reached step `853` with train loss/NLL `1.306/1.285`; trainer PID `378962` and watcher PID `379304` remain alive under the step-5000 gate, with GPU allocation `22381/24564` MiB during the pulse.
+- Verification completed: `python -m py_compile TropicalGT-I/src/tropicalgt/cas_free_resolution.py TropicalGT-I/tests/test_algebraic_persistence.py`, `pytest TropicalGT-I/tests/test_algebraic_persistence.py::test_real_cas_free_resolution_smoke_when_backend_available -q` (`1 passed`), `pytest TropicalGT-I/tests/test_algebraic_persistence.py::test_macaulay2_rejects_nonhomogeneous_stored_multigrading -q` (`1 passed`), `pytest TropicalGT-I/tests/test_algebraic_persistence.py -q` (`24 passed`), `pytest TropicalGT-I/tests/test_simplicial_visualization.py -q` (`33 passed`), `pytest TropicalGT-I/tests/test_interactive_artifact_validator.py -q` (`10 passed`), and `git diff --check`.
+
+
 ## Real Implementations Only Policy
 
 No TropicalGT-I metric, loss, visualization, analogical map, persistence module, free resolution, derived comparison, tropical-cycle diagnostic, or CAS artifact should be presented as a mathematical object unless it is computed from the actual model outputs, graph states, embeddings, probabilities, simplex trees, bifiltrations, or certified CAS/backend output that define that object. Temporary placeholders, synthetic fallback objects, mock charts, fabricated simplices, and convenience stand-ins are not acceptable. When a requested object cannot yet be computed, the artifact must render an explicit unavailable/uncertified state and the training metric must either be disabled or logged under an audit-only unavailable flag. Finite chain-presentation diagnostics may be shown only as chain diagnostics, never as free resolutions. Total-graded or ungraded CAS output may be shown as real CAS output only under its actual grading; it must not be advertised as a multigraded `F2[x_level,x_radius]` free resolution unless the backend certifies that multigraded structure.
 
 Use "one dimensional cone" or "one dimensional cones" as the preferred fan-theoretic language whenever the intended object is a cone of a fan or a cone-indexed filtration datum. Use singular or plural according to ordinary grammar.
 
-_Last updated: 2026-06-16T07:50:00Z_
+_Last updated: 2026-06-16T07:55:00Z_

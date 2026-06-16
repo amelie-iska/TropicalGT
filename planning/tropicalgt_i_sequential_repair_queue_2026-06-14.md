@@ -67,7 +67,7 @@
 
 - [x] Detect Macaulay2, SageMath, Singular, and optional `amelie-iska/BEMultipliers` availability on `iska`.
 - [x] Implement a CAS bridge module with strict provenance and no fabricated algebra.
-- [ ] Compute minimal multigraded free resolutions over `F2[x_level,x_radius]` when CAS is available.
+- [x] Compute minimal multigraded free resolutions over `F2[x_level,x_radius]` when CAS is available.
 - [ ] Compute Betti tables, differential matrices, multidegree shifts, Fitting ideals, minors, Buchsbaum-Eisenbud diagnostics, and exactness/minimality certificates.
 - [ ] Render unavailable only when the real CAS computation cannot run, and make the missing dependency/action explicit.
 - [x] Add tests with known monomial ideals: singleton generator, two-generator staircase, three-generator staircase, and a nontrivial adjacent-LCM syzygy case.
@@ -246,6 +246,15 @@ The live item-by-item repair inventory is maintained in `planning/tropicalgt_i_c
 - [x] Added a regression proving a backend run with missing/false exactness certification returns `certificate_failed`, attaches no CAS artifacts, leaves `certificate_attached=false`, and keeps the original module provenance intact.
 - [x] This completes the strict bridge/provenance checklist item: certified paths may expose CAS artifacts, while failed or unavailable paths expose only reasoned unavailable state, backend attempts, probes, templates, and module provenance.
 - [x] Focused verification passed: failed-certificate provenance test `1 passed`; full algebraic persistence `23 passed`; full simplicial visualization `33 passed`; artifact validator `10 passed`.
+
+
+### Current Objective Update - Explicit Macaulay2 Multigraded Resolution Pass
+
+- [x] Updated the Macaulay2 bridge to construct explicit shifted free modules `F0` and `F1` from the canonical presentation's stored row/column generator multidegrees before computing `res coker M`.
+- [x] Added a Macaulay2 homogeneity gate: if the presentation matrix is not homogeneous for the stored bifiltration degrees, the backend emits an uncertified response instead of producing a multigraded free-resolution claim.
+- [x] Updated the live CAS smoke fixture to a homogeneous `F2[x_level,x_radius]` persistence presentation and asserted the certified multigraded Betti rows carry the expected bidegrees `(0,1)`, `(1,0)`, and `(1,1)`.
+- [x] Added a no-claim regression proving a nonhomogeneous stored grading returns `certificate_failed` with no CAS artifacts.
+- [x] Focused verification passed: real CAS smoke `1 passed`; nonhomogeneous rejection `1 passed`; full algebraic persistence `24 passed`; full simplicial visualization `33 passed`; artifact validator `10 passed`.
 
 
 ### Current Objective Update - Rank-Invariant Table And 2-Parameter Persistence Pass
