@@ -227,3 +227,20 @@
 - Analogical maps must compare probability-vector complexes with Jensen-Shannon assignment and must explain any non-preserved edges/faces instead of reporting high derived similarity with zero free-resolution support.
 - Tropical support heatmaps need grouped labels, top-support summaries, margin profile readability, and collapse diagnostics without jammed axes.
 
+## 2026-06-16 Main-Agent Status Addendum: b62 Always-On Restart And Cleanup
+
+### Training continuity
+- b61 `tropicalgt_i_pg_bpb_step0_full24b_b61_20260616T155103Z_fresh_bpb112_alwayson_5k_gate` crashed at periodic step 500 while writing `trajectory_growth.json` because the root filesystem was full.
+- Safe cleanup completed before restart: removed `~/.cache/tropicalgt/cas_free_resolution`, `/tmp/torchinductor_iska`, pytest scratch, and toric/tropical temporary smoke directories. Datasets, checkpoints, W&B folders, generated training outputs, and secrets were preserved.
+- Fresh step-0 b62 run is active: `tropicalgt_i_pg_bpb_step0_full24b_b62_20260616T162800Z_fresh_bpb112_alwayson_5k_gate`.
+- b62 trainer PID: `960097`; 5K gate monitor PID: `960152`; W&B run id: `pi8weh6v`.
+- b62 config: `TropicalGT-I/outputs/launch_configs/tropicalgt_i_pg_bpb_step0_full24b_b62_20260616T162800Z_fresh_bpb112_alwayson_5k_gate.json`.
+- b62 train log: `TropicalGT-I/outputs/tropicalgt_i_pg_bpb_step0_full24b_b62_20260616T162800Z_fresh_bpb112_alwayson_5k_gate/logs/train_nohup_20260616T162800Z.log`.
+- b62 stop record: `TropicalGT-I/outputs/training_stop_records/b62_fresh_step0_alwayson_step5000_gate.json`.
+- Initial b62 verification: W&B initialized, GPU memory rose to about 22.4GB, and first training steps logged normally.
+
+### Sequential implementation progress
+- Completed the current CAS-cache hardening item for toric/tropical sidecars: caches now use XDG/home cache paths or explicit env overrides, validated wrapper payloads, versioned keys including backend probes and input hashes, atomic writes, explicit `written` flags, and deterministic unavailable-state cache hits.
+- Focused verification passed with `CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/scripts:TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_algebraic_persistence.py -q` returning `30 passed`.
+- Next linear item remains the visual/math repair queue: continue no-proxy simplex-tree/radius/analogical/tropical-support repairs while b62 trains to the 5K gate.
+

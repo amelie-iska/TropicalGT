@@ -849,6 +849,34 @@ def test_macaulay2_tropical_fan_diagnostic_live_or_unavailable():
         assert "No support-token" in report["certificate_contract"]["no_proxy_policy"]
 
 
+def test_tropical_fan_diagnostic_caches_deterministic_unavailable_probe(tmp_path, monkeypatch):
+    monkeypatch.setenv("TROPICALGT_CAS_TROPICAL_CACHE_DIR", str(tmp_path / "cas-tropical-cache"))
+    monkeypatch.setattr(cas_tropical, "_candidate_executable", lambda name: None)
+    ideal = {"variables": ["x", "y"], "generators": ["x+y+1"], "source": "cache_test"}
+
+    first = cas_tropical.try_compute_tropical_fan_diagnostics(ideal, timeout_s=1)
+    second = cas_tropical.try_compute_tropical_fan_diagnostics(ideal, timeout_s=1)
+
+    for report in (first, second):
+        assert report["schema_version"] == "tropicalgt.cas_tropical_fan.v1"
+        assert report["available"] is False
+        assert report["status"] == "backend_not_installed"
+        assert report["certificate_attached"] is False
+        assert report["safe_to_render_as_tropical_fan"] is False
+        assert report["cache"]["enabled"] is True
+        assert report["cache"]["cache_schema_version"] == cas_tropical.TROPICAL_CACHE_SCHEMA_VERSION
+        assert report["cache"]["adapter_cache_version"] == cas_tropical.TROPICAL_CACHE_VERSION
+        assert str(tmp_path / "cas-tropical-cache") in report["cache"]["path"]
+
+    assert first["cache"]["hit"] is False
+    assert first["cache"]["written"] is True
+    assert second["cache"]["hit"] is True
+    assert second["cache"]["written"] is False
+    assert second["cache"]["key"] == first["cache"]["key"]
+    assert first["cas_artifacts"] == {}
+    assert second["cas_artifacts"] == {}
+
+
 def test_macaulay2_tropical_fan_diagnostic_invalid_input_unavailable():
     report = cas_tropical.try_compute_tropical_fan_diagnostics({"variables": ["x"], "generators": []}, use_cache=False)
     assert report["available"] is False
@@ -934,6 +962,37 @@ def test_macaulay2_toric_embedding_certificate_live_or_unavailable():
         assert report["safe_to_render_as_tropical_variety_embedding"] is False
         assert report["safe_to_render_as_global_toric_variety_embedding"] is False
         assert "No chart-bundle logits" in report["certificate_contract"]["no_proxy_policy"]
+
+
+def test_toric_embedding_certificate_caches_deterministic_unavailable_probe(tmp_path, monkeypatch):
+    monkeypatch.setenv("TROPICALGT_CAS_TORIC_CACHE_DIR", str(tmp_path / "cas-toric-cache"))
+    monkeypatch.setattr(cas_toric, "_candidate_executable", lambda name: None)
+    exponent_matrix = {"exponent_matrix": [[1, 1, 1], [0, 1, 2]], "source": "cache_test"}
+
+    first = cas_toric.try_compute_toric_embedding_certificate(exponent_matrix, timeout_s=1)
+    second = cas_toric.try_compute_toric_embedding_certificate(exponent_matrix, timeout_s=1)
+
+    for report in (first, second):
+        assert report["schema_version"] == "tropicalgt.cas_toric_embedding.v1"
+        assert report["available"] is False
+        assert report["status"] == "backend_not_installed"
+        assert report["certificate_attached"] is False
+        assert report["safe_to_render_as_toric_embedding"] is False
+        assert report["safe_to_render_as_tropical_variety_embedding"] is False
+        assert report["safe_to_render_as_global_toric_variety_embedding"] is False
+        assert report["safe_to_use_as_normal_fan_certificate"] is False
+        assert report["cache"]["enabled"] is True
+        assert report["cache"]["cache_schema_version"] == cas_toric.TORIC_EMBEDDING_CACHE_SCHEMA_VERSION
+        assert report["cache"]["adapter_cache_version"] == cas_toric.TORIC_EMBEDDING_CACHE_VERSION
+        assert str(tmp_path / "cas-toric-cache") in report["cache"]["path"]
+
+    assert first["cache"]["hit"] is False
+    assert first["cache"]["written"] is True
+    assert second["cache"]["hit"] is True
+    assert second["cache"]["written"] is False
+    assert second["cache"]["key"] == first["cache"]["key"]
+    assert first["cas_artifacts"] == {}
+    assert second["cas_artifacts"] == {}
 
 
 def test_macaulay2_toric_embedding_certificate_invalid_input_unavailable():

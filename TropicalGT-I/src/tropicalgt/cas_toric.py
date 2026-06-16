@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 from typing import Any
 
 from .cas_free_resolution import (
     _backend_version,
     _candidate_executable,
+    _falsey_env,
     _parse_bool,
     _run_tagged_cas_script,
     canonical_json,
@@ -15,7 +17,7 @@ from .cas_free_resolution import (
 
 TORIC_EMBEDDING_SCHEMA_VERSION = "tropicalgt.cas_toric_embedding.v1"
 TORIC_EMBEDDING_CACHE_SCHEMA_VERSION = "tropicalgt.cas_toric_embedding.cache.v1"
-TORIC_EMBEDDING_CACHE_VERSION = "2026-06-16.macaulay2-toric-ideal-v1"
+TORIC_EMBEDDING_CACHE_VERSION = "2026-06-16.macaulay2-toric-ideal-v2"
 
 
 def toric_embedding_certificate_contract() -> dict[str, Any]:
@@ -309,15 +311,28 @@ def _parse_int(value: Any) -> int | None:
 
 
 def _toric_cache_context(schema: dict[str, Any], *, use_cache: bool | None) -> dict[str, Any]:
-    enabled = bool(use_cache) if use_cache is not None else True
-    cache_root = Path(__file__).resolve().parents[3] / ".cache" / "tropicalgt" / "cas_toric"
+    cache_env = os.environ.get("TROPICALGT_CAS_TORIC_CACHE")
+    enabled = use_cache is not False and not _falsey_env(cache_env)
+    cache_root = _toric_cache_dir()
+    backend_probe = probe_toric_backends()
     key_payload = {
         "cache_schema_version": TORIC_EMBEDDING_CACHE_SCHEMA_VERSION,
         "adapter_cache_version": TORIC_EMBEDDING_CACHE_VERSION,
+        "exponent_matrix_schema_version": schema.get("schema_version"),
+        "exponent_matrix_input_sha256": schema.get("input_sha256"),
         "exponent_matrix": schema,
+        "backend_probe": backend_probe,
     }
     key = sha256_json(key_payload)
-    return {"enabled": enabled, "root": cache_root, "key": key, "path": cache_root / f"{key}.json"}
+    return {"enabled": enabled, "root": cache_root, "key": key, "path": cache_root / f"{key}.json", "backend_probe": backend_probe, "exponent_matrix_input_sha256": schema.get("input_sha256")}
+
+
+def _toric_cache_dir() -> Path:
+    override = os.environ.get("TROPICALGT_CAS_TORIC_CACHE_DIR")
+    if override:
+        return Path(override).expanduser()
+    root = Path(os.environ.get("XDG_CACHE_HOME", Path.home() / ".cache")).expanduser()
+    return root / "tropicalgt" / "cas_toric"
 
 
 def _load_cached_toric(context: dict[str, Any]) -> dict[str, Any] | None:
@@ -327,26 +342,62 @@ def _load_cached_toric(context: dict[str, Any]) -> dict[str, Any] | None:
     if not path.exists():
         return None
     try:
-        data = json.loads(path.read_text())
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        if payload.get("cache_schema_version") != TORIC_EMBEDDING_CACHE_SCHEMA_VERSION:
+            return None
+        if payload.get("adapter_cache_version") != TORIC_EMBEDDING_CACHE_VERSION:
+            return None
+        if payload.get("key") != context.get("key"):
+            return None
+        result = payload.get("result")
+        if not isinstance(result, dict):
+            return None
     except Exception:
         return None
-    if data.get("cache", {}).get("adapter_cache_version") != TORIC_EMBEDDING_CACHE_VERSION:
-        return None
-    data["cache"]["hit"] = True
-    return data
+    result = dict(result)
+    result["cache"] = {
+        "enabled": True,
+        "hit": True,
+        "written": False,
+        "cache_schema_version": TORIC_EMBEDDING_CACHE_SCHEMA_VERSION,
+        "adapter_cache_version": TORIC_EMBEDDING_CACHE_VERSION,
+        "key": context.get("key"),
+        "path": str(path),
+    }
+    return result
 
 
 def _cache_and_annotate_toric(report: dict[str, Any], context: dict[str, Any]) -> dict[str, Any]:
     report = json.loads(canonical_json(report))
+    enabled = bool(context.get("enabled"))
+    path = Path(context["path"])
+    written = False
+    write_error = None
+    if enabled:
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            cache_payload = {
+                "cache_schema_version": TORIC_EMBEDDING_CACHE_SCHEMA_VERSION,
+                "adapter_cache_version": TORIC_EMBEDDING_CACHE_VERSION,
+                "key": context.get("key"),
+                "exponent_matrix_input_sha256": context.get("exponent_matrix_input_sha256"),
+                "backend_probe": context.get("backend_probe"),
+                "result": {key: value for key, value in report.items() if key != "cache"},
+            }
+            tmp_path = path.with_suffix(path.suffix + ".tmp")
+            tmp_path.write_text(json.dumps(cache_payload, sort_keys=True, indent=2), encoding="utf-8")
+            tmp_path.replace(path)
+            written = True
+        except Exception as exc:
+            write_error = f"{type(exc).__name__}: {exc}"
     report["cache"] = {
-        "enabled": bool(context.get("enabled")),
+        "enabled": enabled,
         "hit": False,
+        "written": written,
         "cache_schema_version": TORIC_EMBEDDING_CACHE_SCHEMA_VERSION,
         "adapter_cache_version": TORIC_EMBEDDING_CACHE_VERSION,
         "key": context.get("key"),
+        "path": str(path),
+        **({"write_error": write_error} if write_error else {}),
     }
-    if context.get("enabled"):
-        path = Path(context["path"])
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(json.dumps(report, indent=2, sort_keys=True))
     return report

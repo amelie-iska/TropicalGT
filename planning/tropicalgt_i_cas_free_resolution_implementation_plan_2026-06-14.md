@@ -692,3 +692,27 @@ PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pyt
 ```
 
 Next linear item: continue the simplex-tree/NLL/tropical-support repair queue while keeping active BPB training alive.
+
+## 2026-06-16 Toric And Tropical CAS Cache Hardening Pass
+
+Follow-up CAS infrastructure item completed after the certified-evidence retrieval scoring pass:
+
+- Hardened `cas_tropical.py` and `cas_toric.py` cache handling to mirror the real free-resolution adapter contract: cache keys now include schema version, adapter cache version, canonical input hash, canonical input payload, and backend probe state.
+- Moved default cache roots out of the repository into XDG/home cache locations: `~/.cache/tropicalgt/cas_tropical` and `~/.cache/tropicalgt/cas_toric`, with `TROPICALGT_CAS_TROPICAL_CACHE_DIR` and `TROPICALGT_CAS_TORIC_CACHE_DIR` overrides for tests or controlled runs.
+- Added `TROPICALGT_CAS_TROPICAL_CACHE` and `TROPICALGT_CAS_TORIC_CACHE` falsey env guards for explicit cache disablement while preserving per-call `use_cache=False` behavior.
+- Cache files are now wrapper payloads with `cache_schema_version`, `adapter_cache_version`, `key`, input hash, backend probe, and a `result` object. Loads reject stale schema/version/key mismatches or malformed payloads.
+- Writes are atomic via a temporary file followed by replace, and reports record `cache.enabled`, `cache.hit`, `cache.written`, schema/version/key/path, and any write error.
+- Added deterministic unavailable-probe regression tests for both tropical fan diagnostics and finite toric embedding certificates. These assert first-call writes, second-call hits, stable keys, explicit unavailable status, empty `cas_artifacts`, and no unsafe render flags.
+
+Validation:
+
+```text
+/home/iska/miniconda3/envs/tokengt/bin/python -m py_compile TropicalGT-I/src/tropicalgt/cas_tropical.py TropicalGT-I/src/tropicalgt/cas_toric.py TropicalGT-I/tests/test_algebraic_persistence.py
+# passed
+CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/scripts:TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_algebraic_persistence.py -q
+# 30 passed
+```
+
+Operational note: b61 failed at step 500 due to full disk while writing a periodic visualization artifact. The safe cache cleanup removed the old 33GB `~/.cache/tropicalgt/cas_free_resolution` tree and temp scratch directories, then b62 was restarted from step 0 under the always-on 5K gate.
+
+Next linear CAS item: continue expanding certified backend evidence and UI surfaces only from real CAS output; do not reintroduce repository-local CAS caches or substitute unavailable toric/tropical certificates with chain or support-token diagnostics.
