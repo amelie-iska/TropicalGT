@@ -927,4 +927,25 @@ _Last updated: 2026-06-16T15:31:09Z_
 - A dedicated subagent, Herschel (`019ed124-c3b0-7b00-81a9-1a39c76e5583`), owns only the 5K training-iteration loop. At each 5K boundary it must inspect all metrics, advanced readouts, algebraic/topological/geometric sidecars, newly implemented toric/tropical/vector-bundle/sheaf/derived/PH/memory diagnostics, and then restart from step 0 with evidence-backed changes.
 - Cleanup completed for old `/tmp/tropicalgt*` scratch files, repo `__pycache__` directories, and `.pytest_cache`; provenance/state directories were preserved.
 - Source-side hardening added a `tropicalgt.checkpoint_evidence.v1` block to active training contracts and markdown. Future reviewers now see checkpoint availability, integrity, step/metric mismatch warnings, and whether a checkpoint-backed restart is safe. The 5K monitor now treats zero-byte required files as unavailable, so empty checkpoints cannot satisfy required-path gates.
-- Remaining immediate updates: keep b61 alive to 5K, propagate checkpoint-evidence summaries into generated restart bundles, continue source-side preflight hardening, and then proceed through CAS, analogical-memory, simplex-tree, bifiltration, NLL, tropical-support, GraphCG, toric/vector-bundle, paper, docs, and browser-QA items sequentially.
+- Remaining immediate updates: keep b61 alive to 5K, continue source-side preflight hardening, and then proceed through CAS, analogical-memory, simplex-tree, bifiltration, NLL, tropical-support, GraphCG, toric/vector-bundle, paper, docs, and browser-QA items sequentially.
+
+## 2026-06-16 Sequential Training/Readiness Update: Review Bundle Checkpoint Evidence Propagation
+
+Status: complete for post-5K restart bundle checkpoint-evidence propagation; active b61 training remains running under the always-on rule.
+
+- `prepare_5k_review_bundle.py` now passes the resolved checkpoint path into the active training contract and copies the resulting `tropicalgt.checkpoint_evidence.v1` block into the generated review bundle.
+- `restart_evidence_gate` now records `checkpoint_evidence_safe` and `checkpoint_evidence_warnings`; missed BPB targets are blocked when checkpoint evidence is unavailable, stale, empty, mismatched, or otherwise unsafe for checkpoint-backed restart.
+- Bundle markdown now includes a dedicated `Checkpoint Evidence` section so the 5K training subagent can review checkpoint proof beside execution readiness, advanced BPB contract gates, and command results.
+- Regression tests now cover missing checkpoint, empty checkpoint, and valid loadable checkpoint evidence in the bundle/gate path.
+- No datasets, checkpoints, outputs, caches, W&B folders, generated review bundles, or secrets were staged.
+
+Verification:
+
+```bash
+PYTHONPATH=TropicalGT-I/scripts:TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_prepare_5k_review_bundle.py -q
+# 9 passed in 2.44s
+PYTHONPATH=TropicalGT-I/scripts:TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_prepare_5k_review_bundle.py TropicalGT-I/tests/test_parameter_golf_review_loop.py TropicalGT-I/tests/test_training_step_gate_monitor.py TropicalGT-I/tests/test_readiness_audit.py -q
+# 45 passed in 1.73s
+```
+
+_Last updated: 2026-06-16T16:19:00Z_

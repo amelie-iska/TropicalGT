@@ -154,11 +154,13 @@ def _restart_evidence_gate(
     *,
     decision: dict[str, Any],
     checkpoint: dict[str, Any],
+    checkpoint_evidence: dict[str, Any] | None,
     execution_readiness: dict[str, Any],
     advanced_bpb_contract: dict[str, Any],
     commands: dict[str, Any],
     command_results: list[dict[str, Any]],
 ) -> dict[str, Any]:
+    checkpoint_evidence = checkpoint_evidence or {}
     blockers: list[str] = []
     bpb = decision.get("bpb")
     target_missed = bool(decision.get("triggered", False))
@@ -173,6 +175,13 @@ def _restart_evidence_gate(
             blockers.append(f"checkpoint_unavailable:{reason}")
     if target_missed and not bool(execution_readiness.get("ready", False)):
         blockers.extend(f"execution_readiness:{issue}" for issue in execution_readiness.get("issues", []))
+    checkpoint_evidence_warnings = [str(warning) for warning in checkpoint_evidence.get("warnings", []) if str(warning)]
+    checkpoint_evidence_safe = bool(checkpoint_evidence.get("safe_for_checkpoint_backed_restart", False))
+    if target_missed and not checkpoint_evidence_safe:
+        if checkpoint_evidence_warnings:
+            blockers.extend(f"checkpoint_evidence:{warning}" for warning in checkpoint_evidence_warnings)
+        else:
+            blockers.append("checkpoint_evidence:not_safe_for_checkpoint_backed_restart")
     failed_gates = [str(gate) for gate in advanced_bpb_contract.get("failed_gates", []) if str(gate)]
     if target_missed and failed_gates:
         blockers.append("advanced_bpb_contract_failed:" + ",".join(failed_gates))
@@ -213,6 +222,8 @@ def _restart_evidence_gate(
         "blocked": bool(blockers),
         "blockers": blockers,
         "checkpoint_available": bool(checkpoint.get("available", False)),
+        "checkpoint_evidence_safe": bool(checkpoint_evidence.get("safe_for_checkpoint_backed_restart", False)),
+        "checkpoint_evidence_warnings": checkpoint_evidence_warnings,
         "execution_evidence_ready": bool(execution_readiness.get("ready", False)),
         "advanced_bpb_contract_safe": bool(advanced_bpb_contract.get("safe_to_use_for_step0_bpb_restart", False)),
         "policy": (
@@ -305,6 +316,11 @@ def _bundle_markdown(bundle: dict[str, Any]) -> str:
             json.dumps(inventory, indent=2),
             "```",
             "",
+            "## Checkpoint Evidence",
+            "```json",
+            json.dumps(bundle.get("checkpoint_evidence", {}), indent=2),
+            "```",
+            "",
             "## Execution Readiness",
             "```json",
             json.dumps(bundle.get("execution_readiness", {}), indent=2),
@@ -354,8 +370,10 @@ def prepare_review_bundle(args: argparse.Namespace) -> dict[str, Any]:
         checkpoint,
         boundary_step,
         report_path=report_path,
+        checkpoint_path=checkpoint_path,
         target_bpb=args.target_bpb,
     )
+    checkpoint_evidence = contract.get("checkpoint_evidence", {})
     advanced_bpb_section, advanced_bpb_gates = advanced_bpb_contract_report(cfg)
     advanced_bpb_failed = [gate for gate in advanced_bpb_gates if gate.get("status") == "fail"]
     advanced_bpb_contract = {
@@ -414,6 +432,7 @@ def prepare_review_bundle(args: argparse.Namespace) -> dict[str, Any]:
     restart_evidence_gate = _restart_evidence_gate(
         decision=decision,
         checkpoint=checkpoint,
+        checkpoint_evidence=checkpoint_evidence,
         execution_readiness=execution_readiness,
         advanced_bpb_contract=advanced_bpb_contract,
         commands=commands,
@@ -432,6 +451,7 @@ def prepare_review_bundle(args: argparse.Namespace) -> dict[str, Any]:
         "stop_record_payload": _read_json(stop_record_path),
         "decision": decision,
         "advanced_bpb_contract": advanced_bpb_contract,
+        "checkpoint_evidence": checkpoint_evidence,
         "restart_evidence_gate": restart_evidence_gate,
         "restart_decision_schema": review_loop._restart_decision_schema(args.target_bpb),
         "review_requirements": [

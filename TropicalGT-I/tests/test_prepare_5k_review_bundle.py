@@ -77,10 +77,17 @@ def test_prepare_review_bundle_writes_prompt_contract_and_commands(tmp_path: Pat
     assert bundle["commands"]["interactive_audit_backfills"] == []
     assert bundle["advanced_bpb_contract"]["section"]["required"] is False
     assert bundle["advanced_bpb_contract"]["safe_to_use_for_step0_bpb_restart"] is True
+    checkpoint_evidence = bundle["checkpoint_evidence"]
+    assert checkpoint_evidence["schema_version"] == "tropicalgt.checkpoint_evidence.v1"
+    assert checkpoint_evidence["checkpoint_available"] is False
+    assert checkpoint_evidence["safe_for_checkpoint_backed_restart"] is False
+    assert any(warning.startswith("checkpoint_summary_unavailable:") for warning in checkpoint_evidence["warnings"])
     gate = bundle["restart_evidence_gate"]
     assert gate["restart_action"] == "blocked_missing_required_evidence_no_restart"
     assert gate["step0_restart_allowed"] is False
+    assert gate["checkpoint_evidence_safe"] is False
     assert any(blocker.startswith("checkpoint_unavailable:checkpoint_unavailable") for blocker in gate["blockers"])
+    assert any(blocker.startswith("checkpoint_evidence:checkpoint_summary_unavailable:") for blocker in gate["blockers"])
     assert any(blocker.startswith("execution_readiness:missing_checkpoint:") for blocker in gate["blockers"])
     assert bundle["restart_decision_schema"]["config_patch_contract"]["requires_evidence_paths"] is True
     assert "spawn_or_assign_codex_subagent_when_available" in bundle["review_requirements"]
@@ -93,6 +100,7 @@ def test_prepare_review_bundle_writes_prompt_contract_and_commands(tmp_path: Pat
     assert "No proxies or fallbacks" in prompt_text
     assert "restart_decision_schema" in prompt_text
     bundle_markdown = (module.ROOT / artifacts["bundle_markdown"]).read_text(encoding="utf-8")
+    assert "Checkpoint Evidence" in bundle_markdown
     assert "Advanced BPB Contract" in bundle_markdown
     assert "Restart Evidence Gate" in bundle_markdown
     for key in ("contract_json", "contract_markdown", "advanced_bpb_contract_json", "codex_prompt", "bundle_json", "bundle_markdown"):
@@ -276,11 +284,17 @@ def test_prepare_review_bundle_records_empty_checkpoint_restart_gate_without_run
     )
 
     bundle = module.prepare_review_bundle(args)
+    checkpoint_evidence = bundle["checkpoint_evidence"]
+    assert checkpoint_evidence["checkpoint_available"] is False
+    assert checkpoint_evidence["safe_for_checkpoint_backed_restart"] is False
+    assert "checkpoint_summary_unavailable:checkpoint_file_is_empty" in checkpoint_evidence["warnings"]
     gate = bundle["restart_evidence_gate"]
     assert gate["checkpoint_available"] is False
+    assert gate["checkpoint_evidence_safe"] is False
     assert gate["restart_action"] == "blocked_missing_required_evidence_no_restart"
     assert gate["step0_restart_allowed"] is False
     assert any("checkpoint_file_is_empty" in blocker for blocker in gate["blockers"])
+    assert any(blocker.startswith("checkpoint_evidence:checkpoint_summary_unavailable:checkpoint_file_is_empty") for blocker in gate["blockers"])
     assert any(blocker.startswith("execution_readiness:empty_checkpoint:") for blocker in gate["blockers"])
 
 
@@ -323,7 +337,11 @@ def test_prepare_review_bundle_blocks_restart_without_post_5k_command_results(tm
 
     bundle = module.prepare_review_bundle(args)
     gate = bundle["restart_evidence_gate"]
+    assert bundle["checkpoint_evidence"]["checkpoint_available"] is True
+    assert bundle["checkpoint_evidence"]["safe_for_checkpoint_backed_restart"] is True
+    assert bundle["checkpoint_evidence"]["checkpoint_step"] == 5000
     assert gate["checkpoint_available"] is True
+    assert gate["checkpoint_evidence_safe"] is True
     assert gate["execution_evidence_ready"] is True
     assert gate["advanced_bpb_contract_safe"] is True
     assert gate["restart_action"] == "blocked_missing_required_evidence_no_restart"

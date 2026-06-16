@@ -231,4 +231,15 @@ Status: active training restored; source-side evidence hardening implemented and
 - Implemented `checkpoint_evidence` in `parameter_golf_codex_review_loop.py` active contracts and markdown. The review loop now exposes checkpoint path, availability, unavailable reason, checkpoint/report steps, report checkpoint-integrity blocks, checkpoint metric keys, mismatch warnings, and `safe_for_checkpoint_backed_restart`.
 - Verification: `PYTHONPATH=TropicalGT-I/scripts:TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_parameter_golf_review_loop.py -q` -> `18 passed`; coupled post-5K/review/readiness/monitor suite -> `45 passed`.
 
-Next sequential implementation item remains Item 9 source-side evidence hardening while b61 trains: propagate checkpoint-evidence summaries into generated restart bundles and continue CAS/visual/math repairs item-by-item without interrupting the active 5K run.
+Next sequential implementation item remains Item 9 source-side evidence hardening while b61 trains: continue closing restart/review evidence bypasses, then proceed to CAS/visual/math repairs item-by-item without interrupting the active 5K run.
+
+### 2026-06-16 Post-5K Review Bundle Checkpoint-Evidence Propagation
+
+Status: complete and focused-tested.
+
+- `prepare_5k_review_bundle.py` now propagates the active contract `tropicalgt.checkpoint_evidence.v1` block into the generated bundle and markdown.
+- `restart_evidence_gate` now surfaces checkpoint-evidence safety and warnings, and missed BPB targets remain blocked when checkpoint evidence is unsafe even if other command paths are present.
+- Tests cover missing, empty, and loadable checkpoint cases in the generated post-5K bundle path.
+- Verification: focused post-5K bundle tests -> `9 passed`; coupled post-5K/review/readiness/monitor suite -> `45 passed`.
+
+Next sequential implementation item remains Item 9 source-side evidence hardening while b61 trains: continue closing restart/review evidence bypasses, then proceed to CAS/visual/math repairs item-by-item without interrupting the active 5K run.
