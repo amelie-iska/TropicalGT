@@ -108,6 +108,43 @@ def _assert(condition: bool, errors: list[str], message: str) -> None:
         errors.append(message)
 
 
+def _slider_contract_path(html_path: Path) -> Path:
+    return html_path.with_name(f"{html_path.stem}_slider_contract.json")
+
+
+def _validate_radius_slider_contract(contract_path: Path, errors: list[str], label: str) -> dict[str, Any]:
+    _assert(contract_path.exists(), errors, f"{label} missing radius slider contract sidecar {contract_path.name}")
+    if not contract_path.exists():
+        return {}
+    payload = _read_json(contract_path)
+    _assert(isinstance(payload, dict), errors, f"{label} radius slider contract is not an object")
+    if not isinstance(payload, dict):
+        return {}
+    _assert(payload.get("schema_version") == "tropicalgt.radius_filtration_slider_contract.v1", errors, f"{label} radius slider contract has wrong schema")
+    _assert(payload.get("source") == "canonical_gudhi_filtered_complex_simplices", errors, f"{label} radius slider contract has wrong source")
+    _assert(payload.get("actual_data_only") is True, errors, f"{label} radius slider contract is not actual-data-only")
+    _assert(payload.get("no_proxy_or_fallback") is True, errors, f"{label} radius slider contract allows proxy/fallback data")
+    _assert(payload.get("radius_filtration") is True, errors, f"{label} slider contract is not a radius filtration")
+    _assert(payload.get("threshold_order") == "ascending_min_to_max", errors, f"{label} radius slider contract does not declare ascending min-to-max order")
+    _assert(payload.get("thresholds_ascending") is True, errors, f"{label} radius slider thresholds are not ascending")
+    _assert(int(_finite_float(payload.get("frame_count"), 0.0)) == int(_finite_float(payload.get("threshold_count"), -1.0)), errors, f"{label} radius slider frame/threshold count mismatch")
+    _assert(isinstance(payload.get("frames"), list) and bool(payload.get("frames")), errors, f"{label} radius slider contract lacks frame rows")
+    _assert(payload.get("monotone_visible_counts") is True, errors, f"{label} radius slider visible counts are not monotone")
+    _assert(payload.get("first_frame_disjoint_vertices_only") is True, errors, f"{label} initial radius frame is not vertex-only")
+    _assert(int(_finite_float(payload.get("first_frame_vertex_count"), 0.0)) > 0, errors, f"{label} initial radius frame has no vertices")
+    _assert(int(_finite_float(payload.get("first_frame_solid_edge_count"), -1.0)) == 0, errors, f"{label} initial radius frame shows solid edges")
+    _assert(int(_finite_float(payload.get("first_frame_filled_face_count"), -1.0)) == 0, errors, f"{label} initial radius frame shows filled faces")
+    _assert(int(_finite_float(payload.get("first_frame_dotted_overlay_count"), -1.0)) == 0, errors, f"{label} initial radius frame shows dotted overlays")
+    _assert(payload.get("solid_lines_semantics") == "radius-filtered 1-simplices only", errors, f"{label} solid-line semantics are not radius simplices")
+    _assert(payload.get("filled_faces_semantics") == "radius-gated 2-simplices only", errors, f"{label} filled-face semantics are not radius gated")
+    _assert(payload.get("dotted_lines_semantics") == "causal_decoding_or_direction_overlay_only_and_radius_gated", errors, f"{label} dotted-line semantics are not causal/decoding/direction overlays")
+    frames = payload.get("frames") if isinstance(payload.get("frames"), list) else []
+    thresholds = [_finite_float(row.get("threshold")) for row in frames if isinstance(row, dict)]
+    _assert(all(math.isfinite(value) for value in thresholds), errors, f"{label} radius slider frame thresholds are not finite")
+    _assert(all(a <= b + 1e-12 for a, b in zip(thresholds, thresholds[1:])), errors, f"{label} radius slider frame thresholds decrease")
+    return payload
+
+
 def _html_has_plotly(html: str) -> bool:
     return "Plotly.newPlot" in html or "plotly" in html.lower()
 
@@ -771,6 +808,17 @@ def validate_row(row_dir: Path, *, min_candidates: int = 8, min_depth: int = 2, 
     _assert(int(summary.get("num_edges", 0) or 0) >= len(edges), errors, "full trajectory complex has fewer edges than trajectory")
     _assert(sum(1 for row in full_vertices if row.get("embedding")) == len(full_vertices), errors, "full trajectory complex vertices do not all carry embeddings")
     _assert(sum(1 for row in full_vertices if row.get("input_text") or row.get("decoded_argmax")) == len(full_vertices), errors, "full trajectory complex vertices do not all carry model I/O")
+    _validate_radius_slider_contract(
+        _slider_contract_path(row_dir / REQUIRED_HTML["full_complex"][0]),
+        errors,
+        "full trajectory complex",
+    )
+    if isinstance(prob_obj, dict) and prob_obj.get("available") is not False:
+        _validate_radius_slider_contract(
+            _slider_contract_path(row_dir / REQUIRED_HTML["probability_complex"][0]),
+            errors,
+            "probability trajectory complex",
+        )
 
     maps_path = row_dir / "analogical_simplicial_maps.json"
     if maps_path.exists():
@@ -946,6 +994,11 @@ def validate_row(row_dir: Path, *, min_candidates: int = 8, min_depth: int = 2, 
         _assert(node.get("step_simplex_tree_href") == expected_tree_href, errors, f"trajectory node {rid} has wrong step_simplex_tree_href")
         _assert((row_dir / expected_step_href).exists(), errors, f"trajectory node {rid} references missing step complex page")
         _assert((row_dir / expected_tree_href).exists(), errors, f"trajectory node {rid} references missing step simplex tree page")
+        _validate_radius_slider_contract(
+            _slider_contract_path(row_dir / expected_step_href),
+            errors,
+            f"reasoning-step complex {idx}",
+        )
     for idx in [0, len(steps) // 2, len(steps) - 1] if steps else []:
         step = steps[idx]
         step_file = row_dir / "reasoning_step_complex_maps" / str(step.get("file", ""))

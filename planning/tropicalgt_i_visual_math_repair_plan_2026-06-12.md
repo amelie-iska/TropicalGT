@@ -702,3 +702,28 @@ CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/t
 CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m py_compile TropicalGT-I/src/tropicalgt/visualization.py TropicalGT-I/scripts/validate_interactive_audit_artifacts.py TropicalGT-I/tests/test_simplicial_visualization.py TropicalGT-I/tests/test_interactive_artifact_validator.py
 # passed
 ```
+
+## 2026-06-16 Radius Filtration Slider Contract Repair
+
+Sequential simplicial/simplex-tree item completed after the reasoning-step fingerprint contract:
+
+- Added `tropicalgt.radius_filtration_slider_contract.v1` sidecars beside every generated complex slider page.
+- The sidecar records that the page is built from canonical GUDHI filtered-complex simplices, uses no proxy/fallback data, orders thresholds ascending min-to-max, and exposes one frame per displayed threshold.
+- The contract proves the initial radius frame is a disjoint vertex-only frame: no solid edges, no filled faces, and no dotted causal/decoding/direction overlays.
+- The contract records monotone visible counts, solid-line semantics for radius-filtered 1-simplices, filled-face semantics for radius-gated 2-simplices, and dotted-line semantics for gated causal/decoding/direction overlays.
+- The interactive artifact validator now requires slider sidecars for the full trajectory complex, available probability trajectory complex, and every reasoning-step complex page.
+- Validator rejection coverage now fails audits missing a reasoning-step slider contract; renderer coverage now checks sidecar schema, first-frame vertex-only counts, and monotonicity.
+- The renderer test fixture was updated so per-step `filtered_simplicial_object` payloads are real embedding-radius Vietoris-Rips complexes instead of legacy graph-combinatorial objects.
+
+Validation:
+
+```text
+CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_simplicial_visualization.py TropicalGT-I/tests/test_interactive_artifact_validator.py -q -p no:cacheprovider --basetemp=/tmp/tropicalgt-pytest-slider-contract -k "got_trajectory_visualization_renders_simplicial_panel_and_nll_surface or slider_contract or reasoning_step"
+# 4 passed, 55 deselected
+CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_interactive_artifact_validator.py -q -p no:cacheprovider --basetemp=/tmp/tropicalgt-pytest-slider-validator-full
+# 16 passed
+CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_simplicial_visualization.py -q -p no:cacheprovider --basetemp=/tmp/tropicalgt-pytest-slider-simplicial-full
+# 43 passed
+CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m py_compile TropicalGT-I/src/tropicalgt/visualization.py TropicalGT-I/scripts/validate_interactive_audit_artifacts.py TropicalGT-I/tests/test_simplicial_visualization.py TropicalGT-I/tests/test_interactive_artifact_validator.py
+# passed
+```

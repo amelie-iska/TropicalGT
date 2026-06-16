@@ -667,19 +667,29 @@ def test_graph_token_direction_overlay_uses_model_trace_edges():
 
 def test_got_trajectory_visualization_renders_simplicial_panel_and_nll_surface(tmp_path: Path):
     record = FixtureGraphDataset(1)[0]
-    obj = build_filtered_simplicial_object(record)
     child_record = apply_reasoning_action(record, "verify", rank=0)
     sibling_record = apply_reasoning_action(record, "expand", rank=1)
     leaf_record = apply_reasoning_action(child_record, "refine", rank=0)
-    child_obj = build_filtered_simplicial_object(child_record)
-    sibling_obj = build_filtered_simplicial_object(sibling_record)
-    leaf_obj = build_filtered_simplicial_object(leaf_record)
+
+    def radius_step_obj(source: GraphRecord, offset: float) -> dict[str, object]:
+        descriptors = [
+            {"kind": "state", "index": 0, "text": source.text[:16]},
+            {"kind": "reasoning", "index": 1, "text": "local"},
+            {"kind": "output", "index": 2, "text": "decoded"},
+        ]
+        embeddings = [
+            [offset, 0.0, 0.0],
+            [offset + 0.2, 0.4, 0.1],
+            [offset + 0.5, 0.1, 0.3],
+        ]
+        return build_embedding_radius_simplicial_object(source, descriptors, embeddings, metric="euclidean")
+
     scaling = {
         "candidates": [
-            {"record_id": record.record_id, "embedding": [0.0, 0.0, 0.0], "score": 0.1, "nll": 2.0, "level": 0, "path": [], "filtered_simplicial_object": obj},
-            {"record_id": child_record.record_id, "parent": record.record_id, "embedding": [1.0, 0.3, 0.2], "score": 0.5, "nll": 1.3, "level": 1, "path": ["verify"], "input_text": "input", "decoded_argmax": "output", "filtered_simplicial_object": child_obj},
-            {"record_id": sibling_record.record_id, "parent": record.record_id, "embedding": [0.2, 1.1, -0.4], "score": 0.4, "nll": 1.5, "level": 1, "path": ["expand"], "filtered_simplicial_object": sibling_obj},
-            {"record_id": leaf_record.record_id, "parent": child_record.record_id, "embedding": [1.4, -0.8, 0.9], "score": 0.7, "nll": 0.9, "level": 2, "path": ["verify", "refine"], "filtered_simplicial_object": leaf_obj},
+            {"record_id": record.record_id, "embedding": [0.0, 0.0, 0.0], "score": 0.1, "nll": 2.0, "level": 0, "path": [], "filtered_simplicial_object": radius_step_obj(record, 0.0)},
+            {"record_id": child_record.record_id, "parent": record.record_id, "embedding": [1.0, 0.3, 0.2], "score": 0.5, "nll": 1.3, "level": 1, "path": ["verify"], "input_text": "input", "decoded_argmax": "output", "filtered_simplicial_object": radius_step_obj(child_record, 1.0)},
+            {"record_id": sibling_record.record_id, "parent": record.record_id, "embedding": [0.2, 1.1, -0.4], "score": 0.4, "nll": 1.5, "level": 1, "path": ["expand"], "filtered_simplicial_object": radius_step_obj(sibling_record, 2.0)},
+            {"record_id": leaf_record.record_id, "parent": child_record.record_id, "embedding": [1.4, -0.8, 0.9], "score": 0.7, "nll": 0.9, "level": 2, "path": ["verify", "refine"], "filtered_simplicial_object": radius_step_obj(leaf_record, 3.0)},
         ]
     }
     paths = write_got_trajectory_visualization(scaling, tmp_path)
@@ -693,6 +703,7 @@ def test_got_trajectory_visualization_renders_simplicial_panel_and_nll_surface(t
     step_manifest = json.loads(Path(paths["got_reasoning_step_complex_manifest"]).read_text(encoding="utf-8"))
     payload = json.loads(Path(paths["got_payloads"]).read_text(encoding="utf-8"))
     full_complex_payload = json.loads(Path(paths["got_full_trajectory_complex_payload"]).read_text(encoding="utf-8"))
+    full_slider_contract = json.loads(Path(paths["got_full_trajectory_complex"]).with_name("got_full_trajectory_complex_slider_contract.json").read_text(encoding="utf-8"))
     density_cloud_payload = json.loads(Path(paths["got_nll_density_cloud_payload"]).read_text(encoding="utf-8"))
     assert "simplicial-object-panel" in html
     assert "hover-simplicial-card" in html
@@ -831,9 +842,22 @@ def test_got_trajectory_visualization_renders_simplicial_panel_and_nll_surface(t
     assert "solid radius edges and filled radius-gated 2-simplices" in full_complex_html
     assert "filled 2-simplices gated by radius slider" in full_complex_html
     assert "dotted causal and decoding overlays" in full_complex_html
+    assert "first radius frame is vertex-only" in full_complex_html
     assert "play filtration min-to-max" in full_complex_html
     assert "Left is the smallest visible filtration; right is the full selected complex" in full_complex_html
     assert "Full graph-of-thought trajectory filtered simplicial complex" in full_complex_html
+    assert full_slider_contract["schema_version"] == "tropicalgt.radius_filtration_slider_contract.v1"
+    assert full_slider_contract["radius_filtration"] is True
+    assert full_slider_contract["threshold_order"] == "ascending_min_to_max"
+    assert full_slider_contract["thresholds_ascending"] is True
+    assert full_slider_contract["first_frame_disjoint_vertices_only"] is True
+    assert full_slider_contract["first_frame_vertex_count"] == len(scaling["candidates"])
+    assert full_slider_contract["first_frame_solid_edge_count"] == 0
+    assert full_slider_contract["first_frame_filled_face_count"] == 0
+    assert full_slider_contract["first_frame_dotted_overlay_count"] == 0
+    assert full_slider_contract["monotone_visible_counts"] is True
+    assert full_slider_contract["solid_lines_semantics"] == "radius-filtered 1-simplices only"
+    assert full_slider_contract["dotted_lines_semantics"] == "causal_decoding_or_direction_overlay_only_and_radius_gated"
     assert "actual face-to-coface covers" in full_tree_html
     assert "optional sorted-label trie prefix links" in full_tree_html
     assert "not disconnected simplex columns" in full_tree_html
@@ -877,11 +901,19 @@ def test_got_trajectory_visualization_renders_simplicial_panel_and_nll_surface(t
     first_step = tmp_path / "reasoning_step_complex_maps" / "reasoning_step_000.html"
     assert first_step.exists()
     first_step_html = first_step.read_text(encoding="utf-8")
+    first_step_slider_contract = json.loads((tmp_path / "reasoning_step_complex_maps" / "reasoning_step_000_slider_contract.json").read_text(encoding="utf-8"))
     assert "Filtration radius" in first_step_html
     assert "play filtration min-to-max" in first_step_html
+    assert "first radius frame is vertex-only" in first_step_html
     assert "solid radius edges and filled radius-gated 2-simplices" in first_step_html
     assert "filled 2-simplices gated by radius slider" in first_step_html
     assert "faint directed graph-token overlay" in first_step_html
+    assert first_step_slider_contract["schema_version"] == "tropicalgt.radius_filtration_slider_contract.v1"
+    assert first_step_slider_contract["first_frame_disjoint_vertices_only"] is True
+    assert first_step_slider_contract["first_frame_solid_edge_count"] == 0
+    assert first_step_slider_contract["first_frame_filled_face_count"] == 0
+    assert first_step_slider_contract["first_frame_dotted_overlay_count"] == 0
+    assert first_step_slider_contract["monotone_visible_counts"] is True
 
 
 

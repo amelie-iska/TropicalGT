@@ -2194,17 +2194,30 @@ def _write_complex_slider_map(path: Path, obj: dict[str, object], title: str, su
                 }
             ],
         )
+    slider_contract = _complex_slider_frame_contract(obj, thresholds=thresholds)
+    _complex_slider_contract_path(path).write_text(
+        json.dumps(
+            {
+                **slider_contract,
+                "html_file": path.name,
+                "title": title,
+            },
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
     summary = obj.get("summary", {})
     simplex_tree = obj.get("simplex_tree", {}) if isinstance(obj.get("simplex_tree"), dict) else {}
     backend_label = simplex_tree.get("backend", "json")
     fig.update_layout(
         template="plotly_dark",
-        meta={"radius_filtration_slider_contract": _complex_slider_frame_contract(obj, thresholds=thresholds)},
+        meta={"radius_filtration_slider_contract": slider_contract},
         title=(
             f"{title}<br><sup>{html.escape(subtitle)} | filtration backend={html.escape(str(backend_label))} "
             f"| {html.escape(layout_kind)} | V={summary.get('num_vertices', len(vertices))}, "
             f"E={summary.get('num_edges', len(edges))}, T={summary.get('num_two_simplices', len(triangles))} "
-            "| solid radius edges and filled radius-gated 2-simplices | dotted causal and decoding overlays</sup>"
+            "| first radius frame is vertex-only | solid radius edges and filled radius-gated 2-simplices "
+            "| dotted causal and decoding overlays</sup>"
         ),
         scene=dict(
             xaxis_title="projected coordinate 1",
@@ -2232,6 +2245,10 @@ def _write_complex_slider_map(path: Path, obj: dict[str, object], title: str, su
         _simplicial_panel_items(panel_objects, panel_hovers),
         show_filtration_slider=True,
     )
+
+
+def _complex_slider_contract_path(path: Path) -> Path:
+    return path.with_name(f"{path.stem}_slider_contract.json")
 
 
 def _write_simplex_tree_3d_map(path: Path, obj: dict[str, object], title: str, subtitle: str = "") -> None:
@@ -2551,17 +2568,19 @@ def _complex_slider_frame_contract(obj: dict[str, object], thresholds: list[floa
     Subsequent frames are monotone in visible simplices and overlays.
     """
 
-    thresholds = thresholds or _display_thresholds(obj)
+    thresholds = list(thresholds) if thresholds is not None else _display_thresholds(obj)
     frames: list[dict[str, object]] = []
     previous = {"vertices": 0, "solid_edges": 0, "filled_faces": 0, "dotted_overlays": 0}
     monotone = True
+    thresholds_ascending = all(float(a) <= float(b) + 1e-12 for a, b in zip(thresholds, thresholds[1:]))
+    radius_filtration = _is_radius_filtration_complex(obj)
     for threshold in thresholds:
         initial_radius_frame = _is_initial_radius_frame(obj, float(threshold))
         vertices = [
             s for s in obj.get("simplices", [])
             if isinstance(s, dict)
             and int(s.get("dimension", -1)) == 0
-            and (_is_radius_filtration_complex(obj) or float(s.get("filtration", 0.0) or 0.0) <= float(threshold) + 1e-12)
+            and (radius_filtration or float(s.get("filtration", 0.0) or 0.0) <= float(threshold) + 1e-12)
         ]
         visible = {str((row.get("simplex") or [""])[0]) for row in vertices}
         solid_edges = [] if initial_radius_frame else [
@@ -2615,8 +2634,31 @@ def _complex_slider_frame_contract(obj: dict[str, object], thresholds: list[floa
                 monotone = False
         previous = {key: int(row[key]) for key in previous}
         frames.append(row)
+    first_frame = frames[0] if frames else {}
+    last_frame = frames[-1] if frames else {}
     return {
-        "radius_filtration": _is_radius_filtration_complex(obj),
+        "schema_version": "tropicalgt.radius_filtration_slider_contract.v1",
+        "source": "canonical_gudhi_filtered_complex_simplices",
+        "actual_data_only": True,
+        "no_proxy_or_fallback": True,
+        "radius_filtration": radius_filtration,
+        "threshold_order": "ascending_min_to_max",
+        "thresholds_ascending": bool(thresholds_ascending),
+        "threshold_count": int(len(thresholds)),
+        "first_threshold": float(thresholds[0]) if thresholds else None,
+        "last_threshold": float(thresholds[-1]) if thresholds else None,
+        "frame_count": int(len(frames)),
+        "first_frame_vertex_count": int(first_frame.get("vertices", 0) or 0),
+        "first_frame_solid_edge_count": int(first_frame.get("solid_edges", 0) or 0),
+        "first_frame_filled_face_count": int(first_frame.get("filled_faces", 0) or 0),
+        "first_frame_dotted_overlay_count": int(first_frame.get("dotted_overlays", 0) or 0),
+        "last_frame_solid_edge_count": int(last_frame.get("solid_edges", 0) or 0),
+        "last_frame_filled_face_count": int(last_frame.get("filled_faces", 0) or 0),
+        "solid_lines_semantics": "radius-filtered 1-simplices only",
+        "filled_faces_semantics": "radius-gated 2-simplices only",
+        "dotted_lines_semantics": "causal_decoding_or_direction_overlay_only_and_radius_gated",
+        "initial_radius_frame_hides_dotted_overlays": True,
+        "initial_radius_frame_hides_solid_edges_and_faces": True,
         "first_frame_disjoint_vertices_only": (
             bool(frames)
             and bool(frames[0].get("initial_radius_frame"))
@@ -2625,6 +2667,8 @@ def _complex_slider_frame_contract(obj: dict[str, object], thresholds: list[floa
             and int(frames[0].get("dotted_overlays", 0)) == 0
         ),
         "monotone_visible_counts": bool(monotone),
+        "monotone_solid_radius_edges": bool(monotone),
+        "monotone_filled_radius_faces": bool(monotone),
         "frames": frames,
     }
 

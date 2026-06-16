@@ -29,6 +29,64 @@ def _html(title: str, extra: str = "Plotly.newPlot play filtration Filtration ra
     return f"<!doctype html><title>{title}</title><script src='plotly.min.js'></script><body>{title} {extra}</body>"
 
 
+def _slider_contract(html_file: str, *, vertices: int = 4, solid_edges: int = 3, filled_faces: int = 0) -> dict[str, object]:
+    frames = [
+        {
+            "threshold": 0.0,
+            "initial_radius_frame": True,
+            "vertices": vertices,
+            "solid_edges": 0,
+            "filled_faces": 0,
+            "dotted_trajectory_overlays": 0,
+            "dotted_direction_overlays": 0,
+            "dotted_decoding_overlays": 0,
+            "dotted_overlays": 0,
+        },
+        {
+            "threshold": 1.0,
+            "initial_radius_frame": False,
+            "vertices": vertices,
+            "solid_edges": solid_edges,
+            "filled_faces": filled_faces,
+            "dotted_trajectory_overlays": 0,
+            "dotted_direction_overlays": 0,
+            "dotted_decoding_overlays": 0,
+            "dotted_overlays": 0,
+        },
+    ]
+    return {
+        "schema_version": "tropicalgt.radius_filtration_slider_contract.v1",
+        "source": "canonical_gudhi_filtered_complex_simplices",
+        "actual_data_only": True,
+        "no_proxy_or_fallback": True,
+        "radius_filtration": True,
+        "threshold_order": "ascending_min_to_max",
+        "thresholds_ascending": True,
+        "threshold_count": len(frames),
+        "first_threshold": 0.0,
+        "last_threshold": 1.0,
+        "frame_count": len(frames),
+        "first_frame_vertex_count": vertices,
+        "first_frame_solid_edge_count": 0,
+        "first_frame_filled_face_count": 0,
+        "first_frame_dotted_overlay_count": 0,
+        "last_frame_solid_edge_count": solid_edges,
+        "last_frame_filled_face_count": filled_faces,
+        "solid_lines_semantics": "radius-filtered 1-simplices only",
+        "filled_faces_semantics": "radius-gated 2-simplices only",
+        "dotted_lines_semantics": "causal_decoding_or_direction_overlay_only_and_radius_gated",
+        "initial_radius_frame_hides_dotted_overlays": True,
+        "initial_radius_frame_hides_solid_edges_and_faces": True,
+        "first_frame_disjoint_vertices_only": True,
+        "monotone_visible_counts": True,
+        "monotone_solid_radius_edges": True,
+        "monotone_filled_radius_faces": True,
+        "frames": frames,
+        "html_file": html_file,
+        "title": html_file,
+    }
+
+
 def _row(root: Path, name: str) -> Path:
     row = root if name == "." else root / name
     row.mkdir(parents=True, exist_ok=True)
@@ -740,9 +798,15 @@ def _row(root: Path, name: str) -> Path:
     }
     for rel, content in html_files.items():
         _write(row / rel, content)
+    _write(row / "got_full_trajectory_complex_slider_contract.json", json.dumps(_slider_contract("got_full_trajectory_complex.html")))
+    _write(row / "got_full_trajectory_complex_jensen_shannon_slider_contract.json", json.dumps(_slider_contract("got_full_trajectory_complex_jensen_shannon.html")))
     for step in steps:
         _write(row / "reasoning_step_complex_maps" / step["file"], _html("Reasoning step filtered simplicial complex map"))
         _write(row / "reasoning_step_complex_maps" / step["simplex_tree_file"], _html("Reasoning step GUDHI simplex tree", "Plotly.newPlot simplex-tree inclusion"))
+        _write(
+            row / "reasoning_step_complex_maps" / step["file"].replace(".html", "_slider_contract.json"),
+            json.dumps(_slider_contract(step["file"], vertices=1, solid_edges=0, filled_faces=0)),
+        )
     return row
 
 def _browser_samples(audit: Path, sample_names: list[str]) -> list[dict[str, object]]:
@@ -893,6 +957,17 @@ def test_validate_audit_root_rejects_missing_reasoning_step_complex_fingerprints
     report = validator.validate_audit_root(audit, min_rows=1, min_candidates=4, min_depth=2)
     assert not report["ok"]
     assert any("fingerprint" in err and "reasoning-step" in err for err in report["errors"])
+
+
+def test_validate_audit_root_rejects_missing_reasoning_step_slider_contract(tmp_path: Path):
+    validator = _load_validator()
+    audit = tmp_path / "step_00000001" / "got_audit"
+    row = _row(audit, ".")
+    (row / "reasoning_step_complex_maps" / "reasoning_step_000_slider_contract.json").unlink()
+    _write(audit / "codex_browser_index.html", _codex_browser_html(_browser_samples(audit, ["."])))
+    report = validator.validate_audit_root(audit, min_rows=1, min_candidates=4, min_depth=2)
+    assert not report["ok"]
+    assert any("radius slider contract" in err and "reasoning-step complex 0" in err for err in report["errors"])
 
 
 def test_validate_audit_root_rejects_missing_analogical_simplex_tree_analogy_contract(tmp_path: Path):
