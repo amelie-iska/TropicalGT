@@ -4,6 +4,7 @@ from pathlib import Path
 import plotly.graph_objects as go
 import torch
 
+from tropicalgt import cas_toric
 from tropicalgt.data import FixtureGraphDataset
 from tropicalgt.model import TropicalGTConfig, TropicalGTModel
 from tropicalgt.records import GraphRecord
@@ -33,6 +34,7 @@ from tropicalgt.visualization import (
     write_persistence_visualizations,
     write_reasoning_visualizations,
     write_tropical_fan_diagnostics,
+    write_toric_embedding_sidecar,
     write_tropical_support_heatmap,
 )
 
@@ -937,6 +939,78 @@ def test_tropical_fan_diagnostics_renders_certified_explicit_ideal(tmp_path: Pat
     assert "Sage tropical polynomial" in markup
     assert "No support-token proxies" in markup
 
+
+
+def _certified_toric_sidecar_fixture() -> dict[str, object]:
+    schema = cas_toric.canonicalize_toric_exponent_matrix(
+        {"exponent_matrix": [[1, 1, 1], [0, 1, 2]], "variable_names": ["z_0", "z_1", "z_2"], "source": "unit_test_rational_normal_curve"}
+    )
+    tagged = "\n".join([
+        "backend=Macaulay2",
+        "quasidegrees_package_available=true",
+        "certificate_type=Macaulay2 Quasidegrees toricIdeal finite monomial-map certificate",
+        "embedding_scope=finite_monomial_map_toric_ideal_certificate_only",
+        "toric_embedding_certified=true",
+        "toric_ideal_certified=true",
+        "tropical_variety_embedding_certified=false",
+        "global_toric_variety_embedding_certified=false",
+        "ring=QQ[z_0..z_2]",
+        "exponent_matrix=| 1 1 1 | || | 0 1 2 |",
+        "toric_ideal_text=ideal(z_1^2-z_0*z_2)",
+        "toric_ideal_generators={z_1^2-z_0*z_2}",
+        "generator_count=1",
+        "codimension=1",
+        "dimension=2",
+    ])
+    parsed = {
+        "quasidegrees_package_available": "true",
+        "certificate_type": "Macaulay2 Quasidegrees toricIdeal finite monomial-map certificate",
+        "embedding_scope": "finite_monomial_map_toric_ideal_certificate_only",
+        "toric_embedding_certified": "true",
+        "toric_ideal_certified": "true",
+        "tropical_variety_embedding_certified": "false",
+        "global_toric_variety_embedding_certified": "false",
+        "ring": "QQ[z_0..z_2]",
+        "toric_ideal_text": "ideal(z_1^2-z_0*z_2)",
+        "toric_ideal_generators": "{z_1^2-z_0*z_2}",
+        "generator_count": "1",
+        "codimension": "1",
+        "dimension": "2",
+    }
+    return cas_toric._certified_toric_embedding_result(schema, parsed, tagged, attempts=[{"backend": "Macaulay2", "status": "ran"}])
+
+
+def test_toric_embedding_sidecar_unavailable_without_exponent_matrix(tmp_path: Path):
+    paths = write_toric_embedding_sidecar({}, tmp_path)
+    payload = json.loads(Path(paths["toric_embedding_sidecar_payload"]).read_text(encoding="utf-8"))
+    html = Path(paths["toric_embedding_sidecar"]).read_text(encoding="utf-8")
+    assert payload["schema_version"] == "tropicalgt.toric_embedding_sidecar_visual_audit.v1"
+    assert payload["available"] is False
+    assert payload["safe_to_render_as_finite_toric_ideal_sidecar"] is False
+    assert payload["safe_to_render_as_tropical_variety_embedding"] is False
+    assert payload["safe_to_use_as_normal_fan_certificate"] is False
+    assert payload["diagnostics"]["schema_version"] == "tropicalgt.cas_toric_embedding.v1"
+    assert "chart-bundle" in payload["render_contract"]
+    assert "No finite monomial-map toric ideal" in html
+    assert "Toric embedding sidecar unavailable" in html
+
+
+def test_toric_embedding_sidecar_renders_precomputed_finite_toric_ideal_certificate(tmp_path: Path):
+    report = _certified_toric_sidecar_fixture()
+    paths = write_toric_embedding_sidecar({"toric_embedding_certificate": report}, tmp_path)
+    payload = json.loads(Path(paths["toric_embedding_sidecar_payload"]).read_text(encoding="utf-8"))
+    html = Path(paths["toric_embedding_sidecar"]).read_text(encoding="utf-8")
+    assert payload["available"] is True
+    assert payload["safe_to_render_as_finite_toric_ideal_sidecar"] is True
+    assert payload["safe_to_render_as_tropical_variety_embedding"] is False
+    assert payload["safe_to_render_as_global_toric_variety_embedding"] is False
+    assert payload["safe_to_use_as_normal_fan_certificate"] is False
+    assert payload["diagnostics"]["toric_ideal_certified"] is True
+    assert payload["diagnostics"]["monomial_map_summary"]["exponent_matrix"] == [[1, 1, 1], [0, 1, 2]]
+    assert "finite monomial-map toric ideal certificate" in html
+    assert "not a normal-fan" in html
+    assert "z_1^2-z_0*z_2" in html
+    assert "toric_embedding_sidecar_contract" in html
 
 
 def test_tropical_support_heatmap_does_not_fabricate_invalid_supports(tmp_path: Path):

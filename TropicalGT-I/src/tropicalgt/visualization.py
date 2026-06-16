@@ -427,6 +427,7 @@ def write_inference_audit_artifacts(
             paths.update(write_graphcg_trajectory_visualization(scaling, output_dir))
         paths.update(write_tropical_support_heatmap(result, output_dir))
         paths.update(write_tropical_fan_diagnostics(result, output_dir))
+        paths.update(write_toric_embedding_sidecar(result, output_dir))
         if isinstance(topology, dict):
             paths.update(write_persistence_visualizations(topology, output_dir))
         trajectory_topology = scaling.get("trajectory_topological_algebra") if isinstance(scaling, dict) else None
@@ -4214,6 +4215,284 @@ def write_tropical_fan_diagnostics(result: dict[str, object], output_dir: str | 
     payload_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
     _write_tropical_fan_html(html_path, payload)
     return {"tropical_fan_diagnostics": str(html_path), "tropical_fan_diagnostics_payload": str(payload_path)}
+
+
+
+_TORIC_EXPONENT_SPEC_KEYS = (
+    "model_derived_toric_exponent_matrix",
+    "toric_exponent_matrix",
+    "toric_embedding_exponent_matrix",
+    "finite_toric_exponent_matrix",
+)
+
+
+def _find_explicit_toric_exponent_spec(result: Mapping[str, Any]) -> tuple[str, Mapping[str, Any]] | None:
+    containers: list[tuple[str, Any]] = [("result", result)]
+    trace = result.get("graph_token_trace") if isinstance(result, Mapping) else None
+    if isinstance(trace, Mapping):
+        containers.append(("result.graph_token_trace", trace))
+    metrics = result.get("metrics") if isinstance(result, Mapping) else None
+    if isinstance(metrics, Mapping):
+        containers.append(("result.metrics", metrics))
+    scaling = result.get("inference_scaling") if isinstance(result, Mapping) else None
+    if isinstance(scaling, Mapping):
+        containers.append(("result.inference_scaling", scaling))
+        best = scaling.get("best")
+        if isinstance(best, Mapping):
+            containers.append(("result.inference_scaling.best", best))
+        candidates = scaling.get("candidates")
+        if isinstance(candidates, Sequence) and not isinstance(candidates, (str, bytes)):
+            for idx, candidate in enumerate(candidates[:8]):
+                if isinstance(candidate, Mapping):
+                    containers.append((f"result.inference_scaling.candidates[{idx}]", candidate))
+                    meta = candidate.get("chart_bundle_transport_metadata")
+                    if isinstance(meta, Mapping):
+                        containers.append((f"result.inference_scaling.candidates[{idx}].chart_bundle_transport_metadata", meta))
+    for container_path, container in containers:
+        if not isinstance(container, Mapping):
+            continue
+        for key in _TORIC_EXPONENT_SPEC_KEYS:
+            value = container.get(key)
+            if isinstance(value, Mapping) and ("exponent_matrix" in value or "columns" in value):
+                return f"{container_path}.{key}", value
+    return None
+
+
+def _precomputed_toric_embedding_report(result: Mapping[str, Any]) -> tuple[str, Mapping[str, Any]] | None:
+    containers: list[tuple[str, Any]] = [("result", result)]
+    metrics = result.get("metrics") if isinstance(result, Mapping) else None
+    if isinstance(metrics, Mapping):
+        containers.append(("result.metrics", metrics))
+    scaling = result.get("inference_scaling") if isinstance(result, Mapping) else None
+    if isinstance(scaling, Mapping):
+        containers.append(("result.inference_scaling", scaling))
+        best = scaling.get("best")
+        if isinstance(best, Mapping):
+            containers.append(("result.inference_scaling.best", best))
+        candidates = scaling.get("candidates")
+        if isinstance(candidates, Sequence) and not isinstance(candidates, (str, bytes)):
+            for idx, candidate in enumerate(candidates[:8]):
+                if isinstance(candidate, Mapping):
+                    containers.append((f"result.inference_scaling.candidates[{idx}]", candidate))
+                    meta = candidate.get("chart_bundle_transport_metadata")
+                    if isinstance(meta, Mapping):
+                        containers.append((f"result.inference_scaling.candidates[{idx}].chart_bundle_transport_metadata", meta))
+    for container_path, container in containers:
+        if not isinstance(container, Mapping):
+            continue
+        for key in ("toric_embedding_certificate", "macaulay2_toric_embedding_certificate", "cas_toric_embedding_certificate"):
+            value = container.get(key)
+            if isinstance(value, Mapping) and value.get("schema_version") == "tropicalgt.cas_toric_embedding.v1":
+                return f"{container_path}.{key}", value
+    return None
+
+
+def _unavailable_toric_embedding_payload(reason: str, *, source_path: str = "unavailable", exponent_matrix_spec: Mapping[str, Any] | None = None) -> dict[str, Any]:
+    try:
+        from . import cas_toric
+
+        contract = cas_toric.toric_embedding_certificate_contract()
+    except Exception:
+        contract = {
+            "certificate_source": "Macaulay2 Quasidegrees toricIdeal(A,R) on an explicit integer exponent matrix",
+            "no_proxy_policy": "No chart-bundle logits, toric-row activations, GraphCG cells, support tokens, embeddings, or visualization rows may substitute for this CAS certificate.",
+        }
+    diagnostics = {
+        "schema_version": "tropicalgt.cas_toric_embedding.v1",
+        "available": False,
+        "status": "unavailable_no_model_derived_toric_exponent_matrix",
+        "reason": reason,
+        "backend": "Macaulay2",
+        "certificate_attached": False,
+        "toric_embedding_certified": False,
+        "toric_ideal_certified": False,
+        "tropical_variety_embedding_certified": False,
+        "global_toric_variety_embedding_certified": False,
+        "safe_to_render_as_toric_embedding": False,
+        "safe_to_render_as_tropical_variety_embedding": False,
+        "safe_to_render_as_global_toric_variety_embedding": False,
+        "safe_to_use_as_normal_fan_certificate": False,
+        "embedding_scope": "unavailable_finite_monomial_map_toric_ideal_certificate",
+        "certificate_contract": contract,
+        "cas_artifacts": {},
+    }
+    return {
+        "schema_version": "tropicalgt.toric_embedding_sidecar_visual_audit.v1",
+        "available": False,
+        "source_path": source_path,
+        "exponent_matrix_spec": dict(exponent_matrix_spec) if isinstance(exponent_matrix_spec, Mapping) else None,
+        "diagnostics": diagnostics,
+        "safe_to_render_as_finite_toric_ideal_sidecar": False,
+        "safe_to_render_as_tropical_variety_embedding": False,
+        "safe_to_render_as_global_toric_variety_embedding": False,
+        "safe_to_use_as_normal_fan_certificate": False,
+        "render_contract": "Toric embedding sidecars render only certified finite monomial-map toric ideals from explicit exponent matrices and Macaulay2 Quasidegrees toricIdeal certificates; unavailable states are not substituted by chart-bundle, support-token, GraphCG, embedding, or visualization proxies.",
+    }
+
+
+def _toric_matrix_rows(diagnostics: Mapping[str, Any]) -> list[list[int]]:
+    summary = diagnostics.get("monomial_map_summary") if isinstance(diagnostics.get("monomial_map_summary"), Mapping) else {}
+    matrix = summary.get("exponent_matrix") if isinstance(summary, Mapping) else None
+    if not isinstance(matrix, Sequence) or isinstance(matrix, (str, bytes)):
+        schema = diagnostics.get("exponent_matrix_schema") if isinstance(diagnostics.get("exponent_matrix_schema"), Mapping) else {}
+        matrix = schema.get("exponent_matrix") if isinstance(schema, Mapping) else None
+    rows: list[list[int]] = []
+    if isinstance(matrix, Sequence) and not isinstance(matrix, (str, bytes)):
+        for row in matrix:
+            if isinstance(row, Sequence) and not isinstance(row, (str, bytes)):
+                try:
+                    rows.append([int(value) for value in row])
+                except Exception:
+                    return []
+    return rows
+
+
+def _write_toric_embedding_html(path: Path, payload: Mapping[str, Any]) -> None:
+    diagnostics = payload.get("diagnostics") if isinstance(payload.get("diagnostics"), Mapping) else {}
+    contract = diagnostics.get("certificate_contract") if isinstance(diagnostics.get("certificate_contract"), Mapping) else {}
+    matrix = _toric_matrix_rows(diagnostics)
+    available = bool(payload.get("available") and diagnostics.get("safe_to_render_as_toric_embedding") is True and diagnostics.get("toric_ideal_certified") is True and matrix)
+    if available:
+        summary = diagnostics.get("monomial_map_summary") if isinstance(diagnostics.get("monomial_map_summary"), Mapping) else {}
+        ideal = diagnostics.get("toric_ideal_summary") if isinstance(diagnostics.get("toric_ideal_summary"), Mapping) else {}
+        variables = summary.get("coordinate_variables") if isinstance(summary.get("coordinate_variables"), list) else [f"z_{idx}" for idx in range(len(matrix[0]) if matrix else 0)]
+        table_rows = [
+            ("status", diagnostics.get("status", "certified")),
+            ("backend", diagnostics.get("backend", "Macaulay2")),
+            ("certificate source", contract.get("certificate_source", "Macaulay2 Quasidegrees toricIdeal certificate required")),
+            ("source", payload.get("source_path", "unknown")),
+            ("embedding scope", diagnostics.get("embedding_scope", "finite_monomial_map_toric_ideal_certificate_only")),
+            ("lattice dimension", summary.get("lattice_dimension", len(matrix))),
+            ("coordinate count", summary.get("coordinate_count", len(variables))),
+            ("coordinate variables", ", ".join(str(v) for v in variables)),
+            ("toric ideal generators", _json_clip(ideal.get("generators_text", ""), 240)),
+            ("generator count", ideal.get("generator_count", "")),
+            ("codimension", ideal.get("codimension", "")),
+            ("dimension", ideal.get("dimension", "")),
+            ("normal fan certified", diagnostics.get("safe_to_use_as_normal_fan_certificate", False)),
+            ("tropical variety embedding", diagnostics.get("safe_to_render_as_tropical_variety_embedding", False)),
+            ("global toric variety embedding", diagnostics.get("safe_to_render_as_global_toric_variety_embedding", False)),
+            ("no-proxy policy", contract.get("no_proxy_policy", "no proxy diagnostics may substitute for the certificate")),
+            ("warning", diagnostics.get("render_warning", "not a normal-fan or tropical-variety certificate")),
+        ]
+        fig = make_subplots(
+            rows=1,
+            cols=2,
+            specs=[[{"type": "heatmap"}, {"type": "table"}]],
+            column_widths=[0.48, 0.52],
+            horizontal_spacing=0.12,
+            subplot_titles=("explicit exponent matrix A", "Macaulay2 toricIdeal certificate"),
+        )
+        fig.add_trace(
+            go.Heatmap(
+                z=matrix,
+                x=[str(v) for v in variables],
+                y=[f"e{idx}" for idx in range(len(matrix))],
+                colorscale="Viridis",
+                colorbar=dict(title="exponent", thickness=12),
+                hovertemplate="lattice row=%{y}<br>coordinate=%{x}<br>exponent=%{z}<extra></extra>",
+            ),
+            row=1,
+            col=1,
+        )
+        fig.add_trace(
+            go.Table(
+                header=dict(values=["diagnostic", "value"], fill_color="#10243f", font=dict(color="#e8f2ff", size=13), align="left"),
+                cells=dict(values=[[str(k) for k, _ in table_rows], [str(v) for _, v in table_rows]], fill_color="#07111f", font=dict(color="#d7e8ff", size=12), align="left", height=28),
+            ),
+            row=1,
+            col=2,
+        )
+        fig.update_xaxes(title_text="monomial coordinate", tickangle=24, row=1, col=1)
+        fig.update_yaxes(title_text="lattice exponent row", row=1, col=1)
+        fig.update_layout(
+            title="Toric embedding sidecar: finite monomial-map toric ideal certificate<br><sup>Certified by Macaulay2 Quasidegrees toricIdeal(A,R); not a normal-fan, tropical-variety, or global neural toric-variety certificate.</sup>",
+            meta={"toric_embedding_sidecar_contract": payload.get("render_contract")},
+            height=720,
+            margin=dict(t=118, l=70, r=44, b=82),
+        )
+    else:
+        reason = str(diagnostics.get("reason", "No explicit model-derived toric exponent matrix was exported."))
+        table_rows = [
+            ("status", diagnostics.get("status", "unavailable_no_model_derived_toric_exponent_matrix")),
+            ("source", payload.get("source_path", "unavailable")),
+            ("safe_to_render_as_finite_toric_ideal_sidecar", False),
+            ("reason", reason),
+            ("certificate source", contract.get("certificate_source", "Macaulay2 Quasidegrees toricIdeal certificate required")),
+            ("required input", "explicit integer exponent_matrix or columns for a finite monomial map"),
+            ("normal fan certified", False),
+            ("tropical variety embedding", False),
+            ("global toric variety embedding", False),
+            ("no-proxy policy", contract.get("no_proxy_policy", "no proxy diagnostics may substitute for the certificate")),
+            ("render contract", payload.get("render_contract", "unavailable")),
+        ]
+        fig = go.Figure(
+            data=[
+                go.Table(
+                    header=dict(values=["diagnostic", "value"], fill_color="#10243f", font=dict(color="#e8f2ff", size=13), align="left"),
+                    cells=dict(values=[[str(k) for k, _ in table_rows], [str(v) for _, v in table_rows]], fill_color="#07111f", font=dict(color="#d7e8ff", size=12), align="left", height=30),
+                )
+            ]
+        )
+        fig.update_layout(
+            title="Toric embedding sidecar unavailable<br><sup>No finite monomial-map toric ideal is rendered without an explicit exponent matrix and a real Macaulay2 certificate.</sup>",
+            height=560,
+            margin=dict(t=112, l=44, r=44, b=44),
+            meta={"toric_embedding_sidecar_contract": payload.get("render_contract")},
+        )
+    _write_plotly_dark_html(path, fig, "Toric embedding sidecar")
+
+
+def write_toric_embedding_sidecar(result: dict[str, object], output_dir: str | Path, *, timeout_s: float = 15.0) -> dict[str, str]:
+    output_dir = Path(output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    html_path = output_dir / "toric_embedding_sidecar.html"
+    payload_path = output_dir / "toric_embedding_sidecar.json"
+
+    precomputed = _precomputed_toric_embedding_report(result if isinstance(result, Mapping) else {})
+    if precomputed is not None:
+        source_path, report = precomputed
+        exponent_spec = report.get("exponent_matrix_schema") if isinstance(report.get("exponent_matrix_schema"), Mapping) else None
+    else:
+        found = _find_explicit_toric_exponent_spec(result if isinstance(result, Mapping) else {})
+        if found is None:
+            payload = _unavailable_toric_embedding_payload(
+                "No explicit model-derived toric exponent matrix was exported. Expected one of model_derived_toric_exponent_matrix, toric_exponent_matrix, toric_embedding_exponent_matrix, or finite_toric_exponent_matrix with exponent_matrix or columns.",
+            )
+            payload_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+            _write_toric_embedding_html(html_path, payload)
+            return {"toric_embedding_sidecar": str(html_path), "toric_embedding_sidecar_payload": str(payload_path)}
+        source_path, exponent_spec = found
+        try:
+            from . import cas_toric
+
+            report = cas_toric.try_compute_toric_embedding_certificate(dict(exponent_spec), timeout_s=timeout_s)
+        except Exception as exc:
+            payload = _unavailable_toric_embedding_payload(
+                f"Macaulay2 toricIdeal sidecar call failed before a certificate could be attached: {type(exc).__name__}: {exc}",
+                source_path=source_path,
+                exponent_matrix_spec=exponent_spec,
+            )
+            payload_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+            _write_toric_embedding_html(html_path, payload)
+            return {"toric_embedding_sidecar": str(html_path), "toric_embedding_sidecar_payload": str(payload_path)}
+
+    safe = bool(isinstance(report, Mapping) and report.get("safe_to_render_as_toric_embedding") is True and report.get("toric_ideal_certified") is True)
+    payload = {
+        "schema_version": "tropicalgt.toric_embedding_sidecar_visual_audit.v1",
+        "available": safe,
+        "source_path": source_path,
+        "exponent_matrix_spec": dict(exponent_spec) if isinstance(exponent_spec, Mapping) else None,
+        "diagnostics": dict(report) if isinstance(report, Mapping) else {},
+        "safe_to_render_as_finite_toric_ideal_sidecar": safe,
+        "safe_to_render_as_tropical_variety_embedding": bool(isinstance(report, Mapping) and report.get("safe_to_render_as_tropical_variety_embedding") is True),
+        "safe_to_render_as_global_toric_variety_embedding": bool(isinstance(report, Mapping) and report.get("safe_to_render_as_global_toric_variety_embedding") is True),
+        "safe_to_use_as_normal_fan_certificate": bool(isinstance(report, Mapping) and report.get("safe_to_use_as_normal_fan_certificate") is True),
+        "render_contract": "Toric embedding sidecars render only certified finite monomial-map toric ideals from explicit exponent matrices and Macaulay2 Quasidegrees toricIdeal certificates; unavailable states are not substituted by chart-bundle, support-token, GraphCG, embedding, or visualization proxies.",
+    }
+    payload_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+    _write_toric_embedding_html(html_path, payload)
+    return {"toric_embedding_sidecar": str(html_path), "toric_embedding_sidecar_payload": str(payload_path)}
 
 
 def _support_token_label(index: int, token: dict[str, object], long: bool = False) -> str:

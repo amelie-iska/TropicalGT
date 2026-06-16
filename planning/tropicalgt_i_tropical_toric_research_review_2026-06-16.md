@@ -43,3 +43,10 @@ Implement toric embeddings only where the embedding is mathematically correct an
 - The certified object is the kernel ideal of the finite monomial map defined by the columns of the integer exponent matrix. This is mathematically a toric ideal sidecar and is safe to render as that object.
 - The same report explicitly sets `safe_to_use_as_normal_fan_certificate=false`; fan, normal-fan, tropical-cycle, sheaf, Cox-module, or global neural toric-variety claims still require separate certified data.
 - Neural chart-bundle toric metrics expose `uncertified_activation_chart` metadata until a real CAS sidecar is attached.
+
+## Implemented Browser/Audit Surface
+
+- `write_inference_audit_artifacts` now writes `toric_embedding_sidecar.html` and `toric_embedding_sidecar.json` for new audit bundles.
+- The sidecar is safe to render only as a finite monomial-map toric ideal sidecar when `try_compute_toric_embedding_certificate` attaches a Macaulay2 `Quasidegrees` `toricIdeal(A,R)` certificate for an explicit integer exponent matrix.
+- Unavailable states remain explicit when no model-derived exponent matrix is exported, and the validator checks any present sidecar for false normal-fan, tropical-variety, or global toric-variety claims.
+- This implements the first tool-backed toric audit surface without promoting chart-bundle logits, toric activation rows, GraphCG cells, support tokens, embeddings, or visualization rows into a toric certificate.

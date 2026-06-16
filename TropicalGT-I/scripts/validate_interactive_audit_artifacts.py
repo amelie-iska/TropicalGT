@@ -310,6 +310,28 @@ def validate_row(row_dir: Path, *, min_candidates: int = 8, min_depth: int = 2, 
             _assert(tropical_fan_payload.get("safe_to_render_as_tropical_fan") is False, errors, "unavailable tropical fan diagnostics marked safe to render")
             _assert(fan_diag.get("safe_to_render_as_tropical_fan") is False, errors, "unavailable CAS tropical fan report marked safe to render")
 
+    toric_sidecar_path = row_dir / "toric_embedding_sidecar.json"
+    toric_payload = _read_json(toric_sidecar_path) if toric_sidecar_path.exists() else {}
+    if toric_payload:
+        toric_diag = toric_payload.get("diagnostics", {}) if isinstance(toric_payload.get("diagnostics"), dict) else {}
+        _assert(toric_payload.get("schema_version") == "tropicalgt.toric_embedding_sidecar_visual_audit.v1", errors, "toric embedding sidecar payload has wrong schema")
+        _assert(toric_diag.get("schema_version") == "tropicalgt.cas_toric_embedding.v1", errors, "toric embedding sidecar payload is missing CAS schema")
+        _assert("chart-bundle" in str(toric_payload.get("render_contract", "")) and "proxies" in str(toric_payload.get("render_contract", "")), errors, "toric embedding sidecar missing no-proxy render contract")
+        _assert(toric_payload.get("safe_to_render_as_tropical_variety_embedding") is False, errors, "toric sidecar incorrectly claims safe tropical-variety embedding")
+        _assert(toric_payload.get("safe_to_render_as_global_toric_variety_embedding") is False, errors, "toric sidecar incorrectly claims global toric-variety embedding")
+        _assert(toric_payload.get("safe_to_use_as_normal_fan_certificate") is False, errors, "toric sidecar incorrectly claims normal-fan certificate")
+        if toric_payload.get("available") is True:
+            _assert(toric_payload.get("safe_to_render_as_finite_toric_ideal_sidecar") is True, errors, "available toric sidecar is not marked safe as finite toric-ideal sidecar")
+            _assert(toric_diag.get("certificate_attached") is True, errors, "available toric sidecar missing certificate")
+            _assert(toric_diag.get("toric_ideal_certified") is True, errors, "available toric sidecar is not toric-ideal certified")
+            _assert(toric_diag.get("safe_to_render_as_toric_embedding") is True, errors, "available toric sidecar CAS report is not safe to render as finite toric sidecar")
+            summary = toric_diag.get("monomial_map_summary", {}) if isinstance(toric_diag.get("monomial_map_summary"), dict) else {}
+            matrix = summary.get("exponent_matrix") if isinstance(summary.get("exponent_matrix"), list) else []
+            _assert(bool(matrix), errors, "available toric sidecar is missing exponent matrix evidence")
+        else:
+            _assert(toric_payload.get("safe_to_render_as_finite_toric_ideal_sidecar") is False, errors, "unavailable toric sidecar marked safe to render")
+            _assert(toric_diag.get("safe_to_render_as_toric_embedding") is False, errors, "unavailable CAS toric report marked safe to render")
+
     support_payload = _read_json(row_dir / REQUIRED_JSON["tropical_support_payload"]) if (row_dir / REQUIRED_JSON["tropical_support_payload"]).exists() else {}
     graphcg_payload = _read_json(row_dir / REQUIRED_JSON["graphcg_payload"]) if (row_dir / REQUIRED_JSON["graphcg_payload"]).exists() else {}
     bifiltration_payload = _read_json(row_dir / REQUIRED_JSON["trajectory_bifiltration_payload"]) if (row_dir / REQUIRED_JSON["trajectory_bifiltration_payload"]).exists() else {}

@@ -362,3 +362,26 @@ CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/scripts:TropicalGT-I/src /home/i
 Operational note: b62 remained alive during verification and had advanced past step 702/5000 with train loss/NLL around 1.369/1.347 when checked.
 
 Next linear visual/math item: continue the remaining visual/math repair queue after a cleanup/diff/push cycle, keeping b62 active until the 5K gate.
+
+## 2026-06-16 Toric Embedding Sidecar Audit Surface Pass
+
+Sequential visual/math item completed after the tropical-support no-proxy render contract repair:
+
+- Added `toric_embedding_sidecar.html` and `toric_embedding_sidecar.json` as new audit artifacts written by `write_inference_audit_artifacts` for new bundles.
+- Certified rendering is allowed only for an explicit integer exponent matrix (or columns) plus a Macaulay2 `Quasidegrees` `toricIdeal(A,R)` certificate emitted through the real CAS toric bridge.
+- The sidecar renders the exponent matrix and toric-ideal certificate as a finite monomial-map toric ideal sidecar only. It explicitly does not claim a normal fan, tropical-variety embedding, global toric-variety embedding, sheaf, Cox-module, or global neural toric model.
+- If no model-derived exponent matrix exists, the page and payload render an unavailable state with the exact missing input and no-proxy contract; chart-bundle logits, toric activation rows, support tokens, GraphCG cells, embeddings, and visualization rows cannot substitute for the CAS certificate.
+- The artifact validator now checks the toric sidecar when present: schema, CAS schema, no-proxy render contract, finite-sidecar safety, certificate attachment when available, exponent-matrix evidence, and false normal-fan/tropical-variety/global toric-variety safety flags.
+
+Validation:
+
+```text
+/home/iska/miniconda3/envs/tokengt/bin/python -m py_compile TropicalGT-I/src/tropicalgt/visualization.py TropicalGT-I/scripts/validate_interactive_audit_artifacts.py TropicalGT-I/tests/test_simplicial_visualization.py
+# passed
+CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/scripts:TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_simplicial_visualization.py TropicalGT-I/tests/test_interactive_artifact_validator.py -q
+# 52 passed
+```
+
+Operational note: b62 remained alive during verification and had advanced past step 750/5000 with train loss/NLL around 1.345/1.322 when checked.
+
+Next linear item: continue source-side audit hardening and browser validation while b62 trains to the 5K gate; newly generated bundles will include the toric sidecar, while pre-existing b62 artifacts may need backfill before strict sidecar review.
