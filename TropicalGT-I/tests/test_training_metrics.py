@@ -440,6 +440,33 @@ def test_periodic_got_audit_retention_prunes_only_unprotected_generated_audits(t
     assert json.loads(manifest.read_text(encoding="utf-8"))["step"] == 200
 
 
+def test_periodic_got_audit_retention_can_cap_configured_keep_steps(tmp_path: Path):
+    import tropicalgt.run as run_mod
+
+    out_dir = tmp_path / "run"
+    for step in (250, 500, 750, 1000):
+        audit_dir = out_dir / "periodic" / f"step_{step:08d}" / "got_audit"
+        audit_dir.mkdir(parents=True)
+        (audit_dir / "large_payload.json").write_text("{}", encoding="utf-8")
+
+    actions = run_mod._prune_periodic_generated_audits(
+        out_dir,
+        {
+            "periodic_prune_got_audit_keep_latest": 2,
+            "periodic_prune_got_audit_keep_steps": [250, 500, 1000],
+            "periodic_prune_got_audit_max_retained_steps": 2,
+        },
+    )
+
+    assert [row["step"] for row in actions] == [250, 500]
+    assert not (out_dir / "periodic" / "step_00000250" / "got_audit").exists()
+    assert not (out_dir / "periodic" / "step_00000500" / "got_audit").exists()
+    assert (out_dir / "periodic" / "step_00000750" / "got_audit").exists()
+    assert (out_dir / "periodic" / "step_00001000" / "got_audit").exists()
+    assert all("max_retained_steps capped" in row["reason"] for row in actions)
+    assert actions[0]["retention_policy"]["capped_configured_steps"] == [250, 500]
+
+
 def test_periodic_got_visualization_records_unavailable_on_failure_policy(tmp_path: Path, monkeypatch):
     import tropicalgt.run as run_mod
 

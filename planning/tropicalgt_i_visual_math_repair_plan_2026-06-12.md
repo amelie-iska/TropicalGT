@@ -430,3 +430,23 @@ PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pyt
 Operational note: the first test attempt failed before code execution because the root filesystem had only about 2 MB free and pytest could not allocate `/tmp` directories. After safe cache cleanup, focused tests ran cleanly. The live b60 validator still reports known legacy audit failures for insufficient rows and older no-proxy contracts; the navigation repair itself is verified by source tests, live backfill action, and browser inspection.
 
 Next linear item: continue the no-proxy visual/math repair queue while b62 remains active toward the 5K gate; prioritize the next source-visible gap that Herschel's 5K report must inventory.
+
+
+## 2026-06-16 Periodic Audit Retention Hardening Pass
+
+Sequential operational/source hardening item completed after the toric sidecar navigation pass:
+
+- b62 failed at step 1000 while writing periodic inference-audit artifacts with `OSError: [Errno 28] No space left on device`; the monitor recorded `fatal_marker_observed_no_automatic_restart` and did not claim a 5K completion.
+- Preserved b62 failure evidence under `TropicalGT-I/outputs/training_stop_records/preserved_b62_failure_20260616T162800Z/`, then removed the failed generated b62 output bundle and partial checkpoint to restore about 65 GB free. This did not delete datasets, W&B folders, source, planning docs, b60 evidence, or secrets.
+- Launched fresh step-0 b63 run `tropicalgt_i_pg_bpb_step0_full24b_b63_20260616T174503Z_fresh_bpb112_alwayson_5k_gate` with trainer PID `1048659`, monitor PID `1048773`, W&B id `4vhilcwc`, config `TropicalGT-I/outputs/launch_configs/tropicalgt_i_pg_bpb_step0_full24b_b63_20260616T174503Z_fresh_bpb112_alwayson_5k_gate.json`, log `TropicalGT-I/outputs/tropicalgt_i_pg_bpb_step0_full24b_b63_20260616T174503Z_fresh_bpb112_alwayson_5k_gate/logs/train_nohup_20260616T174503Z.log`, and stop record `TropicalGT-I/outputs/training_stop_records/b63_fresh_step0_alwayson_step5000_gate.json`.
+- b63 preserves the advanced training stack and changes only generated artifact retention: periodic audits still run, but retained `got_audit` bundles are bounded to latest plus final 5K, and final periodic evaluation keeps at least three detail rows.
+- Added an opt-in source retention cap `periodic_prune_got_audit_max_retained_steps`. When set, it can cap configured keep-steps while preserving newest audits, and each prune action records the exact retention policy and capped configured steps in the manifest. This is an artifact-retention guard only; it does not alter model losses, metrics, CAS certificates, or mathematical evidence.
+
+Validation:
+
+```text
+PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_training_metrics.py -q -p no:cacheprovider --basetemp=/tmp/tropicalgt-pytest-retention
+# 14 passed
+```
+
+Next linear item: monitor b63 through its early periodic checkpoint and continue the no-proxy visual/math repair queue.

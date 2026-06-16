@@ -1036,6 +1036,7 @@ def _prune_periodic_generated_audits(out_dir: Path, cfg: dict[str, Any]) -> list
     if not periodic_dir.exists():
         return []
     keep_steps = _cfg_int_list(cfg.get("periodic_prune_got_audit_keep_steps"))
+    max_retained_steps = max(_cfg_int(cfg, ("periodic_prune_got_audit_max_retained_steps",), 0), 0)
     step_dirs: list[tuple[int, Path]] = []
     for path in periodic_dir.glob("step_*"):
         if not path.is_dir():
@@ -1045,7 +1046,14 @@ def _prune_periodic_generated_audits(out_dir: Path, cfg: dict[str, Any]) -> list
             step_dirs.append((step_no, path))
     step_dirs.sort()
     latest_keep = {step for step, _ in step_dirs[-keep_latest:]}
-    protected = latest_keep | keep_steps
+    configured_protected = latest_keep | keep_steps
+    existing_steps = {step for step, _ in step_dirs}
+    capped_configured_steps: set[int] = set()
+    protected = set(configured_protected)
+    if max_retained_steps > 0 and len(configured_protected & existing_steps) > max_retained_steps:
+        retained_existing = set(sorted(configured_protected & existing_steps)[-max_retained_steps:]) | latest_keep
+        capped_configured_steps = (configured_protected & existing_steps) - retained_existing
+        protected = (configured_protected - existing_steps) | retained_existing
     actions: list[dict[str, Any]] = []
     for step_no, step_dir in step_dirs:
         if step_no in protected:
@@ -1056,11 +1064,20 @@ def _prune_periodic_generated_audits(out_dir: Path, cfg: dict[str, Any]) -> list
         import shutil
 
         shutil.rmtree(audit_dir)
+        reason = "Removed generated periodic got_audit payloads according to retention policy; compact validation reports and non-audit artifacts remain."
+        if step_no in capped_configured_steps:
+            reason = "Removed generated periodic got_audit payloads because periodic_prune_got_audit_max_retained_steps capped configured keep-steps; compact validation reports and non-audit artifacts remain."
         actions.append(
             {
                 "step": int(step_no),
                 "removed": str(audit_dir),
-                "reason": "Removed generated periodic got_audit payloads according to retention policy; compact validation reports and non-audit artifacts remain.",
+                "reason": reason,
+                "retention_policy": {
+                    "keep_latest": int(keep_latest),
+                    "keep_steps": sorted(int(step) for step in keep_steps),
+                    "max_retained_steps": int(max_retained_steps),
+                    "capped_configured_steps": sorted(int(step) for step in capped_configured_steps),
+                },
             }
         )
     if actions:
