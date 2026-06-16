@@ -275,6 +275,30 @@ def _row(root: Path, name: str) -> Path:
         },
     ]}))
     _write(
+        row / "tropical_fan_diagnostics.json",
+        json.dumps(
+            {
+                "schema_version": "tropicalgt.tropical_fan_visual_audit.v1",
+                "available": False,
+                "source_path": "unavailable",
+                "ideal_spec": None,
+                "safe_to_render_as_tropical_fan": False,
+                "render_contract": "Tropical fan diagnostics render one dimensional cones only from explicit model-derived ideal specs and real Macaulay2 Tropical certificates; unavailable states are not substituted by support-token proxies.",
+                "diagnostics": {
+                    "schema_version": "tropicalgt.cas_tropical_fan.v1",
+                    "available": False,
+                    "status": "unavailable_no_model_derived_tropical_ideal",
+                    "reason": "fixture has no explicit model-derived tropical ideal",
+                    "backend": "Macaulay2",
+                    "certificate_attached": False,
+                    "fan_diagnostics_certified": False,
+                    "safe_to_render_as_tropical_fan": False,
+                    "cas_artifacts": {},
+                },
+            }
+        ),
+    )
+    _write(
         row / "tropical_support_payload.json",
         json.dumps(
             {
@@ -380,6 +404,7 @@ def _row(root: Path, name: str) -> Path:
         "got_full_trajectory_simplex_tree_3d_jensen_shannon.html": _html("Full graph-of-thought trajectory probability SimplexTree", "Plotly.newPlot Jensen-Shannon probability SimplexTree actual face-to-coface covers optional sorted-label trie prefix links not disconnected simplex columns"),
         "reasoning_step_complex_maps/index.html": _html("Reasoning step filtered simplicial complex maps", "table"),
         "tropical_support_heatmap.html": _html("Tropical active support", "Plotly.newPlot observed supports only top-support collapse rate"),
+        "tropical_fan_diagnostics.html": _html("Tropical fan diagnostics unavailable", "Plotly.newPlot Macaulay2 one dimensional cones not a multigraded free-resolution"),
         "graphcg_direction_cosines.html": _html("GraphCG full-rank direction audit", "Plotly.newPlot Readable top-direction heatmap"),
         "analogical_memory_topk_index.html": "<!doctype html><title>Analogical top-k probability correspondences</title><body>Analogical top-k probability correspondences <a href='analogical_memory_retrieval.html'>rank 1</a> <a href='analogical_memory_map_02.html'>rank 2</a></body>",
         "analogical_memory_retrieval.html": _html("Analogical probability-matched correspondence filtered-complex certificate", "Plotly.newPlot query trajectory complex retrieved memory complex slider filters domain and codomain sliders vertex-only correspondences preserved 1-simplex map simplicial-object-plot selected-complex-graph plotly_click"),

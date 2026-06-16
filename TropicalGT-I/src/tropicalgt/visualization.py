@@ -357,6 +357,7 @@ def write_inference_audit_artifacts(
             paths.update(write_got_trajectory_visualization(scaling, output_dir))
             paths.update(write_graphcg_trajectory_visualization(scaling, output_dir))
         paths.update(write_tropical_support_heatmap(result, output_dir))
+        paths.update(write_tropical_fan_diagnostics(result, output_dir))
         if isinstance(topology, dict):
             paths.update(write_persistence_visualizations(topology, output_dir))
         trajectory_topology = scaling.get("trajectory_topological_algebra") if isinstance(scaling, dict) else None
@@ -3478,6 +3479,246 @@ def write_tropical_support_heatmap(result: dict[str, object], output_dir: str | 
     fig.update_yaxes(title_text="active-support margin", automargin=True, row=3, col=1)
     _write_plotly_dark_html(path, fig, "Tropical active-support heatmap")
     return {"tropical_support_heatmap": str(path), "tropical_support_payload": str(payload_path)}
+
+
+_TROPICAL_IDEAL_KEYS = (
+    "model_derived_tropical_ideal",
+    "tropical_ideal",
+    "tropical_fan_ideal",
+    "tropical_variety_ideal",
+)
+
+
+def _find_explicit_tropical_ideal_spec(result: Mapping[str, Any]) -> tuple[str, Mapping[str, Any]] | None:
+    containers: list[tuple[str, Any]] = [("result", result)]
+    trace = result.get("graph_token_trace") if isinstance(result, Mapping) else None
+    if isinstance(trace, Mapping):
+        containers.append(("result.graph_token_trace", trace))
+    metrics = result.get("metrics") if isinstance(result, Mapping) else None
+    if isinstance(metrics, Mapping):
+        containers.append(("result.metrics", metrics))
+    scaling = result.get("inference_scaling") if isinstance(result, Mapping) else None
+    if isinstance(scaling, Mapping):
+        containers.append(("result.inference_scaling", scaling))
+        best = scaling.get("best")
+        if isinstance(best, Mapping):
+            containers.append(("result.inference_scaling.best", best))
+        candidates = scaling.get("candidates")
+        if isinstance(candidates, Sequence) and not isinstance(candidates, (str, bytes)):
+            for idx, candidate in enumerate(candidates[:8]):
+                if isinstance(candidate, Mapping):
+                    containers.append((f"result.inference_scaling.candidates[{idx}]", candidate))
+    for container_path, container in containers:
+        if not isinstance(container, Mapping):
+            continue
+        for key in _TROPICAL_IDEAL_KEYS:
+            value = container.get(key)
+            if isinstance(value, Mapping) and isinstance(value.get("variables"), Sequence) and isinstance(value.get("generators"), Sequence):
+                return f"{container_path}.{key}", value
+    return None
+
+
+def _precomputed_tropical_fan_report(result: Mapping[str, Any]) -> tuple[str, Mapping[str, Any]] | None:
+    for key in ("tropical_fan_diagnostics", "macaulay2_tropical_fan_diagnostics"):
+        value = result.get(key) if isinstance(result, Mapping) else None
+        if isinstance(value, Mapping) and value.get("schema_version") == "tropicalgt.cas_tropical_fan.v1":
+            return f"result.{key}", value
+    return None
+
+
+def _unavailable_tropical_fan_payload(reason: str, *, source_path: str = "unavailable") -> dict[str, Any]:
+    diagnostics = {
+        "schema_version": "tropicalgt.cas_tropical_fan.v1",
+        "available": False,
+        "status": "unavailable_no_model_derived_tropical_ideal",
+        "reason": reason,
+        "backend": "Macaulay2",
+        "certificate_attached": False,
+        "tropical_cycle_certified": False,
+        "fan_diagnostics_certified": False,
+        "safe_to_render_as_tropical_fan": False,
+        "cas_artifacts": {},
+    }
+    return {
+        "schema_version": "tropicalgt.tropical_fan_visual_audit.v1",
+        "available": False,
+        "source_path": source_path,
+        "ideal_spec": None,
+        "diagnostics": diagnostics,
+        "safe_to_render_as_tropical_fan": False,
+        "render_contract": "Tropical fan diagnostics render one dimensional cones only from explicit model-derived ideal specs and real Macaulay2 Tropical certificates; unavailable states are not substituted by support-token proxies.",
+    }
+
+
+def _tropical_fan_ray_rows(summary: Mapping[str, Any]) -> list[dict[str, Any]]:
+    rays = summary.get("rays") if isinstance(summary, Mapping) else []
+    if not isinstance(rays, Sequence) or isinstance(rays, (str, bytes)) or not rays:
+        return []
+    rows = [list(row) for row in rays if isinstance(row, Sequence) and not isinstance(row, (str, bytes))]
+    if not rows:
+        return []
+    ray_count = max((len(row) for row in rows), default=0)
+    out: list[dict[str, Any]] = []
+    for ray_idx in range(ray_count):
+        coords = []
+        for row in rows:
+            try:
+                coords.append(int(row[ray_idx]))
+            except Exception:
+                coords.append(0)
+        out.append({"ray_index": int(ray_idx), "coordinates": coords})
+    return out
+
+
+def _write_tropical_fan_html(path: Path, payload: Mapping[str, Any]) -> None:
+    diagnostics = payload.get("diagnostics") if isinstance(payload.get("diagnostics"), Mapping) else {}
+    summary = diagnostics.get("fan_summary") if isinstance(diagnostics.get("fan_summary"), Mapping) else {}
+    ray_rows = _tropical_fan_ray_rows(summary)
+    available = bool(payload.get("available") and diagnostics.get("safe_to_render_as_tropical_fan") is True and ray_rows)
+    if available:
+        fig = make_subplots(
+            rows=1,
+            cols=2,
+            specs=[[{"type": "xy"}, {"type": "table"}]],
+            column_widths=[0.56, 0.44],
+            horizontal_spacing=0.14,
+            subplot_titles=("one dimensional cones from certified rays", "Macaulay2 Tropical certificate"),
+        )
+        for row in ray_rows:
+            coords = row["coordinates"]
+            x = float(coords[0]) if coords else 0.0
+            y = float(coords[1]) if len(coords) > 1 else 0.0
+            label = f"rho_{row['ray_index']} = ({', '.join(str(v) for v in coords)})"
+            fig.add_trace(
+                go.Scatter(
+                    x=[0.0, x],
+                    y=[0.0, y],
+                    mode="lines+markers+text",
+                    text=["", label],
+                    textposition="top center",
+                    line=dict(width=3),
+                    marker=dict(size=[5, 10]),
+                    hovertemplate=f"{html.escape(label)}<br>one dimensional cone / ray<extra></extra>",
+                    name=label,
+                    showlegend=False,
+                ),
+                row=1,
+                col=1,
+            )
+        max_cones = summary.get("max_cones") if isinstance(summary.get("max_cones"), list) else []
+        multiplicities = summary.get("multiplicities") if isinstance(summary.get("multiplicities"), list) else []
+        table_rows = [
+            ("status", diagnostics.get("status", "certified")),
+            ("backend", diagnostics.get("backend", "Macaulay2")),
+            ("source", payload.get("source_path", "unknown")),
+            ("ray count", summary.get("ray_count", len(ray_rows))),
+            ("ambient dimension", summary.get("ambient_dimension", "")),
+            ("max cones", _json_clip(max_cones, 220)),
+            ("multiplicities", _json_clip(multiplicities, 160)),
+            ("balanced", summary.get("is_balanced", False)),
+            ("pure", summary.get("is_pure", False)),
+            ("simplicial", summary.get("is_simplicial", False)),
+            ("cycle certified", diagnostics.get("tropical_cycle_certified", False)),
+            ("warning", diagnostics.get("render_warning", "not a multigraded free-resolution certificate")),
+        ]
+        fig.add_trace(
+            go.Table(
+                header=dict(values=["diagnostic", "value"], fill_color="#10243f", font=dict(color="#e8f2ff", size=13), align="left"),
+                cells=dict(
+                    values=[[str(k) for k, _ in table_rows], [str(v) for _, v in table_rows]],
+                    fill_color="#07111f",
+                    font=dict(color="#d7e8ff", size=12),
+                    align="left",
+                    height=28,
+                ),
+            ),
+            row=1,
+            col=2,
+        )
+        fig.update_xaxes(title_text="ray coordinate 1", zeroline=True, row=1, col=1)
+        fig.update_yaxes(title_text="ray coordinate 2", zeroline=True, scaleanchor="x", scaleratio=1, row=1, col=1)
+        title = "Tropical fan diagnostics: real Macaulay2 certificate<br><sup>Rays are one dimensional cones; this is not a multigraded free-resolution or derived-equivalence certificate.</sup>"
+        fig.update_layout(title=title, height=720, margin=dict(t=118, l=70, r=44, b=80))
+    else:
+        diagnostics_reason = str(diagnostics.get("reason", "No explicit model-derived tropical ideal spec was exported."))
+        table_rows = [
+            ("status", diagnostics.get("status", "unavailable_no_model_derived_tropical_ideal")),
+            ("source", payload.get("source_path", "unavailable")),
+            ("safe_to_render_as_tropical_fan", False),
+            ("reason", diagnostics_reason),
+            ("render contract", payload.get("render_contract", "unavailable")),
+            ("one dimensional cones", "not rendered without a real Macaulay2 Tropical certificate"),
+            ("warning", "not a multigraded free-resolution or derived-equivalence certificate"),
+        ]
+        fig = go.Figure(
+            data=[
+                go.Table(
+                    header=dict(values=["diagnostic", "value"], fill_color="#10243f", font=dict(color="#e8f2ff", size=13), align="left"),
+                    cells=dict(
+                        values=[[str(k) for k, _ in table_rows], [str(v) for _, v in table_rows]],
+                        fill_color="#07111f",
+                        font=dict(color="#d7e8ff", size=12),
+                        align="left",
+                        height=30,
+                    ),
+                )
+            ]
+        )
+        fig.update_layout(
+            title="Tropical fan diagnostics unavailable<br><sup>No one dimensional cones are displayed without an explicit model-derived ideal and a real Macaulay2 certificate.</sup>",
+            height=520,
+            margin=dict(t=112, l=44, r=44, b=44),
+        )
+    _write_plotly_dark_html(path, fig, "Tropical fan diagnostics")
+
+
+def write_tropical_fan_diagnostics(result: dict[str, object], output_dir: str | Path, *, timeout_s: float = 15.0) -> dict[str, str]:
+    output_dir = Path(output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    html_path = output_dir / "tropical_fan_diagnostics.html"
+    payload_path = output_dir / "tropical_fan_diagnostics.json"
+
+    precomputed = _precomputed_tropical_fan_report(result if isinstance(result, Mapping) else {})
+    if precomputed is not None:
+        source_path, report = precomputed
+        ideal_spec = report.get("ideal_schema") if isinstance(report.get("ideal_schema"), Mapping) else None
+    else:
+        found = _find_explicit_tropical_ideal_spec(result if isinstance(result, Mapping) else {})
+        if found is None:
+            payload = _unavailable_tropical_fan_payload(
+                "No explicit model-derived tropical ideal spec was exported. Expected one of model_derived_tropical_ideal, tropical_ideal, tropical_fan_ideal, or tropical_variety_ideal with variables and generators.",
+            )
+            payload_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+            _write_tropical_fan_html(html_path, payload)
+            return {"tropical_fan_diagnostics": str(html_path), "tropical_fan_diagnostics_payload": str(payload_path)}
+        source_path, ideal_spec = found
+        try:
+            from . import cas_tropical
+
+            report = cas_tropical.try_compute_tropical_fan_diagnostics(dict(ideal_spec), timeout_s=timeout_s)
+        except Exception as exc:
+            payload = _unavailable_tropical_fan_payload(
+                f"Macaulay2 Tropical diagnostic call failed before a certificate could be attached: {type(exc).__name__}: {exc}",
+                source_path=source_path,
+            )
+            payload["ideal_spec"] = dict(ideal_spec)
+            payload_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+            _write_tropical_fan_html(html_path, payload)
+            return {"tropical_fan_diagnostics": str(html_path), "tropical_fan_diagnostics_payload": str(payload_path)}
+
+    safe = bool(isinstance(report, Mapping) and report.get("safe_to_render_as_tropical_fan") is True)
+    payload = {
+        "schema_version": "tropicalgt.tropical_fan_visual_audit.v1",
+        "available": safe,
+        "source_path": source_path,
+        "ideal_spec": dict(ideal_spec) if isinstance(ideal_spec, Mapping) else None,
+        "diagnostics": dict(report) if isinstance(report, Mapping) else {},
+        "safe_to_render_as_tropical_fan": safe,
+        "render_contract": "Tropical fan diagnostics render one dimensional cones only from explicit model-derived ideal specs and real Macaulay2 Tropical certificates; unavailable states are not substituted by support-token proxies.",
+    }
+    payload_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+    _write_tropical_fan_html(html_path, payload)
+    return {"tropical_fan_diagnostics": str(html_path), "tropical_fan_diagnostics_payload": str(payload_path)}
 
 
 def _support_token_label(index: int, token: dict[str, object], long: bool = False) -> str:

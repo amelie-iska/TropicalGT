@@ -181,14 +181,14 @@ Remaining CAS items:
 
 ## CAS And Tropical Geometry Research Addenda
 
-- Macaulay2 `Tropical` package: first certified wrapper implemented for `tropicalVariety`, `fan`, `rays`, `maxCones`, `linealitySpace`, `multiplicities`, `isBalanced`, `isPure`, and `isSimplicial`; it returns unavailable states rather than proxies and explicitly does not substitute for multigraded `F2[x_level,x_radius]` persistence-module free resolutions. Remaining package audit items include `tropicalPrevariety`, `tropicalCycle`, `BergmanFan`, cones beyond max-cone summaries, `stableIntersection`, `isTropicalBasis`, and `visualizeHypersurface`.
+- Macaulay2 `Tropical` package: first certified wrapper implemented for `tropicalVariety`, `fan`, `rays`, `maxCones`, `linealitySpace`, `multiplicities`, `isBalanced`, `isPure`, and `isSimplicial`; inference/audit bundles now always write a tropical fan diagnostic JSON/HTML surface that renders one dimensional cones only from an explicit model-derived ideal plus the Macaulay2 certificate. It returns unavailable states rather than proxies and explicitly does not substitute for multigraded `F2[x_level,x_radius]` persistence-module free resolutions. Remaining package audit items include `tropicalPrevariety`, `tropicalCycle`, `BergmanFan`, cones beyond max-cone summaries, `stableIntersection`, `isTropicalBasis`, and `visualizeHypersurface`.
 - Sage `tropical_variety` documentation: review Newton polytope, tropical hypersurface/variety, and polyhedral plotting/construction hooks for exact tropical geometry checks associated with embedding-space probes and TokenGT graph-state coordinates.
 - Sage `tropical_mpolynomial` documentation: review tropical multivariate polynomial construction, monomial support, coefficient arithmetic, Newton-polytope data, and exact tropical semiring operations for model-derived tropical polynomial certificates.
 - Reference `1710.10651v2.pdf`: review fully before adding any training theorem, paper claim, or implementation hook tied to tropical/toric embeddings.
 - CAS package survey: look for Sage, Macaulay2, Singular, RIVET/multipers, polymake, Normaliz, and related packages that compute real multigraded modules, minimal resolutions, Betti tables, Fitting ideals, minors, Buchsbaum-Eisenbud diagnostics, tropical fans, toric varieties, and stable intersections.
 - Maclagan-style toric embedding research direction: investigate whether the transformer graph-state and tropical-attention coordinate system can be embedded into a toric variety via model-derived monomial coordinates, Newton polytopes, fan data, and one dimensional cone data. Any resulting implementation must distinguish theorem-level certified constructions from diagnostic embeddings or visual probes.
 
-_Last updated: 2026-06-16T02:05:00+00:00_
+_Last updated: 2026-06-16T02:28:00+00:00_
 
 
 ## 2026-06-16 Fresh b59 5K Review Gate and Worker Handoff
@@ -206,4 +206,4 @@ No TropicalGT-I metric, loss, visualization, analogical map, persistence module,
 
 Use "one dimensional cone" or "one dimensional cones" as the preferred fan-theoretic language whenever the intended object is a cone of a fan or a cone-indexed filtration datum. Use singular or plural according to ordinary grammar.
 
-_Last updated: 2026-06-16T02:05:00+00:00_
+_Last updated: 2026-06-16T02:28:00+00:00_

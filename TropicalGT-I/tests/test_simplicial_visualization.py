@@ -22,6 +22,7 @@ from tropicalgt.visualization import (
     write_got_trajectory_visualization,
     write_persistence_visualizations,
     write_reasoning_visualizations,
+    write_tropical_fan_diagnostics,
     write_tropical_support_heatmap,
 )
 
@@ -552,6 +553,73 @@ def test_got_trajectory_visualization_renders_simplicial_panel_and_nll_surface(t
     assert "Filtration radius" in first_step_html
     assert "play filtration" in first_step_html
     assert "faint directed graph-token overlay" in first_step_html
+
+
+
+def test_tropical_fan_diagnostics_unavailable_without_explicit_ideal(tmp_path: Path):
+    paths = write_tropical_fan_diagnostics({}, tmp_path)
+    payload = json.loads(Path(paths["tropical_fan_diagnostics_payload"]).read_text(encoding="utf-8"))
+    markup = Path(paths["tropical_fan_diagnostics"]).read_text(encoding="utf-8")
+    assert payload["available"] is False
+    assert payload["safe_to_render_as_tropical_fan"] is False
+    assert payload["diagnostics"]["status"] == "unavailable_no_model_derived_tropical_ideal"
+    assert "support-token proxies" in payload["render_contract"]
+    assert "Tropical fan diagnostics unavailable" in markup
+    assert "one dimensional cones" in markup
+    assert "not a multigraded free-resolution" in markup
+    assert "Plotly.newPlot" in markup
+
+
+def test_tropical_fan_diagnostics_renders_certified_explicit_ideal(tmp_path: Path, monkeypatch):
+    import tropicalgt.cas_tropical as cas_tropical
+
+    calls = []
+
+    def fake_try_compute(spec, *, timeout_s=15.0, use_cache=None):
+        calls.append((spec, timeout_s, use_cache))
+        return {
+            "schema_version": "tropicalgt.cas_tropical_fan.v1",
+            "available": True,
+            "status": "certified",
+            "backend": "Macaulay2",
+            "certificate_attached": True,
+            "tropical_cycle_certified": True,
+            "fan_diagnostics_certified": True,
+            "safe_to_render_as_tropical_fan": True,
+            "ideal_schema": {"variables": ["x", "y"], "generators": ["x+y+1"]},
+            "cas_artifacts": {"raw_tagged_output": "rays=matrix {{1,-1,0},{0,-1,1}}"},
+            "fan_summary": {
+                "rays": [[1, -1, 0], [0, -1, 1]],
+                "max_cones": [[1], [0], [2]],
+                "multiplicities": [1, 1, 1],
+                "ray_count": 3,
+                "ambient_dimension": 2,
+                "max_cone_count": 3,
+                "is_balanced": True,
+                "is_pure": True,
+                "is_simplicial": True,
+                "one_dimensional_cone_language": "rays are one dimensional cones",
+            },
+            "render_warning": "Certified tropical fan diagnostics only. This is not a multigraded free-resolution or derived-equivalence certificate.",
+        }
+
+    monkeypatch.setattr(cas_tropical, "try_compute_tropical_fan_diagnostics", fake_try_compute)
+    paths = write_tropical_fan_diagnostics(
+        {"graph_token_trace": {"model_derived_tropical_ideal": {"variables": ["x", "y"], "generators": ["x+y+1"]}}},
+        tmp_path,
+        timeout_s=3.0,
+    )
+    payload = json.loads(Path(paths["tropical_fan_diagnostics_payload"]).read_text(encoding="utf-8"))
+    markup = Path(paths["tropical_fan_diagnostics"]).read_text(encoding="utf-8")
+    assert calls == [({"variables": ["x", "y"], "generators": ["x+y+1"]}, 3.0, None)]
+    assert payload["available"] is True
+    assert payload["source_path"] == "result.graph_token_trace.model_derived_tropical_ideal"
+    assert payload["diagnostics"]["fan_summary"]["ray_count"] == 3
+    assert payload["safe_to_render_as_tropical_fan"] is True
+    assert "Tropical fan diagnostics: real Macaulay2 certificate" in markup
+    assert "rho_0" in markup
+    assert "one dimensional cones" in markup
+    assert "not a multigraded free-resolution" in markup
 
 
 

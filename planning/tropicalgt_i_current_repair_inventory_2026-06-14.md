@@ -317,3 +317,21 @@ Verification:
 - `PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_algebraic_persistence.py -q` -> `18 passed`.
 
 Next sequential item: connect the certified tropical fan diagnostic to a bounded visualization/audit surface when a model-derived tropical ideal is actually exported; unavailable state remains mandatory otherwise.
+
+## 2026-06-16 Tropical Fan Audit Surface Pass
+
+Status: implemented and focused-tested.
+
+Changes made:
+- Added always-written tropical fan audit artifacts for inference/audit bundles.
+- Certified rendering is gated on an explicit model-derived tropical ideal plus the Macaulay2 `Tropical` certificate; otherwise the page and payload are explicitly unavailable.
+- The audit page uses fan-theoretic one dimensional cone language only for certified rays and repeats that the diagnostic is not a free-resolution or derived-equivalence certificate.
+- The interactive artifact validator now checks the fan payload schema and no-proxy render contract.
+
+Verification:
+- `python -m py_compile TropicalGT-I/src/tropicalgt/visualization.py TropicalGT-I/scripts/validate_interactive_audit_artifacts.py` passed.
+- Tropical fan writer focused tests -> `2 passed`.
+- `PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_interactive_artifact_validator.py -q` -> `10 passed`.
+- `PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_simplicial_visualization.py -q` -> `27 passed`.
+
+Next sequential item: expose/export a genuinely model-derived tropical ideal spec when the model has enough implemented algebraic state to justify it; until then the audit surface remains unavailable by design.

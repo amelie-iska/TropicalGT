@@ -23,6 +23,7 @@ REQUIRED_HTML = {
     "probability_simplex_tree": ("got_full_trajectory_simplex_tree_3d_jensen_shannon.html", ("probability", "SimplexTree", "Jensen-Shannon")),
     "step_complex_index": ("reasoning_step_complex_maps/index.html", ("Reasoning step filtered simplicial complex maps",)),
     "tropical_support": ("tropical_support_heatmap.html", ("Tropical", "support")),
+    "tropical_fan": ("tropical_fan_diagnostics.html", ("Tropical fan diagnostics", "one dimensional cones", "Macaulay2", "not a multigraded free-resolution")),
     "graphcg": ("graphcg_direction_cosines.html", ("GraphCG", "full-rank direction audit")),
     "analogical_index": ("analogical_memory_topk_index.html", ("Analogical top-k probability correspondences",)),
     "analogical_map": ("analogical_memory_map_02.html", ("Analogical", "probability-matched correspondence", "filtered-complex certificate")),
@@ -42,6 +43,7 @@ REQUIRED_JSON = {
     "step_manifest": "reasoning_step_complex_maps/manifest.json",
     "inference_audit": "inference_audit.json",
     "tropical_support_payload": "tropical_support_payload.json",
+    "tropical_fan_diagnostics": "tropical_fan_diagnostics.json",
     "graphcg_payload": "graphcg_direction_cosines_payload.json",
     "trajectory_bifiltration_payload": "trajectory_level_radius_bifiltration.json",
 }
@@ -292,6 +294,22 @@ def validate_row(row_dir: Path, *, min_candidates: int = 8, min_depth: int = 2, 
     embedding_payload = _read_json(row_dir / REQUIRED_JSON["embedding_payload"]) if (row_dir / REQUIRED_JSON["embedding_payload"]).exists() else {}
     full_complex_payload = _read_json(row_dir / REQUIRED_JSON["full_complex_payload"]) if (row_dir / REQUIRED_JSON["full_complex_payload"]).exists() else {}
     manifest = _read_json(row_dir / REQUIRED_JSON["step_manifest"]) if (row_dir / REQUIRED_JSON["step_manifest"]).exists() else {}
+    tropical_fan_payload = _read_json(row_dir / REQUIRED_JSON["tropical_fan_diagnostics"]) if (row_dir / REQUIRED_JSON["tropical_fan_diagnostics"]).exists() else {}
+    if tropical_fan_payload:
+        fan_diag = tropical_fan_payload.get("diagnostics", {}) if isinstance(tropical_fan_payload.get("diagnostics"), dict) else {}
+        _assert(tropical_fan_payload.get("schema_version") == "tropicalgt.tropical_fan_visual_audit.v1", errors, "tropical fan diagnostics payload has wrong schema")
+        _assert(fan_diag.get("schema_version") == "tropicalgt.cas_tropical_fan.v1", errors, "tropical fan diagnostics payload is missing CAS schema")
+        _assert("support-token proxies" in str(tropical_fan_payload.get("render_contract", "")), errors, "tropical fan diagnostics missing no-proxy render contract")
+        if tropical_fan_payload.get("available") is True:
+            _assert(fan_diag.get("safe_to_render_as_tropical_fan") is True, errors, "available tropical fan diagnostics are not marked safe to render")
+            _assert(fan_diag.get("certificate_attached") is True, errors, "available tropical fan diagnostics missing certificate")
+            _assert(fan_diag.get("fan_diagnostics_certified") is True, errors, "available tropical fan diagnostics are not certified")
+            summary = fan_diag.get("fan_summary", {}) if isinstance(fan_diag.get("fan_summary"), dict) else {}
+            _assert(_finite_float(summary.get("ray_count"), 0.0) > 0, errors, "available tropical fan diagnostics have no rays")
+        else:
+            _assert(tropical_fan_payload.get("safe_to_render_as_tropical_fan") is False, errors, "unavailable tropical fan diagnostics marked safe to render")
+            _assert(fan_diag.get("safe_to_render_as_tropical_fan") is False, errors, "unavailable CAS tropical fan report marked safe to render")
+
     support_payload = _read_json(row_dir / REQUIRED_JSON["tropical_support_payload"]) if (row_dir / REQUIRED_JSON["tropical_support_payload"]).exists() else {}
     graphcg_payload = _read_json(row_dir / REQUIRED_JSON["graphcg_payload"]) if (row_dir / REQUIRED_JSON["graphcg_payload"]).exists() else {}
     bifiltration_payload = _read_json(row_dir / REQUIRED_JSON["trajectory_bifiltration_payload"]) if (row_dir / REQUIRED_JSON["trajectory_bifiltration_payload"]).exists() else {}
