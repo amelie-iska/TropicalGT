@@ -204,10 +204,11 @@
 - [x] Tightened `restart_evidence_gate` so a target miss also requires successful post-5K eval/visualization, legacy audit backfill, and interactive validator command-result evidence before any step-0 restart proposal is allowed.
 - [x] Hardened `parameter_golf_codex_review_loop.py` so a missed BPB target halts by default after writing review artifacts, recording `blocked_pending_evidence_backed_config_patch` instead of automatically relaunching the same config. Legacy same-config continuation now requires an explicit opt-in flag.
 - [x] Hardened shared checkpoint loading so empty, unloadable, or malformed checkpoints raise explicit `checkpoint_*` evidence errors before inference/eval/readiness callers can use them.
+- [x] Hardened review-loop boundary checkpoint snapshots so missing, empty, unloadable, or malformed checkpoints are recorded as unavailable evidence and are not copied into review outputs or reused as boundary checkpoints.
 
 ### Current Remaining Implementation List - 2026-06-16
 
-1. Keep actual BPB restart blocked until a nonempty loadable checkpoint or explicitly revised evidence policy exists; post-5K review bundles now record this as `restart_evidence_gate.step0_restart_allowed=false` when evidence is missing, and shared checkpoint loading reports the current b60 blocker as `checkpoint_file_empty`.
+1. Keep actual BPB restart blocked until a nonempty loadable checkpoint or explicitly revised evidence policy exists; post-5K review bundles now record this as `restart_evidence_gate.step0_restart_allowed=false` when evidence is missing, shared checkpoint loading reports the current b60 blocker as `checkpoint_file_empty`, and review-loop snapshotting refuses to copy the zero-byte checkpoint.
 2. Continue source-side preflight and evidence hardening for future BPB runs, especially places where stale config fields, cross-run state, missing datasets, unavailable CAS, missing memory evidence, automatic same-config restarts, or newly discovered bypasses could otherwise look successful.
 3. If the no-proxy checkpoint block is resolved, run checkpoint-backed post-5K evaluation/backfill/visual validation, then produce an evidence-backed reviewed step-0 restart config targeting BPB `< 1.12`.
 4. Keep browser QA attached to the real step-5000 audit or the next real audit bundle; do not copy generated artifacts into source control.

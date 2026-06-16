@@ -293,7 +293,10 @@ def test_prepare_review_bundle_blocks_restart_without_post_5k_command_results(tm
     checkpoint_dir.mkdir()
     report_path = output_dir / "train_report.json"
     report_path.write_text(json.dumps({"final_step": 5000, "eval": {"bpb": 1.3, "graph_bpb": 2.0}}), encoding="utf-8")
-    torch.save({"step": 5000, "metrics": {"eval_bpb": 1.3, "eval_graph_bpb": 2.0}}, checkpoint_dir / "unit_run.latest.pt")
+    torch.save(
+        {"model": {}, "config": {}, "step": 5000, "metrics": {"eval_bpb": 1.3, "eval_graph_bpb": 2.0}},
+        checkpoint_dir / "unit_run.latest.pt",
+    )
     cfg_path = tmp_path / "config.json"
     cfg_path.write_text(
         json.dumps({"output_dir": str(output_dir), "checkpoint_dir": str(checkpoint_dir), "run_name": "unit_run", "model": {}}),

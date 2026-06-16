@@ -105,8 +105,10 @@ def main() -> None:
                 env["PYTORCH_CUDA_ALLOC_CONF"] = args.cuda_alloc_conf
             subprocess.run(train_cmd, cwd=ROOT, check=True, env=env)
         checkpoint_path = final_checkpoint if final_checkpoint.exists() else latest_checkpoint
-        snapshot_path = _snapshot_checkpoint(checkpoint_path, output_dir, boundary_step) if checkpoint_path.exists() else None
+        snapshot_status = _snapshot_checkpoint_status(checkpoint_path, output_dir, boundary_step)
+        snapshot_path = Path(snapshot_status["snapshot"]) if snapshot_status.get("available") and snapshot_status.get("snapshot") else None
         event["checkpoint_snapshot"] = str(snapshot_path or "")
+        event["checkpoint_snapshot_status"] = snapshot_status
         state["events"].append(event)
         decision = _review_boundary(
             args=args,
@@ -135,11 +137,25 @@ def main() -> None:
                 resume_from = previous_boundary_checkpoint
                 boundary_step = _checkpoint_step(previous_boundary_checkpoint) + args.review_every_steps
             else:
-                resume_from = snapshot_path or checkpoint_path
+                if snapshot_path is None:
+                    checkpoint_block = _checkpoint_snapshot_block(snapshot_status, decision, "triggered_restart_requires_loadable_latest_checkpoint")
+                    decision["checkpoint_snapshot_block"] = checkpoint_block
+                    state.setdefault("checkpoint_snapshot_blocks", []).append(checkpoint_block)
+                    print(json.dumps({"checkpoint_snapshot_block": checkpoint_block}, indent=2))
+                    _write_state(output_dir, state)
+                    break
+                resume_from = snapshot_path
                 boundary_step = _checkpoint_step(resume_from) + args.review_every_steps
         else:
-            previous_boundary_checkpoint = snapshot_path or checkpoint_path
-            resume_from = snapshot_path or checkpoint_path
+            if snapshot_path is None:
+                checkpoint_block = _checkpoint_snapshot_block(snapshot_status, decision, "target_met_requires_loadable_boundary_checkpoint")
+                decision["checkpoint_snapshot_block"] = checkpoint_block
+                state.setdefault("checkpoint_snapshot_blocks", []).append(checkpoint_block)
+                print(json.dumps({"checkpoint_snapshot_block": checkpoint_block}, indent=2))
+                _write_state(output_dir, state)
+                break
+            previous_boundary_checkpoint = snapshot_path
+            resume_from = snapshot_path
             boundary_step += args.review_every_steps
     _write_state(output_dir, state)
 
@@ -263,15 +279,20 @@ def _load_checkpoint_summary(path: Path) -> dict[str, Any]:
         obj = torch.load(path, map_location="cpu")
     except Exception as exc:  # explicit unavailable evidence; do not substitute checkpoint metrics.
         return {**unavailable, "unavailable_reason": f"checkpoint_load_failed:{exc.__class__.__name__}"}
-    metrics = obj.get("metrics", {}) if isinstance(obj, dict) else {}
-    history = obj.get("history", []) if isinstance(obj, dict) else []
+    if not isinstance(obj, dict):
+        return {**unavailable, "unavailable_reason": "checkpoint_invalid_payload:not_dict"}
+    missing = [key for key in ("model", "config", "step") if key not in obj]
+    if missing:
+        return {**unavailable, "unavailable_reason": "checkpoint_invalid_payload:missing_" + ",".join(missing)}
+    metrics = obj.get("metrics", {}) if isinstance(obj.get("metrics"), dict) else {}
+    history = obj.get("history", []) if isinstance(obj.get("history"), list) else []
     return {
         "path": str(path),
         "available": True,
-        "step": int(obj.get("step", metrics.get("step", 0))) if isinstance(obj, dict) else 0,
+        "step": int(obj.get("step", metrics.get("step", 0))),
         "metrics": metrics,
-        "history_tail": history[-20:] if isinstance(history, list) else [],
-        "config": obj.get("config", {}) if isinstance(obj, dict) else {},
+        "history_tail": history[-20:],
+        "config": obj.get("config", {}),
     }
 
 
@@ -335,16 +356,59 @@ def _current_step(report_path: Path, checkpoint_path: Path) -> int:
 def _checkpoint_step(path: Path | None) -> int:
     if path is None or not path.exists():
         return 0
-    obj = torch.load(path, map_location="cpu")
-    return int(obj.get("step", obj.get("metrics", {}).get("step", 0))) if isinstance(obj, dict) else 0
+    summary = _load_checkpoint_summary(path)
+    if not summary.get("available", False):
+        return 0
+    return int(summary.get("step", 0) or 0)
 
 
-def _snapshot_checkpoint(path: Path, output_dir: Path, boundary_step: int) -> Path:
+def _checkpoint_snapshot_block(snapshot_status: dict[str, Any], decision: dict[str, Any], reason: str) -> dict[str, Any]:
+    return {
+        "schema_version": "tropicalgt.checkpoint_snapshot_block.v1",
+        "restart_action": "blocked_missing_loadable_boundary_checkpoint",
+        "reason": reason,
+        "boundary_step": int(decision.get("boundary_step", snapshot_status.get("boundary_step", 0)) or 0),
+        "bpb": decision.get("bpb"),
+        "target_bpb": decision.get("target_bpb"),
+        "checkpoint": snapshot_status.get("path", ""),
+        "unavailable_reason": snapshot_status.get("unavailable_reason", ""),
+        "policy": "Boundary checkpoints must be nonempty, loadable, full training checkpoint payloads before they can be snapshotted or reused.",
+    }
+
+
+def _snapshot_checkpoint_status(path: Path, output_dir: Path, boundary_step: int) -> dict[str, Any]:
+    status: dict[str, Any] = {
+        "available": False,
+        "path": str(path),
+        "snapshot": "",
+        "boundary_step": int(boundary_step),
+    }
+    if not path.exists():
+        return {**status, "unavailable_reason": "checkpoint_missing"}
+    summary = _load_checkpoint_summary(path)
+    if not summary.get("available", False):
+        return {**status, "unavailable_reason": str(summary.get("unavailable_reason", "checkpoint_unavailable"))}
     snapshot_dir = output_dir / "checkpoints"
     snapshot_dir.mkdir(parents=True, exist_ok=True)
     snapshot = snapshot_dir / f"checkpoint_step_{boundary_step:08d}.pt"
-    shutil.copy2(path, snapshot)
-    return snapshot
+    try:
+        shutil.copy2(path, snapshot)
+    except OSError as exc:
+        return {**status, "unavailable_reason": f"checkpoint_snapshot_copy_failed:{exc.__class__.__name__}"}
+    copied_summary = _load_checkpoint_summary(snapshot)
+    if not copied_summary.get("available", False):
+        try:
+            snapshot.unlink(missing_ok=True)
+        except OSError:
+            pass
+        return {**status, "unavailable_reason": "checkpoint_snapshot_invalid:" + str(copied_summary.get("unavailable_reason", "checkpoint_unavailable"))}
+    return {
+        **status,
+        "available": True,
+        "snapshot": str(snapshot),
+        "step": int(copied_summary.get("step", 0) or 0),
+        "size_bytes": int(snapshot.stat().st_size),
+    }
 
 
 def _restart_decision_schema(target_bpb: float) -> dict[str, Any]:

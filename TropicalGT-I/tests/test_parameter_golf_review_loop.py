@@ -3,6 +3,7 @@ import importlib.util
 from pathlib import Path
 
 import pytest
+import torch
 
 
 def _load_review_loop():
@@ -90,6 +91,14 @@ def test_active_training_contract_inventories_latest_periodic_artifacts(tmp_path
     assert "generated artifacts are not staged or copied" in inventory["inventory_policy"]
 
 
+def test_checkpoint_step_returns_zero_for_invalid_checkpoint(tmp_path: Path):
+    loop = _load_review_loop()
+    checkpoint = tmp_path / "empty.pt"
+    checkpoint.write_bytes(b"")
+
+    assert loop._checkpoint_step(checkpoint) == 0
+
+
 def test_load_checkpoint_summary_reports_empty_checkpoint_unavailable(tmp_path: Path):
     loop = _load_review_loop()
     checkpoint = tmp_path / "empty.pt"
@@ -98,6 +107,60 @@ def test_load_checkpoint_summary_reports_empty_checkpoint_unavailable(tmp_path: 
     assert summary["available"] is False
     assert summary["unavailable_reason"] == "checkpoint_file_is_empty"
     assert summary["path"].endswith("empty.pt")
+
+def test_load_checkpoint_summary_reports_malformed_checkpoint_unavailable(tmp_path: Path):
+    loop = _load_review_loop()
+    checkpoint = tmp_path / "malformed.pt"
+    torch.save({"step": 5, "metrics": {"eval_bpb": 1.2}}, checkpoint)
+
+    summary = loop._load_checkpoint_summary(checkpoint)
+
+    assert summary["available"] is False
+    assert summary["unavailable_reason"] == "checkpoint_invalid_payload:missing_model,config"
+
+
+def test_snapshot_checkpoint_status_refuses_empty_checkpoint(tmp_path: Path):
+    loop = _load_review_loop()
+    checkpoint = tmp_path / "empty.latest.pt"
+    output_dir = tmp_path / "review"
+    checkpoint.write_bytes(b"")
+
+    status = loop._snapshot_checkpoint_status(checkpoint, output_dir, 5000)
+
+    assert status["available"] is False
+    assert status["snapshot"] == ""
+    assert status["unavailable_reason"] == "checkpoint_file_is_empty"
+    assert not list((output_dir / "checkpoints").glob("*.pt"))
+
+
+def test_snapshot_checkpoint_status_copies_only_valid_training_checkpoint(tmp_path: Path):
+    loop = _load_review_loop()
+    checkpoint = tmp_path / "valid.latest.pt"
+    output_dir = tmp_path / "review"
+    torch.save({"model": {}, "config": {}, "step": 5000, "metrics": {"eval_bpb": 1.2}}, checkpoint)
+
+    status = loop._snapshot_checkpoint_status(checkpoint, output_dir, 5000)
+
+    assert status["available"] is True
+    assert status["step"] == 5000
+    snapshot = Path(status["snapshot"])
+    assert snapshot.exists()
+    assert snapshot.stat().st_size > 0
+    assert loop._checkpoint_step(snapshot) == 5000
+
+
+def test_checkpoint_snapshot_block_records_unavailable_reason():
+    loop = _load_review_loop()
+    block = loop._checkpoint_snapshot_block(
+        {"path": "bad.latest.pt", "unavailable_reason": "checkpoint_file_is_empty", "boundary_step": 5000},
+        {"boundary_step": 5000, "bpb": 1.0, "target_bpb": 1.12},
+        "target_met_requires_loadable_boundary_checkpoint",
+    )
+
+    assert block["restart_action"] == "blocked_missing_loadable_boundary_checkpoint"
+    assert block["unavailable_reason"] == "checkpoint_file_is_empty"
+    assert "nonempty, loadable" in block["policy"]
+
 
 def test_review_prompt_requires_subagent_evidence_review_and_step0_restart():
     loop = _load_review_loop()

@@ -850,4 +850,28 @@ git diff --check
 # clean
 ```
 
-_Last updated: 2026-06-16T15:18:33Z_
+## 2026-06-16 Sequential Training/Readiness Update: Boundary Checkpoint Snapshot Evidence
+
+Status: complete for review-loop checkpoint snapshot hardening; actual BPB restart remains blocked by the zero-byte b60 checkpoint.
+
+- `parameter_golf_codex_review_loop.py` now records `checkpoint_snapshot_status` for each review event instead of copying any existing checkpoint path unconditionally.
+- Boundary checkpoint snapshots require a nonempty, torch-loadable full training checkpoint payload with `model`, `config`, and `step`; missing, empty, unloadable, or malformed checkpoints remain explicit unavailable evidence.
+- `_checkpoint_step()` now reads from the validated checkpoint summary and returns `0` for unavailable checkpoints instead of raw-loading arbitrary files.
+- If a target is met or a legacy latest-checkpoint restart path would need an unavailable checkpoint, the loop records `checkpoint_snapshot_block.v1` with `blocked_missing_loadable_boundary_checkpoint` rather than reusing a bad file.
+- Regression tests cover empty checkpoint snapshot refusal, malformed checkpoint summaries, valid snapshot copying, checkpoint-step handling for invalid files, and checkpoint snapshot block content.
+- A real b60 snapshot probe written only under `/tmp/tropicalgt_b60_snapshot_probe` reports `available=false`, `unavailable_reason=checkpoint_file_is_empty`, and creates no snapshot file.
+- No generated snapshots, checkpoints, review-loop state, datasets, W&B folders, caches, or secrets were staged.
+
+Verification:
+
+```bash
+PYTHONPATH=TropicalGT-I/scripts:TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m py_compile TropicalGT-I/scripts/parameter_golf_codex_review_loop.py TropicalGT-I/tests/test_parameter_golf_review_loop.py TropicalGT-I/tests/test_prepare_5k_review_bundle.py
+PYTHONPATH=TropicalGT-I/scripts:TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_parameter_golf_review_loop.py -q
+# 16 passed in 0.95s
+PYTHONPATH=TropicalGT-I/scripts:TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_prepare_5k_review_bundle.py TropicalGT-I/tests/test_parameter_golf_review_loop.py TropicalGT-I/tests/test_training_step_gate_monitor.py TropicalGT-I/tests/test_readiness_audit.py -q
+# 42 passed in 1.45s
+git diff --check
+# clean
+```
+
+_Last updated: 2026-06-16T15:23:49Z_
