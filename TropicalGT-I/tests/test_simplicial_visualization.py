@@ -14,6 +14,7 @@ from tropicalgt.simplicial import build_embedding_radius_simplicial_object, buil
 from tropicalgt.tokenizer import TokenGTTokenizer
 from tropicalgt.visualization import (
     _attach_graph_token_direction_overlay,
+    _be_rank_condition_image_values,
     _cas_real_resolution_display,
     _complex_slider_frame_contract,
     _complex_slider_traces,
@@ -1799,6 +1800,13 @@ def _topology_with_certified_real_resolution(*, input_hash: str = "hash-a", fitt
     }
 
 
+def test_be_rank_condition_image_values_accepts_legacy_cached_key():
+    current = {"image_rank_values_implied_by_exact_rank_identity": {"d1": 2}}
+    legacy = {"image_rank_estimates_by_differential": {"d1": 1}}
+    assert _be_rank_condition_image_values(current) == {"d1": 2}
+    assert _be_rank_condition_image_values(legacy) == {"d1": 1}
+
+
 def test_certified_cas_diagnostic_tables_require_explicit_structured_certificates():
     topology = _topology_with_certified_real_resolution()
     real = topology["commutative_algebra"]["two_parameter_chain_presentation_diagnostics"]["real_free_resolution"]
@@ -1834,7 +1842,7 @@ def test_certified_cas_diagnostic_tables_require_explicit_structured_certificate
     }
     real_with_structured["cas_artifacts"]["buchsbaum_eisenbud_rank_conditions"] = {
         "available": True,
-        "image_rank_estimates_by_differential": {"d1": 1},
+        "image_rank_values_implied_by_exact_rank_identity": {"d1": 1},
         "differential_shapes": {"d1": [1, 1]},
         "shape_bounds_hold": True,
         "is_independent_certificate": False,

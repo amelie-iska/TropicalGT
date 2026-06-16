@@ -18,6 +18,7 @@ def test_metric_provenance_registry_covers_current_risky_terms(tmp_path: Path):
         "legacy_multiparameter_free_resolution_alias_removed",
         "determinantal_grade_depth_cas_unavailable",
         "graphcg_direction_svd_condition_number",
+        "buchsbaum_eisenbud_implied_rank_identity_diagnostic",
         "synthetic_h0_fallback",
         "json_fallback_graph_trace",
         "parameter_golf_token_id_fallback",
@@ -37,6 +38,7 @@ def test_metric_provenance_registry_covers_current_risky_terms(tmp_path: Path):
     assert registry["persistence_landscape"]["kind"] == "fast_vectorized_topology"
     assert registry["persistence_vector_representation_similarity"]["optimize_directly"] is True
     assert registry["browser_same_data_static_preview_rendering"]["kind"] == "same_data_rendering_contingency"
+    assert registry["buchsbaum_eisenbud_implied_rank_identity_diagnostic"]["kind"] == "diagnostic_rank_identity_not_certificate"
     assert registry["simplicial_projection_display_layout_evidence"]["kind"] == "visual_display_layout_boundary"
 
 

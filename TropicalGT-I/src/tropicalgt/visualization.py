@@ -5167,6 +5167,16 @@ def _m2_ideal_diagnostic_columns(m2: Mapping[str, Any]) -> Tuple[List[str], List
     return ["kind", "name", "order/index", "ideal", "source/method"], [[row[idx] for row in rows] for idx in range(5)]
 
 
+def _be_rank_condition_image_values(be_rank: Mapping[str, Any]) -> Mapping[str, Any]:
+    current = be_rank.get("image_rank_values_implied_by_exact_rank_identity")
+    if isinstance(current, Mapping):
+        return current
+    legacy = be_rank.get("image_rank_estimates_by_differential")
+    if isinstance(legacy, Mapping):
+        return legacy
+    return {}
+
+
 def _m2_be_diagnostic_columns(m2: Mapping[str, Any]) -> Tuple[List[str], List[List[str]]]:
     resolution = _m2_selected_staircase_resolution(m2)
     if not resolution:
@@ -5191,11 +5201,11 @@ def _m2_be_diagnostic_columns(m2: Mapping[str, Any]) -> Tuple[List[str], List[Li
                 f"safe_render={bool(res_be.get('safe_to_render_multiplier_output'))}; substitute={bool(res_be.get('safe_to_substitute_for_resolution'))}",
                 f"resolution_backend={bool(res_be.get('is_resolution_backend'))}; requires_certified_macaulay2_chain_complex={bool(res_be.get('requires_certified_macaulay2_chain_complex', True))}",
             ))
-    image_ranks = be_rank.get("image_rank_estimates_by_differential", {}) if isinstance(be_rank.get("image_rank_estimates_by_differential"), Mapping) else {}
+    image_ranks = _be_rank_condition_image_values(be_rank)
     shapes = be_rank.get("differential_shapes", {}) if isinstance(be_rank.get("differential_shapes"), Mapping) else {}
     shape_bounds = be_rank.get("shape_bounds_hold")
     for name in sorted(set(image_ranks) | set(shapes)):
-        rows.append(("BE rank condition", str(name), f"rank={image_ranks.get(name, 'unavailable')}; shape={shapes.get(name, 'unavailable')}", f"shape_bounds_hold={shape_bounds}; independent_certificate={be_rank.get('is_independent_certificate', False)}"))
+        rows.append(("BE rank condition", str(name), f"implied_rank={image_ranks.get(name, 'unavailable')}; shape={shapes.get(name, 'unavailable')}", f"shape_bounds_hold={shape_bounds}; independent_certificate={be_rank.get('is_independent_certificate', False)}"))
     rank_ideal_rows = grade_depth.get("rank_ideal_diagnostics", []) if isinstance(grade_depth.get("rank_ideal_diagnostics"), list) else []
     for row in rank_ideal_rows:
         if not isinstance(row, Mapping):

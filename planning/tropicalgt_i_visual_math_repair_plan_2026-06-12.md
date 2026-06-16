@@ -828,3 +828,23 @@ CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/t
 CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_metric_provenance.py -q -p no:cacheprovider --basetemp=/tmp/tropicalgt-pytest-static-preview-provenance
 # 7 passed
 ```
+
+## 2026-06-16 Buchsbaum-Eisenbud Implied-Rank Diagnostic Rename
+
+Sequential CAS/provenance no-proxy item completed after the browser static-preview provenance rename:
+
+- Renamed the Buchsbaum-Eisenbud rank-condition artifact key from `image_rank_estimates_by_differential` to `image_rank_values_implied_by_exact_rank_identity`.
+- The rendered diagnostic table now labels those values as `implied_rank=` so they are not presented as independently certified image-rank computations.
+- Added a compatibility reader for cached artifacts that still contain the retired key, while new CAS reports write only the exact-rank-identity key.
+- Added provenance coverage marking this surface as `diagnostic_rank_identity_not_certificate`; audit terms keep the retired key visible only as a legacy/cached-artifact guardrail.
+
+Validation:
+
+```text
+CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m py_compile TropicalGT-I/src/tropicalgt/cas_free_resolution.py TropicalGT-I/src/tropicalgt/visualization.py TropicalGT-I/src/tropicalgt/provenance.py TropicalGT-I/tests/test_algebraic_persistence.py TropicalGT-I/tests/test_simplicial_visualization.py TropicalGT-I/tests/test_metric_provenance.py
+# passed
+CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_metric_provenance.py -q -p no:cacheprovider --basetemp=/tmp/tropicalgt-pytest-be-rank-provenance
+# 7 passed
+CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_algebraic_persistence.py TropicalGT-I/tests/test_simplicial_visualization.py -q -p no:cacheprovider --basetemp=/tmp/tropicalgt-pytest-be-rank-full
+# 75 passed
+```

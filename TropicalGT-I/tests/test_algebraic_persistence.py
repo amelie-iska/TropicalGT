@@ -395,7 +395,7 @@ def test_singular_certified_result_structures_ungraded_betti_rows_without_multig
     be_rank = real["cas_artifacts"]["buchsbaum_eisenbud_rank_conditions"]
     assert be_rank["available"] is True
     assert be_rank["free_module_ranks_by_homological_degree"] == {"0": 2, "1": 1}
-    assert be_rank["image_rank_estimates_by_differential"] == {"d1": 1}
+    assert be_rank["image_rank_values_implied_by_exact_rank_identity"] == {"d1": 1}
     assert be_rank["nonnegative_rank_conditions"] is True
     assert be_rank["exactness_certified_by_backend"] is True
     assert be_rank["is_independent_certificate"] is False
@@ -654,7 +654,7 @@ def test_certified_cas_result_surfaces_buchsbaum_eisenbud_diagnostics():
     be_rank = real["cas_artifacts"]["buchsbaum_eisenbud_rank_conditions"]
     assert be_rank["available"] is True
     assert be_rank["free_module_ranks_by_homological_degree"] == {"0": 1, "1": 2, "2": 1}
-    assert be_rank["image_rank_estimates_by_differential"] == {"d2": 1, "d1": 1}
+    assert be_rank["image_rank_values_implied_by_exact_rank_identity"] == {"d2": 1, "d1": 1}
     assert be_rank["shape_bounds_hold"] is True
     assert be_rank["paper_method_note"].startswith("For an exact finite free complex")
     assert real["free_resolution_summary"]["ideal_diagnostics"] == ideal_diag

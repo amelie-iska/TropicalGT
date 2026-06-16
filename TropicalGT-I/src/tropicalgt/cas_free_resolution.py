@@ -1438,14 +1438,14 @@ def _buchsbaum_eisenbud_rank_condition_diagnostics(
             "backend": backend,
             "reason": "No certified free-module ranks were parsed, so Buchsbaum-Eisenbud rank diagnostics are unavailable.",
         }
-    image_rank_estimates: dict[str, int] = {}
-    next_image_rank = 0
+    implied_image_rank_values: dict[str, int] = {}
+    next_implied_image_rank = 0
     for degree in sorted(ranks, reverse=True):
         if degree <= 0:
             continue
-        estimate = int(ranks[degree]) - int(next_image_rank)
-        image_rank_estimates[f"d{degree}"] = estimate
-        next_image_rank = estimate
+        implied_value = int(ranks[degree]) - int(next_implied_image_rank)
+        implied_image_rank_values[f"d{degree}"] = implied_value
+        next_implied_image_rank = implied_value
     differential_shapes: dict[str, list[int]] = {}
     shape_bounds: dict[str, bool] = {}
     for row in differentials or []:
@@ -1458,16 +1458,16 @@ def _buchsbaum_eisenbud_rank_condition_diagnostics(
             continue
         key = f"d{degree}"
         differential_shapes[key] = [rows, cols]
-        if key in image_rank_estimates:
-            rank_est = image_rank_estimates[key]
-            shape_bounds[key] = 0 <= rank_est <= min(rows, cols)
-    nonnegative = all(value >= 0 for value in image_rank_estimates.values())
+        if key in implied_image_rank_values:
+            implied_rank = implied_image_rank_values[key]
+            shape_bounds[key] = 0 <= implied_rank <= min(rows, cols)
+    nonnegative = all(value >= 0 for value in implied_image_rank_values.values())
     shape_bounds_hold = all(shape_bounds.values()) if shape_bounds else None
     return {
         "available": True,
         "backend": backend,
         "free_module_ranks_by_homological_degree": {str(k): int(v) for k, v in sorted(ranks.items())},
-        "image_rank_estimates_by_differential": image_rank_estimates,
+        "image_rank_values_implied_by_exact_rank_identity": implied_image_rank_values,
         "differential_shapes": differential_shapes,
         "nonnegative_rank_conditions": bool(nonnegative),
         "shape_bounds_hold": shape_bounds_hold,

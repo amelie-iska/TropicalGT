@@ -149,6 +149,28 @@ PROVENANCE_REGISTRY: tuple[ProvenanceEntry, ...] = (
         match_terms=("multiparameter_free_resolution_legacy_alias", "free-resolution legacy alias", "free_resolution_legacy_alias"),
     ),
     ProvenanceEntry(
+        name="buchsbaum_eisenbud_implied_rank_identity_diagnostic",
+        kind="diagnostic_rank_identity_not_certificate",
+        surface="CAS Buchsbaum-Eisenbud diagnostics",
+        optimize_directly=False,
+        description=(
+            "Image-rank values in the Buchsbaum-Eisenbud rank-condition table are algebraic values "
+            "implied by rank(F_i)=rank(d_i)+rank(d_{i+1}) under exactness, not independently certified image ranks."
+        ),
+        replacement_or_guardrail=(
+            "Use image_rank_values_implied_by_exact_rank_identity in new reports; accept the retired "
+            "image_rank_estimates_by_differential key only for cached-artifact compatibility and keep is_independent_certificate=false."
+        ),
+        match_terms=(
+            "image_rank_values_implied_by_exact_rank_identity",
+            "image_rank_estimates_by_differential",
+            "implied_image_rank_values",
+            "implied_rank=",
+            "rank(F_i)=rank(d_i)+rank(d_{i+1})",
+            "Buchsbaum-Eisenbud rank conditions require",
+        ),
+    ),
+    ProvenanceEntry(
         name="determinantal_grade_depth_cas_unavailable",
         kind="cas_required_unavailable_state",
         surface="topological algebra report",
