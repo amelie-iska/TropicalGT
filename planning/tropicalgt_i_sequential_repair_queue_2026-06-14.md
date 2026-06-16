@@ -487,7 +487,7 @@ The live item-by-item repair inventory is maintained in `planning/tropicalgt_i_c
 - [x] Verification completed: py-compile for touched source/tests, scoped exponent-chart paper audit, terminology/no-proxy grep, `git diff --check`, `pytest TropicalGT-I/tests/test_algebraic_persistence.py -q` (`27 passed`), `pytest TropicalGT-I/tests/test_losses_and_model.py -q` (`10 passed`), and `pytest TropicalGT-I/tests/test_training_metrics.py -q` (`13 passed`).
 - [x] Remote `pdflatex` compile was attempted into `/tmp/tropicalgt_paper_compile`; it remains blocked by missing TeX dependency `mathtools.sty`, so no PDF artifact was produced or staged.
 - [x] b60 latest checked training state reached step `2250` with train loss/NLL `1.149/1.126`; trainer PID `378962` and watcher PID `379304` remain alive under the step-5000 gate.
-- [ ] Next Section 12 item: keep the current BPB run alive until the 5K gate unless explicitly restarted.
+- [x] Section 12 5K waiting item completed: b60 reached step 5000; post-5K executable review/restart remains blocked by the zero-byte checkpoint evidence recorded below.
 
 ### Current Objective Update - Section 12 Live 5K Gate Status
 
@@ -495,7 +495,7 @@ The live item-by-item repair inventory is maintained in `planning/tropicalgt_i_c
 - [x] Confirmed watcher PID `379304` is alive and monitoring the trainer log until target step `5000`, with required step-5000 paths `periodic/step_00005000/validation_report.json` and `periodic/step_00005000/got_audit/inference_audit.html` before it records completion.
 - [x] Confirmed the existing Codex heartbeat automation `check-tropicalgt-b59-5k-gate` is active on `FREQ=MINUTELY;INTERVAL=150`, i.e. every 2.5 hours, and targets this thread for post-5K follow-up.
 - [x] Latest checked training state during this Section 12 audit reached step `2252/5000` with train loss/NLL `1.126/1.103`; W&B run id remains `ld5u55p5` for `amelie-iska-math/TropicalGT-I`.
-- [ ] Section 12 5K gate remains open until the trainer produces the required step-5000 validation and audit artifacts; do not restart from step 0 before those artifacts exist unless the user explicitly changes the policy.
+- [x] Section 12 5K waiting item superseded: b60 reached step 5000; do not restart or run checkpoint-dependent executable review until real checkpoint evidence exists.
 
 ### Current Objective Update - Post-5K Subagent Review Contract Pass
 
@@ -505,7 +505,7 @@ The live item-by-item repair inventory is maintained in `planning/tropicalgt_i_c
 - [x] `prepare_5k_review_bundle.py` now writes machine-readable `review_requirements` covering subagent review, advanced sidecar/visualization review, step-0 restart, and no-proxy evidence handling.
 - [x] Verification completed: py-compile for the review-loop and bundle scripts/tests plus `pytest TropicalGT-I/tests/test_parameter_golf_review_loop.py TropicalGT-I/tests/test_prepare_5k_review_bundle.py -q` (`5 passed`).
 - [x] Latest checked training state reached step `2324/5000` with train loss/NLL `1.134/1.111`; trainer PID `378962` and watcher PID `379304` remain alive under the step-5000 gate.
-- [ ] Next Section 12 item remains gated on step-5000 artifacts: run post-5K analysis/visualizations, route the review to a Codex subagent, then restart from step 0 with evidence-backed hyperparameter/config updates if BPB is still above target.
+- [x] Section 12 post-5K handoff item partially completed and superseded: real step-5000 report/audit and Codex subagent review exist, while executable checkpoint-dependent analysis/restart remains blocked by empty checkpoint evidence.
 
 ### Current Objective Update - Post-5K Report Schema Compatibility Pass
 
@@ -515,7 +515,7 @@ The live item-by-item repair inventory is maintained in `planning/tropicalgt_i_c
 - [x] Added focused tests for periodic artifact manifests, top-level validation reports, active-contract metrics, and default step-5000 report discovery.
 - [x] Verified with `python -m py_compile` on the touched scripts/tests and `python -m pytest TropicalGT-I/tests/test_parameter_golf_review_loop.py TropicalGT-I/tests/test_prepare_5k_review_bundle.py -q` (`8 passed`).
 - [x] Latest live pulse during this pass: trainer PID `378962` and watcher PID `379304` are alive; progress reached step `2434/5000` with train loss/NLL `1.142/1.119`; step-5000 validation/audit artifacts are not present yet.
-- [ ] Section 12 5K gate remains open: keep the run alive, wait for required step-5000 artifacts, then run analyses/visualizations and route the evidence review through a Codex subagent before any step-0 restart.
+- [x] Section 12 5K waiting item superseded: b60 reached step 5000; do not restart or run checkpoint-dependent executable review until real checkpoint evidence exists.
 
 ### Current Objective Update - Section 12 Strict No-Fallback Data Config Pass
 
@@ -525,7 +525,7 @@ The live item-by-item repair inventory is maintained in `planning/tropicalgt_i_c
 - [x] Preserved the old path-search behavior only in an explicit opt-in test fixture, and added regression tests proving path and tokenizer fallback fields are rejected by default.
 - [x] Verified the live step-2500 periodic audit completed after its settle window: `validation_report.json`, `periodic_validation_artifacts.json`, and `got_audit/inference_audit.html` all exist under `periodic/step_00002500`; training resumed at step `2503/5000`.
 - [x] Verified with `python -m py_compile TropicalGT-I/src/tropicalgt/data.py TropicalGT-I/tests/test_data_loader.py` and `PYTHONPATH=TropicalGT-I/src python -m pytest TropicalGT-I/tests/test_data_loader.py -q` (`15 passed`, only external SWIG deprecation warnings).
-- [ ] Section 12 5K gate remains open: keep the current run alive until step 5000, then run analyses/visualizations and subagent evidence review before any step-0 restart.
+- [x] Section 12 5K waiting item superseded: b60 reached step 5000; do not restart or run checkpoint-dependent executable review until real checkpoint evidence exists.
 
 ### Current Objective Update - README And Browser Reattach Pass
 
@@ -533,7 +533,7 @@ The live item-by-item repair inventory is maintained in `planning/tropicalgt_i_c
 - [x] Verified `http://127.0.0.1:8991/` returns the real `TropicalGT-I Inference Audit` HTML for the latest completed periodic audit; the generated `index.html` symlink, server PID, and server log remain under ignored `outputs/` and are not staged.
 - [x] Updated `README.md` to reflect the live b60 step-0 5K-gate run, BPB target `< 1.12`, W&B run id `ld5u55p5`, strict no-config-path-fallback data policy, post-5K review bundle behavior, CAS unavailable-state policy, and current browser-serving/tunnel commands.
 - [x] Removed stale README references to b44 as the current run, target BPB `1.18`, compatibility path fallbacks, and commutative-algebra proxy/fallback language.
-- [ ] Section 12 5K gate remains open: keep trainer PID `378962` and watcher PID `379304` alive until step 5000 artifacts exist, then run analyses/visualizations and route evidence review through a Codex subagent before any step-0 restart.
+- [x] Section 12 5K waiting item superseded: b60 reached step 5000; do not restart or run checkpoint-dependent executable review until real checkpoint evidence exists.
 
 ### Current Objective Update - Executable Post-5K Review Bundle Pass
 
@@ -541,7 +541,7 @@ The live item-by-item repair inventory is maintained in `planning/tropicalgt_i_c
 - [x] Added per-command stdout/stderr log capture under the generated review bundle `command_logs/` directory, return-code/timed-out summaries in `command_results`, and kept the default behavior path-only with no command execution.
 - [x] Updated `README.md` with the post-5K bundle command that runs eval visualizations and interactive audit validators after step-5000 artifacts and checkpoint paths exist; generated logs remain under ignored outputs and must not be staged.
 - [x] Added focused tests proving default bundles do not execute commands and `_run_shell_command` records stdout, stderr, return code, and timeout status.
-- [ ] Section 12 5K gate remains open: wait for step-5000 artifacts before running the executable review bundle and assigning the Codex subagent evidence review.
+- [x] Section 12 5K waiting item superseded: b60 reached step 5000; do not restart or run checkpoint-dependent executable review until real checkpoint evidence exists.
 
 ### Current Objective Update - Post-5K Legacy Backfill Command Pass
 
@@ -549,7 +549,7 @@ The live item-by-item repair inventory is maintained in `planning/tropicalgt_i_c
 - [x] Extended `prepare_5k_review_bundle.py` with `--run-legacy-audit-backfill`, executed before strict interactive-audit validators and logged under the generated review bundle `command_logs/` directory.
 - [x] Kept the default review bundle path-only; command execution remains explicit and generated backfill reports/logs must not be staged.
 - [x] Documented that legacy audit backfill may only write explicit unavailable diagnostics or rerender visual contracts from existing raw payloads; no CAS, tropical-fan, persistence-module, or visualization proxy is allowed.
-- [ ] Section 12 5K gate remains open: wait for step-5000 artifacts before running eval visualizations, legacy backfill, strict validators, and Codex subagent evidence review.
+- [x] Section 12 5K waiting item superseded: b60 reached step 5000; do not restart or run checkpoint-dependent executable review until real checkpoint evidence exists.
 
 ### Current Objective Update - Evidence-Bound Restart Schema Pass
 
@@ -557,14 +557,14 @@ The live item-by-item repair inventory is maintained in `planning/tropicalgt_i_c
 - [x] Required every proposed post-5K hyperparameter/config change to include `dot_path`, old/new values, reason, evidence paths, expected BPB effect, and risk.
 - [x] Added explicit allowed actions for target-met continuation, target-missed step-0 restart with evidence-backed config patch, and blocked missing-evidence/no-restart states.
 - [x] Kept restart planning no-proxy: unavailable CAS/topology/geometry/algebra/memory/visual evidence remains unavailable with exact reasons and cannot justify a config change.
-- [ ] Section 12 5K gate remains open: do not populate or execute the restart schema until step-5000 metrics, sidecars, visual audits, validators, and Codex subagent review exist.
+- [x] Section 12 5K waiting item superseded: b60 reached step 5000; do not restart or run checkpoint-dependent executable review until real checkpoint evidence exists.
 
 ### Current Objective Update - Post-5K Execution Readiness Gate Pass
 
 - [x] Added an `execution_readiness` report to the post-5K review bundle with boundary step, observed report step, checkpoint path, latest audit path, and exact missing-evidence issues.
 - [x] Kept path-only bundles available before the gate, but blocked all `--run-*` command execution until the boundary report is at/after step 5000, the checkpoint exists, and the latest audit directory exists when backfill/validators are requested.
 - [x] Added regression coverage proving execution flags fail closed with `missing_checkpoint` instead of running eval/visualization/backfill/validator commands against incomplete evidence.
-- [ ] Section 12 5K gate remains open: executable review commands stay blocked until the real step-5000 report, checkpoint, and audit artifacts exist.
+- [x] Section 12 5K waiting item superseded: b60 reached step 5000; do not restart or run checkpoint-dependent executable review until real checkpoint evidence exists.
 
 ### Current Objective Update - Step-3000 Browser Refresh Pass
 
@@ -572,7 +572,7 @@ The live item-by-item repair inventory is maintained in `planning/tropicalgt_i_c
 - [x] Reattached remote `127.0.0.1:8991` and the local Codex tunnel to the step-3000 `got_audit` directory without copying generated artifacts; remote server PID at verification time: `593331`.
 - [x] Recorded real step-3000 validation metrics: BPB/exact BPB `1.5293022093208184`, graph-BPB `20.20904657226864`, graph-conditioned BPB without side cost `1.3445352900384904`, NLL `1.0600315146148205`, and invalid graph rate `0.0`.
 - [x] Confirmed step-5000 validation and audit artifacts are still absent, so post-5K analyses, visualization generation, Codex subagent review, and any step-0 restart remain blocked on real 5K evidence.
-- [ ] Continue Section 12 linearly: preserve trainer PID `378962` and watcher PID `379304`, monitor disk under the configured generated-audit retention policy, and wait for step-5000 evidence before analysis, subagent review, or restart.
+- [x] Section 12 live-monitor item superseded: trainer PID `378962` and watcher PID `379304` stopped after the step-5000 gate; browser remains attached to the real step-5000 audit and restart remains blocked by empty checkpoint evidence.
 
 ### Current Objective Update - Step-3250 Browser Refresh And Retention Pass
 
@@ -581,7 +581,7 @@ The live item-by-item repair inventory is maintained in `planning/tropicalgt_i_c
 - [x] Recorded real step-3250 validation metrics: BPB/exact BPB `1.5044848279550496`, graph-BPB `20.187227572172226`, graph-conditioned BPB without side cost `1.3227162899420746`, NLL `1.042829416692257`, and invalid graph rate `0.0`.
 - [x] Pruned only generated `step_00002750/got_audit` under the active periodic retention policy while step-3250 audit generation was consuming disk; milestone audits, step 3000, step 3250, compact validation reports, and non-audit artifacts remain, with a manifest record in `periodic/got_audit_retention_manifest.jsonl`.
 - [x] Confirmed training resumed after the step-3250 audit at step `3257/5000`; step-5000 validation and audit artifacts remain absent, so post-5K analyses, Codex subagent review, and any step-0 restart remain blocked on real 5K evidence.
-- [ ] Continue Section 12 linearly: preserve trainer PID `378962` and watcher PID `379304`, keep the browser attached to the latest complete real audit, and wait for step-5000 evidence before analysis, subagent review, or restart.
+- [x] Section 12 live-monitor item superseded: trainer PID `378962` and watcher PID `379304` stopped after the step-5000 gate; browser remains attached to the real step-5000 audit and restart remains blocked by empty checkpoint evidence.
 
 ### Current Objective Update - Step-3500 Browser Refresh And Retention Pass
 
@@ -590,7 +590,7 @@ The live item-by-item repair inventory is maintained in `planning/tropicalgt_i_c
 - [x] Recorded real step-3500 validation metrics: BPB/exact BPB `1.4940912929263006`, graph-BPB `20.178089761117462`, graph-conditioned BPB without side cost `1.3135784788873124`, NLL `1.0356251671910286`, and invalid graph rate `0.0`.
 - [x] Pruned only generated `step_00003000/got_audit` under the active periodic retention policy while step-3500 audit generation was consuming disk; milestone audits, step 3250, step 3500, compact validation reports, and non-audit artifacts remain, with a manifest record in `periodic/got_audit_retention_manifest.jsonl`.
 - [x] Confirmed training resumed after the step-3500 audit at step `3508/5000`; step-5000 validation and audit artifacts remain absent, so post-5K analyses, Codex subagent review, and any step-0 restart remain blocked on real 5K evidence.
-- [ ] Continue Section 12 linearly: preserve trainer PID `378962` and watcher PID `379304`, keep the browser attached to the latest complete real audit, and wait for step-5000 evidence before analysis, subagent review, or restart.
+- [x] Section 12 live-monitor item superseded: trainer PID `378962` and watcher PID `379304` stopped after the step-5000 gate; browser remains attached to the real step-5000 audit and restart remains blocked by empty checkpoint evidence.
 
 ### Current Objective Update - Step-3750 Browser Refresh And Retention Pass
 
@@ -599,7 +599,7 @@ The live item-by-item repair inventory is maintained in `planning/tropicalgt_i_c
 - [x] Recorded real step-3750 validation metrics: BPB/exact BPB `1.4739591865478667`, graph-BPB `20.16038997142015`, graph-conditioned BPB without side cost `1.2958786891900003`, NLL `1.0216706544160843`, and invalid graph rate `0.0`.
 - [x] Pruned only generated `step_00003250/got_audit` under the active periodic retention policy while step-3750 audit generation was consuming disk; milestone audits, step 3500, step 3750, compact validation reports, and non-audit artifacts remain, with a manifest record in `periodic/got_audit_retention_manifest.jsonl`.
 - [x] Confirmed training resumed after the step-3750 audit at step `3752/5000`; step-5000 validation and audit artifacts remain absent, so post-5K analyses, Codex subagent review, and any step-0 restart remain blocked on real 5K evidence.
-- [ ] Continue Section 12 linearly: preserve trainer PID `378962` and watcher PID `379304`, keep the browser attached to the latest complete real audit, and wait for step-5000 evidence before analysis, subagent review, or restart.
+- [x] Section 12 live-monitor item superseded: trainer PID `378962` and watcher PID `379304` stopped after the step-5000 gate; browser remains attached to the real step-5000 audit and restart remains blocked by empty checkpoint evidence.
 
 ### Current Objective Update - Step-4000 Browser Refresh And Retention Pass
 
@@ -608,7 +608,7 @@ The live item-by-item repair inventory is maintained in `planning/tropicalgt_i_c
 - [x] Recorded real step-4000 validation metrics: BPB/exact BPB `1.4740326876332792`, graph-BPB `20.160454592266568`, graph-conditioned BPB without side cost `1.2959433100364168`, NLL `1.021721601486206`, and invalid graph rate `0.0`.
 - [x] Pruned only generated `step_00003500/got_audit` under the active periodic retention policy while step-4000 audit generation was consuming disk; milestone audits, step 3750, step 4000, compact validation reports, and non-audit artifacts remain, with a manifest record in `periodic/got_audit_retention_manifest.jsonl`.
 - [x] Confirmed training resumed after the step-4000 audit at step `4006/5000`; step-5000 validation and audit artifacts remain absent, so post-5K analyses, Codex subagent review, and any step-0 restart remain blocked on real 5K evidence.
-- [ ] Continue Section 12 linearly: preserve trainer PID `378962` and watcher PID `379304`, keep the browser attached to the latest complete real audit, and wait for step-5000 evidence before analysis, subagent review, or restart.
+- [x] Section 12 live-monitor item superseded: trainer PID `378962` and watcher PID `379304` stopped after the step-5000 gate; browser remains attached to the real step-5000 audit and restart remains blocked by empty checkpoint evidence.
 
 ### Current Objective Update - Step-4250 Browser Refresh And Retention Pass
 
@@ -617,7 +617,7 @@ The live item-by-item repair inventory is maintained in `planning/tropicalgt_i_c
 - [x] Recorded real step-4250 validation metrics: BPB/exact BPB `1.4582135514242673`, graph-BPB `20.14654668919724`, graph-conditioned BPB without side cost `1.2820354069670894`, NLL `1.0107566118240356`, and invalid graph rate `0.0`.
 - [x] Pruned only generated `step_00003750/got_audit` under the active periodic retention policy while step-4250 audit generation was consuming disk; milestone audits, step 4000, step 4250, compact validation reports, and non-audit artifacts remain, with a manifest record in `periodic/got_audit_retention_manifest.jsonl`.
 - [x] Confirmed training resumed after the step-4250 audit at step `4256/5000`; step-5000 validation and audit artifacts remain absent, so post-5K analyses, Codex subagent review, and any step-0 restart remain blocked on real 5K evidence.
-- [ ] Continue Section 12 linearly: preserve trainer PID `378962` and watcher PID `379304`, keep the browser attached to the latest complete real audit, and wait for step-5000 evidence before analysis, subagent review, or restart.
+- [x] Section 12 live-monitor item superseded: trainer PID `378962` and watcher PID `379304` stopped after the step-5000 gate; browser remains attached to the real step-5000 audit and restart remains blocked by empty checkpoint evidence.
 
 ### Current Objective Update - Step-4500 Browser Refresh And Retention Pass
 
@@ -626,7 +626,7 @@ The live item-by-item repair inventory is maintained in `planning/tropicalgt_i_c
 - [x] Recorded real step-4500 validation metrics: BPB/exact BPB `1.4334303489231286`, graph-BPB `20.12475773855043`, graph-conditioned BPB without side cost `1.260246456320278`, NLL `0.9935782048851252`, and invalid graph rate `0.0`.
 - [x] Pruned only generated `step_00004000/got_audit` under the active periodic retention policy while step-4500 audit generation was consuming disk; milestone audits, step 4250, step 4500, compact validation reports, and non-audit artifacts remain, with a manifest record in `periodic/got_audit_retention_manifest.jsonl`.
 - [x] Confirmed training resumed after the step-4500 audit at step `4503/5000`; step-5000 validation and audit artifacts remain absent, so post-5K analyses, Codex subagent review, and any step-0 restart remain blocked on real 5K evidence.
-- [ ] Continue Section 12 linearly: preserve trainer PID `378962` and watcher PID `379304`, keep the browser attached to the latest complete real audit, and wait for step-5000 evidence before analysis, subagent review, or restart.
+- [x] Section 12 live-monitor item superseded: trainer PID `378962` and watcher PID `379304` stopped after the step-5000 gate; browser remains attached to the real step-5000 audit and restart remains blocked by empty checkpoint evidence.
 
 ### Current Objective Update - Step-4750 Browser Refresh And Retention Pass
 
@@ -635,7 +635,7 @@ The live item-by-item repair inventory is maintained in `planning/tropicalgt_i_c
 - [x] Recorded real step-4750 validation metrics: BPB/exact BPB `1.4367942113359327`, graph-BPB `20.127715186527215`, graph-conditioned BPB without side cost `1.263203904297063`, NLL `0.9959098566323519`, and invalid graph rate `0.0`.
 - [x] Pruned only generated `step_00004250/got_audit` under the active periodic retention policy while step-4750 audit generation was consuming disk; milestone audits, step 4500, step 4750, compact validation reports, and non-audit artifacts remain, with a manifest record in `periodic/got_audit_retention_manifest.jsonl`.
 - [x] Confirmed training resumed after the step-4750 audit at step `4759/5000`; step-5000 validation and audit artifacts remain absent, so post-5K analyses, Codex subagent review, and any step-0 restart remain blocked on real 5K evidence.
-- [ ] Continue Section 12 linearly: preserve trainer PID `378962` and watcher PID `379304`, keep the browser attached to the latest complete real audit, and wait for step-5000 evidence before analysis, subagent review, or restart.
+- [x] Section 12 live-monitor item superseded: trainer PID `378962` and watcher PID `379304` stopped after the step-5000 gate; browser remains attached to the real step-5000 audit and restart remains blocked by empty checkpoint evidence.
 
 ### Current Objective Update - Step-5000 Gate And Empty-Checkpoint Readiness Pass
 
