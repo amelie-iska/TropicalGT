@@ -508,3 +508,25 @@ PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m py_
 Operational note: b63 remained active during validation and was parsed at step 412/5000 with train loss/NLL about 1.463/1.442 and no traceback or ENOSPC.
 
 Next linear item: continue the visual/math repair queue, with an immediate operational check around step 500 to confirm large non-final periodic artifacts do not threaten the 5K run.
+
+## 2026-06-16 CAS Free-Resolution Certificate Contract Repair
+
+Sequential CAS/no-proxy item completed after the analogical, simplex-tree, NLL-density, and tropical-support render-contract repairs:
+
+- Added a `tropicalgt.cas_free_resolution_contract.v1` report contract to real free-resolution outputs. The contract names the required input schema, no-proxy policy, safe render rule, unavailable render rule, and backend capability boundaries for Macaulay2, Singular, Sage, and BEMultipliers.
+- Unavailable CAS reports now carry the same contract as certified reports, so disabled, missing-backend, timeout, complexity-guard, parse-error, and certificate-failed states can still be rendered with exact no-proxy rules and backend reasons.
+- Certified Macaulay2 reports now expose the same contract both at top level and inside `cas_artifacts.certificate_summary`, tying safe multigraded rendering to exactness, minimality, homogeneous-presentation, and parsed multidegree evidence.
+- The contract explicitly records that BEMultipliers is a post-certificate Buchsbaum-Eisenbud diagnostic path only, not a substitute free-resolution backend.
+- Regression tests require the contract on unavailable and certified paths and verify deterministic preservation through cached unavailable probes.
+
+Validation:
+
+```text
+PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_algebraic_persistence.py -q -p no:cacheprovider --basetemp=/tmp/tropicalgt-pytest-cas-contract -k "real_cas_free_resolution_disabled_by_environment or real_cas_free_resolution_caches_deterministic_unavailable_probe or certified_cas_result_surfaces_buchsbaum_eisenbud_diagnostics"
+# 3 passed, 27 deselected
+PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_algebraic_persistence.py -q -p no:cacheprovider --basetemp=/tmp/tropicalgt-pytest-algebraic-full
+# 30 passed
+PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m py_compile TropicalGT-I/src/tropicalgt/cas_free_resolution.py TropicalGT-I/tests/test_algebraic_persistence.py
+# passed
+```
+

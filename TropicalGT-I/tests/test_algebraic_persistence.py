@@ -25,6 +25,17 @@ from tropicalgt.tokenizer import TokenGTTokenizer
 def _assert_real_resolution_guard(real, expected_ring):
     assert real["schema_version"] == "tropicalgt.real_free_resolution.v1"
     assert real["module_summary"]["coefficient_ring"] == expected_ring
+    contract = real["certificate_contract"]
+    assert contract["schema_version"] == "tropicalgt.cas_free_resolution_contract.v1"
+    assert contract["required_input_schema"] == cas_free_resolution.MODULE_SCHEMA_VERSION
+    assert contract["no_proxy_or_fallback"] is True
+    assert "finite chain diagnostics" in contract["no_proxy_policy"]
+    assert contract["backend_claims"]["Macaulay2"]["multigraded_free_resolution"] is True
+    assert contract["backend_claims"]["Singular"]["safe_for_multigraded_claims"] is False
+    assert contract["backend_claims"]["sage"]["safe_for_multigraded_claims"] is False
+    assert contract["backend_claims"]["BEMultipliers"]["is_resolution_backend"] is False
+    assert contract["backend_claims"]["BEMultipliers"]["safe_to_substitute_for_resolution"] is False
+    assert "unavailable" in contract["unavailable_render_rule"]
     for key in (
         "real_free_resolution_certified",
         "total_graded_resolution_certified",
@@ -191,6 +202,7 @@ def test_real_cas_free_resolution_caches_deterministic_unavailable_probe(tmp_pat
     assert second["cache"]["enabled"] is True
     assert second["cache"]["hit"] is True
     assert second["cache"]["key"] == first["cache"]["key"]
+    assert second["certificate_contract"] == first["certificate_contract"]
     unavailable = first["unavailable_diagnostic"]
     assert unavailable["status"] == "backend_not_installed"
     assert unavailable["safe_to_render_only_as_unavailable"] is True
@@ -565,6 +577,10 @@ def test_certified_cas_result_surfaces_buchsbaum_eisenbud_diagnostics():
     assert real["backend"] == "Macaulay2"
     assert real["safe_to_render_as_multigraded_free_resolution"] is True
     cert = real["cas_artifacts"]["certificate_summary"]
+    contract = real["certificate_contract"]
+    assert cert["certificate_contract"] == contract
+    assert contract["backend_claims"]["BEMultipliers"]["safe_to_substitute_for_resolution"] is False
+    assert "backend-emitted exactness certificate" in contract["no_proxy_policy"]
     assert cert["available"] is True
     assert cert["backend"] == "Macaulay2"
     assert cert["certificate_attached"] is True

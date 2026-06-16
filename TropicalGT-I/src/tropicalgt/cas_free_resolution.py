@@ -94,6 +94,53 @@ def probe_cas_backends() -> dict[str, Any]:
     }
 
 
+def free_resolution_certificate_contract() -> dict[str, Any]:
+    return {
+        "schema_version": "tropicalgt.cas_free_resolution_contract.v1",
+        "required_input_schema": MODULE_SCHEMA_VERSION,
+        "no_proxy_or_fallback": True,
+        "no_proxy_policy": (
+            "Only a backend-emitted exactness certificate for the displayed module presentation may be rendered as a free resolution; "
+            "finite chain diagnostics, rank samples, minors, Fitting ideals, grade/depth probes, embeddings, or BEMultipliers output cannot substitute."
+        ),
+        "backend_claims": {
+            "Macaulay2": {
+                "multigraded_free_resolution": True,
+                "minimality_certificate": True,
+                "exactness_certificate": True,
+                "fitting_ideals": True,
+                "minors": True,
+                "grade_depth_diagnostics": True,
+                "bemultipliers_optional_post_certificate": True,
+                "safe_for_multigraded_claims_when_homogeneous": True,
+            },
+            "Singular": {
+                "ungraded_resolution": True,
+                "determinantal_and_fitting_ideals": True,
+                "minimality_may_be_false_with_unit_entries": True,
+                "safe_for_multigraded_claims": False,
+                "bemultipliers_optional_post_certificate": False,
+            },
+            "sage": {
+                "total_graded_resolution_for_supported_one_row_ideals": True,
+                "safe_for_multigraded_claims": False,
+                "bemultipliers_optional_post_certificate": False,
+            },
+            "BEMultipliers": {
+                "is_resolution_backend": False,
+                "runs_only_after_certified_macaulay2_chain_complex": True,
+                "safe_to_substitute_for_resolution": False,
+            },
+        },
+        "safe_render_rule": (
+            "A report may render a multigraded free resolution only when available, certificate_attached, "
+            "exactness_certified, minimality_certified, multigraded_free_resolution_certified, and "
+            "safe_to_render_as_multigraded_free_resolution are all true."
+        ),
+        "unavailable_render_rule": "If any required certificate is missing, render only unavailable diagnostics with exact backend attempts and reasons.",
+    }
+
+
 def probe_bemultipliers() -> dict[str, Any]:
     package_path = _local_bemultipliers_package_path()
     m2_executable = _candidate_executable("M2")
@@ -232,6 +279,7 @@ def unavailable_real_resolution(
         "backend_attempts": attempts or [],
         "backend_probe": backend_probe,
         "bemultipliers_probe": bemultipliers_probe,
+        "certificate_contract": free_resolution_certificate_contract(),
         "cas_artifacts": {},
         "command_templates": templates,
         "certificate_attached": False,
@@ -1119,6 +1167,7 @@ def _certified_result(module_schema: dict[str, Any], backend_result: dict[str, A
         "grade_depth_regular_diagnostics_available": bool(grade_depth_regular.get("available")),
         "regular_element_certificate_available": bool(grade_depth_regular.get("regular_element_certificate_available")),
         "no_proxy_policy": "Only exact CAS certificates with parsed free-resolution summaries are rendered as resolutions; diagnostics alone are not substituted.",
+        "certificate_contract": free_resolution_certificate_contract(),
     }
     return {
         "schema_version": SCHEMA_VERSION,
@@ -1131,6 +1180,7 @@ def _certified_result(module_schema: dict[str, Any], backend_result: dict[str, A
         "backend_attempts": attempts,
         "backend_probe": probe_cas_backends(),
         "bemultipliers_probe": probe_bemultipliers(),
+        "certificate_contract": free_resolution_certificate_contract(),
         "command_templates": cas_command_templates(module_schema),
         "backend": backend,
         "presentation_shape": presentation_shape,
