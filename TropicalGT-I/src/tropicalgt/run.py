@@ -963,8 +963,11 @@ def _run_periodic_validation_round(
     periodic_memory_landscape_weight = float(cfg.get("memory_retrieval_landscape_weight", 0.08) or 0.0)
     periodic_memory_vector_weight = float(cfg.get("memory_retrieval_vector_weight", cfg.get("memory_retrieval_persistence_vector_weight", 0.18)) or 0.0)
     periodic_memory_probability_map_weight = float(cfg.get("memory_retrieval_probability_map_weight", 0.20) or 0.0)
+    periodic_memory_certified_cas_weight = float(cfg.get("memory_retrieval_certified_cas_weight", 0.12) or 0.0)
     periodic_memory_vector_available = 0
     periodic_memory_probability_map_available = 0
+    periodic_memory_certified_cas_available = 0
+    periodic_memory_certified_cas_matches = 0
     periodic_memory_vector_component_counts: list[float] = []
     periodic_memory_vector_aggregate_similarities: list[float] = []
     periodic_memory_vector_score_contributions: list[float] = []
@@ -972,6 +975,8 @@ def _run_periodic_validation_round(
     periodic_memory_probability_map_score_contributions: list[float] = []
     periodic_memory_probability_map_preservation_rates: list[float] = []
     periodic_memory_probability_map_similarities: list[float] = []
+    periodic_memory_certified_cas_score_contributions: list[float] = []
+    periodic_memory_certified_cas_similarities: list[float] = []
     periodic_got_scaling_budgets: list[dict[str, Any]] = []
     periodic_got_scaling_failures: list[dict[str, Any]] = []
     if render_visualizations:
@@ -1098,6 +1103,7 @@ def _run_periodic_validation_round(
                         landscape_weight=periodic_memory_landscape_weight,
                         vector_representation_weight=periodic_memory_vector_weight,
                         probability_map_weight=periodic_memory_probability_map_weight,
+                        certified_cas_weight=periodic_memory_certified_cas_weight,
                     )
                     periodic_memory_retrieved_count += len(retrieved)
                     for hit in retrieved:
@@ -1113,6 +1119,12 @@ def _run_periodic_validation_round(
                         periodic_memory_probability_map_score_contributions.append(float(hit.get("probability_simplicial_map_score_contribution", 0.0) or 0.0))
                         periodic_memory_probability_map_preservation_rates.append(float(hit.get("probability_simplicial_map_preservation_rate", 0.0) or 0.0))
                         periodic_memory_probability_map_similarities.append(float(hit.get("probability_simplicial_map_similarity", 0.0) or 0.0))
+                        if bool(hit.get("certified_cas_evidence_available")):
+                            periodic_memory_certified_cas_available += 1
+                        if bool(hit.get("certified_cas_evidence_match")):
+                            periodic_memory_certified_cas_matches += 1
+                        periodic_memory_certified_cas_score_contributions.append(float(hit.get("certified_cas_score_contribution", 0.0) or 0.0))
+                        periodic_memory_certified_cas_similarities.append(float(hit.get("certified_cas_evidence_similarity", 0.0) or 0.0))
                     audit_result["analogical_memory_retrieval"] = {
                         "bank_path": str(memory_bank.path),
                         "bank_size": len(memory_bank.records),
@@ -1120,6 +1132,7 @@ def _run_periodic_validation_round(
                         "quality_gate": gate_summary,
                         "retrieval_weights": {
                             "probability_simplicial_map_weight": periodic_memory_probability_map_weight,
+                            "certified_cas_weight": periodic_memory_certified_cas_weight,
                             "persistence_landscape_weight": periodic_memory_landscape_weight,
                             "persistence_vector_weight": periodic_memory_vector_weight,
                             "persistence_vector_source": "gudhi.representations.vector_methods",
@@ -1148,6 +1161,7 @@ def _run_periodic_validation_round(
                 metrics["analogical_memory_retrieval_landscape_weight"] = float(periodic_memory_landscape_weight)
                 metrics["analogical_memory_retrieval_vector_weight"] = float(periodic_memory_vector_weight)
                 metrics["analogical_memory_retrieval_probability_map_weight"] = float(periodic_memory_probability_map_weight)
+                metrics["analogical_memory_retrieval_certified_cas_weight"] = float(periodic_memory_certified_cas_weight)
                 if periodic_memory_retrieved_count > 0:
                     metrics["analogical_memory_vector_available_rate"] = float(periodic_memory_vector_available / max(periodic_memory_retrieved_count, 1))
                     metrics["analogical_memory_vector_component_count_mean"] = float(np.mean(periodic_memory_vector_component_counts)) if periodic_memory_vector_component_counts else 0.0
@@ -1158,6 +1172,10 @@ def _run_periodic_validation_round(
                     metrics["analogical_memory_probability_map_score_contribution_mean"] = float(np.mean(periodic_memory_probability_map_score_contributions)) if periodic_memory_probability_map_score_contributions else 0.0
                     metrics["analogical_memory_probability_map_preservation_rate_mean"] = float(np.mean(periodic_memory_probability_map_preservation_rates)) if periodic_memory_probability_map_preservation_rates else 0.0
                     metrics["analogical_memory_probability_map_similarity_mean"] = float(np.mean(periodic_memory_probability_map_similarities)) if periodic_memory_probability_map_similarities else 0.0
+                    metrics["analogical_memory_certified_cas_available_rate"] = float(periodic_memory_certified_cas_available / max(periodic_memory_retrieved_count, 1))
+                    metrics["analogical_memory_certified_cas_match_rate"] = float(periodic_memory_certified_cas_matches / max(periodic_memory_retrieved_count, 1))
+                    metrics["analogical_memory_certified_cas_score_contribution_mean"] = float(np.mean(periodic_memory_certified_cas_score_contributions)) if periodic_memory_certified_cas_score_contributions else 0.0
+                    metrics["analogical_memory_certified_cas_similarity_mean"] = float(np.mean(periodic_memory_certified_cas_similarities)) if periodic_memory_certified_cas_similarities else 0.0
     report = {
         "step": step,
         "validation": str(eval_path),
