@@ -119,6 +119,7 @@ def test_training_history_contains_certificate_and_throughput_metrics(tmp_path: 
         "graph_token_structural_bytes",
         "explicit_graph_json_bytes",
         "graph_json_fallback_rate",
+        "legacy_graph_json_substitution_guardrail_rate",
         "graph_json_derived_text_graph_rate",
         "graph_json_parse_unavailable_rate",
         "graph_json_sequentialized_rate",
@@ -137,6 +138,8 @@ def test_training_history_contains_certificate_and_throughput_metrics(tmp_path: 
         assert key in row
         assert row[key] == row[key]
     assert report["eval"]["bpb"] == report["eval"]["bpb_exact"]
+    assert report["eval"]["legacy_graph_json_substitution_guardrail_records"] == report["eval"]["graph_json_fallback_records"] == 0
+    assert report["eval"]["legacy_graph_json_substitution_guardrail_rate"] == report["eval"]["invalid_graph_rate"] == 0.0
     assert report["eval"]["graph_bpb"] == report["eval"]["graph_bpb"]
 
 

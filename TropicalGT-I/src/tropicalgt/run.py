@@ -655,6 +655,7 @@ def train(config_path: str | Path, resume_from: str | Path | None = None, max_st
             metrics_last["sampler_chunks"] = float(sampler_report.get("chunks", 0))
             metrics_last["shuffle_rows_within_chunk"] = 1.0 if sampler_report.get("shuffle_rows_within_chunk") else 0.0
             metrics_last["graph_json_fallback_rate"] = fallback_count / max(example_count, 1)
+            metrics_last["legacy_graph_json_substitution_guardrail_rate"] = metrics_last["graph_json_fallback_rate"]
             metrics_last["graph_json_derived_text_graph_rate"] = derived_text_graph_count / max(example_count, 1)
             metrics_last["graph_json_parse_unavailable_rate"] = parse_unavailable_count / max(example_count, 1)
             metrics_last["graph_json_sequentialized_rate"] = sum(
@@ -1642,9 +1643,11 @@ def evaluate_model(
         "node_tokens": node_token_total,
         "edge_tokens": edge_token_total,
         "graph_json_fallback_records": graph_json_fallback_total,
+        "legacy_graph_json_substitution_guardrail_records": graph_json_fallback_total,
         "graph_json_derived_text_graph_records": graph_json_derived_text_graph_total,
         "graph_json_parse_unavailable_records": graph_json_parse_unavailable_total,
         "invalid_graph_rate": graph_json_fallback_total / max(len(dataset), 1),
+        "legacy_graph_json_substitution_guardrail_rate": graph_json_fallback_total / max(len(dataset), 1),
         "graph_json_derived_text_graph_rate": graph_json_derived_text_graph_total / max(len(dataset), 1),
         "graph_json_parse_unavailable_rate": graph_json_parse_unavailable_total / max(len(dataset), 1),
         "causal_dag_ar_rate": causal_dag_total / max(len(dataset), 1),
