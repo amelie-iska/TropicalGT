@@ -603,9 +603,13 @@ def _with_serialized_simplex_tree(obj: dict[str, Any]) -> dict[str, Any]:
         tree.make_filtration_non_decreasing()
         canonical: list[dict[str, Any]] = []
         thresholds: set[float] = set()
+        closure_inserted_count = 0
         for simplex_ints, filtration in tree.get_filtration():
             simplex = [int_to_label[int(vertex)] for vertex in simplex_ints]
             key = tuple(sorted(simplex))
+            closure_inserted = key not in metadata
+            if closure_inserted:
+                closure_inserted_count += 1
             base = dict(metadata.get(key, {}))
             base.update(
                 {
@@ -613,7 +617,9 @@ def _with_serialized_simplex_tree(obj: dict[str, Any]) -> dict[str, Any]:
                     "dimension": len(simplex) - 1,
                     "filtration": float(filtration),
                     "gudhi_simplex_tree": True,
-                    "type": base.get("type", f"gudhi_dim_{len(simplex) - 1}"),
+                    "gudhi_closure_inserted": bool(closure_inserted),
+                    "type": base.get("type", f"gudhi_closure_dim_{len(simplex) - 1}" if closure_inserted else f"gudhi_dim_{len(simplex) - 1}"),
+                    "filtration_source": base.get("filtration_source", "gudhi_simplex_tree_closure" if closure_inserted else "gudhi_simplex_tree"),
                 }
             )
             canonical.append(base)
@@ -627,6 +633,7 @@ def _with_serialized_simplex_tree(obj: dict[str, Any]) -> dict[str, Any]:
                 "num_thresholds": len(thresholds),
                 "simplex_tree_backend": "gudhi.SimplexTree",
                 "simplex_tree_available": True,
+                "simplex_tree_closure_inserted_simplices": int(closure_inserted_count),
             }
         )
         return {
@@ -641,6 +648,7 @@ def _with_serialized_simplex_tree(obj: dict[str, Any]) -> dict[str, Any]:
                 "num_simplices": int(tree.num_simplices()),
                 "dimension": int(tree.dimension()),
                 "filtration_non_decreasing": True,
+                "closure_inserted_simplices": int(closure_inserted_count),
             },
         }
     except Exception as exc:

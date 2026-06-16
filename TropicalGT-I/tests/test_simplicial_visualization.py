@@ -337,8 +337,32 @@ def test_gudhi_canonical_complex_marks_simplex_tree_available():
     assert canonical["simplex_tree"]["available"] is True
     assert canonical["summary"]["simplex_tree_backend"] == "gudhi.SimplexTree"
     assert canonical["summary"]["simplex_tree_available"] is True
+    assert canonical["summary"]["simplex_tree_closure_inserted_simplices"] == 0
+    assert canonical["simplex_tree"]["closure_inserted_simplices"] == 0
     assert canonical["summary"]["num_vertices"] == 2
     assert canonical["summary"]["num_edges"] == 1
+
+
+def test_gudhi_canonical_complex_discloses_closure_inserted_faces():
+    obj = {
+        "summary": {
+            "filtration_model": "embedding_vietoris_rips_2_skeleton",
+            "radius_filtration": True,
+        },
+        "simplices": [
+            {"simplex": ["a"], "dimension": 0, "filtration": 0.0},
+            {"simplex": ["b"], "dimension": 0, "filtration": 0.0},
+            {"simplex": ["c"], "dimension": 0, "filtration": 0.0},
+            {"simplex": ["a", "b", "c"], "dimension": 2, "filtration": 0.4},
+        ],
+    }
+    canonical = _gudhi_canonical_complex(obj)
+    inserted = [row for row in canonical["simplices"] if row.get("gudhi_closure_inserted")]
+    assert canonical["summary"]["simplex_tree_closure_inserted_simplices"] == 3
+    assert canonical["simplex_tree"]["closure_inserted_simplices"] == 3
+    assert len(inserted) == 3
+    assert {tuple(row["simplex"]) for row in inserted} == {("a", "b"), ("a", "c"), ("b", "c")}
+    assert all(row["filtration_source"] == "gudhi_simplex_tree_closure" for row in inserted)
 
 
 def test_simplicial_object_svg_uses_3d_pca_radius_filtration():
