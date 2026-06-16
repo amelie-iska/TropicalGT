@@ -332,6 +332,31 @@ def write_inference_audit_artifacts(
                 scaling["trajectory_level_radius_bifiltration"] = level_radius
             except Exception as exc:
                 level_radius = {"available": False, "reason": f"level-radius bifiltration derivation failed: {type(exc).__name__}: {exc}"}
+        if not isinstance(level_radius, dict):
+            candidates = scaling.get("candidates") if isinstance(scaling, dict) else None
+            has_nonempty_candidates = isinstance(candidates, list) and bool(candidates)
+            reason = (
+                "trajectory_level_radius_bifiltration_missing_for_nonempty_scaling_report_without_trajectory_growth"
+                if has_nonempty_candidates
+                else "trajectory growth unavailable only for empty or invalid trajectory"
+            )
+            level_radius = {
+                "available": False,
+                "num_parameters": 2,
+                "parameters": [
+                    {"name": "trajectory_level", "meaning": "reasoning growth level in the sampled graph-of-thought"},
+                    {"name": "radius", "meaning": "scalar radius/filtration threshold"},
+                ],
+                "coefficient_ring": "F2[x_level,x_radius]",
+                "fiber_rank_profile": [],
+                "rank_invariant_samples": [],
+                "structure_maps": [],
+                "reason": reason,
+                "object_key_policy": "unavailable: no trajectory_growth rows were present to compute an actual bifiltration",
+                "object_key_selected": "unavailable",
+                "grid_fiber_provenance": {"available": False, "reason": reason},
+            }
+            scaling["trajectory_level_radius_bifiltration"] = level_radius
         if isinstance(level_radius, dict):
             level_radius_path = output_dir / "trajectory_level_radius_bifiltration.json"
             level_radius_path.write_text(json.dumps(level_radius, indent=2), encoding="utf-8")

@@ -42,7 +42,7 @@
 ### 1. Bifiltration Guarantees
 
 - [x] Guarantee every nonempty reasoning trajectory emits grades over `F2[x_level,x_radius]`.
-- [ ] Remove missing-bifiltration paths except empty/invalid trajectory errors.
+- [x] Remove missing-bifiltration paths except empty/invalid trajectory errors.
 - [x] Add tests proving radius grades and reasoning-level grades are present for every nonempty trajectory.
 - [x] Ensure all reasoning-step complexes begin as disjoint embedding vertices and grow by radius.
 
@@ -222,6 +222,13 @@ The live item-by-item repair inventory is maintained in `planning/tropicalgt_i_c
 - [x] Preserved the Jensen-Shannon probability SimplexTree unavailable state when model probability vectors are absent.
 - [x] Focused verification passed: visualization plus artifact validator `33 passed`.
 - [x] Pushed this simplex-tree contract repair on the non-main branch.
+
+
+### Current Objective Update - Missing-Bifiltration Unavailable-State Pass
+
+- [x] Materialized explicit unavailable `F2[x_level,x_radius]` bifiltration reports for legacy nonempty scaling payloads that have candidates but lack `trajectory_growth`.
+- [x] Added regression coverage proving the raw sidecar is written, keeps the ring/parameter contract, and reports the exact nonempty-scaling missing-growth reason without creating fibers, ranks, maps, or synthetic edges.
+- [x] Focused verification passed: new visualization writer test `1 passed`; full simplicial visualization `33 passed`; full algebraic persistence `20 passed`; artifact validator `10 passed`.
 
 
 ### Current Objective Update - Bifiltration Vertex-Only Start-State Pass

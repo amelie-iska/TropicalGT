@@ -23,6 +23,7 @@ from tropicalgt.visualization import (
     write_analogical_memory_visualization,
     write_graphcg_trajectory_visualization,
     write_got_trajectory_visualization,
+    write_inference_audit_artifacts,
     write_persistence_visualizations,
     write_reasoning_visualizations,
     write_tropical_fan_diagnostics,
@@ -734,6 +735,33 @@ def test_tropical_support_heatmap_does_not_fabricate_invalid_supports(tmp_path: 
     assert payload["support_flow_edges"] == []
     assert payload["supports"] == []
     assert "No valid model active-support indices" in html
+
+
+def test_inference_audit_materializes_unavailable_bifiltration_for_legacy_nonempty_scaling(tmp_path: Path):
+    result = {
+        "inference_scaling": {
+            "candidates": [
+                {
+                    "record_id": "root",
+                    "embedding": [0.0, 0.0, 0.0],
+                    "score": 0.0,
+                    "nll": 1.0,
+                    "path": [],
+                    "level": 0,
+                }
+            ]
+        }
+    }
+    paths = write_inference_audit_artifacts(result, tmp_path, render_html=False)
+    assert "trajectory_level_radius_bifiltration" in paths
+    payload = json.loads(Path(paths["trajectory_level_radius_bifiltration"]).read_text(encoding="utf-8"))
+    assert payload["available"] is False
+    assert payload["coefficient_ring"] == "F2[x_level,x_radius]"
+    assert payload["fiber_rank_profile"] == []
+    assert payload["structure_maps"] == []
+    assert payload["object_key_selected"] == "unavailable"
+    assert payload["reason"] == "trajectory_level_radius_bifiltration_missing_for_nonempty_scaling_report_without_trajectory_growth"
+    assert payload["grid_fiber_provenance"]["reason"] == payload["reason"]
 
 
 def test_simplicial_svg_wraps_long_topological_paths():

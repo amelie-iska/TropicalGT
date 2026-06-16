@@ -232,7 +232,7 @@ git diff --check
 - CAS package survey: look for Sage, Macaulay2, Singular, RIVET/multipers, polymake, Normaliz, and related packages that compute real multigraded modules, minimal resolutions, Betti tables, Fitting ideals, minors, Buchsbaum-Eisenbud diagnostics, tropical fans, toric varieties, and stable intersections.
 - Maclagan-style toric embedding research direction: investigate whether the transformer graph-state and tropical-attention coordinate system can be embedded into a toric variety via model-derived monomial coordinates, Newton polytopes, fan data, and one dimensional cone data. Any resulting implementation must distinguish theorem-level certified constructions from diagnostic embeddings or visual probes.
 
-_Last updated: 2026-06-16T07:12:00Z_
+_Last updated: 2026-06-16T07:20:00Z_
 
 
 ## 2026-06-16 Fresh b59 5K Review Gate and Worker Handoff
@@ -324,10 +324,19 @@ _Last updated: 2026-06-16T07:12:00Z_
 - Verification completed: `python -m py_compile TropicalGT-I/src/tropicalgt/scaling.py TropicalGT-I/tests/test_algebraic_persistence.py`, `pytest TropicalGT-I/tests/test_algebraic_persistence.py::test_inference_scaling_bifiltration_uses_vertex_only_probability_start_state -q` (`1 passed`), `pytest TropicalGT-I/tests/test_algebraic_persistence.py -q` (`20 passed`), `pytest TropicalGT-I/tests/test_simplicial_visualization.py -q` (`32 passed`), `pytest TropicalGT-I/tests/test_interactive_artifact_validator.py -q` (`10 passed`), and `git diff --check`.
 
 
+## 2026-06-16 Missing-Bifiltration Unavailable-State Addendum
+
+- Legacy or partial inference-scaling payloads with nonempty candidates but no `trajectory_growth` now materialize `trajectory_level_radius_bifiltration.json` as an explicit unavailable `F2[x_level,x_radius]` report instead of silently omitting the two-parameter sidecar.
+- The unavailable report preserves the coefficient ring, two parameters, empty fiber/rank/structure-map arrays, selected object key `unavailable`, and the exact reason `trajectory_level_radius_bifiltration_missing_for_nonempty_scaling_report_without_trajectory_growth`. Empty or invalid trajectories continue to receive the separate empty/invalid reason.
+- No substitute fibers, ranks, generators, maps, or synthetic radius edges are produced for missing growth rows.
+- b60 latest checked training state reached step `570` with train loss/NLL `1.352/1.330`; trainer PID `378962` and watcher PID `379304` remain alive under the step-5000 gate.
+- Verification completed: `python -m py_compile TropicalGT-I/src/tropicalgt/visualization.py TropicalGT-I/tests/test_simplicial_visualization.py`, `pytest TropicalGT-I/tests/test_simplicial_visualization.py::test_inference_audit_materializes_unavailable_bifiltration_for_legacy_nonempty_scaling -q` (`1 passed`), `pytest TropicalGT-I/tests/test_simplicial_visualization.py -q` (`33 passed`), `pytest TropicalGT-I/tests/test_algebraic_persistence.py -q` (`20 passed`), `pytest TropicalGT-I/tests/test_interactive_artifact_validator.py -q` (`10 passed`), and `git diff --check`.
+
+
 ## Real Implementations Only Policy
 
 No TropicalGT-I metric, loss, visualization, analogical map, persistence module, free resolution, derived comparison, tropical-cycle diagnostic, or CAS artifact should be presented as a mathematical object unless it is computed from the actual model outputs, graph states, embeddings, probabilities, simplex trees, bifiltrations, or certified CAS/backend output that define that object. Temporary placeholders, synthetic fallback objects, mock charts, fabricated simplices, and convenience stand-ins are not acceptable. When a requested object cannot yet be computed, the artifact must render an explicit unavailable/uncertified state and the training metric must either be disabled or logged under an audit-only unavailable flag. Finite chain-presentation diagnostics may be shown only as chain diagnostics, never as free resolutions. Total-graded or ungraded CAS output may be shown as real CAS output only under its actual grading; it must not be advertised as a multigraded `F2[x_level,x_radius]` free resolution unless the backend certifies that multigraded structure.
 
 Use "one dimensional cone" or "one dimensional cones" as the preferred fan-theoretic language whenever the intended object is a cone of a fan or a cone-indexed filtration datum. Use singular or plural according to ordinary grammar.
 
-_Last updated: 2026-06-16T07:12:00Z_
+_Last updated: 2026-06-16T07:20:00Z_
