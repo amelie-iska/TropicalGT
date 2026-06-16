@@ -200,10 +200,11 @@
 - [x] Required explicit W&B organization/entity for BPB-focused runs and set tracked b54/b55 gate configs to `amelie-iska-math`.
 - [x] Closed wrapper/preflight bypasses: the Codex review-loop wrapper enforces the BPB contract before subprocess launch, readiness dry-run/CUDA preflight short-circuits before dataset/model work on failed BPB contracts, and ablation grids audit in-memory variants before writing analysis-only configs.
 - [x] Added advanced BPB contract evidence to post-5K review bundles so restart reviewers see `safe_to_use_for_step0_bpb_restart` and named failed gates before proposing a new step-0 BPB config.
+- [x] Added a post-5K `restart_evidence_gate` so missed BPB targets are explicitly blocked from step-0 restart when checkpoint, execution evidence, or advanced BPB contract evidence is unavailable.
 
 ### Current Remaining Implementation List - 2026-06-16
 
-1. Keep actual BPB restart blocked until a nonempty loadable checkpoint or explicitly revised evidence policy exists.
+1. Keep actual BPB restart blocked until a nonempty loadable checkpoint or explicitly revised evidence policy exists; post-5K review bundles now record this as `restart_evidence_gate.step0_restart_allowed=false` when evidence is missing.
 2. Continue source-side preflight and evidence hardening for future BPB runs, especially places where stale config fields, cross-run state, missing datasets, unavailable CAS, missing memory evidence, or newly discovered bypasses could otherwise look successful.
 3. If the no-proxy checkpoint block is resolved, run checkpoint-backed post-5K evaluation/backfill/visual validation, then produce an evidence-backed step-0 restart config targeting BPB `< 1.12`.
 4. Keep browser QA attached to the real step-5000 audit or the next real audit bundle; do not copy generated artifacts into source control.

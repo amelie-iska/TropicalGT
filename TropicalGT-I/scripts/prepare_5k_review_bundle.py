@@ -150,6 +150,55 @@ def _execution_readiness(args: argparse.Namespace, report_path: Path, checkpoint
     }
 
 
+def _restart_evidence_gate(
+    *,
+    decision: dict[str, Any],
+    checkpoint: dict[str, Any],
+    execution_readiness: dict[str, Any],
+    advanced_bpb_contract: dict[str, Any],
+) -> dict[str, Any]:
+    blockers: list[str] = []
+    bpb = decision.get("bpb")
+    target_missed = bool(decision.get("triggered", False))
+    if bpb is None:
+        blockers.append("missing_primary_bpb_metric")
+    if target_missed and not bool(checkpoint.get("available", False)):
+        reason = str(checkpoint.get("unavailable_reason") or "checkpoint_unavailable")
+        path = str(checkpoint.get("path") or execution_readiness.get("checkpoint") or "")
+        if path:
+            blockers.append(f"checkpoint_unavailable:{reason}:{path}")
+        else:
+            blockers.append(f"checkpoint_unavailable:{reason}")
+    if target_missed and not bool(execution_readiness.get("ready", False)):
+        blockers.extend(f"execution_readiness:{issue}" for issue in execution_readiness.get("issues", []))
+    failed_gates = [str(gate) for gate in advanced_bpb_contract.get("failed_gates", []) if str(gate)]
+    if target_missed and failed_gates:
+        blockers.append("advanced_bpb_contract_failed:" + ",".join(failed_gates))
+    blockers = sorted(dict.fromkeys(blockers))
+    if not target_missed:
+        action = "not_needed_target_met"
+    elif blockers:
+        action = "blocked_missing_required_evidence_no_restart"
+    else:
+        action = "allowed_for_evidence_backed_step0_restart_proposal"
+    return {
+        "schema_version": "tropicalgt.restart_evidence_gate.v1",
+        "target_missed": target_missed,
+        "restart_action": action,
+        "step0_restart_allowed": action == "allowed_for_evidence_backed_step0_restart_proposal",
+        "blocked": bool(blockers),
+        "blockers": blockers,
+        "checkpoint_available": bool(checkpoint.get("available", False)),
+        "execution_evidence_ready": bool(execution_readiness.get("ready", False)),
+        "advanced_bpb_contract_safe": bool(advanced_bpb_contract.get("safe_to_use_for_step0_bpb_restart", False)),
+        "policy": (
+            "A missed BPB target is not a restart authorization. A step-0 restart proposal is allowed only when "
+            "the checkpoint is nonempty and loadable, post-5K evidence is ready, and the advanced BPB contract passes. "
+            "Missing evidence must remain blocked with explicit reasons; no proxies or fallbacks."
+        ),
+    }
+
+
 def _run_shell_command(command: str, log_dir: Path, name: str, timeout_seconds: float = 0.0) -> dict[str, Any]:
     log_dir.mkdir(parents=True, exist_ok=True)
     safe_name = "".join(ch if ch.isalnum() or ch in "._-" else "_" for ch in name).strip("_") or "command"
@@ -242,6 +291,11 @@ def _bundle_markdown(bundle: dict[str, Any]) -> str:
             json.dumps(bundle.get("advanced_bpb_contract", {}), indent=2),
             "```",
             "",
+            "## Restart Evidence Gate",
+            "```json",
+            json.dumps(bundle.get("restart_evidence_gate", {}), indent=2),
+            "```",
+            "",
             "## Restart Decision Schema",
             "```json",
             json.dumps(bundle.get("restart_decision_schema", {}), indent=2),
@@ -327,6 +381,18 @@ def prepare_review_bundle(args: argparse.Namespace) -> dict[str, Any]:
             + ", ".join(execution_readiness["issues"])
         )
     command_results = _run_requested_commands(args, commands, bundle_dir)
+    decision = {
+        "bpb": bpb,
+        "graph_bpb": graph_bpb,
+        "triggered": bpb is None or bpb > args.target_bpb,
+        "restart_policy": "beginning",
+    }
+    restart_evidence_gate = _restart_evidence_gate(
+        decision=decision,
+        checkpoint=checkpoint,
+        execution_readiness=execution_readiness,
+        advanced_bpb_contract=advanced_bpb_contract,
+    )
     bundle = {
         "schema_version": "tropicalgt.post_5k_review_bundle.v1",
         "boundary_step": boundary_step,
@@ -338,13 +404,9 @@ def prepare_review_bundle(args: argparse.Namespace) -> dict[str, Any]:
         "checkpoint": _relative_project_path(checkpoint_path),
         "stop_record": _relative_project_path(stop_record_path) if stop_record_path else "",
         "stop_record_payload": _read_json(stop_record_path),
-        "decision": {
-            "bpb": bpb,
-            "graph_bpb": graph_bpb,
-            "triggered": bpb is None or bpb > args.target_bpb,
-            "restart_policy": "beginning",
-        },
+        "decision": decision,
         "advanced_bpb_contract": advanced_bpb_contract,
+        "restart_evidence_gate": restart_evidence_gate,
         "restart_decision_schema": review_loop._restart_decision_schema(args.target_bpb),
         "review_requirements": [
             "spawn_or_assign_codex_subagent_when_available",
