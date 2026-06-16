@@ -145,6 +145,53 @@ def _validate_radius_slider_contract(contract_path: Path, errors: list[str], lab
     return payload
 
 
+def _validate_reasoning_step_slider_summary(
+    summary: Any,
+    sidecar: dict[str, Any],
+    errors: list[str],
+    label: str,
+    *,
+    expected_contract_file: str,
+    expected_html_file: str,
+) -> None:
+    _assert(isinstance(summary, dict), errors, f"{label} missing reasoning-step radius slider summary")
+    if not isinstance(summary, dict):
+        return
+    _assert(summary.get("schema_version") == "tropicalgt.reasoning_step_radius_slider_summary.v1", errors, f"{label} reasoning-step radius slider summary has wrong schema")
+    _assert(summary.get("source") == f"reasoning_step_complex_maps/{expected_contract_file}", errors, f"{label} reasoning-step radius slider summary has wrong source")
+    _assert(summary.get("contract_file") == expected_contract_file, errors, f"{label} reasoning-step radius slider summary contract file mismatch")
+    _assert(summary.get("html_file") == expected_html_file, errors, f"{label} reasoning-step radius slider summary html file mismatch")
+    _assert(summary.get("contract_schema_version") == sidecar.get("schema_version"), errors, f"{label} reasoning-step radius slider summary schema/sidecar mismatch")
+    _assert(summary.get("contract_source") == sidecar.get("source"), errors, f"{label} reasoning-step radius slider summary source/sidecar mismatch")
+    for key in [
+        "actual_data_only",
+        "no_proxy_or_fallback",
+        "radius_filtration",
+        "thresholds_ascending",
+        "first_frame_disjoint_vertices_only",
+        "monotone_visible_counts",
+        "monotone_solid_radius_edges",
+        "monotone_filled_radius_faces",
+        "initial_radius_frame_hides_dotted_overlays",
+        "initial_radius_frame_hides_solid_edges_and_faces",
+    ]:
+        _assert(summary.get(key) == (sidecar.get(key) is True), errors, f"{label} reasoning-step radius slider summary {key} mismatch")
+    _assert(summary.get("threshold_order") == sidecar.get("threshold_order"), errors, f"{label} reasoning-step radius slider summary threshold order mismatch")
+    for key in [
+        "threshold_count",
+        "frame_count",
+        "first_frame_vertex_count",
+        "first_frame_solid_edge_count",
+        "first_frame_filled_face_count",
+        "first_frame_dotted_overlay_count",
+    ]:
+        _assert(int(_finite_float(summary.get(key), -999.0)) == int(_finite_float(sidecar.get(key), -998.0)), errors, f"{label} reasoning-step radius slider summary {key} mismatch")
+    _assert(summary.get("solid_lines_semantics_ok") is True, errors, f"{label} reasoning-step radius slider summary rejects solid-line semantics")
+    _assert(summary.get("filled_faces_semantics_ok") is True, errors, f"{label} reasoning-step radius slider summary rejects filled-face semantics")
+    _assert(summary.get("dotted_lines_semantics_ok") is True, errors, f"{label} reasoning-step radius slider summary rejects dotted-line semantics")
+    _assert(summary.get("safe_to_render_radius_filtration") is True, errors, f"{label} reasoning-step radius slider summary is not safe to render")
+
+
 def _html_has_plotly(html: str) -> bool:
     return "Plotly.newPlot" in html or "plotly" in html.lower()
 
@@ -999,6 +1046,14 @@ def validate_row(row_dir: Path, *, min_candidates: int = 8, min_depth: int = 2, 
         _assert(step_contract.get("one_page_per_model_evaluated_reasoning_step") is True, errors, "reasoning-step manifest contract does not require one page per model state")
         _assert(step_contract.get("embedding_trajectory_map_is_not_a_step_complex") is True, errors, "reasoning-step manifest allows trajectory map as step complex")
         _assert(step_contract.get("all_step_complex_fingerprints_present") is True, errors, "reasoning-step manifest contract says fingerprints are missing")
+        _assert(step_contract.get("slider_contract_schema_version") == "tropicalgt.reasoning_step_radius_slider_summary.v1", errors, "reasoning-step manifest missing radius slider summary schema")
+        _assert(int(_finite_float(step_contract.get("rendered_slider_contracts"), -1.0)) == len(steps), errors, "reasoning-step manifest rendered slider contract count mismatch")
+        _assert(step_contract.get("all_steps_have_radius_slider_contracts") is True, errors, "reasoning-step manifest says radius slider summaries are missing")
+        _assert(step_contract.get("all_step_radius_sliders_start_disjoint_vertices") is True, errors, "reasoning-step manifest says radius sliders do not start as disjoint vertices")
+        _assert(step_contract.get("all_step_radius_sliders_monotone") is True, errors, "reasoning-step manifest says radius sliders are not monotone")
+        _assert(step_contract.get("all_step_radius_sliders_no_proxy") is True, errors, "reasoning-step manifest says radius sliders allow proxy data")
+        _assert(step_contract.get("all_step_radius_sliders_safe_to_render") is True, errors, "reasoning-step manifest says radius sliders are unsafe")
+        _assert(int(_finite_float(step_contract.get("radius_slider_unavailable_count"), -1.0)) == 0, errors, "reasoning-step manifest lists unavailable radius slider summaries")
         _assert(int(_finite_float(step_contract.get("unique_step_complex_fingerprint_count"), -1.0)) >= 1 if steps else True, errors, "reasoning-step manifest has no unique complex fingerprints")
         duplicate_groups = step_contract.get("duplicate_step_complex_fingerprint_groups", [])
         _assert(isinstance(duplicate_groups, list), errors, "reasoning-step manifest duplicate fingerprint groups are not a list")
@@ -1037,10 +1092,21 @@ def validate_row(row_dir: Path, *, min_candidates: int = 8, min_depth: int = 2, 
         _assert(node.get("step_simplex_tree_href") == expected_tree_href, errors, f"trajectory node {rid} has wrong step_simplex_tree_href")
         _assert((row_dir / expected_step_href).exists(), errors, f"trajectory node {rid} references missing step complex page")
         _assert((row_dir / expected_tree_href).exists(), errors, f"trajectory node {rid} references missing step simplex tree page")
-        _validate_radius_slider_contract(
-            _slider_contract_path(row_dir / expected_step_href),
+        expected_slider_file = str(step.get("slider_contract_file") or Path(str(step.get("file", ""))).with_suffix("").name + "_slider_contract.json")
+        slider_path = _slider_contract_path(row_dir / expected_step_href)
+        _assert(slider_path.name == expected_slider_file, errors, f"reasoning-step complex {idx} manifest slider contract file mismatch")
+        slider_payload = _validate_radius_slider_contract(
+            slider_path,
             errors,
             f"reasoning-step complex {idx}",
+        )
+        _validate_reasoning_step_slider_summary(
+            step.get("radius_slider_contract"),
+            slider_payload,
+            errors,
+            f"reasoning-step complex {idx}",
+            expected_contract_file=expected_slider_file,
+            expected_html_file=str(step.get("file", "")),
         )
     for idx in [0, len(steps) // 2, len(steps) - 1] if steps else []:
         step = steps[idx]

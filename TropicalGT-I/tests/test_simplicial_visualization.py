@@ -883,6 +883,14 @@ def test_got_trajectory_visualization_renders_simplicial_panel_and_nll_surface(t
     assert step_manifest["contract"]["step_count"] == 4
     assert step_manifest["contract"]["rendered_complex_pages"] == 4
     assert step_manifest["contract"]["rendered_simplex_tree_pages"] == 4
+    assert step_manifest["contract"]["slider_contract_schema_version"] == "tropicalgt.reasoning_step_radius_slider_summary.v1"
+    assert step_manifest["contract"]["rendered_slider_contracts"] == 4
+    assert step_manifest["contract"]["all_steps_have_radius_slider_contracts"] is True
+    assert step_manifest["contract"]["all_step_radius_sliders_start_disjoint_vertices"] is True
+    assert step_manifest["contract"]["all_step_radius_sliders_monotone"] is True
+    assert step_manifest["contract"]["all_step_radius_sliders_no_proxy"] is True
+    assert step_manifest["contract"]["all_step_radius_sliders_safe_to_render"] is True
+    assert step_manifest["contract"]["radius_slider_unavailable_count"] == 0
     assert step_manifest["contract"]["all_step_complex_fingerprints_present"] is True
     assert step_manifest["contract"]["fingerprint_source"].startswith("sha256 canonical JSON")
     assert step_manifest["contract"]["unique_step_complex_fingerprint_count"] == len({row["step_complex_fingerprint"] for row in step_manifest["steps"]})
@@ -897,6 +905,10 @@ def test_got_trajectory_visualization_renders_simplicial_panel_and_nll_surface(t
     assert all(row.get("step_complex_fingerprint_basis", {}).get("schema_version") == "tropicalgt.reasoning_step_complex_fingerprint_basis.v1" for row in step_manifest["steps"])
     assert all(row.get("step_complex_fingerprint_basis", {}).get("no_record_id_or_path_in_hash") is True for row in step_manifest["steps"])
     assert all(row.get("step_complex_fingerprint_basis", {}).get("simplices") for row in step_manifest["steps"])
+    assert all(row.get("slider_contract_file") == f"reasoning_step_{idx:03d}_slider_contract.json" for idx, row in enumerate(step_manifest["steps"]))
+    assert all(row.get("radius_slider_contract", {}).get("schema_version") == "tropicalgt.reasoning_step_radius_slider_summary.v1" for row in step_manifest["steps"])
+    assert all(row.get("radius_slider_contract", {}).get("safe_to_render_radius_filtration") is True for row in step_manifest["steps"])
+    assert all(row.get("radius_slider_contract", {}).get("first_frame_disjoint_vertices_only") is True for row in step_manifest["steps"])
     assert step_manifest["steps"][0]["complex_render_contract"].startswith("actual per-step radius-filtered complex")
     assert step_manifest["steps"][0]["simplex_tree_render_contract"].startswith("actual GUDHI SimplexTree")
     first_step = tmp_path / "reasoning_step_complex_maps" / "reasoning_step_000.html"

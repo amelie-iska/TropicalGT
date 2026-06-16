@@ -1067,3 +1067,23 @@ CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/t
 CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_metrics_and_memory.py -q -p no:cacheprovider --basetemp=/tmp/tropicalgt-pytest-analogical-probability-evidence-full-rerun
 # 11 passed
 ```
+
+## 2026-06-16 Reasoning-Step Radius Slider Manifest Evidence
+
+Sequential simplicial/simplex-tree repair completed after the analogical probability assignment evidence contract:
+
+- Added `tropicalgt.reasoning_step_radius_slider_summary.v1` summaries to every `reasoning_step_complex_maps/manifest.json` step row, sourced from the actual per-step `reasoning_step_*_slider_contract.json` sidecar.
+- The manifest contract now counts rendered per-step slider summaries and requires all reasoning-step radius sliders to be actual-data/no-proxy, start as disjoint vertices, grow monotonically, hide solid edges/faces/dotted overlays on the initial radius frame, and stay safe to render.
+- The reasoning-step index now exposes radius-slider verification in its contract panel instead of relying on separate sidecar discovery.
+- The interactive artifact validator now cross-checks each manifest slider summary against the corresponding sidecar and rejects missing, mismatched, unsafe, nonmonotone, or proxy-permitting summaries.
+
+Validation:
+
+```text
+CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m py_compile TropicalGT-I/src/tropicalgt/visualization.py TropicalGT-I/scripts/validate_interactive_audit_artifacts.py TropicalGT-I/tests/test_simplicial_visualization.py TropicalGT-I/tests/test_interactive_artifact_validator.py
+# passed
+CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_simplicial_visualization.py::test_got_trajectory_visualization_renders_simplicial_panel_and_nll_surface TropicalGT-I/tests/test_interactive_artifact_validator.py::test_validate_audit_root_accepts_three_interactive_rows TropicalGT-I/tests/test_interactive_artifact_validator.py::test_validate_audit_root_rejects_missing_reasoning_step_slider_summary -q -p no:cacheprovider --basetemp=/tmp/tropicalgt-pytest-step-slider-manifest
+# 3 passed
+CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_simplicial_visualization.py TropicalGT-I/tests/test_interactive_artifact_validator.py -q -p no:cacheprovider --basetemp=/tmp/tropicalgt-pytest-step-slider-manifest-full
+# 63 passed
+```

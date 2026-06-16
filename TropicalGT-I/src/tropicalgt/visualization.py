@@ -2060,6 +2060,84 @@ def _reasoning_step_complex_fingerprint(obj_summary: dict[str, object]) -> tuple
     return _stable_artifact_hash(basis), basis
 
 
+def _slider_summary_int(value: object, default: int = 0) -> int:
+    try:
+        numeric = float(value)
+    except (TypeError, ValueError):
+        return default
+    if not math.isfinite(numeric):
+        return default
+    return int(numeric)
+
+
+def _reasoning_step_slider_contract_summary(
+    contract: Mapping[str, object],
+    *,
+    contract_file: str,
+    html_file: str,
+) -> dict[str, object]:
+    first_vertices = _slider_summary_int(contract.get("first_frame_vertex_count"), 0)
+    first_edges = _slider_summary_int(contract.get("first_frame_solid_edge_count"), -1)
+    first_faces = _slider_summary_int(contract.get("first_frame_filled_face_count"), -1)
+    first_dotted = _slider_summary_int(contract.get("first_frame_dotted_overlay_count"), -1)
+    semantic_checks = {
+        "solid_lines_semantics_ok": contract.get("solid_lines_semantics") == "radius-filtered 1-simplices only",
+        "filled_faces_semantics_ok": contract.get("filled_faces_semantics") == "radius-gated 2-simplices only",
+        "dotted_lines_semantics_ok": contract.get("dotted_lines_semantics") == "causal_decoding_or_direction_overlay_only_and_radius_gated",
+    }
+    summary = {
+        "schema_version": "tropicalgt.reasoning_step_radius_slider_summary.v1",
+        "source": f"reasoning_step_complex_maps/{contract_file}",
+        "contract_file": contract_file,
+        "html_file": html_file,
+        "contract_schema_version": contract.get("schema_version"),
+        "contract_source": contract.get("source"),
+        "actual_data_only": contract.get("actual_data_only") is True,
+        "no_proxy_or_fallback": contract.get("no_proxy_or_fallback") is True,
+        "radius_filtration": contract.get("radius_filtration") is True,
+        "threshold_order": contract.get("threshold_order"),
+        "thresholds_ascending": contract.get("thresholds_ascending") is True,
+        "threshold_count": _slider_summary_int(contract.get("threshold_count"), 0),
+        "frame_count": _slider_summary_int(contract.get("frame_count"), 0),
+        "first_frame_vertex_count": first_vertices,
+        "first_frame_solid_edge_count": first_edges,
+        "first_frame_filled_face_count": first_faces,
+        "first_frame_dotted_overlay_count": first_dotted,
+        "initial_radius_frame_hides_dotted_overlays": contract.get("initial_radius_frame_hides_dotted_overlays") is True,
+        "initial_radius_frame_hides_solid_edges_and_faces": contract.get("initial_radius_frame_hides_solid_edges_and_faces") is True,
+        "first_frame_disjoint_vertices_only": contract.get("first_frame_disjoint_vertices_only") is True,
+        "monotone_visible_counts": contract.get("monotone_visible_counts") is True,
+        "monotone_solid_radius_edges": contract.get("monotone_solid_radius_edges") is True,
+        "monotone_filled_radius_faces": contract.get("monotone_filled_radius_faces") is True,
+        **semantic_checks,
+    }
+    summary["safe_to_render_radius_filtration"] = all(
+        [
+            summary["contract_schema_version"] == "tropicalgt.radius_filtration_slider_contract.v1",
+            summary["contract_source"] == "canonical_gudhi_filtered_complex_simplices",
+            summary["actual_data_only"],
+            summary["no_proxy_or_fallback"],
+            summary["radius_filtration"],
+            summary["threshold_order"] == "ascending_min_to_max",
+            summary["thresholds_ascending"],
+            summary["frame_count"] == summary["threshold_count"],
+            summary["frame_count"] > 0,
+            summary["first_frame_disjoint_vertices_only"],
+            first_vertices > 0,
+            first_edges == 0,
+            first_faces == 0,
+            first_dotted == 0,
+            summary["initial_radius_frame_hides_dotted_overlays"],
+            summary["initial_radius_frame_hides_solid_edges_and_faces"],
+            summary["monotone_visible_counts"],
+            summary["monotone_solid_radius_edges"],
+            summary["monotone_filled_radius_faces"],
+            all(semantic_checks.values()),
+        ]
+    )
+    return summary
+
+
 def _write_reasoning_step_complex_maps(candidates: list[dict[str, object]], output_dir: Path) -> dict[str, str]:
     directory = output_dir / "reasoning_step_complex_maps"
     directory.mkdir(parents=True, exist_ok=True)
@@ -2083,6 +2161,31 @@ def _write_reasoning_step_complex_maps(candidates: list[dict[str, object]], outp
             title=f"Reasoning step filtered simplicial complex map: q{idx}",
             subtitle=f"record_id={record_id}; level={row.get('level')}; path={row.get('path', [])}",
         )
+        slider_contract_path = _complex_slider_contract_path(path)
+        if slider_contract_path.exists():
+            try:
+                slider_contract_payload = json.loads(slider_contract_path.read_text(encoding="utf-8"))
+            except json.JSONDecodeError:
+                slider_contract_payload = {
+                    "schema_version": "unreadable",
+                    "source": "reasoning_step_slider_contract_json_decode_error",
+                    "actual_data_only": False,
+                    "no_proxy_or_fallback": False,
+                    "radius_filtration": False,
+                }
+        else:
+            slider_contract_payload = {
+                "schema_version": "missing",
+                "source": "reasoning_step_slider_contract_missing",
+                "actual_data_only": False,
+                "no_proxy_or_fallback": False,
+                "radius_filtration": False,
+            }
+        radius_slider_contract = _reasoning_step_slider_contract_summary(
+            slider_contract_payload if isinstance(slider_contract_payload, Mapping) else {},
+            contract_file=slider_contract_path.name,
+            html_file=file_name,
+        )
         _write_simplex_tree_3d_map(
             tree_path,
             obj,
@@ -2097,6 +2200,8 @@ def _write_reasoning_step_complex_maps(candidates: list[dict[str, object]], outp
                 "path": row.get("path", []),
                 "file": file_name,
                 "simplex_tree_file": tree_file_name,
+                "slider_contract_file": slider_contract_path.name,
+                "radius_slider_contract": radius_slider_contract,
                 "summary": obj_summary.get("summary", {}),
                 "step_complex_fingerprint": step_complex_fingerprint,
                 "step_complex_fingerprint_basis": fingerprint_basis,
@@ -3117,6 +3222,17 @@ def _display_thresholds(obj: dict[str, object], max_steps: int = 32) -> list[flo
 
 def _reasoning_step_complex_manifest_contract(rows: list[dict[str, object]]) -> dict[str, object]:
     simplex_tree_available = [row for row in rows if bool(row.get("simplex_tree_available"))]
+    slider_rows = [row.get("radius_slider_contract") for row in rows if isinstance(row.get("radius_slider_contract"), dict)]
+    slider_unavailable = [
+        {
+            "index": int(row.get("index", 0) or 0),
+            "record_id": str(row.get("record_id", "")),
+            "reason": "missing_or_unsafe_radius_slider_contract",
+            "slider_contract_file": str(row.get("slider_contract_file", "")),
+        }
+        for row in rows
+        if not (isinstance(row.get("radius_slider_contract"), dict) and row.get("radius_slider_contract", {}).get("safe_to_render_radius_filtration") is True)
+    ]
     fingerprint_groups: dict[str, list[dict[str, object]]] = defaultdict(list)
     for row in rows:
         fingerprint = str(row.get("step_complex_fingerprint", ""))
@@ -3158,6 +3274,26 @@ def _reasoning_step_complex_manifest_contract(rows: list[dict[str, object]]) -> 
         "step_count": int(len(rows)),
         "rendered_complex_pages": int(len([row for row in rows if row.get("file")])),
         "rendered_simplex_tree_pages": int(len([row for row in rows if row.get("simplex_tree_file")])),
+        "slider_contract_schema_version": "tropicalgt.reasoning_step_radius_slider_summary.v1",
+        "radius_slider_contract_source": "per-step reasoning_step_*_slider_contract.json sidecars summarized into this manifest",
+        "rendered_slider_contracts": int(len(slider_rows)),
+        "all_steps_have_radius_slider_contracts": bool(rows) and len(slider_rows) == len(rows),
+        "all_step_radius_sliders_start_disjoint_vertices": bool(rows)
+        and all(row.get("first_frame_disjoint_vertices_only") is True for row in slider_rows),
+        "all_step_radius_sliders_monotone": bool(rows)
+        and all(
+            row.get("monotone_visible_counts") is True
+            and row.get("monotone_solid_radius_edges") is True
+            and row.get("monotone_filled_radius_faces") is True
+            for row in slider_rows
+        ),
+        "all_step_radius_sliders_no_proxy": bool(rows)
+        and all(row.get("actual_data_only") is True and row.get("no_proxy_or_fallback") is True for row in slider_rows),
+        "all_step_radius_sliders_safe_to_render": bool(rows)
+        and len(slider_unavailable) == 0
+        and all(row.get("safe_to_render_radius_filtration") is True for row in slider_rows),
+        "radius_slider_unavailable_count": int(len(slider_unavailable)),
+        "radius_slider_unavailable_steps": slider_unavailable,
         "fingerprint_source": "sha256 canonical JSON over per-step gudhi_canonical_complex(filtered_simplicial_object); record id/path excluded",
         "all_step_complex_fingerprints_present": bool(rows) and all(bool(row.get("step_complex_fingerprint")) for row in rows),
         "unique_step_complex_fingerprint_count": int(len(fingerprint_groups)),
@@ -3175,13 +3311,17 @@ def _reasoning_step_contract_panel(contract: Mapping[str, object] | None) -> str
         return ""
     return (
         "<aside class='contract'>"
-        "<div><span class='badge'>no proxy</span><span class='badge'>per-step complex</span><span class='badge'>simplex-tree explicit</span></div>"
-        f"<p><strong>Status:</strong> rendered {int(contract.get('rendered_complex_pages', 0) or 0)} complex pages and "
+        "<div><span class='badge'>no proxy</span><span class='badge'>per-step complex</span><span class='badge'>radius slider verified</span><span class='badge'>simplex-tree explicit</span></div>"
+        f"<p><strong>Status:</strong> rendered {int(contract.get('rendered_complex_pages', 0) or 0)} complex pages, "
+        f"{int(contract.get('rendered_slider_contracts', 0) or 0)} radius-slider contract summaries, and "
         f"{int(contract.get('rendered_simplex_tree_pages', 0) or 0)} simplex-tree pages for "
         f"{int(contract.get('step_count', 0) or 0)} model-evaluated reasoning states.</p>"
         f"<p><strong>Contract:</strong> {html.escape(str(contract.get('claim', '')))} "
         f"GUDHI SimplexTree available for {int(contract.get('gudhi_simplex_tree_step_count', 0) or 0)} step(s); "
         f"explicitly unavailable for {int(contract.get('simplex_tree_unavailable_count', 0) or 0)}.</p>"
+        f"<p><strong>Radius sliders:</strong> first frame disjoint vertices={html.escape(str(contract.get('all_step_radius_sliders_start_disjoint_vertices', False)))}; "
+        f"monotone growth={html.escape(str(contract.get('all_step_radius_sliders_monotone', False)))}; "
+        f"safe summaries={html.escape(str(contract.get('all_step_radius_sliders_safe_to_render', False)))}.</p>"
         f"<p><strong>Per-step fingerprints:</strong> {int(contract.get('unique_step_complex_fingerprint_count', 0) or 0)} unique canonical complex payload hash(es); "
         f"duplicates are listed only when the canonical filtered-complex payload is byte-identical after normalization.</p>"
         "</aside>"

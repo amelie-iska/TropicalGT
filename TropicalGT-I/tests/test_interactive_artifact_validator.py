@@ -87,6 +87,39 @@ def _slider_contract(html_file: str, *, vertices: int = 4, solid_edges: int = 3,
     }
 
 
+def _slider_summary(html_file: str, contract_file: str, *, vertices: int = 4, solid_edges: int = 3, filled_faces: int = 1) -> dict[str, object]:
+    contract = _slider_contract(html_file, vertices=vertices, solid_edges=solid_edges, filled_faces=filled_faces)
+    return {
+        "schema_version": "tropicalgt.reasoning_step_radius_slider_summary.v1",
+        "source": f"reasoning_step_complex_maps/{contract_file}",
+        "contract_file": contract_file,
+        "html_file": html_file,
+        "contract_schema_version": contract["schema_version"],
+        "contract_source": contract["source"],
+        "actual_data_only": True,
+        "no_proxy_or_fallback": True,
+        "radius_filtration": True,
+        "threshold_order": contract["threshold_order"],
+        "thresholds_ascending": True,
+        "threshold_count": contract["threshold_count"],
+        "frame_count": contract["frame_count"],
+        "first_frame_vertex_count": vertices,
+        "first_frame_solid_edge_count": 0,
+        "first_frame_filled_face_count": 0,
+        "first_frame_dotted_overlay_count": 0,
+        "initial_radius_frame_hides_dotted_overlays": True,
+        "initial_radius_frame_hides_solid_edges_and_faces": True,
+        "first_frame_disjoint_vertices_only": True,
+        "monotone_visible_counts": True,
+        "monotone_solid_radius_edges": True,
+        "monotone_filled_radius_faces": True,
+        "solid_lines_semantics_ok": True,
+        "filled_faces_semantics_ok": True,
+        "dotted_lines_semantics_ok": True,
+        "safe_to_render_radius_filtration": True,
+    }
+
+
 def _row(root: Path, name: str) -> Path:
     row = root if name == "." else root / name
     row.mkdir(parents=True, exist_ok=True)
@@ -336,6 +369,14 @@ def _row(root: Path, name: str) -> Path:
                 "record_id": candidates[idx]["record_id"],
                 "file": f"reasoning_step_{idx:03d}.html",
                 "simplex_tree_file": f"reasoning_step_{idx:03d}_simplex_tree.html",
+                "slider_contract_file": f"reasoning_step_{idx:03d}_slider_contract.json",
+                "radius_slider_contract": _slider_summary(
+                    f"reasoning_step_{idx:03d}.html",
+                    f"reasoning_step_{idx:03d}_slider_contract.json",
+                    vertices=1,
+                    solid_edges=0,
+                    filled_faces=0,
+                ),
                 "summary": {"num_vertices": 1},
                 "step_complex_fingerprint": f"fixture-step-fingerprint-{idx}",
                 "step_complex_fingerprint_basis": basis,
@@ -353,6 +394,16 @@ def _row(root: Path, name: str) -> Path:
         "step_count": 4,
         "rendered_complex_pages": 4,
         "rendered_simplex_tree_pages": 4,
+        "slider_contract_schema_version": "tropicalgt.reasoning_step_radius_slider_summary.v1",
+        "radius_slider_contract_source": "per-step reasoning_step_*_slider_contract.json sidecars summarized into this manifest",
+        "rendered_slider_contracts": 4,
+        "all_steps_have_radius_slider_contracts": True,
+        "all_step_radius_sliders_start_disjoint_vertices": True,
+        "all_step_radius_sliders_monotone": True,
+        "all_step_radius_sliders_no_proxy": True,
+        "all_step_radius_sliders_safe_to_render": True,
+        "radius_slider_unavailable_count": 0,
+        "radius_slider_unavailable_steps": [],
         "fingerprint_source": "sha256 canonical JSON over per-step gudhi_canonical_complex(filtered_simplicial_object); record id/path excluded",
         "all_step_complex_fingerprints_present": True,
         "unique_step_complex_fingerprint_count": 4,
@@ -1015,6 +1066,22 @@ def test_validate_audit_root_rejects_missing_reasoning_step_slider_contract(tmp_
     report = validator.validate_audit_root(audit, min_rows=1, min_candidates=4, min_depth=2)
     assert not report["ok"]
     assert any("radius slider contract" in err and "reasoning-step complex 0" in err for err in report["errors"])
+
+
+def test_validate_audit_root_rejects_missing_reasoning_step_slider_summary(tmp_path: Path):
+    validator = _load_validator()
+    audit = tmp_path / "step_00000001" / "got_audit"
+    row = _row(audit, ".")
+    manifest_path = row / "reasoning_step_complex_maps" / "manifest.json"
+    payload = json.loads(manifest_path.read_text(encoding="utf-8"))
+    payload["steps"][0].pop("radius_slider_contract")
+    payload["contract"]["all_steps_have_radius_slider_contracts"] = False
+    payload["contract"]["all_step_radius_sliders_safe_to_render"] = False
+    manifest_path.write_text(json.dumps(payload), encoding="utf-8")
+    _write(audit / "codex_browser_index.html", _codex_browser_html(_browser_samples(audit, ["."])))
+    report = validator.validate_audit_root(audit, min_rows=1, min_candidates=4, min_depth=2)
+    assert not report["ok"]
+    assert any("reasoning-step radius slider summary" in err for err in report["errors"])
 
 
 def test_validate_audit_root_rejects_missing_analogical_simplex_tree_analogy_contract(tmp_path: Path):
