@@ -16,6 +16,7 @@ from tropicalgt.visualization import (
     _derived_invariant_comparison,
     _gudhi_canonical_complex,
     _has_real_probability_filtration,
+    _write_simplex_tree_3d_map,
     _m2_be_diagnostic_columns,
     _m2_certificate_columns,
     _m2_ideal_diagnostic_columns,
@@ -370,6 +371,43 @@ def test_gudhi_canonical_complex_discloses_closure_inserted_faces():
     assert all(row["filtration_source"] == "gudhi_simplex_tree_closure" for row in inserted)
 
 
+def test_simplex_tree_page_is_unavailable_without_gudhi_not_raw_json(monkeypatch, tmp_path: Path):
+    import builtins
+
+    real_import = builtins.__import__
+
+    def guarded_import(name, *args, **kwargs):
+        if name == "gudhi":
+            raise ImportError("forced missing gudhi for no-fallback test")
+        return real_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", guarded_import)
+    obj = {
+        "summary": {"filtration_model": "embedding_vietoris_rips_2_skeleton", "radius_filtration": True},
+        "simplices": [
+            {"simplex": ["a"], "dimension": 0, "filtration": 0.0},
+            {"simplex": ["b"], "dimension": 0, "filtration": 0.0},
+            {"simplex": ["a", "b"], "dimension": 1, "filtration": 0.25},
+        ],
+    }
+
+    canonical = _gudhi_canonical_complex(obj)
+    assert canonical["simplex_tree"]["available"] is False
+    assert canonical["simplex_tree"]["backend"] == "unavailable_gudhi_simplex_tree"
+    assert canonical["simplex_tree"]["no_proxy_or_fallback"] is True
+    assert canonical["simplex_tree"]["safe_to_render_simplex_tree"] is False
+    assert canonical["summary"]["simplex_tree_available"] is False
+    assert canonical["summary"]["simplex_tree_no_proxy_or_fallback"] is True
+
+    out = tmp_path / "tree.html"
+    _write_simplex_tree_3d_map(out, obj, "forced missing GUDHI tree")
+    html = out.read_text(encoding="utf-8")
+    assert "unavailable_gudhi_simplex_tree" in html
+    assert "No simplex-tree/trie or face-coface poset is rendered without a real GUDHI SimplexTree" in html
+    assert "actual face-to-coface covers" not in html
+    assert "optional sorted-label trie prefix links" not in html
+
+
 def test_simplicial_object_svg_uses_3d_pca_radius_filtration():
     obj = {
         "summary": {"num_vertices": 4, "num_edges": 4, "num_two_simplices": 1},
@@ -623,7 +661,12 @@ def test_got_trajectory_visualization_renders_simplicial_panel_and_nll_surface(t
     assert "faint GoT parent-child trajectory overlay" in full_complex_html
     assert "graph_of_thought_parent_decoding_order" in full_complex_html
     assert "got_parent_child_decoding_order" in full_complex_html
-    assert "radius/simplicial edges induced from the same embeddings" in full_complex_html
+    assert "solid radius/simplicial edges induced from the same embeddings" in full_complex_html
+    assert "solid radius edges and filled radius-gated 2-simplices" in full_complex_html
+    assert "filled 2-simplices gated by radius slider" in full_complex_html
+    assert "dotted causal and decoding overlays" in full_complex_html
+    assert "play filtration min-to-max" in full_complex_html
+    assert "Left is the smallest visible filtration; right is the full selected complex" in full_complex_html
     assert "Full graph-of-thought trajectory filtered simplicial complex" in full_complex_html
     assert "actual face-to-coface covers" in full_tree_html
     assert "optional sorted-label trie prefix links" in full_tree_html
@@ -643,7 +686,9 @@ def test_got_trajectory_visualization_renders_simplicial_panel_and_nll_surface(t
     assert first_step.exists()
     first_step_html = first_step.read_text(encoding="utf-8")
     assert "Filtration radius" in first_step_html
-    assert "play filtration" in first_step_html
+    assert "play filtration min-to-max" in first_step_html
+    assert "solid radius edges and filled radius-gated 2-simplices" in first_step_html
+    assert "filled 2-simplices gated by radius slider" in first_step_html
     assert "faint directed graph-token overlay" in first_step_html
 
 

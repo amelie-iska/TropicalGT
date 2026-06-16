@@ -1502,7 +1502,7 @@ def _write_full_trajectory_complex_map(scaling_report: dict[str, object], output
         obj,
         title=title,
         subtitle=(
-            "Full trajectory complex; slider filters radius/simplicial edges induced from the same embeddings "
+            "Full trajectory complex; slider filters solid radius/simplicial edges induced from the same embeddings "
             "while the GoT overlay shows parent-child trajectory edges."
         ),
     )
@@ -2047,7 +2047,8 @@ def _write_complex_slider_map(path: Path, obj: dict[str, object], title: str, su
         title=(
             f"{title}<br><sup>{html.escape(subtitle)} | filtration backend={html.escape(str(backend_label))} "
             f"| {html.escape(layout_kind)} | V={summary.get('num_vertices', len(vertices))}, "
-            f"E={summary.get('num_edges', len(edges))}, T={summary.get('num_two_simplices', len(triangles))}</sup>"
+            f"E={summary.get('num_edges', len(edges))}, T={summary.get('num_two_simplices', len(triangles))} "
+            "| solid radius edges and filled radius-gated 2-simplices | dotted causal and decoding overlays</sup>"
         ),
         scene=dict(
             xaxis_title="projected coordinate 1",
@@ -2079,6 +2080,17 @@ def _write_complex_slider_map(path: Path, obj: dict[str, object], title: str, su
 
 def _write_simplex_tree_3d_map(path: Path, obj: dict[str, object], title: str, subtitle: str = "") -> None:
     obj = _gudhi_canonical_complex(obj)
+    tree_status = obj.get("simplex_tree", {}) if isinstance(obj.get("simplex_tree"), dict) else {}
+    if tree_status and tree_status.get("available") is False:
+        reason = tree_status.get("error") or tree_status.get("reason") or "gudhi_simplex_tree_unavailable"
+        _write_dark_empty(
+            path,
+            (
+                f"{title}: unavailable_gudhi_simplex_tree; {reason}. "
+                "No simplex-tree/trie or face-coface poset is rendered without a real GUDHI SimplexTree."
+            ),
+        )
+        return
     simplices = [row for row in obj.get("simplices", []) if isinstance(row, dict) and row.get("simplex")]
     if not simplices:
         _write_dark_empty(path, f"{title}: no simplices available.")
@@ -2404,11 +2416,25 @@ def _gudhi_canonical_complex(obj: dict[str, object]) -> dict[str, object]:
             },
         }
     except Exception as exc:
+        error = f"{type(exc).__name__}: {exc}"
+        summary = dict(obj.get("summary", {})) if isinstance(obj.get("summary"), dict) else {}
+        summary.update(
+            {
+                "simplex_tree_backend": "unavailable_gudhi_simplex_tree",
+                "simplex_tree_available": False,
+                "simplex_tree_unavailable_reason": error,
+                "simplex_tree_no_proxy_or_fallback": True,
+            }
+        )
         serialized_obj = dict(obj)
+        serialized_obj["summary"] = summary
         serialized_obj["simplex_tree"] = {
             "backend": "unavailable_gudhi_simplex_tree",
             "available": False,
-            "error": f"{type(exc).__name__}: {exc}",
+            "reason": "gudhi_simplex_tree_unavailable",
+            "error": error,
+            "safe_to_render_simplex_tree": False,
+            "no_proxy_or_fallback": True,
         }
         return serialized_obj
 
@@ -2608,7 +2634,7 @@ def _complex_slider_traces(
             line=dict(width=2.2, color="rgba(125,211,252,0.42)"),
             hovertext=edge_hover,
             hoverinfo="text",
-            name="radius/simplicial edges induced from the same embeddings",
+            name="solid radius/simplicial edges induced from the same embeddings",
         ),
         go.Scatter3d(
             x=overlay_x,
@@ -2706,7 +2732,7 @@ def _complex_slider_traces(
             k=tri_k,
             color="rgba(94,234,212,0.14)",
             opacity=0.18,
-            name="2-simplices",
+            name="filled 2-simplices gated by radius slider",
             hoverinfo="skip",
             showscale=False,
         )

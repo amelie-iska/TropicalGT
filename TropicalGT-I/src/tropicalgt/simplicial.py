@@ -652,11 +652,25 @@ def _with_serialized_simplex_tree(obj: dict[str, Any]) -> dict[str, Any]:
             },
         }
     except Exception as exc:
+        error = f"{type(exc).__name__}: {exc}"
+        summary = dict(obj.get("summary", {})) if isinstance(obj.get("summary"), dict) else {}
+        summary.update(
+            {
+                "simplex_tree_backend": "unavailable_gudhi_simplex_tree",
+                "simplex_tree_available": False,
+                "simplex_tree_unavailable_reason": error,
+                "simplex_tree_no_proxy_or_fallback": True,
+            }
+        )
         serialized_obj = dict(obj)
+        serialized_obj["summary"] = summary
         serialized_obj["simplex_tree"] = {
             "backend": "unavailable_gudhi_simplex_tree",
             "available": False,
-            "error": f"{type(exc).__name__}: {exc}",
+            "reason": "gudhi_simplex_tree_unavailable",
+            "error": error,
+            "safe_to_render_simplex_tree": False,
+            "no_proxy_or_fallback": True,
         }
         return serialized_obj
 

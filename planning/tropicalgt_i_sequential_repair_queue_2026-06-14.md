@@ -84,10 +84,10 @@
 ### 6. Simplex Trees and Simplicial Complexes
 
 - [x] Render actual GUDHI simplex-tree/trie or face-coface poset structure, not disconnected columns.
-- [ ] Include every reasoning step's filtered complex and simplex tree.
-- [ ] Add dotted directed edges for causal structure, decoding order, or both when they align.
-- [ ] Use solid edges/faces filled in by radius slider for simplicial objects.
-- [ ] Fix slider direction everywhere to min-to-max radius.
+- [x] Include every reasoning step's filtered complex and simplex tree.
+- [x] Add dotted directed edges for causal structure, decoding order, or both when they align.
+- [x] Use solid edges/faces filled in by radius slider for simplicial objects.
+- [x] Fix slider direction everywhere to min-to-max radius.
 - [ ] Remove duplicate/extraneous panels where two panels show the same reasoning step.
 
 ### 7. NLL / Fitness / Density Landscapes
@@ -311,6 +311,16 @@ The live item-by-item repair inventory is maintained in `planning/tropicalgt_i_c
 - [x] Required explicit BE/certified-resolution evidence before rendering Buchsbaum-Eisenbud rows; missing evidence renders unavailable rather than defaulting to false exactness/minimality.
 - [x] Focused verification passed: new CAS table helper test `1 passed`; bifiltration artifact test `1 passed`; full simplicial visualization `32 passed`; algebraic persistence `19 passed`; artifact validator `10 passed`.
 - [x] Pushed this certified CAS diagnostic table repair on the non-main branch as commit `e70dbc8`.
+
+
+### Current Objective Update - SimplexTree No-Fallback And Radius Slider Pass
+
+- [x] Hardened the GUDHI-unavailable path so SimplexTree pages render an explicit `unavailable_gudhi_simplex_tree` state and do not display raw JSON simplex rows as a trie, face-coface poset, or SimplexTree substitute.
+- [x] Added no-proxy/no-fallback certificate fields to the visualization and core simplicial serializers when a real GUDHI SimplexTree cannot be built.
+- [x] Renamed the provenance registry entry from a JSON fallback to an explicit GUDHI unavailable state.
+- [x] Confirmed every observed GoT reasoning step is linked to its own radius-filtered complex page and its own simplex-tree page through the step manifest.
+- [x] Confirmed dotted causal/decoding overlays are attached from actual decoding-order reports and GoT parent-child order, while solid radius edges and filled radius-gated 2-simplices remain the simplicial objects controlled by the min-to-max radius slider.
+- [x] Verification passed: full simplicial visualization `34 passed`; artifact validator `10 passed`; reasoning trajectory growth test `1 passed`; compile checks passed for modified source/tests.
 
 
 ### Current Objective Update - NLL Density Contract Pass

@@ -306,13 +306,13 @@ PROVENANCE_REGISTRY: tuple[ProvenanceEntry, ...] = (
         match_terms=("torch-native differentiable surrogate", "gudhi vectorizers are numpy", "not pytorch autograd losses"),
     ),
     ProvenanceEntry(
-        name="simplex_tree_json_fallback",
-        kind="serialization_fallback",
+        name="simplex_tree_gudhi_unavailable_state",
+        kind="certified_unavailable_state",
         surface="simplicial visualization payload",
         optimize_directly=False,
-        description="JSON simplex-tree summary emitted when a real Gudhi SimplexTree object cannot be serialized into HTML payloads.",
-        replacement_or_guardrail="Use only for rendering payloads; computation should use the actual topology report before serialization.",
-        match_terms=("json-fallback", "simplex_tree", "domain_simplex_tree", "codomain_simplex_tree"),
+        description="Explicit unavailable marker emitted when a real Gudhi SimplexTree cannot be built or serialized for an HTML payload.",
+        replacement_or_guardrail="Render an unavailable simplex-tree page with the exact GUDHI error; do not substitute raw JSON rows as a SimplexTree, trie, or face-coface poset.",
+        match_terms=("unavailable_gudhi_simplex_tree", "simplex_tree_no_proxy_or_fallback", "safe_to_render_simplex_tree"),
     ),
     ProvenanceEntry(
         name="browser_static_preview_rendering_fallback",
