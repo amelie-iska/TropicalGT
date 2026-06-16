@@ -21,7 +21,7 @@ TropicalGT develops reasoning agents that use tropical geometry in transformer e
 - `TropicalGT-I/configs/smoke.json` is a CPU fixture smoke config.
 - `TropicalGT-I/configs/gpu_smoke.json` is the RTX 4090 data-backed smoke config.
 - `TropicalGT-I/configs/gpu_ablation.json` is a bounded data-backed RTX 4090 config for matched BPB/graph-BPB ablation grids.
-- `TropicalGT-I/configs/train_full_dataset_pg_bpb_step0_full24b_b44.json` is the current fresh step-0 full-dataset Parameter-Golf BPB run config; `TropicalGT-I/configs/train_full_dataset_active.json` is an older full-dataset path, and `TropicalGT-I/configs/train.json` is a legacy cap-sized review config.
+- `TropicalGT-I/configs/train_full_dataset_pg_bpb_step0_full24b_b55_v11_bpb_5k_gate.json` is the latest committed strict full-dataset Parameter-Golf BPB template; the live b60 step-0 5K gate run uses a generated launch config under `TropicalGT-I/outputs/launch_configs/`. `TropicalGT-I/configs/train_full_dataset_active.json` is an older full-dataset path, and `TropicalGT-I/configs/train.json` is a legacy cap-sized review config.
 - `TropicalGT-I/assets/tropicalgt_neurips_research_paper.tex` is the paper source.
 - `planning/` contains reference synthesis and implementation notes.
 - `external/` contains separate fork checkouts and is intentionally gitignored by this repo.
@@ -48,7 +48,7 @@ The active full-dataset `TropicalGT-I/configs/train_full_dataset_active.json` pa
 external/oai-parameter-golf
 ```
 
-On this workstation that path can be a symlink to the existing ignored checkout at `external/parameter-golf`; `train_full_dataset_active.json` uses `external/oai-parameter-golf` first and keeps `external/parameter-golf` as a compatibility fallback. Populate the full SP1024 cache before a full run:
+On this workstation that path may be a user-created symlink to an ignored checkout, but committed full-dataset configs no longer contain `fallback_roots` or `tokenizer_fallback_paths`. Required data and tokenizer paths must resolve directly, with `allow_config_path_fallbacks: false`, so missing paths fail instead of silently substituting another source. Populate the full SP1024 cache before a full run:
 
 ```bash
 cd external/oai-parameter-golf
@@ -58,7 +58,7 @@ cd ../..
 
 This creates `external/oai-parameter-golf/data/datasets/fineweb10B_sp1024` and `external/oai-parameter-golf/data/tokenizers/fineweb_1024_bpe.model`. The manifest reports `19,473,201,340` SP1024 train tokens across `195` train shards, plus the moved Hugging Face reasoning parquet shards. Those data files are gitignored. Every OAI sample is graph structured before batching: each token window becomes a causal DAG of sequence chunks, while non-causal/cyclic graphs elsewhere use deterministic random autoregressive node order.
 
-Data-backed configs set `require_data: true`, and the OAI source is required. Missing or unreadable required parquet/OAI shards fail loudly instead of silently training on fixture examples or a partial hybrid. The current `train_full_dataset_pg_bpb_step0_full24b_b44.json` run requires both `tropicalgt_hf_reasoning` and `openai_parameter_golf` and uses the full audited train token-slot budget, not a 10B floor. The parquet loader builds a row-group metadata index over train/validation/test shards and reads records through a bounded row-group cache controlled by `cache_shards`; it does not concatenate the full moved dataset into memory. The hybrid sampler uses deterministic weighted indexed sampling over already graph-structured sources.
+Data-backed configs set `require_data: true`, and the OAI source is required. Missing or unreadable required parquet/OAI shards fail loudly instead of silently training on fixture examples or a partial hybrid. The strict full-dataset Parameter-Golf templates require both `tropicalgt_hf_reasoning` and `openai_parameter_golf` and use the full audited train token-slot budget, not a 10B floor. The parquet loader builds a row-group metadata index over train/validation/test shards and reads records through a bounded row-group cache controlled by `cache_shards`; it does not concatenate the full moved dataset into memory. The hybrid sampler uses deterministic weighted indexed sampling over already graph-structured sources.
 
 Audit the data budget before a long run:
 
@@ -84,7 +84,7 @@ TropicalGT-I/scripts/validate_tropicalgt_i.py \
 
 ## Install/runtime notes
 
-The `tokengt` env already provides PyTorch, pandas, pyarrow, datasets, tqdm, sklearn, transformers, W&B, Gudhi, Ripser, Persim, NetworkX, SciPy, SymPy, and Plotly. The optional `multipers` package can be installed later for richer multiparameter signed-measure backends; until then TropicalGT-I uses its in-repo bounded exact multiparameter persistence and commutative-algebra fallback.
+The `tokengt` env already provides PyTorch, pandas, pyarrow, datasets, tqdm, sklearn, transformers, W&B, Gudhi, Ripser, Persim, NetworkX, SciPy, SymPy, and Plotly. The optional `multipers` package can be installed later for richer multiparameter signed-measure backends; until then TropicalGT-I uses its in-repo bounded exact multiparameter persistence and renders CAS-dependent algebra unavailable unless a real Macaulay2, Sage, Singular, or BEMultipliers certificate is present.
 
 ## Run tests
 
@@ -196,32 +196,28 @@ PYTHONPATH=TropicalGT-I/src python TropicalGT-I/scripts/train_tropicalgt_i.py --
 
 ### Current full-dataset BPB repair run
 
-The current fresh step-0 Parameter-Golf BPB repair run uses:
+The live fresh step-0 Parameter-Golf BPB repair run is the b60 5K-gate run:
 
 ```text
-config: TropicalGT-I/configs/train_full_dataset_pg_bpb_step0_full24b_b44.json
-run name: tropicalgt_i_pg_bpb_step0_full24b_b44
-batch_size: 44
+config: TropicalGT-I/outputs/launch_configs/tropicalgt_i_pg_bpb_step0_full24b_b60_20260616T053631Z_fresh_bpb112_casrows_5k_gate.json
+run name: tropicalgt_i_pg_bpb_step0_full24b_b60_20260616T053631Z_fresh_bpb112_casrows_5k_gate
+command cap: --max-steps 5000
+target BPB: < 1.12
+batch_size: 54
 seq_len: 1024
-max_steps: 537083
-configured token slots: 24,198,811,648
-audited available token slots: 24,198,796,288
-dataset roots:
-  - TropicalGT-I/data/toricgt/curated_hf_shards
-  - external/oai-parameter-golf/data/datasets/fineweb10B_sp1024
+W&B run id: ld5u55p5
+W&B project: amelie-iska-math/TropicalGT-I
+required step-5000 artifacts: periodic/step_00005000/validation_report.json and periodic/step_00005000/got_audit/inference_audit.html
 ```
 
-This config is intended to use roughly 18-20GB VRAM on an RTX 4090 while
-leaving headroom for implementation tests and browser/inference probes. Its
-readiness audit must pass the required-source gates for both the moved
-Hugging Face reasoning shards and the OpenAI Parameter-Golf SP1024 cache. Do
-not describe a run as full-dataset unless it uses both data roots and the full
-audited token-slot budget.
+The committed templates are strict: `allow_config_path_fallbacks` is false, `allow_token_id_fallback` is false for the OpenAI Parameter-Golf source, and both `tropicalgt_hf_reasoning` plus `openai_parameter_golf` are required. Do not describe a run as full-dataset unless it uses both data roots and the full audited token-slot budget.
 
 ```bash
+PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True \
 PYTHONPATH=TropicalGT-I/src \
 python TropicalGT-I/scripts/train_tropicalgt_i.py \
---config TropicalGT-I/configs/train_full_dataset_pg_bpb_step0_full24b_b44.json
+--config TropicalGT-I/outputs/launch_configs/tropicalgt_i_pg_bpb_step0_full24b_b60_20260616T053631Z_fresh_bpb112_casrows_5k_gate.json \
+--max-steps 5000
 ```
 
 W&B should remain scalar-first by default: losses, BPB metrics, objectives,
@@ -307,12 +303,12 @@ TropicalGT-I/scripts/parameter_golf_codex_review_loop.py \
 --config TropicalGT-I/configs/train.json \
 --python python \
 --review-every-steps 5000 \
---target-bpb 1.18 \
+--target-bpb 1.12 \
 --max-total-steps 20000 \
 --restart-policy beginning
 ```
 
-At every 5K boundary it writes a Codex prompt plus `active_training_contract_step_*.json/.md` containing active hyperparameters, losses, objective weights, BPB/graph-BPB metrics, tropical metrics, GFlowNet metrics, GraphCG full-rank metrics, algebra/topology metrics, memory metrics, data-source rates, throughput, VRAM, and visualization paths. If `eval.bpb` is missing or above `1.18`, the boundary is marked for review and restart according to the chosen policy.
+At every 5K boundary it writes a Codex prompt plus `active_training_contract_step_*.json/.md` containing active hyperparameters, losses, objective weights, BPB/graph-BPB metrics, tropical metrics, GFlowNet metrics, GraphCG full-rank metrics, algebra/topology metrics, memory metrics, data-source rates, throughput, VRAM, and visualization paths. If `eval.bpb` is missing or above `1.12`, the boundary is marked for review and restart according to the chosen policy. For an already-stopped 5K run, use `TropicalGT-I/scripts/prepare_5k_review_bundle.py` with the launch config, checkpoint, stop record, and step-5000 periodic report; it prefers `periodic_validation_artifacts.json`, falls back to `validation_report.json`, and writes a path-only review bundle without copying generated artifacts.
 
 ## Eval, inference, validation, visualization
 
@@ -351,9 +347,9 @@ TropicalGT-I/scripts/infer_tropicalgt_i.py \
 --output TropicalGT-I/outputs/gpu_smoke/inference_full_audit.json
 ```
 
-This writes a dark-mode graph-of-thought PCA trajectory whose nodes are reasoning candidates and whose edges are parent-child expansions. Hovering over a node renders the filtered simplicial complex attached to that reasoning step directly in a cursor-following hover card and in the side panel. The 3D trajectory uses observed model-evaluated NLL anchors and a surface-contact projection contract: every plotted reasoning node and edge endpoint lies on the displayed NLL energy landscape with payload plot.z equal to plot.z_surface, while each node retains the raw centered/scaled NLL value for audit. Missing NLL, embedding, or probability outputs are reported as unavailable diagnostics instead of synthetic/proxy geometry. The persistence bundle includes barcodes, Betti/free-resolution growth, `persistence_representations.html` for GUDHI vector summaries, and `persistence_landscapes.html` for the actual GUDHI landscape functions `lambda_k(t)` by trajectory-growth level. The JSON payload stores the full Euclidean radius complex, the Jensen-Shannon probability complex, simplex-tree provenance, multiparameter persistence report, vectorized persistence summaries, commutative-algebra proxies, derived-equivalence signature, GraphCG direction diagnostics with projection-basis proof, NLL-surface metadata, NLL-progress diagnostics, and analogical memory retrieval details.
+This writes a dark-mode graph-of-thought PCA trajectory whose nodes are reasoning candidates and whose edges are parent-child expansions. Hovering over a node renders the filtered simplicial complex attached to that reasoning step directly in a cursor-following hover card and in the side panel. The 3D trajectory uses observed model-evaluated NLL anchors and a surface-contact projection contract: every plotted reasoning node and edge endpoint lies on the displayed NLL energy landscape with payload plot.z equal to plot.z_surface, while each node retains the raw centered/scaled NLL value for audit. Missing NLL, embedding, or probability outputs are reported as unavailable diagnostics instead of synthetic/proxy geometry. The persistence bundle includes barcodes, Betti/free-resolution growth, `persistence_representations.html` for GUDHI vector summaries, and `persistence_landscapes.html` for the actual GUDHI landscape functions `lambda_k(t)` by trajectory-growth level. The JSON payload stores the full Euclidean radius complex, the Jensen-Shannon probability complex, simplex-tree provenance, multiparameter persistence report, vectorized persistence summaries, certified CAS algebra reports or exact unavailable diagnostics, derived-equivalence signatures only when backed by certified evidence, GraphCG direction diagnostics with projection-basis proof, NLL-surface metadata, NLL-progress diagnostics, and analogical memory retrieval details.
 
-For Codex/browser review of a periodic audit, generate the sample-first dashboard so each inference row/input is the top-level unit. Each sample card links to the GoT NLL landscape, embedding map, full radius complex, full simplex tree, Jensen-Shannon probability complex, probability simplex tree, every reasoning-step complex/tree, persistence pages, per-rank analogical probability correspondences, GraphCG, tropical support, and metric/audit pages:
+For Codex/browser review of a periodic audit, serve the completed `got_audit` directory or generate the sample-first dashboard so each inference row/input is the top-level unit. Each sample card links to the GoT NLL landscape, embedding map, full radius complex, full simplex tree, Jensen-Shannon probability complex, probability simplex tree, every reasoning-step complex/tree, persistence pages, per-rank analogical probability correspondences, GraphCG, tropical support, and metric/audit pages:
 
 ```bash
 PYTHONPATH=TropicalGT-I/src python \
@@ -361,6 +357,22 @@ TropicalGT-I/scripts/build_sample_browser_index.py \
 TropicalGT-I/outputs/train_full_dataset_active/periodic/step_XXXXXXXX/got_audit \
 --output TropicalGT-I/outputs/train_full_dataset_active/periodic/step_XXXXXXXX/got_audit/codex_browser_index.html
 ```
+
+For the live b60 run, the latest completed periodic audit can be served read-only on the review port:
+
+```bash
+AUDIT=TropicalGT-I/outputs/tropicalgt_i_pg_bpb_step0_full24b_b60_20260616T053631Z_fresh_bpb112_casrows_5k_gate/periodic/step_00002500/got_audit
+ln -sf inference_audit.html "$AUDIT/index.html"
+python -m http.server 8991 --bind 127.0.0.1 --directory "$AUDIT"
+```
+
+When reviewing from a local Codex browser, forward the remote port rather than copying artifacts:
+
+```bash
+ssh -o BatchMode=yes -o ExitOnForwardFailure=yes -fN -L 127.0.0.1:8991:127.0.0.1:8991 iska-tailscale
+```
+
+Open `http://127.0.0.1:8991/`. These `outputs/` files, symlinks, PID files, logs, and browser bundles are generated artifacts and must not be staged.
 
 For fresh sample-based browser review, run multiple independent inference audits into a clean output root and serve the generated `browser_index.html`:
 
@@ -399,8 +411,8 @@ deterministic branch expansion from model action probabilities:
 ```bash
 PYTHONPATH=TropicalGT-I/src:TropicalGT-I/scripts \
 python TropicalGT-I/scripts/run_multi_inference_audits.py \
---config TropicalGT-I/configs/train_full_dataset_pg_bpb_step0_full24b_b44.json \
---checkpoint TropicalGT-I/checkpoints/tropicalgt_i_pg_bpb_step0_full24b_b44.latest.pt \
+--config TropicalGT-I/configs/train_full_dataset_pg_bpb_step0_full24b_b55_v11_bpb_5k_gate.json \
+--checkpoint TropicalGT-I/checkpoints/tropicalgt_i_pg_bpb_step0_full24b_b55_v11_bpb_5k_gate.latest.pt \
 --output-root TropicalGT-I/outputs/multi_sample_browser/full_audit_deepwide \
 --samples 1 \
 --audit-preset full \

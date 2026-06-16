@@ -138,7 +138,7 @@
 
 ### 13. Docs, README, Tests, Push
 
-- [ ] Update `README.md` with current training, eval, inference, visualization, CAS, and browser audit commands.
+- [x] Update `README.md` with current training, eval, inference, visualization, CAS, and browser audit commands.
 - [ ] Update planning docs after each completed repair.
 - [ ] Run focused pytest before each push.
 - [ ] Keep browser open and visible during QA.
@@ -526,3 +526,11 @@ The live item-by-item repair inventory is maintained in `planning/tropicalgt_i_c
 - [x] Verified the live step-2500 periodic audit completed after its settle window: `validation_report.json`, `periodic_validation_artifacts.json`, and `got_audit/inference_audit.html` all exist under `periodic/step_00002500`; training resumed at step `2503/5000`.
 - [x] Verified with `python -m py_compile TropicalGT-I/src/tropicalgt/data.py TropicalGT-I/tests/test_data_loader.py` and `PYTHONPATH=TropicalGT-I/src python -m pytest TropicalGT-I/tests/test_data_loader.py -q` (`15 passed`, only external SWIG deprecation warnings).
 - [ ] Section 12 5K gate remains open: keep the current run alive until step 5000, then run analyses/visualizations and subagent evidence review before any step-0 restart.
+
+### Current Objective Update - README And Browser Reattach Pass
+
+- [x] Reattached the live Codex/browser review endpoint without copying artifacts: remote `python -m http.server` now serves the completed b60 step-2500 `got_audit` directory on remote `127.0.0.1:8991`, and the local `127.0.0.1:8991` endpoint is forwarded to it through a clean SSH tunnel.
+- [x] Verified `http://127.0.0.1:8991/` returns the real `TropicalGT-I Inference Audit` HTML for the latest completed periodic audit; the generated `index.html` symlink, server PID, and server log remain under ignored `outputs/` and are not staged.
+- [x] Updated `README.md` to reflect the live b60 step-0 5K-gate run, BPB target `< 1.12`, W&B run id `ld5u55p5`, strict no-config-path-fallback data policy, post-5K review bundle behavior, CAS unavailable-state policy, and current browser-serving/tunnel commands.
+- [x] Removed stale README references to b44 as the current run, target BPB `1.18`, compatibility path fallbacks, and commutative-algebra proxy/fallback language.
+- [ ] Section 12 5K gate remains open: keep trainer PID `378962` and watcher PID `379304` alive until step 5000 artifacts exist, then run analyses/visualizations and route evidence review through a Codex subagent before any step-0 restart.
