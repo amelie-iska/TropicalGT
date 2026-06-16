@@ -117,7 +117,7 @@
 - [x] Keep meet-in-the-middle decoding behind a config toggle.
 - [x] For causal DAGs, decode using forward plus reverse causal directions.
 - [x] For cyclic/noncausal graphs, use ROAR/random-order autoregressive decoding.
-- [ ] Annotate dataset graphs that should have causal structure; preserve noncausal/cyclic graphs correctly.
+- [x] Annotate dataset graphs that should have causal structure; preserve noncausal/cyclic graphs correctly.
 - [ ] Add dotted decoding/causal edges to relevant visualizations.
 
 ### 11. Tropical/Toric Embedding Research and Paper Updates
@@ -418,3 +418,10 @@ The live item-by-item repair inventory is maintained in `planning/tropicalgt_i_c
 - [x] Added full-path meet-in-the-middle regression coverage for a cyclic graph, proving the report uses ROAR/random-order forward and reverse contexts under graph autoregressive decoding.
 - [x] b60 latest checked training state remained at the latest parsed step `1750` with train loss/NLL `1.151/1.128`; trainer PID `378962` and watcher PID `379304` remain alive under the step-5000 gate.
 - [x] Verification passed: compile check for `test_meet_in_middle_decoding.py`; `pytest TropicalGT-I/tests/test_meet_in_middle_decoding.py -q` (`12 passed`).
+
+### Current Objective Update - Dataset Causal Annotation Preservation Pass
+
+- [x] Confirmed dataset graph normalization annotates causal edge types (`depends_on`, `supports_answer`, sequence edges, and related temporal/control-flow relations) while preserving explicit noncausal or undirected edges as noncausal.
+- [x] Added mixed-edge regression coverage proving a graph with causal reasoning edges plus an explicit noncausal similarity edge keeps the noncausal edge, avoids causal-DAG decoding, and uses ROAR/random-order forward and reverse contexts.
+- [x] b60 latest checked training state remained at the latest parsed step `1750` with train loss/NLL `1.151/1.128`; trainer PID `378962` and watcher PID `379304` remain alive under the step-5000 gate.
+- [x] Verification passed: compile check for `test_data_loader.py`; `pytest TropicalGT-I/tests/test_data_loader.py -q` (`13 passed`, `2 warnings`); `pytest TropicalGT-I/tests/test_meet_in_middle_decoding.py -q` (`12 passed`).

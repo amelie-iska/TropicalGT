@@ -514,10 +514,18 @@ git diff --check
 - b60 latest checked training state remained at the latest parsed step `1750` with train loss/NLL `1.151/1.128`; trainer PID `378962` and watcher PID `379304` remain alive under the step-5000 gate.
 - Verification completed: `/home/iska/miniconda3/envs/tokengt/bin/python -m py_compile TropicalGT-I/tests/test_meet_in_middle_decoding.py` and `pytest TropicalGT-I/tests/test_meet_in_middle_decoding.py -q` (`12 passed`).
 
+
+## 2026-06-16 Dataset Causal Annotation Preservation Addendum
+
+- Dataset graph normalization keeps causal annotations real and conservative: known causal/temporal edge types are directed causal edges, explicit noncausal or undirected edges remain noncausal, and mixed graphs do not get promoted to causal DAGs.
+- The new regression covers a graph with causal reasoning edges plus an explicit noncausal similarity edge. It verifies the noncausal edge is preserved, the graph is decoded as `random_autoregressive`, and reverse decoding is `reverse_random_autoregressive`.
+- b60 latest checked training state remained at the latest parsed step `1750` with train loss/NLL `1.151/1.128`; trainer PID `378962` and watcher PID `379304` remain alive under the step-5000 gate.
+- Verification completed: `/home/iska/miniconda3/envs/tokengt/bin/python -m py_compile TropicalGT-I/tests/test_data_loader.py`, `pytest TropicalGT-I/tests/test_data_loader.py -q` (`13 passed`, `2 warnings`), and `pytest TropicalGT-I/tests/test_meet_in_middle_decoding.py -q` (`12 passed`).
+
 ## Real Implementations Only Policy
 
 No TropicalGT-I metric, loss, visualization, analogical map, persistence module, free resolution, derived comparison, tropical-cycle diagnostic, or CAS artifact should be presented as a mathematical object unless it is computed from the actual model outputs, graph states, embeddings, probabilities, simplex trees, bifiltrations, or certified CAS/backend output that define that object. Temporary placeholders, synthetic fallback objects, mock charts, fabricated simplices, and convenience stand-ins are not acceptable. When a requested object cannot yet be computed, the artifact must render an explicit unavailable/uncertified state and the training metric must either be disabled or logged under an audit-only unavailable flag. Finite chain-presentation diagnostics may be shown only as chain diagnostics, never as free resolutions. Total-graded or ungraded CAS output may be shown as real CAS output only under its actual grading; it must not be advertised as a multigraded `F2[x_level,x_radius]` free resolution unless the backend certifies that multigraded structure.
 
 Use "one dimensional cone" or "one dimensional cones" as the preferred fan-theoretic language whenever the intended object is a cone of a fan or a cone-indexed filtration datum. Use singular or plural according to ordinary grammar.
 
-_Last updated: 2026-06-16T07:32:30Z_
+_Last updated: 2026-06-16T07:34:10Z_

@@ -268,6 +268,36 @@ def test_graph_decoding_order_uses_topological_order_for_dag_and_random_for_cycl
     assert record.autoregressive_text().splitlines()[0] == "[node] first"
 
 
+def test_graph_record_preserves_mixed_noncausal_edges_as_roar():
+    record = GraphRecord.from_mapping(
+        {
+            "record_id": "mixed-causal-noncausal",
+            "text": "alpha beta gamma",
+            "graph_json": {
+                "nodes": [
+                    {"id": "p", "type": "problem", "text": "alpha"},
+                    {"id": "s", "type": "reasoning_step", "text": "beta"},
+                    {"id": "a", "type": "answer", "text": "gamma"},
+                ],
+                "edges": [
+                    {"source": "p", "target": "s", "type": "depends_on"},
+                    {"source": "s", "target": "a", "type": "supports_answer"},
+                    {"source": "p", "target": "a", "type": "similar", "directed": True, "causal": False},
+                ],
+            },
+        }
+    )
+    metadata = record.metadata or {}
+    similar_edges = [edge for edge in record.graph_json["edges"] if edge.get("type") == "similar"]
+
+    assert similar_edges and similar_edges[0]["causal"] is False
+    assert similar_edges[0]["directed"] is False
+    assert metadata["causal_edge_count"] >= 2
+    assert metadata["noncausal_edge_count"] >= 1
+    assert metadata["decoding_order_kind"] == "random_autoregressive"
+    assert metadata["decoding_reverse_order_kind"] == "reverse_random_autoregressive"
+
+
 def _write_parameter_golf_bin(path: Path, payload: bytes) -> None:
     header = np.zeros(256, dtype="<i4")
     header[0] = 20240520
