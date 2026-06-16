@@ -35,6 +35,16 @@ def _assert_real_resolution_guard(real, expected_ring):
     assert contract["backend_claims"]["sage"]["safe_for_multigraded_claims"] is False
     assert contract["backend_claims"]["BEMultipliers"]["is_resolution_backend"] is False
     assert contract["backend_claims"]["BEMultipliers"]["safe_to_substitute_for_resolution"] is False
+    paper = contract["paper_method_contract"]
+    assert paper["schema_version"] == "tropicalgt.be_fitting_method_contract.v1"
+    assert paper["paper_reference"] == "references/2210.11433v1.pdf"
+    assert paper["arxiv_id"] == "2210.11433v1"
+    assert any("Fitting" in section for section in paper["source_evidence"]["sections_used"])
+    assert paper["fitting_ideals"]["formula"].startswith("Fitt_j")
+    assert paper["buchsbaum_eisenbud_multipliers"]["safe_to_substitute_for_resolution"] is False
+    assert paper["grade_depth_regular_conditions"]["regular_sequence_claim_requires_certificate"] is True
+    assert paper["no_proxy_or_fallback"] is True
+    assert real["paper_method_contract"] == paper
     assert "unavailable" in contract["unavailable_render_rule"]
     for key in (
         "real_free_resolution_certified",
@@ -376,6 +386,8 @@ def test_singular_certified_result_structures_ungraded_betti_rows_without_multig
     assert ideal_diag["fitting_invariants"][0]["fitting_index"] == 0
     assert ideal_diag["fitting_invariants"][0]["determinantal_order"] == 1
     assert ideal_diag["determinantal_minors"][0]["minor_order"] == 1
+    assert ideal_diag["paper_method_contract"]["paper_reference"] == "references/2210.11433v1.pdf"
+    assert ideal_diag["paper_method_contract"]["fitting_ideals"]["requires_real_cas_output"] is True
     assert ideal_diag["not_a_resolution_certificate_by_itself"] is True
     grade_depth = real["cas_artifacts"]["grade_depth_regular_diagnostics"]
     assert grade_depth["available"] is False
@@ -387,6 +399,7 @@ def test_singular_certified_result_structures_ungraded_betti_rows_without_multig
     assert be_rank["nonnegative_rank_conditions"] is True
     assert be_rank["exactness_certified_by_backend"] is True
     assert be_rank["is_independent_certificate"] is False
+    assert be_rank["paper_method_contract"]["buchsbaum_eisenbud_multipliers"]["requires_certified_chain_complex"] is True
 
 
 def test_macaulay2_rejects_nonhomogeneous_stored_multigrading(monkeypatch):
@@ -579,6 +592,8 @@ def test_certified_cas_result_surfaces_buchsbaum_eisenbud_diagnostics():
     cert = real["cas_artifacts"]["certificate_summary"]
     contract = real["certificate_contract"]
     assert cert["certificate_contract"] == contract
+    assert cert["paper_method_contract"] == contract["paper_method_contract"]
+    assert real["paper_method_contract"] == contract["paper_method_contract"]
     assert contract["backend_claims"]["BEMultipliers"]["safe_to_substitute_for_resolution"] is False
     assert "backend-emitted exactness certificate" in contract["no_proxy_policy"]
     assert cert["available"] is True
@@ -597,6 +612,8 @@ def test_certified_cas_result_surfaces_buchsbaum_eisenbud_diagnostics():
     assert be["is_resolution_backend"] is False
     assert be["safe_to_substitute_for_resolution"] is False
     assert be["diagnostic_contract"]["requires_certified_macaulay2_chain_complex"] is True
+    assert be["diagnostic_contract"]["paper_method_contract"]["paper_reference"] == "references/2210.11433v1.pdf"
+    assert be["paper_method_contract"] == be["diagnostic_contract"]["paper_method_contract"]
     assert be["bemultipliers_status"] == "unavailable_no_package_path"
     assert "not substituted" in be["interpretation"]
     assert cert["bemultipliers_status"] == "unavailable_no_package_path"
@@ -608,6 +625,7 @@ def test_certified_cas_result_surfaces_buchsbaum_eisenbud_diagnostics():
     assert ideal_diag["available"] is True
     assert ideal_diag["presentation_shape"] == [1, 2]
     assert ideal_diag["fitting_invariants"][0]["method"].startswith("Fitt_j")
+    assert ideal_diag["paper_method_contract"]["arxiv_id"] == "2210.11433v1"
     assert ideal_diag["determinantal_minors"][0]["minor_order"] == 1
     grade_depth = real["cas_artifacts"]["grade_depth_regular_diagnostics"]
     assert grade_depth["available"] is True

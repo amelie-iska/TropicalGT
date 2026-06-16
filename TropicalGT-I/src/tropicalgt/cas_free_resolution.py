@@ -99,6 +99,7 @@ def free_resolution_certificate_contract() -> dict[str, Any]:
         "schema_version": "tropicalgt.cas_free_resolution_contract.v1",
         "required_input_schema": MODULE_SCHEMA_VERSION,
         "no_proxy_or_fallback": True,
+        "paper_method_contract": be_fitting_paper_method_contract(),
         "no_proxy_policy": (
             "Only a backend-emitted exactness certificate for the displayed module presentation may be rendered as a free resolution; "
             "finite chain diagnostics, rank samples, minors, Fitting ideals, grade/depth probes, embeddings, or BEMultipliers output cannot substitute."
@@ -138,6 +139,47 @@ def free_resolution_certificate_contract() -> dict[str, Any]:
             "safe_to_render_as_multigraded_free_resolution are all true."
         ),
         "unavailable_render_rule": "If any required certificate is missing, render only unavailable diagnostics with exact backend attempts and reasons.",
+    }
+
+
+def be_fitting_paper_method_contract() -> dict[str, Any]:
+    return {
+        "schema_version": "tropicalgt.be_fitting_method_contract.v1",
+        "paper_reference": "references/2210.11433v1.pdf",
+        "arxiv_id": "2210.11433v1",
+        "source_evidence": {
+            "title_hint": "Generic Free Resolutions and Persistent Homology",
+            "sections_used": [
+                "Section 4: Presentation Spaces, Rank Invariants, and Fitting Ideals",
+                "Section 4.4: Fitting Ideals",
+                "Section 6: Buchsbaum-Eisenbud Multipliers",
+                "Definition 8.9: multipliers described by complementary minors",
+            ],
+            "local_review_command": "pdftotext references/2210.11433v1.pdf - | grep -i -n -E 'Buchsbaum|Eisenbud|multiplier|Fitting|minor|resolution|regular sequence|grade|determinantal'",
+        },
+        "fitting_ideals": {
+            "method": "Fitting invariants are represented as determinantal ideals of the displayed presentation matrix.",
+            "formula": "Fitt_j(coker(PM)) = I_{rank(target)-j}(PM)",
+            "rank_strata_policy": "Rank-invariant strata may be diagnosed by determinantal minors, but those minors are not a free-resolution certificate by themselves.",
+            "requires_real_cas_output": True,
+        },
+        "buchsbaum_eisenbud_multipliers": {
+            "method": "Buchsbaum-Eisenbud multipliers are complementary-minor relations attached to a certified free complex.",
+            "requires_certified_chain_complex": True,
+            "requires_regular_element_or_grade_certificate_for_exactness_claims": True,
+            "bemultipliers_role": "optional post-certificate diagnostic sidecar",
+            "safe_to_substitute_for_resolution": False,
+        },
+        "grade_depth_regular_conditions": {
+            "method": "Rank-ideal codimension/depth/regular-element checks are CAS diagnostics for Buchsbaum-Eisenbud exactness criteria.",
+            "regular_sequence_claim_requires_certificate": True,
+            "rank_tables_are_not_regular_sequence_certificates": True,
+        },
+        "safe_render_policy": (
+            "Render Fitting ideals, minors, grade/depth rows, and BEMultipliers output only as CAS-certified diagnostics. "
+            "Never promote them to a multigraded free-resolution, derived-equivalence, or exactness claim unless the backend also certifies the displayed resolution and all required conditions."
+        ),
+        "no_proxy_or_fallback": True,
     }
 
 
@@ -280,6 +322,7 @@ def unavailable_real_resolution(
         "backend_probe": backend_probe,
         "bemultipliers_probe": bemultipliers_probe,
         "certificate_contract": free_resolution_certificate_contract(),
+        "paper_method_contract": be_fitting_paper_method_contract(),
         "cas_artifacts": {},
         "command_templates": templates,
         "certificate_attached": False,
@@ -1168,6 +1211,7 @@ def _certified_result(module_schema: dict[str, Any], backend_result: dict[str, A
         "regular_element_certificate_available": bool(grade_depth_regular.get("regular_element_certificate_available")),
         "no_proxy_policy": "Only exact CAS certificates with parsed free-resolution summaries are rendered as resolutions; diagnostics alone are not substituted.",
         "certificate_contract": free_resolution_certificate_contract(),
+        "paper_method_contract": be_fitting_paper_method_contract(),
     }
     return {
         "schema_version": SCHEMA_VERSION,
@@ -1181,6 +1225,7 @@ def _certified_result(module_schema: dict[str, Any], backend_result: dict[str, A
         "backend_probe": probe_cas_backends(),
         "bemultipliers_probe": probe_bemultipliers(),
         "certificate_contract": free_resolution_certificate_contract(),
+        "paper_method_contract": be_fitting_paper_method_contract(),
         "command_templates": cas_command_templates(module_schema),
         "backend": backend,
         "presentation_shape": presentation_shape,
@@ -1360,6 +1405,7 @@ def _structured_ideal_diagnostics(
             "Fitting invariants and rank strata are represented by determinantal ideals/minors; "
             "Buchsbaum-Eisenbud multiplier and exactness claims still require explicit CAS certificates."
         ),
+        "paper_method_contract": be_fitting_paper_method_contract(),
         "not_a_resolution_certificate_by_itself": True,
     }
 
@@ -1433,6 +1479,7 @@ def _buchsbaum_eisenbud_rank_condition_diagnostics(
             "rank(F_i)=rank(d_i)+rank(d_{i+1}); regular-element/grade conditions and multipliers "
             "are not inferred from these ranks and must come from the CAS diagnostic block."
         ),
+        "paper_method_contract": be_fitting_paper_method_contract(),
     }
 
 
@@ -1478,6 +1525,7 @@ def _parse_grade_depth_regular_diagnostics(parsed: dict[str, Any], *, backend: s
         "regular_element_certificate_reason": values.get("regular_element_certificate_reason", "not emitted by CAS"),
         "not_a_resolution_certificate_by_itself": _parse_bool(values.get("not_a_resolution_certificate_by_itself"), default=True),
         "no_proxy_policy": "Grade/depth/rank-ideal diagnostics are explicit CAS output and never replace the exact free-resolution certificate or a regular-sequence certificate.",
+        "paper_method_contract": be_fitting_paper_method_contract(),
     }
 
 
@@ -1510,6 +1558,7 @@ def _parse_buchsbaum_eisenbud_diagnostics(parsed: dict[str, Any], *, backend: st
         "safe_to_use_as_resolution_certificate": False,
         "safe_to_substitute_for_resolution": False,
         "multiplier_output_is_explicit_cas_output": bool(multiplier_available),
+        "paper_method_contract": be_fitting_paper_method_contract(),
         "no_proxy_policy": "BEMultipliers output may annotate a certified Macaulay2 ChainComplex, but never replaces a certified free-resolution backend.",
     }
     return {
@@ -1524,6 +1573,7 @@ def _parse_buchsbaum_eisenbud_diagnostics(parsed: dict[str, Any], *, backend: st
         "requires_certified_macaulay2_chain_complex": True,
         "safe_to_substitute_for_resolution": False,
         "diagnostic_contract": contract,
+        "paper_method_contract": be_fitting_paper_method_contract(),
         "bemultipliers_status": status,
         "bemultipliers_repository": values.get("bemultipliers_repository", "https://github.com/amelie-iska/BEMultipliers.git"),
         "bemultipliers_package_path": values.get("bemultipliers_package_path", ""),
@@ -1900,7 +1950,7 @@ def _load_cached_result(cache_context: dict[str, Any]) -> dict[str, Any] | None:
             return None
     except Exception:
         return None
-    result = dict(result)
+    result = _hydrate_cached_result_contracts(dict(result))
     result["cache"] = {
         "enabled": True,
         "hit": True,
@@ -1910,6 +1960,39 @@ def _load_cached_result(cache_context: dict[str, Any]) -> dict[str, Any] | None:
         "key": cache_context.get("key"),
         "path": str(path),
     }
+    return result
+
+
+def _hydrate_cached_result_contracts(result: dict[str, Any]) -> dict[str, Any]:
+    result = dict(result)
+    contract = result.get("certificate_contract") if isinstance(result.get("certificate_contract"), dict) else {}
+    current_contract = free_resolution_certificate_contract()
+    if contract.get("schema_version") == current_contract["schema_version"]:
+        merged_contract = {**current_contract, **contract}
+        merged_contract["paper_method_contract"] = current_contract["paper_method_contract"]
+        result["certificate_contract"] = merged_contract
+    else:
+        result["certificate_contract"] = current_contract
+    result["paper_method_contract"] = result["certificate_contract"]["paper_method_contract"]
+    artifacts = result.get("cas_artifacts") if isinstance(result.get("cas_artifacts"), dict) else None
+    if artifacts is not None:
+        artifacts = dict(artifacts)
+        cert = artifacts.get("certificate_summary") if isinstance(artifacts.get("certificate_summary"), dict) else None
+        if cert is not None:
+            cert = dict(cert)
+            cert.setdefault("certificate_contract", result["certificate_contract"])
+            cert["paper_method_contract"] = result["paper_method_contract"]
+            artifacts["certificate_summary"] = cert
+        for key in ("ideal_diagnostics", "buchsbaum_eisenbud_rank_conditions", "grade_depth_regular_diagnostics", "buchsbaum_eisenbud_diagnostics"):
+            if isinstance(artifacts.get(key), dict):
+                row = dict(artifacts[key])
+                row.setdefault("paper_method_contract", result["paper_method_contract"])
+                if key == "buchsbaum_eisenbud_diagnostics" and isinstance(row.get("diagnostic_contract"), dict):
+                    diag = dict(row["diagnostic_contract"])
+                    diag.setdefault("paper_method_contract", result["paper_method_contract"])
+                    row["diagnostic_contract"] = diag
+                artifacts[key] = row
+        result["cas_artifacts"] = artifacts
     return result
 
 

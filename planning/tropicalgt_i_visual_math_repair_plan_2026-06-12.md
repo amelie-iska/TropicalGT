@@ -727,3 +727,26 @@ CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/t
 CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m py_compile TropicalGT-I/src/tropicalgt/visualization.py TropicalGT-I/scripts/validate_interactive_audit_artifacts.py TropicalGT-I/tests/test_simplicial_visualization.py TropicalGT-I/tests/test_interactive_artifact_validator.py
 # passed
 ```
+
+
+## 2026-06-16 CAS Fitting/BE Paper-Method Contract Repair
+
+Sequential CAS/no-proxy item completed after the radius filtration slider contract:
+
+- Reviewed `references/2210.11433v1.pdf` locally with `pdftotext` and confirmed the applicable method hooks: presentation spaces/rank invariants/Fitting ideals, determinantal minors for rank strata, generic free resolutions, and Buchsbaum-Eisenbud multipliers as complementary-minor sidecars for certified complexes.
+- Added `tropicalgt.be_fitting_method_contract.v1` to `cas_free_resolution.py` and embedded it in the CAS free-resolution certificate contract.
+- Certified and unavailable CAS reports now carry the paper-method contract at top level; cached older CAS reports are hydrated in memory so they expose the current contract without rerunning CAS.
+- CAS artifact subreports for Fitting/minor diagnostics, Buchsbaum-Eisenbud rank conditions, grade/depth/regular diagnostics, and BEMultipliers output now inherit the same paper-method/no-proxy contract.
+- The contract explicitly records that Fitting/minor/rank-strata evidence and BEMultipliers output are diagnostics only: they cannot substitute for a CAS-certified free resolution, regular-sequence certificate, derived equivalence, or exactness claim.
+- Regression coverage now checks unavailable reports, parsed Singular/Macaulay2-style outputs, cached reports, ideal diagnostics, BE diagnostics, and the two-parameter bifiltration CAS path for the `2210.11433v1` method contract.
+
+Validation:
+
+```text
+CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_algebraic_persistence.py -q -p no:cacheprovider --basetemp=/tmp/tropicalgt-pytest-cas-paper-contract -k "real_cas_free_resolution_disabled_by_environment or tagged or fitting or bemultipliers or macaulay2_rejects_nonhomogeneous"
+# 5 passed, 25 deselected
+CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_algebraic_persistence.py -q -p no:cacheprovider --basetemp=/tmp/tropicalgt-pytest-cas-paper-full
+# 30 passed
+CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m py_compile TropicalGT-I/src/tropicalgt/cas_free_resolution.py TropicalGT-I/tests/test_algebraic_persistence.py
+# passed
+```
