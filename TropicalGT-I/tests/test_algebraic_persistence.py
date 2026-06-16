@@ -759,11 +759,15 @@ def test_level_radius_bifiltration_reports_scoped_real_staircase_resolution(tmp_
     assert visual_payload["axes"] == {"horizontal": "x_radius", "vertical": "x_level", "coordinate_one_dimensional_cones": ["rho_x_radius", "rho_x_level"]}
     assert visual_payload["actual_data_only"] is True
     assert visual_payload["no_proxy_resolution_claim"] is True
+    assert "certified_fitting_minor_tables" in visual_payload["secondary_views"]
+    assert "buchsbaum_eisenbud_diagnostic_tables" in visual_payload["secondary_views"]
     assert "horizontal lattice coordinates are x_radius" in html
     assert "The primary view is the Miller-Sturmfels staircase" in html
     assert "Columns are radius grades" in html
     assert "Adjacent structure maps persisted=" in html
     assert "diagnostic chain data is not substituted for a free resolution" in html
+    assert "Certified Fitting ideals and determinantal minors" in html
+    assert "Buchsbaum-Eisenbud rank and multiplier diagnostics" in html
     assert "x_radius exponent" in html and "radius grade" in html
     assert "x_level exponent" in html and "reasoning growth level" in html
     chain = report["chain_presentation_diagnostics"]

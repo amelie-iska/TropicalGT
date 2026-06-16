@@ -4146,6 +4146,63 @@ def _m2_differential_columns(m2: Mapping[str, Any], max_rows: int = 18) -> Tuple
     return ["map", "shape", "rank", "matrix preview"], [maps, shapes, ranks, previews]
 
 
+def _m2_ideal_diagnostic_columns(m2: Mapping[str, Any]) -> Tuple[List[str], List[List[str]]]:
+    resolution = _m2_selected_staircase_resolution(m2)
+    if not resolution:
+        return ["kind", "name", "order/index", "ideal", "source/method"], [["unavailable"], [""], [""], [""], ["no certified CAS resolution; Fitting/minor diagnostics are unavailable"]]
+    ideal_diag_raw = resolution.get("ideal_diagnostics")
+    ideal_diag = ideal_diag_raw if isinstance(ideal_diag_raw, Mapping) else {}
+    rows: list[tuple[str, str, str, str, str]] = []
+    for row in ideal_diag.get("fitting_invariants", []) if isinstance(ideal_diag.get("fitting_invariants"), list) else []:
+        if not isinstance(row, Mapping):
+            continue
+        order = f"j={row.get('fitting_index', '')}; I_{row.get('determinantal_order', '')}"
+        rows.append(("Fitting invariant", str(row.get("name", "")), order, str(row.get("ideal_text", "")), str(row.get("method", row.get("source", "")))))
+    for row in ideal_diag.get("determinantal_minors", []) if isinstance(ideal_diag.get("determinantal_minors"), list) else []:
+        if not isinstance(row, Mapping):
+            continue
+        rows.append(("determinantal minors", str(row.get("name", "")), f"order={row.get('minor_order', '')}", str(row.get("ideal_text", "")), str(row.get("method", row.get("source", "")))))
+    if not rows:
+        if not ideal_diag:
+            reason = "certified resolution lacks ideal_diagnostics certificate"
+        else:
+            reason = str(ideal_diag.get("reason") or ideal_diag.get("error") or "certified ideal_diagnostics certificate has no Fitting/minor rows")
+        rows = [("unavailable", "", "", "", reason)]
+    return ["kind", "name", "order/index", "ideal", "source/method"], [[row[idx] for row in rows] for idx in range(5)]
+
+
+def _m2_be_diagnostic_columns(m2: Mapping[str, Any]) -> Tuple[List[str], List[List[str]]]:
+    resolution = _m2_selected_staircase_resolution(m2)
+    if not resolution:
+        return ["diagnostic", "object", "value", "certificate/scope"], [["unavailable"], [""], [""], ["no certified CAS resolution; Buchsbaum-Eisenbud diagnostics are unavailable"]]
+    res_be_raw = resolution.get("buchsbaum_eisenbud_diagnostics")
+    be_rank_raw = resolution.get("buchsbaum_eisenbud_rank_conditions")
+    res_be = res_be_raw if isinstance(res_be_raw, Mapping) else {}
+    be_rank = be_rank_raw if isinstance(be_rank_raw, Mapping) else {}
+    rows: list[tuple[str, str, str, str]] = []
+    if res_be:
+        if "exactness_certified" in res_be:
+            rows.append(("CAS exactness", "resolution", str(res_be.get("exactness_certified")), str(res_be.get("certificate", ""))))
+        if "minimality_certified" in res_be:
+            rows.append(("CAS minimality", "resolution", str(res_be.get("minimality_certified")), str(res_be.get("grading_scope", ""))))
+        if any(key in res_be for key in ("bemultipliers_status", "a_multiplier_1_shape", "a_multiplier_1_matrix")):
+            rows.append(("BEMultipliers", str(res_be.get("bemultipliers_status", "unreported")), str(res_be.get("a_multiplier_1_shape", "")), _json_clip(res_be.get("a_multiplier_1_matrix", ""), 220)))
+    image_ranks = be_rank.get("image_rank_estimates_by_differential", {}) if isinstance(be_rank.get("image_rank_estimates_by_differential"), Mapping) else {}
+    shapes = be_rank.get("differential_shapes", {}) if isinstance(be_rank.get("differential_shapes"), Mapping) else {}
+    shape_bounds = be_rank.get("shape_bounds_hold")
+    for name in sorted(set(image_ranks) | set(shapes)):
+        rows.append(("BE rank condition", str(name), f"rank={image_ranks.get(name, 'unavailable')}; shape={shapes.get(name, 'unavailable')}", f"shape_bounds_hold={shape_bounds}; independent_certificate={be_rank.get('is_independent_certificate', False)}"))
+    if be_rank.get("paper_method_note"):
+        rows.append(("method note", "Buchsbaum-Eisenbud", "not inferred as exactness", str(be_rank.get("paper_method_note"))))
+    if not rows:
+        if not res_be and not be_rank:
+            reason = "certified resolution lacks Buchsbaum-Eisenbud diagnostic certificates"
+        else:
+            reason = str(res_be.get("reason") or be_rank.get("reason") or res_be.get("error") or be_rank.get("error") or "Buchsbaum-Eisenbud diagnostic certificates contain no renderable rows")
+        rows = [("unavailable", "", "", reason)]
+    return ["diagnostic", "object", "value", "certificate/scope"], [[row[idx] for row in rows] for idx in range(4)]
+
+
 def _m2_certificate_columns(m2: Mapping[str, Any], bifiltration: Mapping[str, Any]) -> Tuple[List[str], List[List[str]]]:
     cert = m2.get("chain_complex_certificate") if isinstance(m2, Mapping) else {}
     cert = cert if isinstance(cert, Mapping) else {}
@@ -4822,6 +4879,8 @@ def _write_two_parameter_bifiltration_staircase_html(
     free_h, free_c = _m2_free_module_columns(m2)
     diff_h, diff_c = _m2_differential_columns(m2)
     cert_h, cert_c = _m2_certificate_columns(m2, bifiltration)
+    ideal_h, ideal_c = _m2_ideal_diagnostic_columns(m2)
+    be_h, be_c = _m2_be_diagnostic_columns(m2)
     rank_note = f"grid={len(levels)} x-levels x {len(radius_grades)} radius grades; H0 range {float(np.nanmin(h0_grid)):.0f}-{float(np.nanmax(h0_grid)):.0f}; H1 range {float(np.nanmin(h1_grid)):.0f}-{float(np.nanmax(h1_grid)):.0f}; chain generators={sum(generator_counts.values())}."
     chart1 = fig_module.to_html(full_html=False, include_plotlyjs=False, config={"displaylogo": False, "responsive": True})
     chart2 = fig_3d.to_html(full_html=False, include_plotlyjs=False, config={"displaylogo": False, "responsive": True})
@@ -4879,7 +4938,7 @@ td {{ background:#07111f; color:#d7e8ff; }}
 <div class='callout'><b>Computed bifiltration:</b> {html.escape(rank_note)}<br>This section is an exponent-lattice module diagram in the sense of the two-variable monomial-ideal staircase picture: the coordinate axes are the x_radius and x_level one dimensional cone(s). The large gold/cyan/blue boundary points are minimal antichain generators; smaller dim-colored points are dominated observed bidegrees and are not treated as additional generators. White lattice points are displayed quotient-basis complements, colored cells/points are actual H1 fiber ranks. Adjacent structure maps persisted={len(bifiltration.get("structure_maps", [])) if isinstance(bifiltration, Mapping) else 0}. Staircase cards render exact two-variable monomial-ideal resolutions when the Miller-Sturmfels adjacent-LCM theorem applies. Lower CAS tables render only certified CAS output under its actual grading; diagnostic chain data is not substituted for a free resolution.</div>
 <section class='panel'><h2>Miller-Sturmfels bivariate module staircases from actual multidegree generators</h2><div class='staircase-grid'>{staircase_svgs}</div></section>
 <details class='secondary-disclosure'><summary>Secondary fiber-rank diagnostics</summary><section class='panel'><h2>F2[x_level,x_radius] support and homology fiber ranks</h2>{chart1}</section><section class='panel'><h2>Fiber-rank lattice with H0/H1 layer offsets</h2>{chart2}</section></details>
-<details class='secondary-disclosure'><summary>Certified algebra tables and CAS certificates</summary><div class='card-grid'>{_table_html(betti_h, betti_c, 'Betti-style diagnostics')}{_table_html(free_h, free_c, 'Free chain modules / certified free modules')}{_table_html(diff_h, diff_c, 'Differentials / boundary maps')}{_table_html(cert_h, cert_c, 'CAS certificates, Fitting ideals, BE diagnostics')}</div></details>
+<details class='secondary-disclosure'><summary>Certified algebra tables and CAS certificates</summary><div class='card-grid'>{_table_html(betti_h, betti_c, 'Betti-style diagnostics')}{_table_html(free_h, free_c, 'Free chain modules / certified free modules')}{_table_html(diff_h, diff_c, 'Differentials / boundary maps')}{_table_html(ideal_h, ideal_c, 'Certified Fitting ideals and determinantal minors')}{_table_html(be_h, be_c, 'Buchsbaum-Eisenbud rank and multiplier diagnostics')}{_table_html(cert_h, cert_c, 'CAS certificate summary')}</div></details>
 </main>
 </body>
 </html>
@@ -4889,7 +4948,7 @@ td {{ background:#07111f; color:#d7e8ff; }}
         "coefficient_ring": "F2[x_level,x_radius]",
         "primary_view": "miller_sturmfels_bivariate_staircase",
         "primary_view_contract": "The primary view is an exponent-lattice staircase over F2[x_level,x_radius]: x_radius is horizontal, x_level is vertical, shaded regions are upward-closed generated submodules, and white lattice points are displayed quotient-basis complements from actual bifiltration chain-generator bidegrees.",
-        "secondary_views": ["fiber_rank_heatmap", "fiber_rank_lattice_3d", "certified_algebra_tables"],
+        "secondary_views": ["fiber_rank_heatmap", "fiber_rank_lattice_3d", "certified_algebra_tables", "certified_fitting_minor_tables", "buchsbaum_eisenbud_diagnostic_tables"],
         "rank_surface_primary": False,
         "rank_surface_policy": "3D fiber-rank displays are secondary diagnostics only and are not rendered as the primary module view.",
         "axes": {
