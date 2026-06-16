@@ -92,9 +92,10 @@ def test_visualization_payload_contains_filtered_objects(tmp_path: Path):
     assert 'color-scheme: dark' in html
     assert "plotly_hover" in html
     assert "renderHoverCard" in html
+    assert "if (panelSvg) panelSvg.innerHTML" in html
     assert 'aria-label="interactive selected filtered simplicial complex"' in html
-    assert '<details class="static-preview">' in html
-    assert "Static SVG fallback preview" in html
+    assert '<details class="static-preview">' not in html
+    assert "Static SVG fallback preview" not in html
     assert '<details class="static-preview" open>' not in html
     assert "<svg" in html
     assert "pca-radius-filtered-complex" in html
@@ -627,9 +628,10 @@ def test_got_trajectory_visualization_renders_simplicial_panel_and_nll_surface(t
     assert "centered scaled NLL=%{z:.4f}" not in html
     assert payload["nll_surface"]["z_axis_label"].startswith("observed-state NLL anchor z; raw centered NLL")
     assert "open interactive reasoning-step complex page" in html
+    assert "if (panelSvg) panelSvg.innerHTML" in html
     assert 'aria-label="interactive selected filtered simplicial complex"' in html
-    assert '<details class="static-preview">' in html
-    assert "Static SVG fallback preview" in html
+    assert '<details class="static-preview">' not in html
+    assert "Static SVG fallback preview" not in html
     assert '<details class="static-preview" open>' not in html
     assert "reasoning_step_complex_maps/reasoning_step_000.html" in html
     assert payload["nodes"][1]["input_text"] == "input"

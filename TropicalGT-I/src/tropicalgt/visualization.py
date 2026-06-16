@@ -9030,6 +9030,14 @@ def _write_plotly_dark_html(path: Path, fig: go.Figure, title: str, panel_items:
         if show_selected_complex_panel
         else '<div class="panel-note">Hover or click a point in the main plot to inspect the exact filtered simplicial object payload. The duplicate secondary 3D complex panel is disabled on this page.</div>'
     )
+    static_preview_html = (
+        f"""<details class="static-preview">
+	        <summary>Static SVG fallback preview from the same filtered-complex payload</summary>
+	        <div class="simplicial-object-panel" id="simplicial-svg">{initial["svg"]}</div>
+	      </details>"""
+        if has_panel and not show_selected_complex_panel
+        else ""
+    )
     panel_html = (
         f"""
     <aside class="panel" aria-live="polite">
@@ -9037,10 +9045,7 @@ def _write_plotly_dark_html(path: Path, fig: go.Figure, title: str, panel_items:
       <div class="summary" id="simplicial-summary">{initial["summary"]}</div>
       {controls_html}
       {selected_complex_panel_html}
-      <details class="static-preview">
-	        <summary>Static SVG fallback preview from the same filtered-complex payload</summary>
-	        <div class="simplicial-object-panel" id="simplicial-svg">{initial["svg"]}</div>
-	      </details>
+      {static_preview_html}
     </aside>"""
         if has_panel
         else ""
@@ -9265,7 +9270,7 @@ def _write_plotly_dark_html(path: Path, fig: go.Figure, title: str, panel_items:
       activePanelIndex = index;
       panelTitle.textContent = item.title || "Filtered simplicial object";
       panelSummary.innerHTML = item.summary || "";
-      panelSvg.innerHTML = item.svg || "";
+      if (panelSvg) panelSvg.innerHTML = item.svg || "";
       configureFiltrationSlider(item, panelSvg);
       renderPanelComplex(item);
     }}

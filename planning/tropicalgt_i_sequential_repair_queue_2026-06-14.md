@@ -88,7 +88,7 @@
 - [x] Add dotted directed edges for causal structure, decoding order, or both when they align.
 - [x] Use solid edges/faces filled in by radius slider for simplicial objects.
 - [x] Fix slider direction everywhere to min-to-max radius.
-- [ ] Remove duplicate/extraneous panels where two panels show the same reasoning step.
+- [x] Remove duplicate/extraneous panels where two panels show the same reasoning step.
 
 ### 7. NLL / Fitness / Density Landscapes
 
@@ -311,6 +311,15 @@ The live item-by-item repair inventory is maintained in `planning/tropicalgt_i_c
 - [x] Required explicit BE/certified-resolution evidence before rendering Buchsbaum-Eisenbud rows; missing evidence renders unavailable rather than defaulting to false exactness/minimality.
 - [x] Focused verification passed: new CAS table helper test `1 passed`; bifiltration artifact test `1 passed`; full simplicial visualization `32 passed`; algebraic persistence `19 passed`; artifact validator `10 passed`.
 - [x] Pushed this certified CAS diagnostic table repair on the non-main branch as commit `e70dbc8`.
+
+
+### Current Objective Update - Duplicate Reasoning-Step Panel Removal Pass
+
+- [x] Removed the duplicate static preview block from pages that already render the interactive selected filtered-complex panel, so the same reasoning-step complex is not shown in two adjacent side-panel surfaces.
+- [x] Preserved the static same-payload preview path only for pages that explicitly disable the interactive selected-complex panel, keeping that path distinct rather than duplicative.
+- [x] Updated regression coverage for validation PCA/NLL pages, GoT trajectory pages, and the static-preview-only WebGL path.
+- [x] Section 6 is complete: actual GUDHI SimplexTree/face-coface views, per-step complex/tree pages, dotted causal/decoding overlays, solid radius edges, filled radius-gated 2-simplices, min-to-max sliders, and duplicate-panel removal are all covered.
+- [x] Verification passed: focused duplicate-panel tests `3 passed`; full simplicial visualization `34 passed`; artifact validator `10 passed`; compile checks passed for modified source/tests.
 
 
 ### Current Objective Update - SimplexTree No-Fallback And Radius Slider Pass
