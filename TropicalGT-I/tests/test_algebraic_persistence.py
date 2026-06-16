@@ -1,3 +1,4 @@
+import builtins
 import json
 import sys
 
@@ -9,6 +10,7 @@ import tropicalgt.cas_toric as cas_toric
 from tropicalgt.algebra import (
     _bivariate_staircase_resolution_from_points,
     compute_level_radius_bifiltration_report,
+    _multipers_backend_status,
     compute_topological_algebra_report,
     summarize_algebra_reports,
 )
@@ -19,6 +21,23 @@ from tropicalgt.records import GraphRecord
 from tropicalgt.scaling import run_inference_scaling
 from tropicalgt.simplicial import build_filtered_simplicial_object, build_reasoning_trajectory_complex
 from tropicalgt.tokenizer import TokenGTTokenizer
+
+
+
+def test_multipers_unavailable_status_uses_signed_measure_backend_language(monkeypatch):
+    real_import = builtins.__import__
+
+    def guarded_import(name, *args, **kwargs):
+        if name == "multipers":
+            raise ImportError("forced missing multipers")
+        return real_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", guarded_import)
+    status = _multipers_backend_status()
+
+    assert status["available"] is False
+    assert "optional signed-measure backend diagnostics" in status["recommendation"]
+    assert "approximation" not in status["recommendation"]
 
 
 

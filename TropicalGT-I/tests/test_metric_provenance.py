@@ -25,6 +25,7 @@ def test_metric_provenance_registry_covers_current_risky_terms(tmp_path: Path):
         "training_data_budget_estimate",
         "config_default_fallback",
         "wandb_uncategorized_metric_namespace",
+        "multipers_optional_signed_measure_backend",
         "browser_same_data_static_preview_rendering",
         "simplicial_projection_display_layout_evidence",
         "gudhi_vectorizer_autograd_boundary",
@@ -40,6 +41,7 @@ def test_metric_provenance_registry_covers_current_risky_terms(tmp_path: Path):
     assert registry["persistence_vector_representation_similarity"]["optimize_directly"] is True
     assert registry["browser_same_data_static_preview_rendering"]["kind"] == "same_data_rendering_contingency"
     assert registry["wandb_uncategorized_metric_namespace"]["kind"] == "logging_namespace"
+    assert registry["multipers_optional_signed_measure_backend"]["kind"] == "optional_backend_diagnostic"
     assert registry["buchsbaum_eisenbud_implied_rank_identity_diagnostic"]["kind"] == "diagnostic_rank_identity_not_certificate"
     assert registry["simplicial_projection_display_layout_evidence"]["kind"] == "visual_display_layout_boundary"
 

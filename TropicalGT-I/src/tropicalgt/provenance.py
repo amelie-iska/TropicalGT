@@ -308,13 +308,13 @@ PROVENANCE_REGISTRY: tuple[ProvenanceEntry, ...] = (
         match_terms=("_wandb_uncategorized_metric_group", "wandb_uncategorized_metric_namespace", "_wandb_fallback_group", "fallback_group"),
     ),
     ProvenanceEntry(
-        name="multipers_backend_approximation",
-        kind="optional_backend_approximation",
+        name="multipers_optional_signed_measure_backend",
+        kind="optional_backend_diagnostic",
         surface="multiparameter persistence backend note",
         optimize_directly=False,
-        description="Optional multipers approximation/signed-measure backend recommendation for large multiparameter descriptors.",
-        replacement_or_guardrail="The in-repo bounded finite-grid module remains the implemented path unless multipers is explicitly installed and audited.",
-        match_terms=("module approximation/signed-measure", "multipers", "approximation/signed-measure"),
+        description="Optional multipers signed-measure backend recommendation for large multiparameter descriptors.",
+        replacement_or_guardrail="The in-repo bounded finite-grid module remains the implemented path unless multipers is explicitly installed and audited; signed-measure diagnostics are not substitutes for exact finite-grid or CAS-certified evidence.",
+        match_terms=("optional signed-measure backend", "multipers_optional_signed_measure_backend", "module approximation/signed-measure", "multipers", "approximation/signed-measure"),
     ),
     ProvenanceEntry(
         name="gudhi_vectorizer_autograd_boundary",

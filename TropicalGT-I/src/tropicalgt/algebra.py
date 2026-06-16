@@ -1304,7 +1304,7 @@ def _multipers_backend_status() -> dict[str, Any]:
         return {
             "available": False,
             "error": f"{type(exc).__name__}: {exc}",
-            "recommendation": "Install multipers to add module approximation/signed-measure backends for high-scale multiparameter graph descriptors.",
+            "recommendation": "Install multipers to add optional signed-measure backend diagnostics for high-scale multiparameter graph descriptors; do not treat them as substitutes for exact finite-grid or CAS-certified evidence.",
         }
 
 

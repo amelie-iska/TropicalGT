@@ -967,3 +967,21 @@ CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/t
 CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_training_metrics.py::test_wandb_metrics_are_namespaced_by_priority TropicalGT-I/tests/test_metric_provenance.py::test_metric_provenance_registry_covers_current_risky_terms -q -p no:cacheprovider --basetemp=/tmp/tropicalgt-pytest-wandb-uncategorized-namespace
 # 2 passed
 ```
+
+## 2026-06-16 Multipers Signed-Measure Backend Terminology Repair
+
+Sequential multiparameter backend terminology item completed after the W&B uncategorized namespace rename:
+
+- Reworded the unavailable `multipers` recommendation to `optional signed-measure backend diagnostics` rather than approximation language.
+- Renamed provenance entry `multipers_backend_approximation` to `multipers_optional_signed_measure_backend` with kind `optional_backend_diagnostic`.
+- Kept retired approximation phrases as audit-only match terms so stale wording remains detectable.
+- Added an unavailable-path regression that forces `multipers` import failure and checks the exact recommendation wording.
+
+Validation:
+
+```text
+CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m py_compile TropicalGT-I/src/tropicalgt/algebra.py TropicalGT-I/src/tropicalgt/provenance.py TropicalGT-I/tests/test_algebraic_persistence.py TropicalGT-I/tests/test_metric_provenance.py
+# passed
+CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_algebraic_persistence.py::test_multipers_unavailable_status_uses_signed_measure_backend_language TropicalGT-I/tests/test_metric_provenance.py::test_metric_provenance_registry_covers_current_risky_terms -q -p no:cacheprovider --basetemp=/tmp/tropicalgt-pytest-multipers-signed-measure
+# 2 passed
+```
