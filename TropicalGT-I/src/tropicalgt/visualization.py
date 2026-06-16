@@ -11521,7 +11521,7 @@ def _simplicial_pca3_radius_layout(
     if not labels:
         return {}, {}, "empty_3d_pca"
     vertex_by_label = {str((row.get("simplex") or [""])[0]): row for row in vertices if isinstance(row, dict)}
-    features = _vertex_metric_feature_matrix(labels, vertex_by_label)
+    features, feature_evidence = _vertex_metric_feature_matrix(labels, vertex_by_label)
     if features.shape[0] == 1:
         coords = np.asarray([[0.5, 0.5, 0.5]], dtype=float)
         stats = {"stress": 0.0, "corr": 1.0, "energy3": 1.0}
@@ -11530,7 +11530,12 @@ def _simplicial_pca3_radius_layout(
         coords, stats = _classical_mds3(target_distances)
         if coords.shape != (features.shape[0], 3) or not np.isfinite(coords).all():
             coords, projection_stats = _feature_pca3_without_synthetic_jitter(features, labels)
-            stats = {"stress": 1.0, "corr": 0.0, "energy3": float(projection_stats.get("energy3", 0.0)), "projection_note": projection_stats.get("projection_note", "feature_pca3")}
+            stats = {
+                "stress": 1.0,
+                "corr": 0.0,
+                "energy3": float(projection_stats.get("energy3", 0.0)),
+                "projection_note": projection_stats.get("projection_note", "feature_pca3"),
+            }
     mins = coords.min(axis=0, keepdims=True)
     spans = np.maximum(coords.max(axis=0, keepdims=True) - mins, 1e-8)
     unit = (coords - mins) / spans
@@ -11561,19 +11566,28 @@ def _simplicial_pca3_radius_layout(
         f"stress={float(stats.get('stress', 0.0)):.3f} "
         f"corr={float(stats.get('corr', 0.0)):.3f} "
         f"energy3={float(stats.get('energy3', 0.0)):.3f} "
+        f"coordinate_evidence={feature_evidence['coordinate_evidence']} "
+        f"safe_for_metric_claims={str(feature_evidence['safe_for_metric_claims']).lower()} "
+        f"vector_rows={feature_evidence['vector_rows']} "
+        f"display_metadata_rows={feature_evidence['display_metadata_rows']} "
         + (f"projection_note={stats.get('projection_note')} " if stats.get("projection_note") else "")
         + f"mean_radius={mean_radius:.3f}",
     )
 
 
-def _vertex_metric_feature_matrix(labels: list[str], vertex_by_label: dict[str, dict[str, object]]) -> np.ndarray:
+def _vertex_metric_feature_matrix(labels: list[str], vertex_by_label: dict[str, dict[str, object]]) -> tuple[np.ndarray, dict[str, object]]:
     rows: list[list[float]] = []
     max_len = 0
+    vector_rows = 0
+    display_metadata_rows = 0
     for idx, label in enumerate(labels):
         vertex = vertex_by_label.get(label, {})
         vector = _coerce_vertex_vector(vertex)
         if not vector:
-            vector = _vertex_numeric_feature(label, vertex, idx, len(labels))
+            vector = _vertex_display_layout_feature(label, vertex, idx, len(labels))
+            display_metadata_rows += 1
+        else:
+            vector_rows += 1
         row = vector
         rows.append(row)
         max_len = max(max_len, len(row))
@@ -11585,7 +11599,21 @@ def _vertex_metric_feature_matrix(labels: list[str], vertex_by_label: dict[str, 
     padded = np.where(np.isfinite(padded), padded, means)
     scale = np.nanstd(padded, axis=0, keepdims=True)
     scale = np.where(scale > 1e-8, scale, 1.0)
-    return (padded - means) / scale
+    if vector_rows == len(labels) and labels:
+        coordinate_evidence = "real_vertex_vectors"
+        safe_for_metric_claims = True
+    elif vector_rows:
+        coordinate_evidence = "mixed_model_vectors_and_display_metadata_layout"
+        safe_for_metric_claims = False
+    else:
+        coordinate_evidence = "display_only_vertex_metadata_layout"
+        safe_for_metric_claims = False
+    return (padded - means) / scale, {
+        "coordinate_evidence": coordinate_evidence,
+        "safe_for_metric_claims": safe_for_metric_claims,
+        "vector_rows": vector_rows,
+        "display_metadata_rows": display_metadata_rows,
+    }
 
 
 def _feature_pca3_without_synthetic_jitter(features: np.ndarray, labels: list[str]) -> tuple[np.ndarray, dict[str, object]]:
@@ -11731,7 +11759,7 @@ def _classical_mds3(distances: np.ndarray) -> tuple[np.ndarray, dict[str, float]
     return coords[:, :3], {"stress": stress, "corr": corr, "energy3": energy3}
 
 
-def _vertex_numeric_feature(label: str, vertex: dict[str, object], idx: int, total: int) -> list[float]:
+def _vertex_display_layout_feature(label: str, vertex: dict[str, object], idx: int, total: int) -> list[float]:
     text = str(vertex.get("text", "")) if isinstance(vertex, dict) else ""
     filt = float(vertex.get("filtration", 0.0) or 0.0) if isinstance(vertex, dict) else 0.0
     weight = float(vertex.get("weight", 1.0) or 1.0) if isinstance(vertex, dict) else 1.0

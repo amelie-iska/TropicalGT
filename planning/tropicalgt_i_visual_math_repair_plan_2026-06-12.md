@@ -770,3 +770,23 @@ CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/t
 CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_simplicial_visualization.py -q -p no:cacheprovider --basetemp=/tmp/tropicalgt-pytest-static-preview-full
 # 43 passed
 ```
+
+## 2026-06-16 Simplicial Projection Evidence Boundary Repair
+
+Sequential simplicial visualization item completed after the same-data static-preview terminology repair:
+
+- The 3D radius-filtered simplicial SVG layout now records `coordinate_evidence`, `safe_for_metric_claims`, `vector_rows`, and `display_metadata_rows` in the rendered layout contract string.
+- When every vertex carries a real vector such as an embedding, probability vector, coordinate vector, or model feature vector, the layout reports `coordinate_evidence=real_vertex_vectors` and `safe_for_metric_claims=true`.
+- When vertex vectors are absent or only partially present, the layout remains usable as a display-only arrangement from vertex metadata, but it reports `safe_for_metric_claims=false`; these coordinates cannot be read as model PCA, embedding geometry, topology metrics, or training evidence.
+- The helper previously named `_vertex_numeric_feature` is now `_vertex_display_layout_feature`, making the code boundary match the no-proxy policy.
+
+Validation:
+
+```text
+CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m py_compile TropicalGT-I/src/tropicalgt/visualization.py TropicalGT-I/tests/test_simplicial_visualization.py
+# passed
+CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_simplicial_visualization.py -q -p no:cacheprovider --basetemp=/tmp/tropicalgt-pytest-layout-evidence -k "simplicial_svg_wraps_long_topological_paths or simplicial_svg_reports_model_vector_projection_evidence"
+# 2 passed, 42 deselected
+CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_simplicial_visualization.py -q -p no:cacheprovider --basetemp=/tmp/tropicalgt-pytest-layout-evidence-full
+# 44 passed
+```

@@ -1135,10 +1135,34 @@ def test_simplicial_svg_wraps_long_topological_paths():
     assert "layout=3d_pca_radius_projection" in svg
     assert "method=classical_mds_pcoa" in svg
     assert "stress=" in svg
+    assert "coordinate_evidence=display_only_vertex_metadata_layout" in svg
+    assert "safe_for_metric_claims=false" in svg
+    assert "display_metadata_rows=50" in svg
     assert "pca-radius-filtered-complex" in svg
     assert "data-pca-z" in svg
     assert svg.count("zero-simplex") == 50
     assert svg.count("one-simplex") == 49
+
+
+def test_simplicial_svg_reports_model_vector_projection_evidence():
+    simplices = [
+        {"simplex": ["a"], "dimension": 0, "filtration": 0.0, "embedding": [0.0, 0.0, 0.0]},
+        {"simplex": ["b"], "dimension": 0, "filtration": 0.2, "embedding": [1.0, 0.0, 0.0]},
+        {"simplex": ["c"], "dimension": 0, "filtration": 0.4, "embedding": [0.0, 1.0, 0.0]},
+        {"simplex": ["a", "b"], "dimension": 1, "filtration": 0.2},
+        {"simplex": ["b", "c"], "dimension": 1, "filtration": 0.4},
+    ]
+    svg = _simplicial_object_svg(
+        {
+            "summary": {"num_vertices": 3, "num_edges": 2, "num_two_simplices": 0},
+            "simplices": simplices,
+            "thresholds": [0.0, 0.2, 0.4],
+        }
+    )
+    assert "coordinate_evidence=real_vertex_vectors" in svg
+    assert "safe_for_metric_claims=true" in svg
+    assert "vector_rows=3" in svg
+    assert "display_metadata_rows=0" in svg
 
 
 def test_trajectory_persistence_uses_growth_and_chain_presentation_diagnostics(tmp_path: Path):
