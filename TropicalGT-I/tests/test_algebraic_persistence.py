@@ -345,6 +345,17 @@ def test_macaulay2_tropical_fan_diagnostic_parser_and_script():
         "is_pure=true",
         "is_simplicial=true",
         "fan_text=Fan{...1...}",
+        "tropical_basis_check_available=true",
+        "is_tropical_basis=true",
+        "tropical_prevariety_available=true",
+        "prevariety_class=Fan",
+        "prevariety_rays=matrix {{1, -1, 0}, {0, -1, 1}}",
+        "prevariety_max_cones={{1}, {0}, {2}}",
+        "prevariety_lineality_space=matrix {{}, {}}",
+        "prevariety_multiplicities={1, 1, 1}",
+        "prevariety_is_balanced=true",
+        "prevariety_is_pure=true",
+        "prevariety_is_simplicial=true",
     ])
     parsed = cas_free_resolution._parse_key_value_lines(tagged)
     report = cas_tropical._certified_tropical_result(schema, parsed, tagged, attempts=[{"backend": "Macaulay2", "status": "ran"}])
@@ -360,6 +371,18 @@ def test_macaulay2_tropical_fan_diagnostic_parser_and_script():
     assert summary["multiplicities"] == [1, 1, 1]
     assert summary["is_balanced"] is True
     assert "one dimensional cones" in summary["one_dimensional_cone_language"]
+    assert report["tropical_basis_check"] == {
+        "available": True,
+        "is_tropical_basis": True,
+        "error": None,
+        "method": "Macaulay2 Tropical isTropicalBasis on flatten entries gens I",
+    }
+    pre = report["tropical_prevariety_summary"]
+    assert pre["available"] is True
+    assert pre["class"] == "Fan"
+    assert pre["ray_count"] == 3
+    assert pre["max_cones"] == [[1], [0], [2]]
+    assert pre["is_simplicial"] is True
     assert "not a multigraded free-resolution" in report["render_warning"]
 
 
@@ -376,6 +399,8 @@ def test_macaulay2_tropical_fan_diagnostic_live_or_unavailable():
         assert report["fan_diagnostics_certified"] is True
         assert report["fan_summary"]["ray_count"] == 3
         assert report["fan_summary"]["is_balanced"] is True
+        assert "available" in report["tropical_basis_check"]
+        assert "available" in report["tropical_prevariety_summary"]
         assert report["cas_artifacts"]["raw_tagged_output"]
     else:
         assert report["status"] in {"backend_not_installed", "timeout", "backend_error", "certificate_failed", "invalid_input"}

@@ -588,6 +588,8 @@ def test_tropical_fan_diagnostics_renders_certified_explicit_ideal(tmp_path: Pat
             "safe_to_render_as_tropical_fan": True,
             "ideal_schema": {"variables": ["x", "y"], "generators": ["x+y+1"]},
             "cas_artifacts": {"raw_tagged_output": "rays=matrix {{1,-1,0},{0,-1,1}}"},
+            "tropical_basis_check": {"available": True, "is_tropical_basis": True, "error": None},
+            "tropical_prevariety_summary": {"available": True, "rays": [[1, -1, 0], [0, -1, 1]], "max_cones": [[1], [0], [2]]},
             "fan_summary": {
                 "rays": [[1, -1, 0], [0, -1, 1]],
                 "max_cones": [[1], [0], [2]],
@@ -618,6 +620,8 @@ def test_tropical_fan_diagnostics_renders_certified_explicit_ideal(tmp_path: Pat
     assert payload["safe_to_render_as_tropical_fan"] is True
     assert "Tropical fan diagnostics: real Macaulay2 certificate" in markup
     assert "rho_0" in markup
+    assert "tropical basis check" in markup
+    assert "prevariety rays" in markup
     assert "one dimensional cones" in markup
     assert "not a multigraded free-resolution" in markup
 

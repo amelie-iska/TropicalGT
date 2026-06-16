@@ -335,3 +335,19 @@ Verification:
 - `PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_simplicial_visualization.py -q` -> `27 passed`.
 
 Next sequential item: expose/export a genuinely model-derived tropical ideal spec when the model has enough implemented algebraic state to justify it; until then the audit surface remains unavailable by design.
+
+## 2026-06-16 Tropical Basis And Prevariety Diagnostic Pass
+
+Status: implemented and focused-tested.
+
+Changes made:
+- Added optional Macaulay2 `isTropicalBasis` and `tropicalPrevariety` diagnostics to the tropical fan wrapper.
+- Side diagnostics are availability-gated and do not weaken the primary safe-render condition, which still requires certified `tropicalVariety` fan/cycle output.
+- The audit HTML exposes tropical-basis and prevariety rows so post-run reviewers can compare fan and prevariety evidence without treating either as a free-resolution certificate.
+
+Verification:
+- `python -m py_compile TropicalGT-I/src/tropicalgt/cas_tropical.py TropicalGT-I/src/tropicalgt/visualization.py` passed.
+- `PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_algebraic_persistence.py -q` -> `18 passed`.
+- Tropical fan focused visualization tests -> `2 passed`; `PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_simplicial_visualization.py -q` -> `27 passed`.
+
+Next sequential item: expand certified tropical package coverage only where Macaulay2 exposes stable, testable methods, and keep all unsupported checks as explicit unavailable states.

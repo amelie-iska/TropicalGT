@@ -3607,6 +3607,8 @@ def _write_tropical_fan_html(path: Path, payload: Mapping[str, Any]) -> None:
             )
         max_cones = summary.get("max_cones") if isinstance(summary.get("max_cones"), list) else []
         multiplicities = summary.get("multiplicities") if isinstance(summary.get("multiplicities"), list) else []
+        basis_check = diagnostics.get("tropical_basis_check") if isinstance(diagnostics.get("tropical_basis_check"), Mapping) else {}
+        prevariety = diagnostics.get("tropical_prevariety_summary") if isinstance(diagnostics.get("tropical_prevariety_summary"), Mapping) else {}
         table_rows = [
             ("status", diagnostics.get("status", "certified")),
             ("backend", diagnostics.get("backend", "Macaulay2")),
@@ -3619,6 +3621,10 @@ def _write_tropical_fan_html(path: Path, payload: Mapping[str, Any]) -> None:
             ("pure", summary.get("is_pure", False)),
             ("simplicial", summary.get("is_simplicial", False)),
             ("cycle certified", diagnostics.get("tropical_cycle_certified", False)),
+            ("tropical basis check", basis_check.get("is_tropical_basis") if basis_check.get("available") else basis_check.get("error", "unavailable")),
+            ("prevariety available", bool(prevariety.get("available"))),
+            ("prevariety rays", _json_clip(prevariety.get("rays", []), 180)),
+            ("prevariety max cones", _json_clip(prevariety.get("max_cones", []), 180)),
             ("warning", diagnostics.get("render_warning", "not a multigraded free-resolution certificate")),
         ]
         fig.add_trace(

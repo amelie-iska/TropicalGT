@@ -154,30 +154,43 @@ def build_macaulay2_tropical_script(schema: dict[str, Any]) -> str:
     ideal_expr = "ideal(" + ",".join(generators) + ")"
     lines = [
         "-- TropicalGT Macaulay2 Tropical fan diagnostic probe",
-        "tropicalOk = try (needsPackage \"Tropical\"; true) else false",
-        "print \"TROPICALGT_RESOLUTION_BEGIN\"",
-        "print \"backend=Macaulay2\"",
-        "print concatenate(\"tropical_package_available=\", toString tropicalOk)",
-        "if not tropicalOk then (print \"certificate_error=Tropical package is not loadable\"; print \"TROPICALGT_RESOLUTION_END\"; exit 2)",
+        'tropicalOk = try (needsPackage "Tropical"; true) else false',
+        'print "TROPICALGT_RESOLUTION_BEGIN"',
+        'print "backend=Macaulay2"',
+        'print concatenate("tropical_package_available=", toString tropicalOk)',
+        'if not tropicalOk then (print "certificate_error=Tropical package is not loadable"; print "TROPICALGT_RESOLUTION_END"; exit 2)',
         f"R = {ring}",
         f"I = {ideal_expr}",
+        "G = flatten entries gens I",
+        "basisOk = try (basisResult = isTropicalBasis G; true) else false",
+        'print concatenate("tropical_basis_check_available=", toString basisOk)',
+        'if basisOk then print concatenate("is_tropical_basis=", toString basisResult) else print "is_tropical_basis_error=not computed by Macaulay2 Tropical for this generator list"',
+        "preOk = try (P = tropicalPrevariety G; true) else false",
+        'print concatenate("tropical_prevariety_available=", toString preOk)',
+        'if preOk then print concatenate("prevariety_class=", toString class P)',
+        'if preOk then print concatenate("prevariety_rays=", replace("\\n", " || ", toString rays P))',
+        'if preOk then print concatenate("prevariety_max_cones=", replace("\\n", " || ", toString maxCones P))',
+        'if preOk then print concatenate("prevariety_lineality_space=", replace("\\n", " || ", toString linealitySpace P))',
+        'if preOk then (try print concatenate("prevariety_multiplicities=", replace("\\n", " || ", toString multiplicities P)) else print "prevariety_multiplicities_error=unavailable")',
+        'if preOk then (try print concatenate("prevariety_is_balanced=", toString isBalanced P) else print "prevariety_is_balanced_error=unavailable")',
+        'if preOk then (try print concatenate("prevariety_is_pure=", toString isPure P) else print "prevariety_is_pure_error=unavailable")',
+        'if preOk then (try print concatenate("prevariety_is_simplicial=", toString isSimplicial P) else print "prevariety_is_simplicial_error=unavailable")',
         "T = tropicalVariety I",
-        "print \"certificate_type=Macaulay2 Tropical tropicalVariety fan diagnostics\"",
-        "print \"tropical_cycle_certified=true\"",
-        "print concatenate(\"class=\", toString class T)",
-        "print concatenate(\"rays=\", replace(\"\\n\", \" || \", toString rays T))",
-        "print concatenate(\"max_cones=\", replace(\"\\n\", \" || \", toString maxCones T))",
-        "print concatenate(\"lineality_space=\", replace(\"\\n\", \" || \", toString linealitySpace T))",
-        "print concatenate(\"multiplicities=\", replace(\"\\n\", \" || \", toString multiplicities T))",
-        "print concatenate(\"is_balanced=\", toString isBalanced T)",
-        "print concatenate(\"is_pure=\", toString isPure T)",
-        "print concatenate(\"is_simplicial=\", toString isSimplicial T)",
-        "print concatenate(\"fan_text=\", replace(\"\\n\", \" || \", toString fan T))",
-        "print \"TROPICALGT_RESOLUTION_END\"",
+        'print "certificate_type=Macaulay2 Tropical tropicalVariety fan diagnostics"',
+        'print "tropical_cycle_certified=true"',
+        'print concatenate("class=", toString class T)',
+        'print concatenate("rays=", replace("\\n", " || ", toString rays T))',
+        'print concatenate("max_cones=", replace("\\n", " || ", toString maxCones T))',
+        'print concatenate("lineality_space=", replace("\\n", " || ", toString linealitySpace T))',
+        'print concatenate("multiplicities=", replace("\\n", " || ", toString multiplicities T))',
+        'print concatenate("is_balanced=", toString isBalanced T)',
+        'print concatenate("is_pure=", toString isPure T)',
+        'print concatenate("is_simplicial=", toString isSimplicial T)',
+        'print concatenate("fan_text=", replace("\\n", " || ", toString fan T))',
+        'print "TROPICALGT_RESOLUTION_END"',
         "exit 0",
     ]
     return "\n".join(lines) + "\n"
-
 
 def _certified_tropical_result(schema: dict[str, Any], parsed: dict[str, Any], tagged_output: str, attempts: list[dict[str, Any]]) -> dict[str, Any]:
     package_available = _parse_bool(parsed.get("tropical_package_available"))
@@ -195,6 +208,12 @@ def _certified_tropical_result(schema: dict[str, Any], parsed: dict[str, Any], t
     max_cones = _parse_m2_index_sets(max_cones_text)
     multiplicities = _parse_m2_int_list(parsed.get("multiplicities", ""))
     lineality = _parse_m2_matrix_rows(parsed.get("lineality_space", ""))
+    basis_available = _parse_bool(parsed.get("tropical_basis_check_available"))
+    prevariety_available = _parse_bool(parsed.get("tropical_prevariety_available"))
+    prevariety_rays = _parse_m2_matrix_rows(parsed.get("prevariety_rays", "")) if prevariety_available else []
+    prevariety_max_cones = _parse_m2_index_sets(parsed.get("prevariety_max_cones", "")) if prevariety_available else []
+    prevariety_lineality = _parse_m2_matrix_rows(parsed.get("prevariety_lineality_space", "")) if prevariety_available else []
+    prevariety_multiplicities = _parse_m2_int_list(parsed.get("prevariety_multiplicities", "")) if prevariety_available else []
     return {
         "schema_version": TROPICAL_SCHEMA_VERSION,
         "available": True,
@@ -218,6 +237,38 @@ def _certified_tropical_result(schema: dict[str, Any], parsed: dict[str, Any], t
             "lineality_space_text": str(parsed.get("lineality_space", "") or ""),
             "multiplicities_text": str(parsed.get("multiplicities", "") or ""),
             "fan_text": str(parsed.get("fan_text", "") or ""),
+            "is_tropical_basis": str(parsed.get("is_tropical_basis", "") or ""),
+            "is_tropical_basis_error": str(parsed.get("is_tropical_basis_error", "") or ""),
+            "prevariety_rays_text": str(parsed.get("prevariety_rays", "") or ""),
+            "prevariety_max_cones_text": str(parsed.get("prevariety_max_cones", "") or ""),
+            "prevariety_lineality_space_text": str(parsed.get("prevariety_lineality_space", "") or ""),
+            "prevariety_multiplicities_text": str(parsed.get("prevariety_multiplicities", "") or ""),
+        },
+        "tropical_basis_check": {
+            "available": bool(basis_available),
+            "is_tropical_basis": _parse_bool(parsed.get("is_tropical_basis")) if basis_available else None,
+            "error": None if basis_available else str(parsed.get("is_tropical_basis_error", "not computed") or "not computed"),
+            "method": "Macaulay2 Tropical isTropicalBasis on flatten entries gens I",
+        },
+        "tropical_prevariety_summary": {
+            "available": bool(prevariety_available),
+            "class": str(parsed.get("prevariety_class", "") or "") if prevariety_available else "",
+            "rays": prevariety_rays,
+            "max_cones": prevariety_max_cones,
+            "lineality_space": prevariety_lineality,
+            "multiplicities": prevariety_multiplicities,
+            "ray_count": len(prevariety_rays[0]) if prevariety_rays else 0,
+            "ambient_dimension": len(prevariety_rays),
+            "max_cone_count": len(prevariety_max_cones),
+            "is_balanced": _parse_bool(parsed.get("prevariety_is_balanced")),
+            "is_pure": _parse_bool(parsed.get("prevariety_is_pure")),
+            "is_simplicial": _parse_bool(parsed.get("prevariety_is_simplicial")),
+            "errors": {
+                "multiplicities": str(parsed.get("prevariety_multiplicities_error", "") or ""),
+                "is_balanced": str(parsed.get("prevariety_is_balanced_error", "") or ""),
+                "is_pure": str(parsed.get("prevariety_is_pure_error", "") or ""),
+                "is_simplicial": str(parsed.get("prevariety_is_simplicial_error", "") or ""),
+            },
         },
         "fan_summary": {
             "rays": rays,
