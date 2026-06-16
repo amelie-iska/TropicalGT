@@ -109,7 +109,7 @@ This checklist merges the browser/photo review, the current active training stat
 Implementation checkpoint, 2026-06-16:
 - Zero-default config flags and model hooks are now implemented for chart-bundle/toric telemetry and losses: bundle transport L1, cocycle defect, flat-rank defect, toric normal-fan loss, GraphCG-toric cell agreement, chart-BPB consistency availability, and atom-stability gap.
 - The implementation is deliberately auxiliary and gated. Disabled defaults emit zero metrics; enabled zero-weight hooks preserve logits and loss; positive coefficients affect only the auxiliary regularizer.
-- Chart-local NLL/BPB partitions are now implemented for supervised batches and remain unavailable when targets are absent. Remaining items in this section are deeper math/rendering work: explicit overlap-pair/triple transport ids, landscape transport metrics, and matched BPB/graph-BPB ablations before promoting any nonzero coefficient.
+- Chart-local NLL/BPB partitions and transport-gated memory persistence-landscape L2/cosine diagnostics are now implemented where their evidence exists. Remaining items in this section are deeper math/rendering work: explicit overlap-pair/triple transport ids and matched BPB/graph-BPB ablations before promoting any nonzero coefficient.
 
 
 ### Paper Workstream Status: Vector Bundles and Tropical Toric Embeddings
@@ -188,7 +188,7 @@ Remaining CAS items:
 - CAS package survey: look for Sage, Macaulay2, Singular, RIVET/multipers, polymake, Normaliz, and related packages that compute real multigraded modules, minimal resolutions, Betti tables, Fitting ideals, minors, Buchsbaum-Eisenbud diagnostics, tropical fans, toric varieties, and stable intersections.
 - Maclagan-style toric embedding research direction: investigate whether the transformer graph-state and tropical-attention coordinate system can be embedded into a toric variety via model-derived monomial coordinates, Newton polytopes, fan data, and one dimensional cone data. Any resulting implementation must distinguish theorem-level certified constructions from diagnostic embeddings or visual probes.
 
-_Last updated: 2026-06-16T01:12:00+00:00_
+_Last updated: 2026-06-16T01:28:00+00:00_
 
 
 ## 2026-06-16 Fresh b59 5K Review Gate and Worker Handoff
@@ -206,4 +206,4 @@ No TropicalGT-I metric, loss, visualization, analogical map, persistence module,
 
 Use "one dimensional cone" or "one dimensional cones" as the preferred fan-theoretic language whenever the intended object is a cone of a fan or a cone-indexed filtration datum. Use singular or plural according to ordinary grammar.
 
-_Last updated: 2026-06-16T01:12:00+00:00_
+_Last updated: 2026-06-16T01:28:00+00:00_

@@ -321,3 +321,10 @@
 - The chart head now reports global chart BPB, min/max chart-local BPB, BPB spread, active chart count, availability, and a mass-weighted chart-BPB consistency objective. Missing targets still render as explicit unavailable zeros.
 - W&B grouping exposes these scalars under `10_bundle_toric` for the post-5K restart review and ablation planning.
 - Verification: `PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_losses_and_model.py -q` returned `9 passed`; the combined model/training metrics slice returned `20 passed`.
+
+## Iteration 39: Transport-Gated Persistence-Landscape Memory Diagnostics
+
+- Added `transported_persistence_landscape_diagnostics` for analogical retrieval. The diagnostic compares cached GUDHI persistence-landscape vectors only after the model-probability simplicial map is available and fully filtration/simplex-tree preserving.
+- Retrieval rows now expose `transported_landscape`, `transported_landscape_available`, `transported_landscape_l2`, `transported_landscape_l2_similarity`, `transported_landscape_cosine`, and an unavailable reason when probability transport or landscape vectors are missing.
+- Periodic training aggregation now logs transported-landscape availability, mean L2 distance, and mean cosine under the memory W&B group. These are audit metrics only; retrieval scoring is unchanged in this pass.
+- Verification: `python -m py_compile` passed for memory/run; `PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_metrics_and_memory.py -q` returned `10 passed`.

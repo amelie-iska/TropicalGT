@@ -516,6 +516,57 @@ def test_analogical_memory_retrieval_uses_probability_simplicial_map_weight(tmp_
     assert hits[0]["probability_simplicial_map"]["chain_map_diagnostics"]["safe_to_use_as_persistence_module_morphism"] is True
 
 
+def test_analogical_memory_retrieval_reports_transported_landscape_diagnostics(tmp_path):
+    query_complex = _probability_complex("q")
+    matching_complex = _probability_complex("m")
+    query_topology = _landscape_topology([0.0, 0.25, 0.75, 0.25, 0.0])
+    matching_topology = _landscape_topology([0.0, 0.24, 0.74, 0.26, 0.0])
+
+    record = _probability_memory_record("match", matching_complex)
+    record.topological_algebra = matching_topology
+    record.metadata["trajectory_probability_topological_algebra"] = matching_topology
+    bank = AnalogicalMemoryBank(tmp_path / "transported_landscape_memory.jsonl", max_records=8)
+    bank.extend([record])
+
+    hits = bank.retrieve(
+        [0.0, 0.0, 0.0],
+        [0.0, 0.0, 0.0],
+        top_k=1,
+        embedding_weight=0.0,
+        signature_weight=0.0,
+        score_weight=0.0,
+        landscape_weight=0.0,
+        vector_representation_weight=0.0,
+        probability_map_weight=1.0,
+        diversity_weight=0.0,
+        query_topology=query_topology,
+        query_probability_complex=query_complex,
+    )
+    assert hits[0]["transported_landscape_available"] is True
+    assert hits[0]["transported_landscape"]["source"] == "probability_simplicial_map_plus_gudhi_landscape"
+    assert hits[0]["transported_landscape"]["chain_map_certified"] is True
+    assert hits[0]["transported_landscape_l2"] >= 0.0
+    assert hits[0]["transported_landscape_cosine"] > 0.0
+    assert hits[0]["transported_landscape_l2_similarity"] > 0.0
+
+    unavailable_hits = bank.retrieve(
+        [0.0, 0.0, 0.0],
+        [0.0, 0.0, 0.0],
+        top_k=1,
+        embedding_weight=0.0,
+        signature_weight=0.0,
+        score_weight=0.0,
+        landscape_weight=0.0,
+        vector_representation_weight=0.0,
+        probability_map_weight=0.0,
+        diversity_weight=0.0,
+        query_topology=query_topology,
+        query_probability_complex={},
+    )
+    assert unavailable_hits[0]["transported_landscape_available"] is False
+    assert unavailable_hits[0]["transported_landscape_reason"] == "probability_simplicial_map_unavailable"
+
+
 def test_analogical_memory_quality_gate_rejects_low_quality_storage(tmp_path):
     report = {
         "candidates": [

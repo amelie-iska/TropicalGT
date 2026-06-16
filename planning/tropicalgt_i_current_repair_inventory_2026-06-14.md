@@ -270,3 +270,19 @@ Verification:
 - `PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_losses_and_model.py TropicalGT-I/tests/test_training_metrics.py -q` -> `20 passed`.
 
 Next sequential item: implement the remaining transport-side chart-bundle metrics, especially explicit overlap-pair/triple transport ids and memory transported-landscape L2/cosine diagnostics, while b59 continues toward step `5000`.
+
+## 2026-06-16 Transport-Gated Landscape Memory Pass
+
+Status: implemented and focused-tested.
+
+Changes made:
+- Analogical memory retrieval now reports transported persistence-landscape diagnostics only when the probability simplicial map is available and fully preserved.
+- The diagnostic reuses real cached GUDHI landscape vectors and records L2 distance, L2 similarity, cosine, correlation, overlap dimension, chain-map certification, and persistence-module morphism certification.
+- Missing probability transport or missing landscape vectors produce explicit unavailable reasons and zero scalar fields.
+- Periodic training metrics now aggregate transported-landscape availability, L2, and cosine for W&B/post-5K review.
+
+Verification:
+- `python -m py_compile TropicalGT-I/src/tropicalgt/memory.py TropicalGT-I/src/tropicalgt/run.py` passed.
+- `PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_metrics_and_memory.py -q` -> `10 passed`.
+
+Next sequential item: add explicit overlap-pair/triple transport identifiers in the chart-bundle head and visual/audit payloads, then use matched ablations after the b59 5K review before any nonzero transport coefficient is promoted.

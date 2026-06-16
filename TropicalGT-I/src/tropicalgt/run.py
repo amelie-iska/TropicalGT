@@ -227,6 +227,9 @@ WANDB_PRIORITY_GROUPS: tuple[tuple[str, tuple[str, ...]], ...] = (
             "analogical_memory_vector_aggregate_similarity_mean",
             "analogical_memory_vector_score_contribution_mean",
             "analogical_memory_landscape_score_contribution_mean",
+            "analogical_memory_transported_landscape_available_rate",
+            "analogical_memory_transported_landscape_l2_mean",
+            "analogical_memory_transported_landscape_cosine_mean",
         ),
     ),
     (
@@ -1011,6 +1014,9 @@ def _run_periodic_validation_round(
     periodic_memory_probability_map_score_contributions: list[float] = []
     periodic_memory_probability_map_preservation_rates: list[float] = []
     periodic_memory_probability_map_similarities: list[float] = []
+    periodic_memory_transported_landscape_available = 0
+    periodic_memory_transported_landscape_l2: list[float] = []
+    periodic_memory_transported_landscape_cosines: list[float] = []
     periodic_memory_certified_cas_score_contributions: list[float] = []
     periodic_memory_certified_cas_similarities: list[float] = []
     periodic_got_scaling_budgets: list[dict[str, Any]] = []
@@ -1155,6 +1161,10 @@ def _run_periodic_validation_round(
                         periodic_memory_probability_map_score_contributions.append(float(hit.get("probability_simplicial_map_score_contribution", 0.0) or 0.0))
                         periodic_memory_probability_map_preservation_rates.append(float(hit.get("probability_simplicial_map_preservation_rate", 0.0) or 0.0))
                         periodic_memory_probability_map_similarities.append(float(hit.get("probability_simplicial_map_similarity", 0.0) or 0.0))
+                        if bool(hit.get("transported_landscape_available")):
+                            periodic_memory_transported_landscape_available += 1
+                        periodic_memory_transported_landscape_l2.append(float(hit.get("transported_landscape_l2", 0.0) or 0.0))
+                        periodic_memory_transported_landscape_cosines.append(float(hit.get("transported_landscape_cosine", 0.0) or 0.0))
                         if bool(hit.get("certified_cas_evidence_available")):
                             periodic_memory_certified_cas_available += 1
                         if bool(hit.get("certified_cas_evidence_match")):
@@ -1208,6 +1218,9 @@ def _run_periodic_validation_round(
                     metrics["analogical_memory_probability_map_score_contribution_mean"] = float(np.mean(periodic_memory_probability_map_score_contributions)) if periodic_memory_probability_map_score_contributions else 0.0
                     metrics["analogical_memory_probability_map_preservation_rate_mean"] = float(np.mean(periodic_memory_probability_map_preservation_rates)) if periodic_memory_probability_map_preservation_rates else 0.0
                     metrics["analogical_memory_probability_map_similarity_mean"] = float(np.mean(periodic_memory_probability_map_similarities)) if periodic_memory_probability_map_similarities else 0.0
+                    metrics["analogical_memory_transported_landscape_available_rate"] = float(periodic_memory_transported_landscape_available / max(periodic_memory_retrieved_count, 1))
+                    metrics["analogical_memory_transported_landscape_l2_mean"] = float(np.mean(periodic_memory_transported_landscape_l2)) if periodic_memory_transported_landscape_l2 else 0.0
+                    metrics["analogical_memory_transported_landscape_cosine_mean"] = float(np.mean(periodic_memory_transported_landscape_cosines)) if periodic_memory_transported_landscape_cosines else 0.0
                     metrics["analogical_memory_certified_cas_available_rate"] = float(periodic_memory_certified_cas_available / max(periodic_memory_retrieved_count, 1))
                     metrics["analogical_memory_certified_cas_match_rate"] = float(periodic_memory_certified_cas_matches / max(periodic_memory_retrieved_count, 1))
                     metrics["analogical_memory_certified_cas_score_contribution_mean"] = float(np.mean(periodic_memory_certified_cas_score_contributions)) if periodic_memory_certified_cas_score_contributions else 0.0

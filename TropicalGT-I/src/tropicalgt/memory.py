@@ -247,6 +247,7 @@ class AnalogicalMemoryBank:
             probability_map = probability_simplicial_map_diagnostics(query_probability_complex, trajectory_probability_complex)
             probability_map_similarity = _probability_simplicial_map_similarity(probability_map)
             probability_map_contribution = float(probability_map_weight) * probability_map_similarity
+            transported_landscape = transported_persistence_landscape_diagnostics(query_topology, memory_topology, probability_map)
             certified_cas_report = certified_cas_evidence_similarity(query_topology, memory_topology)
             certified_cas_retrieval_similarity = float(certified_cas_report.get("retrieval_score_similarity", 0.0) or 0.0)
             certified_cas_contribution = float(certified_cas_weight) * certified_cas_retrieval_similarity
@@ -336,6 +337,12 @@ class AnalogicalMemoryBank:
                     "probability_simplicial_map_available": bool(probability_map.get("available")),
                     "probability_simplicial_map_source": probability_map.get("map_source", "none"),
                     "probability_simplicial_map_preservation_rate": float(probability_map.get("simplex_tree_map_preservation_rate", 0.0) or 0.0),
+                    "transported_landscape": transported_landscape,
+                    "transported_landscape_available": bool(transported_landscape.get("available")),
+                    "transported_landscape_l2": float(transported_landscape.get("l2_distance", 0.0) or 0.0),
+                    "transported_landscape_l2_similarity": float(transported_landscape.get("l2_similarity", 0.0) or 0.0),
+                    "transported_landscape_cosine": float(transported_landscape.get("cosine", 0.0) or 0.0),
+                    "transported_landscape_reason": transported_landscape.get("reason"),
                     "topological_algebra": record.topological_algebra,
                     "signature_vector": record.signature_vector,
                     "derived_signature": record.derived_signature,
@@ -1470,6 +1477,58 @@ def persistence_landscape_vector_similarity(query_topology: dict[str, Any], memo
         "l2_distance": l2_distance,
         "l2_similarity": l2_similarity,
         "correlation": correlation,
+    }
+
+
+def transported_persistence_landscape_diagnostics(
+    query_topology: dict[str, Any],
+    memory_topology: dict[str, Any],
+    probability_map: dict[str, Any],
+) -> dict[str, Any]:
+    if not isinstance(probability_map, dict) or not probability_map.get("available"):
+        return {
+            "available": False,
+            "source": "probability_simplicial_map_plus_gudhi_landscape",
+            "reason": "probability_simplicial_map_unavailable",
+        }
+    preservation = float(probability_map.get("simplex_tree_map_preservation_rate", 0.0) or 0.0)
+    if preservation < 1.0 - 1.0e-9:
+        return {
+            "available": False,
+            "source": "probability_simplicial_map_plus_gudhi_landscape",
+            "reason": "probability_simplicial_map_not_fully_preserved",
+            "simplex_tree_map_preservation_rate": preservation,
+        }
+    landscape = persistence_landscape_vector_similarity(query_topology, memory_topology)
+    if not landscape.get("available"):
+        return {
+            "available": False,
+            "source": "probability_simplicial_map_plus_gudhi_landscape",
+            "reason": "landscape_vector_unavailable",
+            "landscape_reason": landscape.get("reason"),
+            "simplex_tree_map_preservation_rate": preservation,
+            "probability_map_source": probability_map.get("map_source", "none"),
+        }
+    return {
+        "available": True,
+        "source": "probability_simplicial_map_plus_gudhi_landscape",
+        "transport_source": probability_map.get("map_source", "model_probability_jensen_shannon_assignment"),
+        "comparison_space": "GUDHI persistence landscape vectors compared only after certified probability-simplicial transport",
+        "simplex_tree_map_preservation_rate": preservation,
+        "chain_map_certified": bool(
+            isinstance(probability_map.get("chain_map_diagnostics"), dict)
+            and probability_map.get("chain_map_diagnostics", {}).get("boundary_commutation_certified")
+        ),
+        "persistence_module_morphism_certified": bool(
+            isinstance(probability_map.get("persistence_module_morphism_diagnostics"), dict)
+            and probability_map.get("persistence_module_morphism_diagnostics", {}).get("morphism_certified")
+        ),
+        "l2_distance": float(landscape.get("l2_distance", 0.0) or 0.0),
+        "l2_similarity": float(landscape.get("l2_similarity", 0.0) or 0.0),
+        "cosine": float(landscape.get("cosine", 0.0) or 0.0),
+        "correlation": float(landscape.get("correlation", 0.0) or 0.0),
+        "overlap_dim": int(landscape.get("overlap_dim", 0) or 0),
+        "landscape_vector_similarity": landscape,
     }
 
 
