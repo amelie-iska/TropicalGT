@@ -415,3 +415,20 @@ Legacy b59 note:
 - The already-running b59 process predates tropical fan and bifiltration visual sidecar writers. Its old step-500 validation probe still fails on missing `tropical_fan_diagnostics.json/html`; the post-5K review should either rerender missing audits with current code or record explicit unavailable states rather than treating absent old sidecars as completed evidence.
 
 Next sequential item: continue the visual/math repair queue by adding a small post-hoc legacy audit repair/rerender path or move into the remaining CAS/free-resolution backend coverage, depending on the b59 5K timing.
+
+## 2026-06-16 Legacy Audit Backfill Pass
+
+Status: implemented, focused-tested, and live-smoked on b59 step 500.
+
+Changes made:
+- Added a dedicated legacy audit backfill helper for `got_audit` directories produced before the current tropical fan and bivariate staircase visual-contract writers existed.
+- Missing tropical fan diagnostics are repaired only as explicit unavailable/no-proxy artifacts unless an actual model-derived ideal and CAS certificate are present.
+- Missing two-parameter bifiltration visual sidecars are regenerated only from the raw `trajectory_level_radius_bifiltration.json` payload, preserving the Miller-Sturmfels bivariate staircase contract.
+- The helper writes `backfill_report.json` so post-5K reviewers can distinguish generated unavailable states from certified mathematical evidence.
+
+Verification:
+- `python -m py_compile TropicalGT-I/scripts/backfill_interactive_audit_artifacts.py` passed.
+- `PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_backfill_interactive_audit_artifacts.py TropicalGT-I/tests/test_interactive_artifact_validator.py -q` -> `11 passed`.
+- Live b59 step-500 audit backfill plus strict validator -> PASS, rows checked `1`, `bpb=2.011564489777277`, `graph_bpb=19.847021684446936`, and `graph_conditioned_bpb_no_side_cost=1.7685317056430416`.
+
+Next sequential item: post-5K review should run this helper on legacy b59 audit folders before strict validation, then proceed with metrics, advanced sidecars, topological/geometric/algebraic visual review, and evidence-backed restart planning.

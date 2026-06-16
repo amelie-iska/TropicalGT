@@ -188,7 +188,7 @@ Remaining CAS items:
 - CAS package survey: look for Sage, Macaulay2, Singular, RIVET/multipers, polymake, Normaliz, and related packages that compute real multigraded modules, minimal resolutions, Betti tables, Fitting ideals, minors, Buchsbaum-Eisenbud diagnostics, tropical fans, toric varieties, and stable intersections.
 - Maclagan-style toric embedding research direction: investigate whether the transformer graph-state and tropical-attention coordinate system can be embedded into a toric variety via model-derived monomial coordinates, Newton polytopes, fan data, and one dimensional cone data. Any resulting implementation must distinguish theorem-level certified constructions from diagnostic embeddings or visual probes.
 
-_Last updated: 2026-06-16T03:05:00+00:00_
+_Last updated: 2026-06-16T03:20:00+00:00_
 
 
 ## 2026-06-16 Fresh b59 5K Review Gate and Worker Handoff
@@ -220,10 +220,17 @@ _Last updated: 2026-06-16T03:05:00+00:00_
 - The old unreachable rank-surface-first implementation block and the retired `trajectory_level_radius_bifiltration_3d` source path key were removed. Keep 3D fiber-rank displays only as secondary diagnostics.
 - Already-running b59 periodic artifacts may lack this new sidecar and the tropical fan diagnostic pair; post-5K review must rerender or record unavailable states rather than inferring those missing artifacts.
 
+## 2026-06-16 Legacy Audit Backfill Addendum
+
+- Added `TropicalGT-I/scripts/backfill_interactive_audit_artifacts.py` and `TropicalGT-I/tests/test_backfill_interactive_audit_artifacts.py` for legacy audit directories produced before the current tropical fan diagnostics and bivariate staircase visual sidecar existed.
+- Post-5K b59 workflow: before running strict `validate_interactive_audit_artifacts.py` on an older periodic `got_audit`, run the backfill helper. It writes explicit unavailable tropical fan diagnostics when no certified model-derived ideal exists and regenerates the bifiltration visual contract only from the raw bifiltration payload.
+- Live step-500 b59 smoke after backfill validated successfully. Treat the helper as a repair/rerender step for audit completeness, not as mathematical evidence of a CAS certificate, tropical fan, or free resolution.
+
+
 ## Real Implementations Only Policy
 
 No TropicalGT-I metric, loss, visualization, analogical map, persistence module, free resolution, derived comparison, tropical-cycle diagnostic, or CAS artifact should be presented as a mathematical object unless it is computed from the actual model outputs, graph states, embeddings, probabilities, simplex trees, bifiltrations, or certified CAS/backend output that define that object. Temporary placeholders, synthetic fallback objects, mock charts, fabricated simplices, and convenience stand-ins are not acceptable. When a requested object cannot yet be computed, the artifact must render an explicit unavailable/uncertified state and the training metric must either be disabled or logged under an audit-only unavailable flag. Finite chain-presentation diagnostics may be shown only as chain diagnostics, never as free resolutions. Total-graded or ungraded CAS output may be shown as real CAS output only under its actual grading; it must not be advertised as a multigraded `F2[x_level,x_radius]` free resolution unless the backend certifies that multigraded structure.
 
 Use "one dimensional cone" or "one dimensional cones" as the preferred fan-theoretic language whenever the intended object is a cone of a fan or a cone-indexed filtration datum. Use singular or plural according to ordinary grammar.
 
-_Last updated: 2026-06-16T03:05:00+00:00_
+_Last updated: 2026-06-16T03:20:00+00:00_
