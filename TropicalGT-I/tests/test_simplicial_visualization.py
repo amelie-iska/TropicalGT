@@ -14,6 +14,8 @@ from tropicalgt.tokenizer import TokenGTTokenizer
 from tropicalgt.visualization import (
     _attach_graph_token_direction_overlay,
     _cas_real_resolution_display,
+    _complex_slider_frame_contract,
+    _complex_slider_traces,
     _derived_invariant_comparison,
     _gudhi_canonical_complex,
     _has_real_probability_filtration,
@@ -408,6 +410,72 @@ def test_simplex_tree_page_is_unavailable_without_gudhi_not_raw_json(monkeypatch
     assert "No simplex-tree/trie or face-coface poset is rendered without a real GUDHI SimplexTree" in html
     assert "actual face-to-coface covers" not in html
     assert "optional sorted-label trie prefix links" not in html
+
+
+def test_complex_slider_contract_starts_with_disjoint_vertices_and_monotone_growth():
+    obj = {
+        "summary": {
+            "filtration_model": "model_graph_token_embedding_vietoris_rips_2_skeleton",
+            "radius_filtration": True,
+        },
+        "thresholds": [0.0, 0.5, 1.0],
+        "simplices": [
+            {"simplex": ["a"], "dimension": 0, "filtration": 0.0, "type": "state"},
+            {"simplex": ["b"], "dimension": 0, "filtration": 0.0, "type": "state"},
+            {"simplex": ["c"], "dimension": 0, "filtration": 0.0, "type": "state"},
+            {"simplex": ["a", "b"], "dimension": 1, "filtration": 0.0, "type": "zero_radius_edge"},
+            {"simplex": ["b", "c"], "dimension": 1, "filtration": 0.5, "type": "radius_edge"},
+            {"simplex": ["a", "b", "c"], "dimension": 2, "filtration": 1.0, "type": "radius_face"},
+        ],
+        "trajectory_overlay": {
+            "edges": [{"source": "a", "target": "b", "filtration": 0.0, "action": "expand"}],
+        },
+        "graph_token_direction_overlay": {
+            "edges": [{"source": "b", "target": "c", "filtration": 0.0, "role": "source-node-to-edge-token"}],
+        },
+        "decoding_causal_overlay": {
+            "edges": [{"source": "a", "target": "c", "filtration": 0.0, "role": "forward_decoding_order"}],
+        },
+    }
+    coords = {"a": (0.0, 0.0, 0.0), "b": (1.0, 0.0, 0.0), "c": (0.0, 1.0, 0.0)}
+
+    contract = _complex_slider_frame_contract(obj, thresholds=[0.0, 0.5, 1.0])
+    assert contract["radius_filtration"] is True
+    assert contract["first_frame_disjoint_vertices_only"] is True
+    assert contract["monotone_visible_counts"] is True
+    first, middle, final = contract["frames"]
+    assert first == {
+        "threshold": 0.0,
+        "initial_radius_frame": True,
+        "vertices": 3,
+        "solid_edges": 0,
+        "filled_faces": 0,
+        "dotted_trajectory_overlays": 0,
+        "dotted_direction_overlays": 0,
+        "dotted_decoding_overlays": 0,
+        "dotted_overlays": 0,
+    }
+    assert middle["solid_edges"] == 2
+    assert final["filled_faces"] == 1
+    assert final["dotted_overlays"] == 3
+
+    def non_null_count(trace) -> int:
+        return sum(1 for value in list(trace.x) if value is not None)
+
+    first_traces = {trace.name: trace for trace in _complex_slider_traces(obj, coords, threshold=0.0)}
+    assert non_null_count(first_traces["solid radius/simplicial edges induced from the same embeddings"]) == 0
+    assert non_null_count(first_traces["faint GoT parent-child trajectory overlay"]) == 0
+    assert non_null_count(first_traces["faint directed graph-token overlay"]) == 0
+    assert non_null_count(first_traces["dotted causal/decoding order overlay"]) == 0
+    assert non_null_count(first_traces["0-simplices"]) == 3
+
+    final_traces = {trace.name: trace for trace in _complex_slider_traces(obj, coords, threshold=1.0)}
+    assert non_null_count(final_traces["solid radius/simplicial edges induced from the same embeddings"]) == 4
+    assert non_null_count(final_traces["faint GoT parent-child trajectory overlay"]) == 2
+    assert non_null_count(final_traces["faint directed graph-token overlay"]) == 2
+    assert non_null_count(final_traces["dotted causal/decoding order overlay"]) > 2
+    mesh = final_traces["filled 2-simplices gated by radius slider"]
+    assert len(mesh.i) == 1
 
 
 def test_simplicial_object_svg_uses_3d_pca_radius_filtration():

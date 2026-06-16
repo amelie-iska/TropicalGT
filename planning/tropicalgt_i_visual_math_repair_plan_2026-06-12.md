@@ -244,3 +244,27 @@
 - Focused verification passed with `CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/scripts:TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_algebraic_persistence.py -q` returning `30 passed`.
 - Next linear item remains the visual/math repair queue: continue no-proxy simplex-tree/radius/analogical/tropical-support repairs while b62 trains to the 5K gate.
 
+## 2026-06-16 Radius Slider Contract Repair
+
+Sequential visual/math item completed after the toric/tropical CAS cache hardening pass:
+
+- Added a machine-readable `radius_filtration_slider_contract` to 3D complex slider Plotly metadata. The contract records per-frame thresholds, visible 0-simplices, solid radius edges, filled faces, dotted trajectory overlays, dotted graph-token overlays, and dotted causal/decoding overlays.
+- Enforced the initial-frame rule for true radius filtrations: the first slider frame is a disjoint 0-simplex cloud. Positive-dimensional solid simplices and dotted overlays are hidden on that initial frame even when an input edge reports filtration `0.0`.
+- Preserved later-frame semantics: solid edges and filled 2-simplices remain radius-gated; dotted overlays remain order/causal metadata and do not become simplices.
+- Added regression coverage proving first-frame disjointness, monotone visible counts, and later-frame recovery of radius edges, filled faces, and dotted overlays.
+
+Validation:
+
+```text
+/home/iska/miniconda3/envs/tokengt/bin/python -m py_compile TropicalGT-I/src/tropicalgt/visualization.py TropicalGT-I/tests/test_simplicial_visualization.py
+# passed
+CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/scripts:TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_simplicial_visualization.py -q
+# 37 passed
+CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/scripts:TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_interactive_artifact_validator.py TropicalGT-I/tests/test_backfill_interactive_audit_artifacts.py -q
+# 11 passed
+```
+
+Operational note: b62 remained alive during verification and had advanced past step 181/5000 with train loss/NLL around 1.641/1.617 when checked.
+
+Next linear visual/math item: continue from slider-contract verification into remaining no-proxy simplex-tree, analogical-map, NLL-density, and tropical-support readability repairs.
+

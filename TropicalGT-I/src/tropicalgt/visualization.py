@@ -2088,6 +2088,7 @@ def _write_complex_slider_map(path: Path, obj: dict[str, object], title: str, su
     backend_label = simplex_tree.get("backend", "json")
     fig.update_layout(
         template="plotly_dark",
+        meta={"radius_filtration_slider_contract": _complex_slider_frame_contract(obj, thresholds=thresholds)},
         title=(
             f"{title}<br><sup>{html.escape(subtitle)} | filtration backend={html.escape(str(backend_label))} "
             f"| {html.escape(layout_kind)} | V={summary.get('num_vertices', len(vertices))}, "
@@ -2386,6 +2387,112 @@ def _is_radius_filtration_complex(obj: dict[str, object]) -> bool:
     return bool(summary.get("radius_filtration")) or "vietoris_rips" in model or "radius" in model
 
 
+def _initial_radius_frame_threshold(obj: dict[str, object]) -> float | None:
+    if not _is_radius_filtration_complex(obj):
+        return None
+    thresholds = _display_thresholds(obj)
+    if not thresholds:
+        return None
+    return float(thresholds[0])
+
+
+def _is_initial_radius_frame(obj: dict[str, object], threshold: float) -> bool:
+    initial = _initial_radius_frame_threshold(obj)
+    if initial is None:
+        return False
+    try:
+        value = float(threshold)
+    except (TypeError, ValueError):
+        return False
+    return abs(value - initial) <= 1e-12
+
+
+def _complex_slider_frame_contract(obj: dict[str, object], thresholds: list[float] | None = None) -> dict[str, object]:
+    """Machine-readable contract for the radius slider frames.
+
+    For true radius filtrations the first frame is a disjoint 0-simplex cloud: no
+    solid edges, filled faces, or dotted order overlays are rendered there.
+    Subsequent frames are monotone in visible simplices and overlays.
+    """
+
+    thresholds = thresholds or _display_thresholds(obj)
+    frames: list[dict[str, object]] = []
+    previous = {"vertices": 0, "solid_edges": 0, "filled_faces": 0, "dotted_overlays": 0}
+    monotone = True
+    for threshold in thresholds:
+        initial_radius_frame = _is_initial_radius_frame(obj, float(threshold))
+        vertices = [
+            s for s in obj.get("simplices", [])
+            if isinstance(s, dict)
+            and int(s.get("dimension", -1)) == 0
+            and (_is_radius_filtration_complex(obj) or float(s.get("filtration", 0.0) or 0.0) <= float(threshold) + 1e-12)
+        ]
+        visible = {str((row.get("simplex") or [""])[0]) for row in vertices}
+        solid_edges = [] if initial_radius_frame else [
+            s for s in obj.get("simplices", [])
+            if isinstance(s, dict)
+            and int(s.get("dimension", -1)) == 1
+            and float(s.get("filtration", 0.0) or 0.0) <= float(threshold) + 1e-12
+            and all(str(v) in visible for v in (s.get("simplex") or [])[:2])
+        ]
+        filled_faces = [] if initial_radius_frame else [
+            s for s in obj.get("simplices", [])
+            if isinstance(s, dict)
+            and int(s.get("dimension", -1)) == 2
+            and float(s.get("filtration", 0.0) or 0.0) <= float(threshold) + 1e-12
+            and all(str(v) in visible for v in (s.get("simplex") or [])[:3])
+        ]
+
+        def overlay_visible(edge: object) -> bool:
+            if initial_radius_frame or not isinstance(edge, dict):
+                return False
+            source = str(edge.get("source", ""))
+            target = str(edge.get("target", ""))
+            if source not in visible or target not in visible:
+                return False
+            try:
+                filt = float(edge.get("filtration", edge.get("radius", 0.0)) or 0.0)
+            except (TypeError, ValueError):
+                filt = 0.0
+            return filt <= float(threshold) + 1e-12
+
+        trajectory_overlay = obj.get("trajectory_overlay", {}) if isinstance(obj.get("trajectory_overlay"), dict) else {}
+        direction_overlay = obj.get("graph_token_direction_overlay", {}) if isinstance(obj.get("graph_token_direction_overlay"), dict) else {}
+        decoding_overlay = obj.get("decoding_causal_overlay", {}) if isinstance(obj.get("decoding_causal_overlay"), dict) else {}
+        trajectory_count = sum(1 for edge in trajectory_overlay.get("edges", []) if overlay_visible(edge)) if isinstance(trajectory_overlay.get("edges"), list) else 0
+        direction_count = sum(1 for edge in direction_overlay.get("edges", []) if overlay_visible(edge)) if isinstance(direction_overlay.get("edges"), list) else 0
+        decoding_count = sum(1 for edge in decoding_overlay.get("edges", []) if overlay_visible(edge)) if isinstance(decoding_overlay.get("edges"), list) else 0
+        dotted_total = trajectory_count + direction_count + decoding_count
+        row = {
+            "threshold": float(threshold),
+            "initial_radius_frame": bool(initial_radius_frame),
+            "vertices": len(vertices),
+            "solid_edges": len(solid_edges),
+            "filled_faces": len(filled_faces),
+            "dotted_trajectory_overlays": int(trajectory_count),
+            "dotted_direction_overlays": int(direction_count),
+            "dotted_decoding_overlays": int(decoding_count),
+            "dotted_overlays": int(dotted_total),
+        }
+        for key in previous:
+            if row[key] < previous[key]:
+                monotone = False
+        previous = {key: int(row[key]) for key in previous}
+        frames.append(row)
+    return {
+        "radius_filtration": _is_radius_filtration_complex(obj),
+        "first_frame_disjoint_vertices_only": (
+            bool(frames)
+            and bool(frames[0].get("initial_radius_frame"))
+            and int(frames[0].get("solid_edges", 0)) == 0
+            and int(frames[0].get("filled_faces", 0)) == 0
+            and int(frames[0].get("dotted_overlays", 0)) == 0
+        ),
+        "monotone_visible_counts": bool(monotone),
+        "frames": frames,
+    }
+
+
 def _gudhi_canonical_complex(obj: dict[str, object]) -> dict[str, object]:
     """Canonicalize a JSON filtered complex through GUDHI SimplexTree when available."""
     if not isinstance(obj, dict):
@@ -2497,14 +2604,15 @@ def _complex_slider_traces(
         and (radius_vertices_enter_at_zero or float(s.get("filtration", 0.0) or 0.0) <= threshold + 1e-12)
     ]
     visible = {str((row.get("simplex") or [""])[0]) for row in vertices}
-    edges = [
+    initial_radius_frame = _is_initial_radius_frame(obj, threshold)
+    edges = [] if initial_radius_frame else [
         s for s in obj.get("simplices", [])
         if isinstance(s, dict)
         and int(s.get("dimension", -1)) == 1
         and float(s.get("filtration", 0.0) or 0.0) <= threshold + 1e-12
         and all(str(v) in visible for v in (s.get("simplex") or [])[:2])
     ]
-    triangles = [
+    triangles = [] if initial_radius_frame else [
         s for s in obj.get("simplices", [])
         if isinstance(s, dict)
         and int(s.get("dimension", -1)) == 2
@@ -2534,7 +2642,7 @@ def _complex_slider_traces(
     overlay_y: list[float | None] = []
     overlay_z: list[float | None] = []
     overlay_hover: list[str | None] = []
-    for overlay_edge in overlay.get("edges", []) if isinstance(overlay.get("edges"), list) else []:
+    for overlay_edge in ([] if initial_radius_frame else (overlay.get("edges", []) if isinstance(overlay.get("edges"), list) else [])):
         if not isinstance(overlay_edge, dict):
             continue
         source = str(overlay_edge.get("source", ""))
@@ -2569,7 +2677,7 @@ def _complex_slider_traces(
     direction_y: list[float | None] = []
     direction_z: list[float | None] = []
     direction_hover: list[str | None] = []
-    for directed_edge in direction_overlay.get("edges", []) if isinstance(direction_overlay.get("edges"), list) else []:
+    for directed_edge in ([] if initial_radius_frame else (direction_overlay.get("edges", []) if isinstance(direction_overlay.get("edges"), list) else [])):
         if not isinstance(directed_edge, dict):
             continue
         source = str(directed_edge.get("source", ""))
@@ -2625,7 +2733,7 @@ def _complex_slider_traces(
     decoding_marker_z: list[float] = []
     decoding_marker_hover: list[str] = []
     decoding_marker_color: list[str] = []
-    for directed_edge in decoding_overlay.get("edges", []) if isinstance(decoding_overlay.get("edges"), list) else []:
+    for directed_edge in ([] if initial_radius_frame else (decoding_overlay.get("edges", []) if isinstance(decoding_overlay.get("edges"), list) else [])):
         if not isinstance(directed_edge, dict):
             continue
         source = str(directed_edge.get("source", ""))
