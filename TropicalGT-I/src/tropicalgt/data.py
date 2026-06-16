@@ -148,8 +148,8 @@ class ParameterGolfBinGraphDataset(Dataset):
     """OpenAI Parameter Golf token shards as graph-structured records.
 
     Each sampled token window is represented as a sequential DAG. Pure-byte
-    tokenizers decode losslessly to bytes; SentencePiece or unknown tokenizers
-    fall back to textual token identifiers while preserving graph structure.
+    tokenizers decode losslessly to bytes, and SentencePiece tokenizers must load
+    successfully; unavailable or corrupt tokenizers fail closed.
     """
 
     header_ints: int = 256
@@ -165,7 +165,7 @@ class ParameterGolfBinGraphDataset(Dataset):
         stride: int | None = None,
         tokenizer_path: str | Path | None = None,
         max_graph_chunks: int = 64,
-        allow_token_id_fallback: bool = True,
+        allow_token_id_fallback: bool = False,
     ) -> None:
         self.root = Path(root)
         self.split = split
@@ -173,8 +173,10 @@ class ParameterGolfBinGraphDataset(Dataset):
         self.stride = max(int(stride or window_tokens), 1)
         self.tokenizer_path = Path(tokenizer_path) if tokenizer_path else None
         self.max_graph_chunks = max(int(max_graph_chunks), 1)
-        self.allow_token_id_fallback = bool(allow_token_id_fallback)
-        self._decoder = _ParameterGolfDecoder(self.tokenizer_path, allow_token_id_fallback=self.allow_token_id_fallback)
+        if allow_token_id_fallback:
+            raise ValueError("Parameter Golf token-id fallback is disabled by no_proxy_no_fallback policy")
+        self.allow_token_id_fallback = False
+        self._decoder = _ParameterGolfDecoder(self.tokenizer_path, allow_token_id_fallback=False)
         files = discover_parameter_golf_bin_files(self.root, split)
         if not files:
             raise FileNotFoundError(f"No Parameter Golf .bin files for split={split} under {self.root}")
@@ -440,40 +442,29 @@ def encode_record_bytes(record: GraphRecord, seq_len: int, graph_autoregressive:
 
 
 class _ParameterGolfDecoder:
-    def __init__(self, tokenizer_path: Path | None = None, *, allow_token_id_fallback: bool = True) -> None:
+    def __init__(self, tokenizer_path: Path | None = None, *, allow_token_id_fallback: bool = False) -> None:
+        if allow_token_id_fallback:
+            raise ValueError("Parameter Golf token-id fallback is disabled by no_proxy_no_fallback policy")
         self.tokenizer_path = tokenizer_path
-        self.allow_token_id_fallback = bool(allow_token_id_fallback)
-        self.kind = "token_ids"
+        self.allow_token_id_fallback = False
+        self.kind = "unavailable"
         self.byte_offset = 4
         self._sp = None
         if tokenizer_path is None or not tokenizer_path.is_file():
-            if not self.allow_token_id_fallback:
-                raise FileNotFoundError(f"Parameter Golf tokenizer is required: {tokenizer_path}")
-            return
+            raise FileNotFoundError(f"Parameter Golf tokenizer is required: {tokenizer_path}")
         if tokenizer_path.suffix == ".json":
-            try:
-                payload = json.loads(tokenizer_path.read_text(encoding="utf-8"))
-                if payload.get("tokenizer_type") == "pure_byte":
-                    cfg = payload.get("config", {})
-                    self.kind = "pure_byte"
-                    self.byte_offset = int(cfg.get("byte_offset", 4))
-                elif not self.allow_token_id_fallback:
-                    raise ValueError(f"Unsupported Parameter Golf tokenizer JSON: {tokenizer_path}")
-            except Exception:
-                if not self.allow_token_id_fallback:
-                    raise
-                self.kind = "token_ids"
+            payload = json.loads(tokenizer_path.read_text(encoding="utf-8"))
+            if payload.get("tokenizer_type") != "pure_byte":
+                raise ValueError(f"Unsupported Parameter Golf tokenizer JSON: {tokenizer_path}")
+            cfg = payload.get("config", {})
+            self.kind = "pure_byte"
+            self.byte_offset = int(cfg.get("byte_offset", 4))
         elif tokenizer_path.suffix == ".model":
-            try:
-                import sentencepiece as spm
+            import sentencepiece as spm
 
-                self._sp = spm.SentencePieceProcessor(model_file=str(tokenizer_path))
-                self.kind = "sentencepiece"
-            except Exception:
-                if not self.allow_token_id_fallback:
-                    raise
-                self.kind = "token_ids"
-        elif not self.allow_token_id_fallback:
+            self._sp = spm.SentencePieceProcessor(model_file=str(tokenizer_path))
+            self.kind = "sentencepiece"
+        else:
             raise ValueError(f"Unsupported Parameter Golf tokenizer path: {tokenizer_path}")
 
     def decode(self, token_ids: np.ndarray) -> str:
@@ -481,14 +472,8 @@ class _ParameterGolfDecoder:
             byte_values = np.clip(token_ids.astype(np.int32) - self.byte_offset, 0, 255).astype(np.uint8)
             return bytes(byte_values.tolist()).decode("utf-8", "replace")
         if self.kind == "sentencepiece" and self._sp is not None:
-            try:
-                return self._sp.decode([int(token) for token in token_ids.tolist()])
-            except Exception:
-                if not self.allow_token_id_fallback:
-                    raise
-        if not self.allow_token_id_fallback:
-            raise RuntimeError("Parameter Golf tokenizer fallback is disabled")
-        return " ".join(f"tok_{int(token)}" for token in token_ids.tolist())
+            return self._sp.decode([int(token) for token in token_ids.tolist()])
+        raise RuntimeError("Parameter Golf decoder unavailable; no token-id fallback is permitted")
 
 
 def parameter_golf_window_graph(token_ids: np.ndarray, text: str, max_chunks: int = 64) -> dict[str, Any]:
@@ -823,7 +808,7 @@ def _make_dataset_source(cfg: dict[str, Any], source: dict[str, Any], split: str
             stride=source.get("stride"),
             tokenizer_path=tokenizer_path,
             max_graph_chunks=int(source.get("max_graph_chunks", 64)),
-            allow_token_id_fallback=bool(source.get("allow_token_id_fallback", tokenizer_path is None)),
+            allow_token_id_fallback=bool(source.get("allow_token_id_fallback", False)),
         )
     raise ValueError(f"Unsupported dataset source kind: {kind}")
 
@@ -836,8 +821,8 @@ def _strict_config_path_candidates(cfg: dict[str, Any], source: dict[str, Any], 
         values = [raw]
     else:
         values = [value for value in raw if value]
-    if values and not bool(source.get("allow_config_path_fallbacks", cfg.get("allow_config_path_fallbacks", False))):
-        raise ValueError(f"{label} configured {key}, but allow_config_path_fallbacks is false")
+    if values:
+        raise ValueError(f"{label} configured {key}, but config path fallbacks are disabled by no_proxy_no_fallback policy")
     return values
 
 

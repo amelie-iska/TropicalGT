@@ -118,6 +118,7 @@ def test_make_dataset_from_config_mixes_graph_parquet_and_parameter_golf(tmp_pat
     pg_root = tmp_path / "pg"
     pg_root.mkdir()
     _write_parameter_golf_bin(pg_root / "fineweb_train_000000.bin", b"abcdef")
+    tokenizer_path = _write_parameter_golf_tokenizer(tmp_path)
     cfg = {
         "seed": 7,
         "seq_len": 4,
@@ -126,7 +127,7 @@ def test_make_dataset_from_config_mixes_graph_parquet_and_parameter_golf(tmp_pat
             "enabled": True,
             "sources": [
                 {"kind": "parquet", "name": "graph_parquet", "root": str(tmp_path / "shards"), "weight": 1.0, "required": True},
-                {"kind": "parameter_golf_bin", "name": "openai_parameter_golf", "root": str(pg_root), "weight": 1.0, "required": True, "window_tokens": 4},
+                {"kind": "parameter_golf_bin", "name": "openai_parameter_golf", "root": str(pg_root), "tokenizer_path": str(tokenizer_path), "weight": 1.0, "required": True, "window_tokens": 4},
             ],
         },
     }
@@ -147,6 +148,7 @@ def test_chunk_shuffle_sampler_supports_hybrid_dataset_with_fixed_windows(tmp_pa
     pg_root = tmp_path / "pg"
     pg_root.mkdir()
     _write_parameter_golf_bin(pg_root / "fineweb_train_000000.bin", b"abcdefghijklmnop")
+    tokenizer_path = _write_parameter_golf_tokenizer(tmp_path)
     cfg = {
         "seed": 7,
         "seq_len": 4,
@@ -156,7 +158,7 @@ def test_chunk_shuffle_sampler_supports_hybrid_dataset_with_fixed_windows(tmp_pa
             "train_length": 7,
             "sources": [
                 {"kind": "parquet", "name": "graph_parquet", "root": str(tmp_path / "shards"), "weight": 1.0, "required": True},
-                {"kind": "parameter_golf_bin", "name": "openai_parameter_golf", "root": str(pg_root), "weight": 1.0, "required": True, "window_tokens": 4},
+                {"kind": "parameter_golf_bin", "name": "openai_parameter_golf", "root": str(pg_root), "tokenizer_path": str(tokenizer_path), "weight": 1.0, "required": True, "window_tokens": 4},
             ],
         },
     }
@@ -173,7 +175,7 @@ def test_chunk_shuffle_sampler_supports_hybrid_dataset_with_fixed_windows(tmp_pa
     assert list(ChunkShuffleSampler(ds, seed=11, shuffle_rows=False, chunk_size=3)) == indices
 
 
-def test_hybrid_config_resolves_fallback_roots_and_reports_budget(tmp_path: Path):
+def test_hybrid_config_uses_explicit_roots_and_reports_budget(tmp_path: Path):
     parquet_root = tmp_path / "shards" / "train"
     parquet_root.mkdir(parents=True)
     pd.DataFrame([
@@ -183,17 +185,17 @@ def test_hybrid_config_resolves_fallback_roots_and_reports_budget(tmp_path: Path
     pg_root = tmp_path / "pg"
     pg_root.mkdir()
     _write_parameter_golf_bin(pg_root / "fineweb_train_000000.bin", b"abcdefgh")
+    tokenizer_path = _write_parameter_golf_tokenizer(tmp_path)
     cfg = {
         "seed": 7,
         "seq_len": 4,
         "batch_size": 2,
         "max_steps": 3,
-        "allow_config_path_fallbacks": True,
         "hybrid_data": {
             "enabled": True,
             "sources": [
-                {"kind": "parquet", "name": "graph_parquet", "root": str(tmp_path / "missing_shards"), "fallback_roots": [str(tmp_path / "shards")], "weight": 1.0, "required": True},
-                {"kind": "parameter_golf_bin", "name": "openai_parameter_golf", "root": str(tmp_path / "missing_pg"), "fallback_roots": [str(pg_root)], "weight": 1.0, "required": True, "window_tokens": 4},
+                {"kind": "parquet", "name": "graph_parquet", "root": str(tmp_path / "shards"), "weight": 1.0, "required": True},
+                {"kind": "parameter_golf_bin", "name": "openai_parameter_golf", "root": str(pg_root), "tokenizer_path": str(tokenizer_path), "weight": 1.0, "required": True, "window_tokens": 4},
             ],
         },
     }
@@ -209,12 +211,13 @@ def test_hybrid_config_resolves_fallback_roots_and_reports_budget(tmp_path: Path
     assert any("configured training token slots" in error for error in errors)
 
 
-def test_hybrid_config_rejects_path_fallbacks_by_default(tmp_path: Path):
+def test_hybrid_config_rejects_path_fallbacks_even_when_enabled(tmp_path: Path):
     pg_root = tmp_path / "pg"
     pg_root.mkdir()
     _write_parameter_golf_bin(pg_root / "fineweb_train_000000.bin", b"abcdefgh")
     cfg = {
         "seq_len": 4,
+        "allow_config_path_fallbacks": True,
         "hybrid_data": {
             "enabled": True,
             "sources": [
@@ -230,11 +233,11 @@ def test_hybrid_config_rejects_path_fallbacks_by_default(tmp_path: Path):
             ],
         },
     }
-    with pytest.raises(ValueError, match="allow_config_path_fallbacks"):
+    with pytest.raises(ValueError, match="config path fallbacks are disabled"):
         make_dataset_from_config(cfg, "train")
 
 
-def test_hybrid_config_rejects_tokenizer_fallback_paths_by_default(tmp_path: Path):
+def test_hybrid_config_rejects_tokenizer_fallback_paths(tmp_path: Path):
     pg_root = tmp_path / "pg"
     pg_root.mkdir()
     _write_parameter_golf_bin(pg_root / "fineweb_train_000000.bin", b"abcdefgh")
@@ -259,8 +262,9 @@ def test_hybrid_config_rejects_tokenizer_fallback_paths_by_default(tmp_path: Pat
             ],
         },
     }
-    with pytest.raises(ValueError, match="allow_config_path_fallbacks"):
+    with pytest.raises(ValueError, match="config path fallbacks are disabled"):
         make_dataset_from_config(cfg, "train")
+
 
 def test_dataset_budget_validates_per_source_requirements(tmp_path: Path):
     parquet_root = tmp_path / "shards" / "train"
@@ -269,6 +273,7 @@ def test_dataset_budget_validates_per_source_requirements(tmp_path: Path):
     pg_root = tmp_path / "pg"
     pg_root.mkdir()
     _write_parameter_golf_bin(pg_root / "fineweb_train_000000.bin", b"abcdefgh")
+    tokenizer_path = _write_parameter_golf_tokenizer(tmp_path)
     cfg = {
         "seed": 7,
         "seq_len": 4,
@@ -276,7 +281,7 @@ def test_dataset_budget_validates_per_source_requirements(tmp_path: Path):
             "enabled": True,
             "sources": [
                 {"kind": "parquet", "name": "graph_parquet", "root": str(tmp_path / "shards"), "weight": 1.0, "required": True},
-                {"kind": "parameter_golf_bin", "name": "openai_parameter_golf", "root": str(pg_root), "weight": 1.0, "required": True, "window_tokens": 4},
+                {"kind": "parameter_golf_bin", "name": "openai_parameter_golf", "root": str(pg_root), "tokenizer_path": str(tokenizer_path), "weight": 1.0, "required": True, "window_tokens": 4},
             ],
         },
     }
@@ -290,7 +295,7 @@ def test_dataset_budget_validates_per_source_requirements(tmp_path: Path):
     assert any("source openai_parameter_golf raw_tokens" in error for error in errors)
 
 
-def test_parameter_golf_strict_tokenizer_rejects_corrupt_model(tmp_path: Path):
+def test_parameter_golf_tokenizer_unavailable_or_corrupt_fails_closed(tmp_path: Path):
     pg_root = tmp_path / "pg"
     pg_root.mkdir()
     _write_parameter_golf_bin(pg_root / "fineweb_train_000000.bin", b"abcdef")
@@ -298,10 +303,13 @@ def test_parameter_golf_strict_tokenizer_rejects_corrupt_model(tmp_path: Path):
     bad_model.write_bytes(b"not a sentencepiece model")
 
     with pytest.raises(Exception):
-        ParameterGolfBinGraphDataset(pg_root, "train", tokenizer_path=bad_model, allow_token_id_fallback=False)
+        ParameterGolfBinGraphDataset(pg_root, "train", tokenizer_path=bad_model)
 
-    ds = ParameterGolfBinGraphDataset(pg_root, "train", tokenizer_path=bad_model, allow_token_id_fallback=True)
-    assert ds[0].text.startswith("tok_")
+    with pytest.raises(ValueError, match="token-id fallback is disabled"):
+        ParameterGolfBinGraphDataset(pg_root, "train", tokenizer_path=bad_model, allow_token_id_fallback=True)
+
+    with pytest.raises(FileNotFoundError, match="Parameter Golf tokenizer is required"):
+        ParameterGolfBinGraphDataset(pg_root, "train")
 
 
 def test_graph_decoding_order_uses_topological_order_for_dag_and_random_for_cycles():
@@ -350,6 +358,15 @@ def test_graph_record_preserves_mixed_noncausal_edges_as_roar():
     assert metadata["noncausal_edge_count"] >= 1
     assert metadata["decoding_order_kind"] == "random_autoregressive"
     assert metadata["decoding_reverse_order_kind"] == "reverse_random_autoregressive"
+
+
+def _write_parameter_golf_tokenizer(root: Path) -> Path:
+    path = root / "fineweb_pure_byte_260.json"
+    path.write_text(
+        json.dumps({"tokenizer_type": "pure_byte", "config": {"byte_offset": 4}, "vocab_size": 260}),
+        encoding="utf-8",
+    )
+    return path
 
 
 def _write_parameter_golf_bin(path: Path, payload: bytes) -> None:

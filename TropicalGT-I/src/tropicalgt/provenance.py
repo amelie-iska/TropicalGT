@@ -202,8 +202,8 @@ PROVENANCE_REGISTRY: tuple[ProvenanceEntry, ...] = (
         kind="data_decode_fallback",
         surface="Parameter-Golf tokenizer decode",
         optimize_directly=False,
-        description="Optional token-id decode fallback for Parameter-Golf shards when a tokenizer model is unavailable or corrupt.",
-        replacement_or_guardrail="The full-dataset active config sets allow_token_id_fallback=false and tests reject corrupt tokenizer models in strict mode.",
+        description="Prohibited token-id decode fallback for Parameter-Golf shards when a tokenizer model is unavailable or corrupt.",
+        replacement_or_guardrail="The loader rejects allow_token_id_fallback=true, missing tokenizer paths, corrupt tokenizer models, and unsupported tokenizer formats under the no_proxy_no_fallback policy.",
         match_terms=(
             "allow_token_id_fallback",
             "token id fallback",
@@ -254,8 +254,8 @@ PROVENANCE_REGISTRY: tuple[ProvenanceEntry, ...] = (
         kind="configuration_fallback",
         surface="runtime/config plumbing",
         optimize_directly=False,
-        description="Fallback from a specific config key to a broader/default config key.",
-        replacement_or_guardrail="Acceptable only for config compatibility; it is not a model metric or training signal.",
+        description="Fallback from a specific config key to a broader/default config key; training data and tokenizer path fallbacks are prohibited.",
+        replacement_or_guardrail="Training data roots and tokenizer paths must be explicit existing paths. Configured fallback_roots or tokenizer_fallback_paths fail closed under the no_proxy_no_fallback policy.",
         match_terms=(
             "fallback_shuffle",
             "fallback_root",

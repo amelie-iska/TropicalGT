@@ -724,3 +724,11 @@ The live item-by-item repair inventory is maintained in `planning/tropicalgt_i_c
 - [x] Added train/eval/browser metrics for `graph_json_derived_text_graph_rate` and `graph_json_parse_unavailable_rate`; retained `graph_json_fallback_rate` only as a legacy must-remain-zero guardrail.
 - [x] Updated per-record diagnostics and provenance audit coverage so browser-visible records distinguish explicit graph JSON, derived text graphs, and parse-unavailable explicit graph JSON without substituting proxy objects.
 - [x] Focused verification passed: py-compile for touched source/tests, `git diff --check`, and `pytest TropicalGT-I/tests/test_training_metrics.py TropicalGT-I/tests/test_diagnostics.py TropicalGT-I/tests/test_metrics_and_memory.py TropicalGT-I/tests/test_metric_provenance.py TropicalGT-I/tests/test_readiness_audit.py -q` (`37 passed`).
+
+### Current Objective Update - Training Data No-Fallback Contract Pass
+
+- [x] Removed opt-in training-data path fallback behavior: configured `fallback_roots` and `tokenizer_fallback_paths` now fail closed with the no-proxy/no-fallback policy instead of resolving alternate roots.
+- [x] Removed Parameter-Golf token-id text fallback behavior: `allow_token_id_fallback=true`, missing tokenizer paths, corrupt tokenizer models, and unsupported tokenizer formats now raise explicit unavailable errors.
+- [x] Verified tracked training configs already provide explicit tokenizer paths and keep legacy fallback flags false, so the stricter loader contract does not require config edits.
+- [x] Updated data-loader tests and provenance text to treat these paths as prohibited fallback surfaces, not tolerable compatibility behavior.
+- [x] Focused verification passed: py-compile for touched source/tests, `git diff --check`, tracked-config no-fallback audit, and `pytest TropicalGT-I/tests/test_data_loader.py TropicalGT-I/tests/test_metric_provenance.py TropicalGT-I/tests/test_readiness_audit.py TropicalGT-I/tests/test_training_metrics.py -q` (`38 passed`, two SentencePiece import deprecation warnings from the corrupt-model failure test).
