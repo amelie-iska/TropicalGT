@@ -447,7 +447,7 @@ def organize_wandb_metrics(metrics: dict[str, Any]) -> dict[str, Any]:
     for key, value in metrics.items():
         if key in used or key == "step" or not _wandb_scalar(value):
             continue
-        payload[f"{_wandb_fallback_group(key)}/{key}"] = value
+        payload[f"{_wandb_uncategorized_metric_group(key)}/{key}"] = value
     return payload
 
 
@@ -1499,7 +1499,7 @@ def _wandb_scalar(value: Any) -> bool:
     return isinstance(value, (int, float, bool)) and not isinstance(value, bool) or isinstance(value, bool)
 
 
-def _wandb_fallback_group(key: str) -> str:
+def _wandb_uncategorized_metric_group(key: str) -> str:
     if key.startswith("eval_"):
         return "00_primary" if key in {"eval_bpb", "eval_graph_bpb", "eval_nll", "eval_ppl"} else "02_bpb"
     if key.startswith(("loss_",)) or key in {"loss", "nll", "ppl"}:

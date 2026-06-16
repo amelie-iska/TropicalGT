@@ -24,6 +24,7 @@ def test_metric_provenance_registry_covers_current_risky_terms(tmp_path: Path):
         "parameter_golf_token_id_fallback",
         "training_data_budget_estimate",
         "config_default_fallback",
+        "wandb_uncategorized_metric_namespace",
         "browser_same_data_static_preview_rendering",
         "simplicial_projection_display_layout_evidence",
         "gudhi_vectorizer_autograd_boundary",
@@ -38,6 +39,7 @@ def test_metric_provenance_registry_covers_current_risky_terms(tmp_path: Path):
     assert registry["persistence_landscape"]["kind"] == "fast_vectorized_topology"
     assert registry["persistence_vector_representation_similarity"]["optimize_directly"] is True
     assert registry["browser_same_data_static_preview_rendering"]["kind"] == "same_data_rendering_contingency"
+    assert registry["wandb_uncategorized_metric_namespace"]["kind"] == "logging_namespace"
     assert registry["buchsbaum_eisenbud_implied_rank_identity_diagnostic"]["kind"] == "diagnostic_rank_identity_not_certificate"
     assert registry["simplicial_projection_display_layout_evidence"]["kind"] == "visual_display_layout_boundary"
 

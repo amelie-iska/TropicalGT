@@ -950,3 +950,20 @@ CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/scripts:TropicalGT-I/src /home/i
 CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/scripts:TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_diagnostics.py::test_record_gfn_graphcg_diagnostics TropicalGT-I/tests/test_readiness_audit.py::test_validate_tropicalgt_i_reports_legacy_graph_json_guardrail_alias -q -p no:cacheprovider --basetemp=/tmp/tropicalgt-pytest-per-record-graph-json-alias
 # 2 passed
 ```
+
+## 2026-06-16 W&B Uncategorized Metric Namespace Rename
+
+Sequential W&B/readout terminology item completed after the graph JSON per-record guardrail alias:
+
+- Renamed `_wandb_fallback_group` to `_wandb_uncategorized_metric_group` so unmatched scalar metrics are described as uncategorized logging output, not a fallback path.
+- Renamed the provenance entry to `wandb_uncategorized_metric_namespace` with kind `logging_namespace`, while keeping retired fallback-era terms as audit-only match terms.
+- Added regression coverage proving unknown scalar metrics still route to `99_other/*` without changing priority namespace behavior.
+
+Validation:
+
+```text
+CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m py_compile TropicalGT-I/src/tropicalgt/run.py TropicalGT-I/src/tropicalgt/provenance.py TropicalGT-I/tests/test_training_metrics.py TropicalGT-I/tests/test_metric_provenance.py
+# passed
+CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_training_metrics.py::test_wandb_metrics_are_namespaced_by_priority TropicalGT-I/tests/test_metric_provenance.py::test_metric_provenance_registry_covers_current_risky_terms -q -p no:cacheprovider --basetemp=/tmp/tropicalgt-pytest-wandb-uncategorized-namespace
+# 2 passed
+```

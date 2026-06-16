@@ -299,13 +299,13 @@ PROVENANCE_REGISTRY: tuple[ProvenanceEntry, ...] = (
         match_terms=("fallback = next((row for row in action_probs", "audit_selection_score", "action_probs"),
     ),
     ProvenanceEntry(
-        name="wandb_namespace_fallback",
-        kind="logging_fallback",
+        name="wandb_uncategorized_metric_namespace",
+        kind="logging_namespace",
         surface="W&B metric organization",
         optimize_directly=False,
-        description="Default grouping for metrics that do not match a priority W&B namespace.",
-        replacement_or_guardrail="Pure logging organization; no effect on training or evaluation.",
-        match_terms=("_wandb_fallback_group", "fallback_group"),
+        description="Uncategorized grouping for scalar metrics that do not match a priority W&B namespace.",
+        replacement_or_guardrail="Pure logging organization; no effect on training or evaluation. Retired fallback-era names remain audit terms only.",
+        match_terms=("_wandb_uncategorized_metric_group", "wandb_uncategorized_metric_namespace", "_wandb_fallback_group", "fallback_group"),
     ),
     ProvenanceEntry(
         name="multipers_backend_approximation",

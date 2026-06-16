@@ -172,6 +172,7 @@ def test_wandb_metrics_are_namespaced_by_priority():
             "graph_json_derived_text_graph_rate": 1.0,
             "causal_dag_ar_rate": 0.75,
             "gpu_mem_mb": 21484.0,
+            "unknown_scalar_metric": 7.0,
         }
     )
     assert list(payload)[:4] == ["step", "00_primary/eval_bpb", "00_primary/bpb", "00_primary/loss"]
@@ -202,6 +203,7 @@ def test_wandb_metrics_are_namespaced_by_priority():
     assert payload["06_graph_data/graph_json_derived_text_graph_rate"] == 1.0
     assert payload["06_graph_data/causal_dag_ar_rate"] == 0.75
     assert payload["00_primary/gpu_mem_mb"] == 21484.0
+    assert payload["99_other/unknown_scalar_metric"] == 7.0
 
 
 def test_browser_metric_visualization_prioritizes_graphcg_rank_audit(tmp_path: Path):
