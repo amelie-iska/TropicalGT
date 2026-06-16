@@ -68,6 +68,7 @@ class ChartBundleToricHead(nn.Module):
         graph_token_support_probabilities: Tensor | None = None,
         graph_token_mask: Tensor | None = None,
         graphcg_projection: Tensor | None = None,
+        per_record_bpb: Tensor | None = None,
     ) -> tuple[dict[str, Tensor], dict[str, Tensor]]:
         zero = graph_state.sum() * 0.0
         batch = graph_state.shape[0]
@@ -135,8 +136,33 @@ class ChartBundleToricHead(nn.Module):
             atom_stability_gap = zero
             atom_stability_available = zero
 
-        chart_bpb_consistency = zero
-        chart_bpb_consistency_available = zero
+        if per_record_bpb is not None and per_record_bpb.numel() == batch and batch > 0:
+            bpb = per_record_bpb.detach().to(dtype=graph_state.dtype, device=graph_state.device)
+            chart_mass = chart_probs.sum(dim=0)
+            active = chart_mass.gt(1.0e-6)
+            chart_bpb_values = (chart_probs * bpb[:, None]).sum(dim=0) / chart_mass.clamp_min(1.0e-6)
+            global_bpb = bpb.mean()
+            chart_mass_weights = chart_mass / chart_mass.sum().clamp_min(1.0e-6)
+            chart_bpb_consistency = (chart_mass_weights * (chart_bpb_values - global_bpb).pow(2)).sum()
+            if active.any():
+                active_values = chart_bpb_values.masked_select(active)
+                chart_bpb_min = active_values.min()
+                chart_bpb_max = active_values.max()
+                chart_bpb_active_count = active.to(dtype=graph_state.dtype).sum()
+            else:
+                chart_bpb_min = zero
+                chart_bpb_max = zero
+                chart_bpb_active_count = zero
+            chart_bpb_spread = chart_bpb_max - chart_bpb_min
+            chart_bpb_consistency_available = torch.ones((), dtype=graph_state.dtype, device=graph_state.device)
+        else:
+            chart_bpb_consistency = zero
+            chart_bpb_consistency_available = zero
+            global_bpb = zero
+            chart_bpb_min = zero
+            chart_bpb_max = zero
+            chart_bpb_spread = zero
+            chart_bpb_active_count = zero
 
         metrics = {
             "bundle_transport_l1": transport_l1,
@@ -151,6 +177,11 @@ class ChartBundleToricHead(nn.Module):
             "graphcg_toric_cell_agreement_available": graphcg_toric_cell_available,
             "chart_bpb_consistency": chart_bpb_consistency,
             "chart_bpb_consistency_available": chart_bpb_consistency_available,
+            "chart_bpb_global": global_bpb,
+            "chart_bpb_min": chart_bpb_min,
+            "chart_bpb_max": chart_bpb_max,
+            "chart_bpb_spread": chart_bpb_spread,
+            "chart_bpb_active_count": chart_bpb_active_count,
             "bundle_atom_stability_gap": atom_stability_gap,
             "bundle_atom_stability_available": atom_stability_available,
         }
@@ -181,6 +212,11 @@ def _zero_chart_bundle_outputs(reference: Tensor) -> tuple[dict[str, Tensor], di
         "graphcg_toric_cell_agreement_available": zero.detach(),
         "chart_bpb_consistency": zero.detach(),
         "chart_bpb_consistency_available": zero.detach(),
+        "chart_bpb_global": zero.detach(),
+        "chart_bpb_min": zero.detach(),
+        "chart_bpb_max": zero.detach(),
+        "chart_bpb_spread": zero.detach(),
+        "chart_bpb_active_count": zero.detach(),
         "bundle_atom_stability_gap": zero.detach(),
         "bundle_atom_stability_available": zero.detach(),
     }
@@ -194,6 +230,26 @@ def _zero_chart_bundle_outputs(reference: Tensor) -> tuple[dict[str, Tensor], di
         "bundle_atom_stability_gap": zero,
     }
     return metrics, losses
+
+
+def _nll_and_per_record_bpb(logits: Tensor, target_ids: Tensor) -> tuple[Tensor, Tensor]:
+    flat_loss = F.cross_entropy(
+        logits.reshape(-1, logits.shape[-1]),
+        target_ids.reshape(-1),
+        ignore_index=0,
+        reduction="none",
+    ).reshape_as(target_ids)
+    valid = target_ids.ne(0)
+    if valid.any():
+        valid_loss = flat_loss.masked_select(valid)
+        nll = valid_loss.mean()
+        per_record_counts = valid.sum(dim=1).clamp_min(1).to(dtype=flat_loss.dtype)
+        per_record_nll = (flat_loss * valid.to(dtype=flat_loss.dtype)).sum(dim=1) / per_record_counts
+    else:
+        nll = flat_loss.sum() * 0.0
+        per_record_nll = flat_loss.sum(dim=1) * 0.0
+    log2 = torch.log(torch.tensor(2.0, dtype=per_record_nll.dtype, device=per_record_nll.device))
+    return nll, per_record_nll / log2
 
 
 class TropicalGTModel(nn.Module):
@@ -255,6 +311,11 @@ class TropicalGTModel(nn.Module):
             }
         h, _ = self.gru(x)
         logits = self.out(h)
+        nll: Tensor | None = None
+        per_record_bpb: Tensor | None = None
+        if target_ids is not None:
+            nll, per_record_bpb = _nll_and_per_record_bpb(logits, target_ids)
+            per_record_bpb = per_record_bpb.detach()
         valid_margin = trop.margin.masked_select(graph_batch.attention_mask)
         support_entropy = tropical_support_entropy(trop.support, graph_batch.attention_mask)
         soft_entropy = soft_tropical_support_entropy(trop.scores, graph_batch.attention_mask, graph_batch.attention_mask)
@@ -273,6 +334,7 @@ class TropicalGTModel(nn.Module):
                 graph_token_support_probabilities=graph_token_support_probabilities,
                 graph_token_mask=graph_batch.attention_mask,
                 graphcg_projection=graphcg_projection,
+                per_record_bpb=per_record_bpb,
             )
             chart_bundle_metrics = {key: value.detach() for key, value in chart_bundle_metrics_raw.items()}
         else:
@@ -305,7 +367,7 @@ class TropicalGTModel(nn.Module):
         }
         loss = None
         if target_ids is not None:
-            nll = F.cross_entropy(logits.reshape(-1, logits.shape[-1]), target_ids.reshape(-1), ignore_index=0)
+            assert nll is not None
             reward = torch.exp(-nll.detach()).repeat(input_ids.shape[0]).clamp_min(1e-6)
             states = graph_state[:, None, :].repeat(1, 2, 1)
             actions = torch.zeros(input_ids.shape[0], 2, dtype=torch.long, device=input_ids.device)

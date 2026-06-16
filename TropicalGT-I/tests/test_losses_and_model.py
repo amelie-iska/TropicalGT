@@ -131,6 +131,11 @@ def test_model_forward_fixture():
         "graphcg_toric_cell_agreement_available",
         "chart_bpb_consistency",
         "chart_bpb_consistency_available",
+        "chart_bpb_global",
+        "chart_bpb_min",
+        "chart_bpb_max",
+        "chart_bpb_spread",
+        "chart_bpb_active_count",
         "loss_bundle_transport_weighted",
         "loss_bundle_cocycle_weighted",
         "loss_bundle_flat_rank_weighted",
@@ -192,8 +197,30 @@ def test_chart_bundle_auxiliary_zero_weights_do_not_change_logits_or_loss():
     assert aux_out["bundle_monomial_projection_one_hotness"].item() == 1.0
     assert aux_out["bundle_chart_count"].item() == 3.0
     assert aux_out["toric_active_row_count"].item() == 5.0
-    assert aux_out["chart_bpb_consistency_available"].item() == 0.0
+    assert aux_out["chart_bpb_consistency_available"].item() == 1.0
+    assert aux_out["chart_bpb_active_count"].item() == 3.0
+    assert aux_out["chart_bpb_spread"].item() >= 0.0
+    assert aux_out["chart_bpb_min"].item() <= aux_out["chart_bpb_global"].item() <= aux_out["chart_bpb_max"].item()
     assert aux_out["bundle_atom_stability_available"].item() == 1.0
+
+
+def test_chart_bundle_bpb_partition_unavailable_without_targets():
+    input_ids, graph_batch, _target_ids = _fixture_batch()
+    model = TropicalGTModel(
+        TropicalGTConfig(
+            dim=32,
+            hidden_dim=32,
+            graph_feature_dim=48,
+            graphcg_num_directions=32,
+            enable_chart_bundle_auxiliary=True,
+            bundle_num_charts=3,
+            toric_num_active_rows=5,
+        )
+    )
+    out = model(input_ids, graph_batch)
+    assert out["chart_bpb_consistency_available"].item() == 0.0
+    assert out["chart_bpb_global"].item() == 0.0
+    assert out["chart_bpb_active_count"].item() == 0.0
 
 
 def test_chart_bundle_auxiliary_positive_weights_change_loss_not_logits():
@@ -220,6 +247,7 @@ def test_chart_bundle_auxiliary_positive_weights_change_loss_not_logits():
     model.config.bundle_transport_weight = 0.05
     model.config.bundle_cocycle_weight = 0.02
     model.config.toric_normal_fan_weight = 0.03
+    model.config.chart_bpb_consistency_weight = 0.04
     model.config.bundle_atom_stability_weight = 0.01
     weighted_out = model(input_ids, graph_batch, target_ids)
     assert torch.allclose(weighted_out["logits"], zero_out["logits"], atol=0.0, rtol=0.0)
@@ -229,6 +257,8 @@ def test_chart_bundle_auxiliary_positive_weights_change_loss_not_logits():
     assert weighted_out["bundle_cocycle_defect"].item() >= 0.0
     assert weighted_out["toric_normal_fan_loss"].item() >= 0.0
     assert weighted_out["graphcg_toric_cell_agreement_available"].item() == 1.0
+    assert weighted_out["chart_bpb_consistency_available"].item() == 1.0
+    assert weighted_out["loss_chart_bpb_consistency_weighted"].item() >= 0.0
 
 
 def test_model_allows_explicit_full_embedding_graphcg_bank():

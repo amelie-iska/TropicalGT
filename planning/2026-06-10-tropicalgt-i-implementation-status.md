@@ -313,3 +313,11 @@
 - Updated the main training configs with explicit zero-default bundle/toric fields so the post-5K restart can turn on these diagnostics or losses deliberately from step 0.
 - Verification: `python -m py_compile TropicalGT-I/src/tropicalgt/model.py TropicalGT-I/src/tropicalgt/run.py` passed; `PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_losses_and_model.py TropicalGT-I/tests/test_training_metrics.py -q` returned `19 passed`.
 - Live b59 status during this pass: PID `73189` remained alive and under the 5K review gate. A log parse reached step `640`, latest train loss/NLL around `1.329/1.306`, with no traceback/OOM/nonfinite markers. Galileo remains responsible for the 5K analysis, visualization review, and evidence-backed step-0 restart.
+
+## Iteration 38: Chart-Local BPB Partition Diagnostics
+
+- Replaced the chart-BPB placeholder with a real target-backed partition when `enable_chart_bundle_auxiliary` is active and supervised targets are present.
+- The model now computes per-record NLL/BPB from the same cross-entropy contract used by the training loss, detaches the per-record BPB signal, and passes it to the chart-bundle head as audit/auxiliary evidence. This prevents chart-consistency weights from creating an extra hidden gradient path through token logits.
+- The chart head now reports global chart BPB, min/max chart-local BPB, BPB spread, active chart count, availability, and a mass-weighted chart-BPB consistency objective. Missing targets still render as explicit unavailable zeros.
+- W&B grouping exposes these scalars under `10_bundle_toric` for the post-5K restart review and ablation planning.
+- Verification: `PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_losses_and_model.py -q` returned `9 passed`; the combined model/training metrics slice returned `20 passed`.

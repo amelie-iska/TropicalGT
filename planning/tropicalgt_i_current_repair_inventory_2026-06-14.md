@@ -255,3 +255,18 @@ Training gate note:
 - b59 continues running toward the required step `5000` minimum review gate. The new hook is for the next evidence-backed restart or ablation, not a mid-run mutation.
 
 Next sequential item: continue source-side audit repairs that do not interfere with b59, then use the step-5000 metrics, sidecars, topology/geometric/algebraic visualizations, and Galileo review to choose restart coefficients and hyperparameters.
+
+## 2026-06-16 Chart-Local BPB Partition Pass
+
+Status: implemented and focused-tested.
+
+Changes made:
+- Chart-bundle diagnostics now include a real per-record BPB partition when targets are available: global BPB, chart-local min/max, chart BPB spread, active chart count, availability, and a mass-weighted chart-BPB consistency loss.
+- Per-record BPB is detached before reaching the chart head, so positive chart-consistency coefficients train the chart partition side without adding a second gradient path through token logits.
+- When targets are absent, the chart-BPB fields remain explicit unavailable zeros.
+
+Verification:
+- `PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_losses_and_model.py -q` -> `9 passed`.
+- `PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_losses_and_model.py TropicalGT-I/tests/test_training_metrics.py -q` -> `20 passed`.
+
+Next sequential item: implement the remaining transport-side chart-bundle metrics, especially explicit overlap-pair/triple transport ids and memory transported-landscape L2/cosine diagnostics, while b59 continues toward step `5000`.
