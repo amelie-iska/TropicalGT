@@ -126,7 +126,7 @@
 - [x] Implement toric embeddings only where the embedding is mathematically correct and tool-backed.
 - [x] Use "one dimensional cone(s)" terminology in the paper/plans where rays/cone generators are meant.
 - [x] Add scheme/sheaf-theoretic and vector-bundle material to `TropicalGT-I/assets/tropicalgt_neurips_research_paper.tex` as implementations mature.
-- [ ] Distinguish scoped monomial-ideal exponent-chart certificates from full tropical-variety embeddings into toric varieties.
+- [x] Distinguish scoped monomial-ideal exponent-chart certificates from full tropical-variety embeddings into toric varieties.
 
 ### 12. Training, BPB, and W&B
 
@@ -475,4 +475,16 @@ The live item-by-item repair inventory is maintained in `planning/tropicalgt_i_c
 - [x] Verification completed for this paper-only pass: paper scope audit passed, unescaped Markdown backtick audit passed, requested no-proxy phrases are present, terminology audit passed, and TeX environment-balance audit passed.
 - [x] Remote `pdflatex` compile was attempted into `/tmp/tropicalgt_paper_compile`; it remains blocked by missing TeX dependency `mathtools.sty`, so no PDF artifact was produced or staged.
 - [x] b60 latest checked training state reached step `2157` with train loss/NLL `1.153/1.129`; trainer PID `378962` and watcher PID `379304` remain alive under the step-5000 gate.
-- [ ] Next Section 11 item: distinguish scoped monomial-ideal exponent-chart certificates from full tropical-variety embeddings into toric varieties.
+- [x] Next Section 11 item completed: scoped exponent-chart diagnostics, finite monomial-map toric-ideal sidecars, and full tropical-variety embeddings into toric varieties are now separated in code contracts, paper prose, tests, and planning docs.
+
+### Current Objective Update - Scoped Exponent-Chart Certificate Boundary Pass
+
+- [x] Added machine-readable toric sidecar fields distinguishing finite monomial-map toric-ideal certificates from tropical-variety embeddings into toric varieties and global toric-variety models.
+- [x] Chart-bundle metadata now marks activation charts as `uncertified_activation_chart_not_tropical_variety_embedding` and exposes false safety flags for tropical-variety/global toric-variety rendering.
+- [x] Added `toric_activation_cell_margin_loss` and `loss_toric_activation_cell_margin_weighted` as correctly scoped aliases; legacy `toric_normal_fan_loss` keys remain compatibility aliases, not certificates.
+- [x] Reworded the paper's trainable neural object as a scoped max-linear exponent-chart sidecar; normal-fan cell comparisons are allowed only with certified fan/tropical sidecars.
+- [x] Updated planning docs to reserve toric-variety embedding language for certified finite sidecars and to label neural/runtime quantities as scoped exponent-chart diagnostics.
+- [x] Verification completed: py-compile for touched source/tests, scoped exponent-chart paper audit, terminology/no-proxy grep, `git diff --check`, `pytest TropicalGT-I/tests/test_algebraic_persistence.py -q` (`27 passed`), `pytest TropicalGT-I/tests/test_losses_and_model.py -q` (`10 passed`), and `pytest TropicalGT-I/tests/test_training_metrics.py -q` (`13 passed`).
+- [x] Remote `pdflatex` compile was attempted into `/tmp/tropicalgt_paper_compile`; it remains blocked by missing TeX dependency `mathtools.sty`, so no PDF artifact was produced or staged.
+- [x] b60 latest checked training state reached step `2250` with train loss/NLL `1.149/1.126`; trainer PID `378962` and watcher PID `379304` remain alive under the step-5000 gate.
+- [ ] Next Section 12 item: keep the current BPB run alive until the 5K gate unless explicitly restarted.

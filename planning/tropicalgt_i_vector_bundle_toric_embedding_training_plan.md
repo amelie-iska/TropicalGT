@@ -25,7 +25,7 @@
 
 ## Goal
 
-Use the theory of tropical vector bundles and vector bundles on tropical schemes to add trainable chart transports, toric embedding regularizers, and BPB-oriented chart consistency objectives to TropicalGT-I. The guiding rule is that invertible tropical chart changes should be monomial transports, while chart filtrations should be checked against small valuated-matroid flat systems.
+Use the theory of tropical vector bundles and vector bundles on tropical schemes to add trainable chart transports, scoped exponent-chart regularizers, certified finite toric-ideal sidecars, and BPB-oriented chart consistency objectives to TropicalGT-I. The guiding rule is that invertible tropical chart changes should be monomial transports, while chart filtrations should be checked against small valuated-matroid flat systems.
 
 ## Model Hooks
 
@@ -40,7 +40,7 @@ Use the theory of tropical vector bundles and vector bundles on tropical schemes
 - `bundle/transport_l1`: L1 difference between transported chart features and target chart features on overlaps.
 - `bundle/cocycle_defect`: discrepancy between `T_bc T_ab` and `T_ac` on sampled triple overlaps.
 - `bundle/flat_rank_defect`: rank or incidence defect between predicted filtrations and basis-generated flats.
-- `toric/normal_fan_loss`: disagreement between active toric embedding rows and chart filtration cells.
+- `toric/activation_cell_margin_loss (legacy alias: toric/normal_fan_loss)`: disagreement between active toric embedding rows and chart filtration cells.
 - `chart/bpb_consistency`: robust NLL difference across transported overlapping charts.
 - `bundle/atom_stability_gap`: sampled flat/atom load imbalance diagnostic inspired by tropical vector-bundle stability; use only as a BPB-gated auxiliary.
 - `memory/transported_landscape_l2` and `memory/transported_landscape_cosine`: analogical retrieval comparisons only when real GUDHI landscape vectors are present.
@@ -51,7 +51,7 @@ Use the theory of tropical vector bundles and vector bundles on tropical schemes
 - `bundle/transport_l1`: feature agreement under monomial transports on sampled TokenGT chart overlaps.
 - `bundle/cocycle_defect`: consistency of `T_ab`, `T_bc`, and `T_ac` on graph-token, GoT-prefix, or memory-overlap triples.
 - `bundle/flat_rank_defect`: matroid flat reconstruction error for active tropical attention supports, GraphCG one dimensional cone probes, and persistence atoms.
-- `toric/normal_fan_loss`: agreement between active max-linear toric rows and chart filtration cells.
+- `toric/activation_cell_margin_loss (legacy alias: toric/normal_fan_loss)`: agreement between active max-linear toric rows and chart filtration cells.
 - `graphcg/toric_cell_agreement`: agreement between active GraphCG direction cones and toric active cells, with the existing full-rank barrier retained.
 - `gfn/bundle_reward`: optional GFlowNet reward shaping by transport, cocycle, and flat defects; promotion still depends on BPB and graph-BPB gates.
 - `memory/transported_landscape_l2` and `memory/transported_landscape_cosine`: analogical retrieval comparisons only when both memory rows have real GUDHI persistence-landscape vectors.
@@ -64,14 +64,14 @@ Use the theory of tropical vector bundles and vector bundles on tropical schemes
 2. Enable soft monomial transports at a very small coefficient after BPB stabilizes.
 3. Add chart BPB consistency only if validation BPB and graph BPB do not regress.
 4. Add matroid flat compatibility on tiny ground sets and audit basis coverage.
-5. Add toric embedding regularization after chart transports are stable.
+5. Add scoped exponent-chart regularization after chart transports are stable; reserve toric-variety embedding claims for certified finite sidecars.
 6. Project soft permutations to hard monomial maps for periodic audits, not necessarily every optimizer step.
 
 ## Metrics and W&B Keys
 
 - `train/bpb`, `val/bpb`, `train/graph_bpb`, `val/graph_bpb`
 - `bundle/transport_l1`, `bundle/cocycle_defect`, `bundle/flat_rank_defect`, `bundle/basis_coverage`
-- `toric/normal_fan_loss`, `toric/active_row_entropy`, `toric/tropical_margin`
+- `toric/activation_cell_margin_loss (legacy alias: toric/normal_fan_loss)`, `toric/active_row_entropy`, `toric/tropical_margin`
 - `chart/bpb_consistency`, `chart/overlap_count`, `chart/transport_projection_error`
 - `memory/landscape_available_rate`, `memory/transported_landscape_l2`, `memory/transported_landscape_cosine`
 - `audit/browser_landscape_label_ok`, `audit/topk_landscape_columns_present`
@@ -87,7 +87,7 @@ Ablations should use matched seeds and identical data windows whenever possible.
 | telemetry only | coefficients `0`, artifact emission on | chart ids, toric rows, flat defects, landscape availability | logits and BPB must match zero auxiliary within tolerance |
 | transport only | `lambda_transport`, `lambda_cocycle` | `bundle/transport_l1`, `bundle/cocycle_defect`, `chart/overlap_count` | no BPB/graph-BPB regression |
 | matroid/one dimensional cone only | `lambda_flat`, optional atom stability | `bundle/flat_rank_defect`, `bundle/basis_coverage`, `bundle/atom_stability_gap` | no BPB/graph-BPB regression and no certificate-loss spike |
-| toric/GraphCG only | `lambda_toric`, `lambda_graphcg_toric` | `toric/normal_fan_loss`, `graphcg/toric_cell_agreement`, full-rank spectra | no graph-BPB regression and GraphCG full-rank remains finite |
+| toric/GraphCG only | `lambda_toric`, `lambda_graphcg_toric` | `toric/activation_cell_margin_loss (legacy alias: toric/normal_fan_loss)`, `graphcg/toric_cell_agreement`, full-rank spectra | no graph-BPB regression and GraphCG full-rank remains finite |
 | memory landscape only | `lambda_landscape` | landscape availability, transported L2/cosine, top-k columns | unavailable vectors remain unavailable; retrieval quality gate passes |
 | chart BPB consistency | `lambda_chart_bpb` | chart-local NLL gap, overlap count, validation BPB | text BPB improves or is unchanged |
 | full bundle stack | all selected coefficients | all above plus artifact-byte manifest | promote only if BPB, graph-BPB, certificate loss, and wall-hit gates pass |
@@ -98,7 +98,7 @@ W&B keys should be namespaced as `bundle/*`, `toric/*`, `graphcg/*`, `chart/*`, 
 ## Paper Coverage Verification
 
 - Background theory: covered in `tropicalgt_neurips_research_paper.tex` under `Reference-theory background`, using Khan-Maclagan valuated-matroid/one dimensional cone-filtration tropical toric bundles and Jun-Mincheva-Tolliver semiring-scheme monomial transition results.
-- Definitions: covered by `TropicalGT chart bundle`, `Tropical toric embedding of a reasoning state`, `One dimension cone-filtration atomization for graph tokens`, and `TokenGT tropical atlas`.
+- Definitions: covered by `TropicalGT chart bundle`, `Scoped max-linear exponent-chart sidecar for a reasoning state`, `One dimension cone-filtration atomization for graph tokens`, and `TokenGT tropical atlas`.
 - Theorem/proposition material: covered by monomial transport, matroid-filtration compatibility, BPB-oriented chart consistency, finite one dimensional cone-filtration auditability, and metric-gated auxiliary geometry.
 - Examples: covered by the chart-consistency batch and transported persistence-landscape memory examples.
 - Pseudocode: covered by `vector_bundle_toric_step` and `promote_bundle_geometry`.
@@ -111,7 +111,7 @@ W&B keys should be namespaced as `bundle/*`, `toric/*`, `graphcg/*`, `chart/*`, 
 - Label GoT loss, fitness, heat, or density fields as NLL, fitness, or density, never as persistence landscapes.
 - Add top-k analogical retrieval columns for landscape availability, transported L2, transported cosine, source chart, target chart, and transport id.
 - Add chart-overlap audit panels showing transport L1, cocycle defect, flat rank defect, and BPB consistency.
-- Add toric embedding panels showing active exponent rows and normal-fan cell assignments.
+- Add scoped exponent-chart panels showing active exponent rows; show normal-fan cell assignments only when a certified fan/tropical sidecar is attached.
 
 ## Tests
 
@@ -136,7 +136,7 @@ W&B keys should be namespaced as `bundle/*`, `toric/*`, `graphcg/*`, `chart/*`, 
 - Implement monomial transport projection with a hard-audit path and a soft training path; log projection error separately from transport L1.
 - Keep byte BPB and graph-BPB as promotion gates: reject or anneal down any auxiliary coefficient that worsens validation BPB, graph-BPB, certificate loss, or tropical wall-hit rate.
 - Add persistence-landscape availability masks to memory rows; compute transported L2 and cosine only when both source and target rows have real GUDHI `lambda_k(t)` vectors.
-- Add browser artifacts for chart ids, transport ids, toric active rows, normal-fan cell labels, landscape availability, transported L2, and transported cosine.
+- Add browser artifacts for chart ids, transport ids, toric active rows, scoped exponent-chart cells, landscape availability, transported L2, and transported cosine; normal-fan cell labels require a certified fan/tropical sidecar.
 - Add inference toggles so optional artifacts can be emitted for audits without altering the greedy/sample decoding path.
 - Add tests for zero-coefficient no-op behavior, unavailable landscape masking, monomial projection shape, cocycle defect on synthetic charts, and browser label separation between GUDHI landscapes and GoT NLL/fitness/density fields.
 

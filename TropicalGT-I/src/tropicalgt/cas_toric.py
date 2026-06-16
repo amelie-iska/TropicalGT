@@ -23,12 +23,13 @@ def toric_embedding_certificate_contract() -> dict[str, Any]:
         "certificate_source": "Macaulay2 Quasidegrees toricIdeal(A,R) on an explicit integer exponent matrix",
         "tool_backed_embedding_scope": (
             "The certified object is the affine toric ideal/kernel of the finite monomial map determined by "
-            "the columns of A. It is a finite sidecar certificate, not a global toric model of the neural network."
+            "the columns of A. It is a finite monomial-map sidecar certificate, not a tropical-variety "
+            "embedding into a toric variety and not a global toric model of the neural network."
         ),
         "required_macaulay2_methods": ["needsPackage Quasidegrees", "toricIdeal"],
         "normal_fan_scope": (
-            "Normal-fan, fan-refinement, or toric-variety claims require an additional certified fan or tropical certificate; "
-            "the toricIdeal certificate alone certifies only the monomial map kernel."
+            "Normal-fan, fan-refinement, toric-variety, or tropical-variety embedding claims require an additional "
+            "certified fan or tropical certificate; the toricIdeal certificate alone certifies only the monomial map kernel."
         ),
         "sage_scope": (
             "Sage ToricIdeal or toric-variety APIs may be added as separate explicit backends only if they emit the same "
@@ -146,7 +147,12 @@ def unavailable_toric_embedding_certificate(
         "certificate_attached": False,
         "toric_embedding_certified": False,
         "toric_ideal_certified": False,
+        "tropical_variety_embedding_certified": False,
+        "global_toric_variety_embedding_certified": False,
+        "embedding_scope": "unavailable_finite_monomial_map_toric_ideal_certificate",
         "safe_to_render_as_toric_embedding": False,
+        "safe_to_render_as_tropical_variety_embedding": False,
+        "safe_to_render_as_global_toric_variety_embedding": False,
         "safe_to_use_as_normal_fan_certificate": False,
         "cas_artifacts": {},
     }
@@ -193,7 +199,7 @@ def build_macaulay2_toric_embedding_script(schema: dict[str, Any]) -> str:
     ring = f"{schema.get('coefficient_field', 'QQ')}[" + ",".join(variables) + "]"
     matrix = "matrix {" + ",".join("{" + ",".join(str(value) for value in row) + "}" for row in rows) + "}"
     return "\n".join([
-        "-- TropicalGT Macaulay2 toric embedding sidecar certificate",
+        "-- TropicalGT Macaulay2 finite monomial-map toric ideal sidecar certificate",
         'toricOk = try (needsPackage "Quasidegrees"; true) else false',
         'print "TROPICALGT_RESOLUTION_BEGIN"',
         'print "backend=Macaulay2"',
@@ -202,9 +208,12 @@ def build_macaulay2_toric_embedding_script(schema: dict[str, Any]) -> str:
         f"R = {ring}",
         f"A = {matrix}",
         "I = toricIdeal(A,R)",
-        'print "certificate_type=Macaulay2 Quasidegrees toricIdeal exponent-matrix embedding certificate"',
+        'print "certificate_type=Macaulay2 Quasidegrees toricIdeal finite monomial-map certificate"',
+        'print "embedding_scope=finite_monomial_map_toric_ideal_certificate_only"',
         'print "toric_embedding_certified=true"',
         'print "toric_ideal_certified=true"',
+        'print "tropical_variety_embedding_certified=false"',
+        'print "global_toric_variety_embedding_certified=false"',
         'print concatenate("ring=", toString R)',
         'print concatenate("exponent_matrix=", replace("\n", " || ", toString A))',
         'print concatenate("toric_ideal_text=", replace("\n", " || ", toString I))',
@@ -248,10 +257,15 @@ def _certified_toric_embedding_result(
         "command_template": build_macaulay2_toric_embedding_script(schema),
         "certificate_contract": toric_embedding_certificate_contract(),
         "certificate_attached": True,
-        "certificate_type": parsed.get("certificate_type", "Macaulay2 Quasidegrees toricIdeal exponent-matrix embedding certificate"),
+        "certificate_type": parsed.get("certificate_type", "Macaulay2 Quasidegrees toricIdeal finite monomial-map certificate"),
         "toric_embedding_certified": True,
         "toric_ideal_certified": True,
+        "tropical_variety_embedding_certified": _parse_bool(parsed.get("tropical_variety_embedding_certified")),
+        "global_toric_variety_embedding_certified": _parse_bool(parsed.get("global_toric_variety_embedding_certified")),
+        "embedding_scope": str(parsed.get("embedding_scope") or "finite_monomial_map_toric_ideal_certificate_only"),
         "safe_to_render_as_toric_embedding": True,
+        "safe_to_render_as_tropical_variety_embedding": False,
+        "safe_to_render_as_global_toric_variety_embedding": False,
         "safe_to_use_as_normal_fan_certificate": False,
         "monomial_map_summary": {
             "lattice_dimension": schema["lattice_dimension"],

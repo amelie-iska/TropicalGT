@@ -81,7 +81,7 @@ Repair `trajectory_persistence/two_parameter_bifiltration.html` so it is mathema
 
 - Research Macaulay2 `Tropical`, Sage tropical polynomial and tropical variety APIs, `references/1710.10651v2.pdf`, and Maclagan-style embeddings of tropical schemes into toric varieties.
 - Implement toric embeddings only when fan, one dimensional cone(s), semigroup, and embedding maps are mathematically correct and tool-backed.
-- Add vector-bundle, tropical toric embedding, scheme, and sheaf-theoretic material to the TropicalGT-I paper as implementations mature.
+- Add vector-bundle, scoped exponent-chart sidecar, certified finite toric-ideal sidecar, scheme, and sheaf-theoretic material to the TropicalGT-I paper as implementations mature.
 
 ### 9. Training, Browser QA, Docs, and Push
 
@@ -243,7 +243,7 @@ Next sequential item: continue the remaining topological/geometric/algebraic aud
 Status: implemented and focused-tested as a zero-default auxiliary hook for future restarts.
 
 Changes made:
-- `TropicalGTModel` now has an opt-in chart-bundle/toric auxiliary head that computes chart confidence, monomial projection one-hotness, overlap transport L1, cocycle defect, flat-rank defect, toric normal-fan margin, GraphCG/toric active-cell agreement, chart-BPB availability, and atom-stability gap.
+- `TropicalGTModel` now has an opt-in chart-bundle/toric auxiliary head that computes chart confidence, monomial projection one-hotness, overlap transport L1, cocycle defect, flat-rank defect, toric activation-cell margin (normal-fan only with certified fan sidecar), GraphCG/toric active-cell agreement, chart-BPB availability, and atom-stability gap.
 - The disabled default path emits explicit zero metrics. The enabled zero-weight path is tested to preserve logits and loss exactly, so current training behavior is not changed unless a restart config turns coefficients on.
 - W&B priority groups now expose the new bundle/toric metrics under `10_bundle_toric`; default train configs declare all related coefficients as `0.0`.
 

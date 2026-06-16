@@ -153,6 +153,7 @@ def test_model_forward_fixture():
         "bundle_overlap_triple_count",
         "bundle_atom_stability_gap",
         "bundle_atom_stability_available",
+        "toric_activation_cell_margin_loss",
         "toric_normal_fan_loss",
         "toric_active_row_count",
         "graphcg_toric_cell_agreement",
@@ -169,6 +170,7 @@ def test_model_forward_fixture():
         "loss_bundle_transport_weighted",
         "loss_bundle_cocycle_weighted",
         "loss_bundle_flat_rank_weighted",
+        "loss_toric_activation_cell_margin_weighted",
         "loss_toric_normal_fan_weighted",
         "loss_graphcg_toric_cell_agreement_weighted",
         "loss_chart_bpb_consistency_weighted",
@@ -206,7 +208,11 @@ def test_model_forward_fixture():
     disabled_cert = out["chart_bundle_transport_metadata"]["toric_embedding_certificate"]
     assert disabled_cert["available"] is False
     assert disabled_cert["safe_to_render_as_toric_embedding"] is False
+    assert disabled_cert["safe_to_render_as_tropical_variety_embedding"] is False
+    assert disabled_cert["safe_to_render_as_global_toric_variety_embedding"] is False
+    assert disabled_cert["embedding_scope"] == "uncertified_activation_chart_not_tropical_variety_embedding"
     assert "not toric embeddings" in disabled_cert["no_proxy_policy"]
+    assert "tropical-variety embeddings" in disabled_cert["no_proxy_policy"]
 
 
 def _fixture_batch(batch_size: int = 2, seq_len: int = 32):
@@ -259,8 +265,12 @@ def test_chart_bundle_auxiliary_zero_weights_do_not_change_logits_or_loss():
     assert toric_cert["available"] is False
     assert toric_cert["status"] == "uncertified_activation_chart"
     assert toric_cert["safe_to_render_as_toric_embedding"] is False
+    assert toric_cert["safe_to_render_as_tropical_variety_embedding"] is False
+    assert toric_cert["safe_to_render_as_global_toric_variety_embedding"] is False
+    assert toric_cert["embedding_scope"] == "uncertified_activation_chart_not_tropical_variety_embedding"
     assert toric_cert["metric_scope"] == "activation_margin_diagnostic_not_tool_backed_toric_embedding"
     assert "Chart-bundle logits" in toric_cert["no_proxy_policy"]
+    assert "tropical-variety embeddings" in toric_cert["no_proxy_policy"]
     assert aux_out["chart_bpb_consistency_available"].item() == 1.0
     assert aux_out["chart_bpb_active_count"].item() == 3.0
     assert aux_out["chart_bpb_spread"].item() >= 0.0
@@ -319,7 +329,9 @@ def test_chart_bundle_auxiliary_positive_weights_change_loss_not_logits():
     assert weighted_out["loss"].item() >= zero_out["loss"].item()
     assert weighted_out["bundle_transport_l1"].item() >= 0.0
     assert weighted_out["bundle_cocycle_defect"].item() >= 0.0
-    assert weighted_out["toric_normal_fan_loss"].item() >= 0.0
+    assert weighted_out["toric_activation_cell_margin_loss"].item() >= 0.0
+    assert torch.allclose(weighted_out["toric_normal_fan_loss"], weighted_out["toric_activation_cell_margin_loss"])
+    assert torch.allclose(weighted_out["loss_toric_normal_fan_weighted"], weighted_out["loss_toric_activation_cell_margin_weighted"])
     assert weighted_out["graphcg_toric_cell_agreement_available"].item() == 1.0
     assert weighted_out["chart_bpb_consistency_available"].item() == 1.0
     assert weighted_out["loss_chart_bpb_consistency_weighted"].item() >= 0.0

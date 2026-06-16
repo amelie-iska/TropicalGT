@@ -307,7 +307,7 @@
 ## Iteration 37: Zero-Default Chart-Bundle/Toric Auxiliary Hooks
 
 - Added a gated `ChartBundleToricHead` to `TropicalGTModel` for telemetry-only tropical chart-bundle and toric-cell diagnostics. The head reads graph states, tropical support probabilities, graph-token masks, and GraphCG projections; it does not feed into token logits.
-- Added config controls for `enable_chart_bundle_auxiliary`, chart count, toric active rows, and zero-default auxiliary weights for bundle transport, cocycle defect, flat-rank defect, toric normal-fan margin, GraphCG/toric cell agreement, chart BPB consistency, and atom-stability gap.
+- Added config controls for `enable_chart_bundle_auxiliary`, chart count, toric active rows, and zero-default auxiliary weights for bundle transport, cocycle defect, flat-rank defect, toric activation-cell margin (legacy normal-fan alias), GraphCG/exponent-chart cell agreement, chart BPB consistency, and atom-stability gap.
 - The default-disabled path now emits explicit zero metrics/losses, while the enabled zero-weight path proves logits and total loss remain unchanged. Positive weights only add nonnegative auxiliary regularizer terms and leave logits unchanged.
 - Added W&B priority grouping for bundle/toric telemetry under `10_bundle_toric`; system and optimizer groups moved to `11_system` and `12_optimization` to keep dashboards ordered.
 - Updated the main training configs with explicit zero-default bundle/toric fields so the post-5K restart can turn on these diagnostics or losses deliberately from step 0.

@@ -99,7 +99,7 @@ This checklist merges the browser/photo review, the current active training stat
 
 ## 14. Tropical Vector Bundles and Tropical Toric Embeddings
 
-- Add zero-default config flags for monomial chart transports, tropical toric embeddings, chart BPB consistency, landscape transport metrics, and atom stability.
+- Add zero-default config flags for monomial chart transports, scoped exponent-chart sidecars, certified finite toric-ideal sidecars, chart BPB consistency, landscape transport metrics, and atom stability.
 - Model hooks must emit chart ids, overlap pairs/triples, toric active rows, active tropical support cells, GraphCG active directions, chart-local NLL, and transport ids without changing logits when coefficients are zero.
 - Implement `MonomialTransportHead`, `BundleMatroidHead`, and `ToricEmbeddingHead` only behind config gates.
 - Add losses/metrics: `bundle/transport_l1`, `bundle/cocycle_defect`, `bundle/flat_rank_defect`, `toric/normal_fan_loss`, `graphcg/toric_cell_agreement`, `chart/bpb_consistency`, `bundle/atom_stability_gap`, `memory/transported_landscape_l2`, and `memory/transported_landscape_cosine`.
@@ -115,7 +115,7 @@ Implementation checkpoint, 2026-06-16:
 ### Paper Workstream Status: Vector Bundles and Tropical Toric Embeddings
 
 - Subagent Avicenna reviewed `references/2405.03505v1.pdf` and `references/2009.03030v2.pdf` in full from extracted text and updated `TropicalGT-I/assets/tropicalgt_neurips_research_paper.tex`.
-- The new paper material introduces TropicalGT chart bundles, TokenGT tropical atlases, monomial tropical chart transports, one dimension cone-filtration atomization, tropical toric embeddings, matroid flat-defect objectives, GraphCG-toric agreement, chart-BPB consistency, and transported persistence-landscape memory metrics.
+- The new paper material introduces TropicalGT chart bundles, TokenGT tropical atlases, monomial tropical chart transports, one dimension cone-filtration atomization, scoped exponent-chart sidecars, certified finite toric-ideal sidecars, matroid flat-defect objectives, GraphCG/exponent-chart agreement, chart-BPB consistency, and transported persistence-landscape memory metrics.
 - Implementation planning is in `planning/tropicalgt_i_vector_bundle_toric_embedding_training_plan.md`; the key rule is zero-default auxiliary coefficients with telemetry-only and active-loss ablations before any BPB promotion.
 - Remote LaTeX compilation remains blocked by missing `latexmk`, `pdflatex`, and `tectonic`; the current lightweight TeX environment-balance check passed.
 
@@ -230,7 +230,7 @@ git diff --check
 - Sage `tropical_mpolynomial` documentation: review tropical multivariate polynomial construction, monomial support, coefficient arithmetic, Newton-polytope data, and exact tropical semiring operations for model-derived tropical polynomial certificates.
 - Reference `1710.10651v2.pdf`: review fully before adding any training theorem, paper claim, or implementation hook tied to tropical/toric embeddings.
 - CAS package survey: look for Sage, Macaulay2, Singular, RIVET/multipers, polymake, Normaliz, and related packages that compute real multigraded modules, minimal resolutions, Betti tables, Fitting ideals, minors, Buchsbaum-Eisenbud diagnostics, tropical fans, toric varieties, and stable intersections.
-- Maclagan-style toric embedding research direction: investigate whether the transformer graph-state and tropical-attention coordinate system can be embedded into a toric variety via model-derived monomial coordinates, Newton polytopes, fan data, and one dimensional cone data. Any resulting implementation must distinguish theorem-level certified constructions from diagnostic embeddings or visual probes.
+- Maclagan-style toric embedding research direction: investigate whether finite model-derived monomial coordinates, Newton polytopes, certified fan data, and one dimensional cone data define a tool-backed toric sidecar. Any resulting implementation must distinguish theorem-level certified tropical-variety embeddings into toric varieties from scoped exponent-chart diagnostics or visual probes.
 
 
 ## 2026-06-16 Fresh b59 5K Review Gate and Worker Handoff
@@ -545,7 +545,7 @@ git diff --check
 ## 2026-06-16 Tool-Backed Toric Embedding Sidecar Addendum
 
 - Added `TropicalGT-I/src/tropicalgt/cas_toric.py` as the real-only finite toric embedding certificate boundary. It accepts explicit integer exponent matrices, validates coordinate variable names, builds a Macaulay2 script using `needsPackage "Quasidegrees"` and `toricIdeal(A,R)`, and returns a tagged certificate or an explicit unavailable state.
-- Certified toric reports are scoped to the affine toric ideal/kernel of the finite monomial map determined by the columns of the exponent matrix. They are safe as finite toric embedding sidecars but not as normal-fan, tropical-variety, sheaf, or global neural toric-variety certificates.
+- Certified toric reports are scoped to the affine toric ideal/kernel of the finite monomial map determined by the columns of the exponent matrix. They are safe as finite monomial-map toric-ideal sidecars but not as normal-fan, tropical-variety embedding, sheaf, or global neural toric-variety certificates.
 - Chart-bundle toric telemetry now records an explicit unavailable/uncertified certificate object. The live metrics `toric_normal_fan_loss`, `toric_active_row_count`, and `graphcg_toric_cell_agreement` are activation diagnostics only until a real `cas_toric` or `cas_tropical` certificate is attached.
 - Live smoke on exponent matrix `[[1,1,1],[0,1,2]]` returned `ideal(z_1^2-z_0*z_2)` from Macaulay2 and kept `safe_to_use_as_normal_fan_certificate=false`.
 - Verification completed: py-compile for touched source/tests, focused toric embedding tests (`3 passed`), focused chart-bundle tests (`3 passed`), `pytest TropicalGT-I/tests/test_algebraic_persistence.py -q` (`27 passed`), and `pytest TropicalGT-I/tests/test_losses_and_model.py -q` (`10 passed`).

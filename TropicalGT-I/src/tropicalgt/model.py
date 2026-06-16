@@ -54,13 +54,19 @@ def _uncertified_toric_embedding_metadata(source: str) -> dict[str, Any]:
         "source": source,
         "toric_embedding_certified": False,
         "toric_ideal_certified": False,
+        "tropical_variety_embedding_certified": False,
+        "global_toric_variety_embedding_certified": False,
+        "embedding_scope": "uncertified_activation_chart_not_tropical_variety_embedding",
         "safe_to_render_as_toric_embedding": False,
+        "safe_to_render_as_tropical_variety_embedding": False,
+        "safe_to_render_as_global_toric_variety_embedding": False,
         "safe_to_use_as_normal_fan_certificate": False,
         "required_certificate": "tropicalgt.cas_toric.try_compute_toric_embedding_certificate on an explicit integer exponent matrix",
         "metric_scope": "activation_margin_diagnostic_not_tool_backed_toric_embedding",
         "no_proxy_policy": (
             "Chart-bundle logits, toric active rows, GraphCG cells, support tokens, and embeddings are diagnostics only; "
-            "they are not toric embeddings or normal-fan certificates without a real CAS sidecar."
+            "they are not toric embeddings, tropical-variety embeddings, global toric-variety models, or normal-fan "
+            "certificates without a real CAS sidecar."
         ),
     }
 
@@ -167,7 +173,9 @@ class ChartBundleToricHead(nn.Module):
             toric_margin = toric_top[:, 0] - toric_top[:, 1]
         else:
             toric_margin = torch.ones(batch, dtype=graph_state.dtype, device=graph_state.device)
-        toric_normal_fan_loss = F.relu(0.05 - toric_margin).mean() if toric_margin.numel() else zero
+        toric_activation_cell_margin_loss = F.relu(0.05 - toric_margin).mean() if toric_margin.numel() else zero
+        # Backward-compatible metric name; this is an activation-cell margin diagnostic unless a fan certificate is attached.
+        toric_normal_fan_loss = toric_activation_cell_margin_loss
         toric_active_rows = toric_probs.argmax(dim=-1)
 
         if graphcg_projection is not None and graphcg_projection.numel() and graphcg_projection.shape[0] == batch:
@@ -230,6 +238,7 @@ class ChartBundleToricHead(nn.Module):
             "bundle_chart_count": torch.tensor(float(self.num_charts), dtype=graph_state.dtype, device=graph_state.device),
             "bundle_overlap_pair_count": torch.tensor(float(self.num_charts * max(self.num_charts - 1, 0)), dtype=graph_state.dtype, device=graph_state.device),
             "bundle_overlap_triple_count": torch.tensor(float(self.num_charts * max(self.num_charts - 1, 0) * max(self.num_charts - 2, 0)), dtype=graph_state.dtype, device=graph_state.device),
+            "toric_activation_cell_margin_loss": toric_activation_cell_margin_loss,
             "toric_normal_fan_loss": toric_normal_fan_loss,
             "toric_active_row_count": torch.tensor(float(self.toric_rows), dtype=graph_state.dtype, device=graph_state.device),
             "graphcg_toric_cell_agreement": graphcg_toric_cell_agreement,
@@ -248,6 +257,7 @@ class ChartBundleToricHead(nn.Module):
             "bundle_transport_l1": transport_l1,
             "bundle_cocycle_defect": cocycle_defect,
             "bundle_flat_rank_defect": flat_rank_defect,
+            "toric_activation_cell_margin_loss": toric_activation_cell_margin_loss,
             "toric_normal_fan_loss": toric_normal_fan_loss,
             "graphcg_toric_cell_agreement": graphcg_toric_cell_agreement_loss,
             "chart_bpb_consistency": chart_bpb_consistency,
@@ -267,6 +277,7 @@ def _zero_chart_bundle_outputs(reference: Tensor) -> tuple[dict[str, Tensor], di
         "bundle_chart_count": zero.detach(),
         "bundle_overlap_pair_count": zero.detach(),
         "bundle_overlap_triple_count": zero.detach(),
+        "toric_activation_cell_margin_loss": zero.detach(),
         "toric_normal_fan_loss": zero.detach(),
         "toric_active_row_count": zero.detach(),
         "graphcg_toric_cell_agreement": zero.detach(),
@@ -285,6 +296,7 @@ def _zero_chart_bundle_outputs(reference: Tensor) -> tuple[dict[str, Tensor], di
         "bundle_transport_l1": zero,
         "bundle_cocycle_defect": zero,
         "bundle_flat_rank_defect": zero,
+        "toric_activation_cell_margin_loss": zero,
         "toric_normal_fan_loss": zero,
         "graphcg_toric_cell_agreement": zero,
         "chart_bpb_consistency": zero,
@@ -469,7 +481,8 @@ class TropicalGTModel(nn.Module):
             bundle_transport_weighted = self.config.bundle_transport_weight * chart_bundle_loss_terms["bundle_transport_l1"]
             bundle_cocycle_weighted = self.config.bundle_cocycle_weight * chart_bundle_loss_terms["bundle_cocycle_defect"]
             bundle_flat_rank_weighted = self.config.bundle_flat_rank_weight * chart_bundle_loss_terms["bundle_flat_rank_defect"]
-            toric_normal_fan_weighted = self.config.toric_normal_fan_weight * chart_bundle_loss_terms["toric_normal_fan_loss"]
+            toric_activation_cell_margin_weighted = self.config.toric_normal_fan_weight * chart_bundle_loss_terms["toric_activation_cell_margin_loss"]
+            toric_normal_fan_weighted = toric_activation_cell_margin_weighted
             graphcg_toric_cell_agreement_weighted = self.config.graphcg_toric_cell_agreement_weight * chart_bundle_loss_terms["graphcg_toric_cell_agreement"]
             chart_bpb_consistency_weighted = self.config.chart_bpb_consistency_weight * chart_bundle_loss_terms["chart_bpb_consistency"]
             bundle_atom_stability_weighted = self.config.bundle_atom_stability_weight * chart_bundle_loss_terms["bundle_atom_stability_gap"]
@@ -519,6 +532,7 @@ class TropicalGTModel(nn.Module):
                     "loss_bundle_transport_weighted": bundle_transport_weighted.detach(),
                     "loss_bundle_cocycle_weighted": bundle_cocycle_weighted.detach(),
                     "loss_bundle_flat_rank_weighted": bundle_flat_rank_weighted.detach(),
+                    "loss_toric_activation_cell_margin_weighted": toric_activation_cell_margin_weighted.detach(),
                     "loss_toric_normal_fan_weighted": toric_normal_fan_weighted.detach(),
                     "loss_graphcg_toric_cell_agreement_weighted": graphcg_toric_cell_agreement_weighted.detach(),
                     "loss_chart_bpb_consistency_weighted": chart_bpb_consistency_weighted.detach(),

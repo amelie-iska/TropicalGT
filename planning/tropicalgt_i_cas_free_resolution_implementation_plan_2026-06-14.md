@@ -523,9 +523,9 @@ Next CAS item after this checkpoint:
 ## Added CAS/Tropical Survey Targets
 
 1. Macaulay2 `Tropical`: use tropical cycles/fans for audited tropical geometry diagnostics: `tropicalVariety`, `BergmanFan`, `fan`, `rays`, `cones`, `maxCones`, `isBalanced`, `isPure`, `isSimplicial`, `stableIntersection`, and `isTropicalBasis`.
-2. Sage tropical varieties and tropical multivariate polynomials: use Newton-polytope and tropical-polynomial arithmetic to build exact model-derived tropicalization checks and toric embedding diagnostics.
+2. Sage tropical varieties and tropical multivariate polynomials: use Newton-polytope and tropical-polynomial arithmetic to build exact model-derived tropicalization checks and scoped finite toric sidecar diagnostics.
 3. `1710.10651v2.pdf`: review before adding any training theorem or implementation hook tied to toric/tropical embeddings.
-4. Maclagan-style toric embeddings: investigate embedding the transformer graph-state/tropical-attention coordinate system into a toric variety using monomial coordinates, Newton polytopes, fan data, and one dimensional cones; distinguish certified constructions from visualization/probe diagnostics.
+4. Maclagan-style toric embeddings: investigate certified tropical-variety embeddings into toric varieties only from finite monomial coordinates, Newton polytopes, fan data, and one dimensional cones with tool-backed evidence; distinguish those certified constructions from scoped exponent-chart visualization/probe diagnostics.
 
 _Last updated: 2026-06-14T15:27:54+00:00_
 

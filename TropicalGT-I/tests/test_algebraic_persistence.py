@@ -749,9 +749,12 @@ def test_macaulay2_toric_embedding_certificate_parser_and_script():
     tagged = "\n".join([
         "backend=Macaulay2",
         "quasidegrees_package_available=true",
-        "certificate_type=Macaulay2 Quasidegrees toricIdeal exponent-matrix embedding certificate",
+        "certificate_type=Macaulay2 Quasidegrees toricIdeal finite monomial-map certificate",
+        "embedding_scope=finite_monomial_map_toric_ideal_certificate_only",
         "toric_embedding_certified=true",
         "toric_ideal_certified=true",
+        "tropical_variety_embedding_certified=false",
+        "global_toric_variety_embedding_certified=false",
         "ring=QQ[z_0..z_2]",
         "exponent_matrix=| 1 1 1 | || | 0 1 2 |",
         "toric_ideal_text=ideal(z_1^2-z_0*z_2)",
@@ -767,6 +770,11 @@ def test_macaulay2_toric_embedding_certificate_parser_and_script():
     assert report["toric_embedding_certified"] is True
     assert report["toric_ideal_certified"] is True
     assert report["safe_to_render_as_toric_embedding"] is True
+    assert report["embedding_scope"] == "finite_monomial_map_toric_ideal_certificate_only"
+    assert report["tropical_variety_embedding_certified"] is False
+    assert report["global_toric_variety_embedding_certified"] is False
+    assert report["safe_to_render_as_tropical_variety_embedding"] is False
+    assert report["safe_to_render_as_global_toric_variety_embedding"] is False
     assert report["safe_to_use_as_normal_fan_certificate"] is False
     assert report["monomial_map_summary"]["exponent_matrix"] == [[1, 1, 1], [0, 1, 2]]
     assert report["toric_ideal_summary"]["generator_count"] == 1
@@ -774,6 +782,7 @@ def test_macaulay2_toric_embedding_certificate_parser_and_script():
     contract = report["certificate_contract"]
     assert "toricIdeal" in contract["required_macaulay2_methods"]
     assert "No chart-bundle logits" in contract["no_proxy_policy"]
+    assert "not a tropical-variety" in contract["tool_backed_embedding_scope"]
 
 
 def test_macaulay2_toric_embedding_certificate_live_or_unavailable():
@@ -789,12 +798,16 @@ def test_macaulay2_toric_embedding_certificate_live_or_unavailable():
         assert report["toric_embedding_certified"] is True
         assert report["toric_ideal_certified"] is True
         assert report["safe_to_render_as_toric_embedding"] is True
+        assert report["safe_to_render_as_tropical_variety_embedding"] is False
+        assert report["safe_to_render_as_global_toric_variety_embedding"] is False
         assert report["safe_to_use_as_normal_fan_certificate"] is False
         assert report["cas_artifacts"]["raw_tagged_output"]
     else:
         assert report["status"] in {"backend_not_installed", "timeout", "backend_error", "certificate_failed", "invalid_input", "parse_error"}
         assert report["certificate_attached"] is False
         assert report["safe_to_render_as_toric_embedding"] is False
+        assert report["safe_to_render_as_tropical_variety_embedding"] is False
+        assert report["safe_to_render_as_global_toric_variety_embedding"] is False
         assert "No chart-bundle logits" in report["certificate_contract"]["no_proxy_policy"]
 
 
@@ -804,6 +817,8 @@ def test_macaulay2_toric_embedding_certificate_invalid_input_unavailable():
     assert report["status"] == "invalid_input"
     assert report["cas_artifacts"] == {}
     assert report["safe_to_render_as_toric_embedding"] is False
+    assert report["safe_to_render_as_tropical_variety_embedding"] is False
+    assert report["safe_to_render_as_global_toric_variety_embedding"] is False
 
 
 def test_cas_canonicalization_preserves_generator_id_boundaries():
