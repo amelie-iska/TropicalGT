@@ -188,6 +188,111 @@ def test_tagged_cas_script_timeout_records_bounded_attempt():
     assert attempt["stdout_tail"]
 
 
+def test_singular_certified_result_structures_ungraded_betti_rows_without_multigraded_claims():
+    schema = canonicalize_module(_small_free_resolution_module())
+    tagged = "\n".join([
+        "TROPICALGT_RESOLUTION_BEGIN",
+        "backend=Singular",
+        "exactness_certified=true",
+        "minimality_certified=true",
+        "certificate_type=Singular mres image-submodule resolution prepended to the displayed cokernel presentation",
+        "presentation_shape=1x2",
+        "betti_table_begin",
+        "2     1",
+        "betti_table_end",
+        "singular_resolution_text_begin",
+        "1      2      1",
+        "singular_resolution_text_end",
+        "fitting_ideals_begin",
+        "Fitt0=x_level,x_radius",
+        "Fitt1=1",
+        "fitting_ideals_end",
+        "minors_begin",
+        "minors_1=x_level,x_radius",
+        "minors_end",
+        "buchsbaum_eisenbud_diagnostics_begin",
+        "backend_diagnostics_available=true",
+        "exactness_certified=true",
+        "minimality_certified=true",
+        "be_exactness_source=Singular mres plus exact determinantal/Fitting ideals for the displayed presentation matrix",
+        "multiplier_output_available=false",
+        "bemultipliers_status=unsupported_in_singular_adapter",
+        "reason=Singular output is not Buchsbaum-Eisenbud multiplier output",
+        "buchsbaum_eisenbud_diagnostics_end",
+        "TROPICALGT_RESOLUTION_END",
+    ])
+    parsed = cas_free_resolution._parse_tagged_output(tagged)
+    assert parsed is not None
+    real = cas_free_resolution._certified_result(
+        schema,
+        {
+            "available": True,
+            "backend": "Singular",
+            "parsed": parsed,
+            "tagged_output": parsed["_raw"],
+            "certificate_attached": True,
+        },
+        attempts=[{"backend": "Singular", "status": "ran"}],
+    )
+    _assert_real_resolution_guard(real, "F2[x_level,x_radius]")
+    assert real["backend"] == "Singular"
+    assert real["ungraded_resolution_certified"] is True
+    assert real["multigraded_free_resolution_certified"] is False
+    assert real["safe_to_render_as_multigraded_free_resolution"] is False
+    ungraded = real["cas_artifacts"]["betti_table_ungraded"]
+    assert ungraded["available"] is True
+    assert ungraded["not_multigraded"] is True
+    assert ungraded["safe_for_multigraded_claims"] is False
+    assert ungraded["homological_column_ranks"] == [2, 1]
+    assert ungraded["free_modules"] == [
+        {
+            "homological_degree": 0,
+            "rank": 2,
+            "display": "F_0 = S^2",
+            "grading": "ungraded_total_rank",
+            "multidegree_shifts_available": False,
+        },
+        {
+            "homological_degree": 1,
+            "rank": 1,
+            "display": "F_1 = S",
+            "grading": "ungraded_total_rank",
+            "multidegree_shifts_available": False,
+        },
+    ]
+    assert ungraded["betti_table_rows"] == [
+        {
+            "homological_degree": 0,
+            "matrix_row": 0,
+            "multidegree": [],
+            "shift_display": "ungraded row 0",
+            "rank": 2,
+            "multiplicity": 2,
+            "grading": "ungraded_total_rank",
+            "source": "Singular_betti_matrix",
+            "not_multigraded": True,
+            "multidegree_shifts_available": False,
+            "safe_for_multigraded_claims": False,
+        },
+        {
+            "homological_degree": 1,
+            "matrix_row": 0,
+            "multidegree": [],
+            "shift_display": "ungraded row 0",
+            "rank": 1,
+            "multiplicity": 1,
+            "grading": "ungraded_total_rank",
+            "source": "Singular_betti_matrix",
+            "not_multigraded": True,
+            "multidegree_shifts_available": False,
+            "safe_for_multigraded_claims": False,
+        },
+    ]
+    assert real["free_resolution_summary"]["betti_table_rows"] == ungraded["betti_table_rows"]
+    assert real["cas_artifacts"]["fitting_ideals"]["Fitt0"] == "x_level,x_radius"
+    assert real["cas_artifacts"]["minors"]["minors_1"] == "x_level,x_radius"
+
+
 def test_real_cas_free_resolution_smoke_when_backend_available():
     module = {
         "coefficient_ring": "F2[x_level,x_radius]",
@@ -216,6 +321,8 @@ def test_real_cas_free_resolution_smoke_when_backend_available():
         assert ungraded["available"] is True
         assert ungraded["homological_column_ranks"][:2] == [2, 1]
         assert [row["display"] for row in ungraded["free_modules"][:2]] == ["F_0 = S^2", "F_1 = S"]
+        assert ungraded["betti_table_rows"]
+        assert all(row["safe_for_multigraded_claims"] is False for row in ungraded["betti_table_rows"])
         assert ungraded["not_multigraded"] is True
         if real["backend"] == "Singular":
             assert real["cas_artifacts"]["singular_determinantal"]["available"] is True
@@ -316,6 +423,56 @@ def test_certified_cas_result_surfaces_buchsbaum_eisenbud_diagnostics():
     assert "not substituted" in be["interpretation"]
     assert real["cas_artifacts"]["fitting_ideals"]["Fitt0"] == "ideal(x_level,x_radius)"
     assert real["cas_artifacts"]["minors"]["minors_1"] == "ideal(x_level,x_radius)"
+    assert real["free_resolution_summary"]["betti_table_rows"] == [
+        {
+            "homological_degree": 0,
+            "multidegree": [0, 0],
+            "shift_display": "(0,0)",
+            "rank": 1,
+            "multiplicity": 1,
+            "grading": "multigraded_bidegree_shift",
+            "source": "macaulay2_free_module_degree_block",
+            "not_multigraded": False,
+            "multidegree_shifts_available": True,
+            "safe_for_multigraded_claims": True,
+        },
+        {
+            "homological_degree": 1,
+            "multidegree": [0, 1],
+            "shift_display": "(0,1)",
+            "rank": 1,
+            "multiplicity": 1,
+            "grading": "multigraded_bidegree_shift",
+            "source": "macaulay2_free_module_degree_block",
+            "not_multigraded": False,
+            "multidegree_shifts_available": True,
+            "safe_for_multigraded_claims": True,
+        },
+        {
+            "homological_degree": 1,
+            "multidegree": [1, 0],
+            "shift_display": "(1,0)",
+            "rank": 1,
+            "multiplicity": 1,
+            "grading": "multigraded_bidegree_shift",
+            "source": "macaulay2_free_module_degree_block",
+            "not_multigraded": False,
+            "multidegree_shifts_available": True,
+            "safe_for_multigraded_claims": True,
+        },
+        {
+            "homological_degree": 2,
+            "multidegree": [1, 1],
+            "shift_display": "(1,1)",
+            "rank": 1,
+            "multiplicity": 1,
+            "grading": "multigraded_bidegree_shift",
+            "source": "macaulay2_free_module_degree_block",
+            "not_multigraded": False,
+            "multidegree_shifts_available": True,
+            "safe_for_multigraded_claims": True,
+        },
+    ]
     m2_script = cas_free_resolution.build_macaulay2_script(schema)
     singular_script = build_singular_script(schema)
     sage_script = cas_free_resolution.build_sage_python_script(schema)

@@ -3921,6 +3921,7 @@ def _cas_real_resolution_display(real: Mapping[str, Any]) -> Dict[str, Any]:
     else:
         ungraded = artifacts.get("betti_table_ungraded") if isinstance(artifacts.get("betti_table_ungraded"), Mapping) else {}
         modules_in = ungraded.get("free_modules") if isinstance(ungraded.get("free_modules"), list) else []
+        betti_rows_in = ungraded.get("betti_table_rows") if isinstance(ungraded.get("betti_table_rows"), list) else []
         scope = "certified_total_graded_cas_resolution" if is_total_graded else "certified_ungraded_cas_resolution"
         object_resolved = "CAS-certified resolution of the boundary-presentation module under the displayed non-multigraded grading"
         not_full = True
@@ -3928,6 +3929,7 @@ def _cas_real_resolution_display(real: Mapping[str, Any]) -> Dict[str, Any]:
     modules: List[Dict[str, Any]] = []
     betti_rows: List[Dict[str, Any]] = []
     if is_multigraded:
+        betti_rows_in = summary.get("betti_table_rows") if isinstance(summary.get("betti_table_rows"), list) else []
         for idx, row in enumerate(modules_in):
             if not isinstance(row, Mapping):
                 continue
@@ -3954,7 +3956,28 @@ def _cas_real_resolution_display(real: Mapping[str, Any]) -> Dict[str, Any]:
             rank = int(row.get("rank", row.get("multiplicity", 0)) or 0)
             display = str(row.get("display") or f"{name} = S^{rank}")
             modules.append({"module": name, "name": name, "degree": hd, "rank": rank, "display": display, "multidegree": []})
-            betti_rows.append({"homological_degree": hd, "multidegree": [], "shift_display": "ungraded", "rank": rank, "multiplicity": rank})
+            if not betti_rows_in:
+                betti_rows.append({"homological_degree": hd, "multidegree": [], "shift_display": "ungraded", "rank": rank, "multiplicity": rank})
+    if betti_rows_in:
+        betti_rows = []
+        for row in betti_rows_in:
+            if not isinstance(row, Mapping):
+                continue
+            hd = int(row.get("homological_degree", 0) or 0)
+            rank = int(row.get("rank", row.get("multiplicity", 0)) or 0)
+            if rank == 0:
+                continue
+            normalized = {
+                "homological_degree": hd,
+                "multidegree": row.get("multidegree", []) if isinstance(row.get("multidegree", []), list) else [],
+                "shift_display": str(row.get("shift_display", "ungraded")),
+                "rank": rank,
+                "multiplicity": int(row.get("multiplicity", rank) or rank),
+            }
+            for optional in ("total_degree", "matrix_row", "grading", "source", "not_multigraded", "safe_for_multigraded_claims"):
+                if optional in row:
+                    normalized[optional] = row.get(optional)
+            betti_rows.append(normalized)
 
     diffs_in = artifacts.get("differentials") if isinstance(artifacts.get("differentials"), list) else summary.get("differentials", [])
     differentials: List[Dict[str, Any]] = []

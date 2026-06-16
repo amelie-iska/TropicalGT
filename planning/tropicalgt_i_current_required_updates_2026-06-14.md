@@ -163,12 +163,34 @@ PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pyt
 # 7 passed in 1.48s
 ```
 
-Remaining CAS items:
+Remaining CAS items after the 2026-06-16 structured-row checkpoint:
 
-1. Parse Singular Betti matrices into structured multigraded Betti-table rows suitable for the research-style figures.
-2. Add Macaulay2 when available, because it remains the preferred backend for minimal graded free resolutions, Fitting ideals, minors, and Buchsbaum-Eisenbud diagnostics.
-3. Add optional Sage bridge only if it records the underlying backend and returns the same certificate fields.
-4. Clone and wire `amelie-iska/BEMultipliers.git` only as a Buchsbaum-Eisenbud diagnostic layer after a certified resolution exists; it is not a substitute for a resolution backend.
+1. Expand Macaulay2 as the preferred backend for minimal graded free resolutions, richer Fitting/minor extraction, and Buchsbaum-Eisenbud diagnostics when its packages are available. The bridge already parses real Macaulay2 multigraded free-module degree blocks into `betti_table_rows`; keep using this as the only source for multigraded shift claims.
+2. Keep Singular as a certified fallback for exactness, determinantal ideals, Fitting ideals, minors, and figure-ready ungraded Betti rows. Singular `betti(R)` rows are now structured but explicitly `not_multigraded`; do not promote them to `F2[x_level,x_radius]` multidegree shifts.
+3. Add optional Sage hardening only if it records the underlying backend and returns the same certificate fields. Current total-graded Sage rows must remain labeled total-graded/non-multigraded.
+4. Continue wiring `amelie-iska/BEMultipliers.git` only as a Buchsbaum-Eisenbud diagnostic layer after a certified Macaulay2 resolution exists; it is not a substitute for a resolution backend.
+5. Browser-verify the rendered CAS tables after the next 5K audit bundle exists, especially Betti rows, differential previews, Fitting ideals, minors, and BE diagnostic cells.
+
+## 2026-06-16 Sequential CAS Update: Structured Betti Rows For Certified CAS Output
+
+Status: complete for the row-schema checkpoint; incomplete for the broader Macaulay2/BEMultipliers expansion.
+
+- Added `betti_table_rows` to the certified CAS parser for Macaulay2 multigraded degree blocks, Sage total-graded summaries, Macaulay2 total rows, and Singular Betti matrices.
+- Singular rows now carry `source=Singular_betti_matrix`, `shift_display=ungraded row <i>`, `multidegree=[]`, `not_multigraded=true`, and `safe_for_multigraded_claims=false`, so research-style figures can display the real certified rows without implying unavailable multidegree shifts.
+- The two-parameter persistence visualization adapter now prefers explicit `betti_table_rows` from certified CAS artifacts and falls back to module ranks only for legacy artifacts.
+- Added a deterministic tagged-output test for the Singular certified path, plus Macaulay2 structured-row assertions and live/unavailable CAS smoke coverage.
+
+Verification:
+
+```bash
+PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m py_compile TropicalGT-I/src/tropicalgt/cas_free_resolution.py TropicalGT-I/src/tropicalgt/visualization.py TropicalGT-I/tests/test_algebraic_persistence.py
+PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_algebraic_persistence.py -q
+# 19 passed in 8.02s
+PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_simplicial_visualization.py TropicalGT-I/tests/test_interactive_artifact_validator.py -q
+# 37 passed in 3.61s
+git diff --check
+# clean
+```
 
 
 ## 2026-06-14 Sequential CAS Update: BEMultipliers Repository Inspection

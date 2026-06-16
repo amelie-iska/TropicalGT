@@ -1019,6 +1019,7 @@ def _parse_macaulay2_multigraded_artifacts(parsed: dict[str, Any], *, backend: s
     if not free_text:
         return {"available": False, "backend": backend, "reason": "Macaulay2 output did not contain multigraded free-module degree blocks."}
     free_modules: list[dict[str, Any]] = []
+    betti_table_rows: list[dict[str, Any]] = []
     betti_by_multidegree: dict[str, dict[str, int]] = {}
     for line in free_text.splitlines():
         line = line.strip()
@@ -1037,14 +1038,27 @@ def _parse_macaulay2_multigraded_artifacts(parsed: dict[str, Any], *, backend: s
             row[key] = int(rank)
             shift = ",".join(str(v) for v in degree)
             display = f"F_{homological_degree} contains S(-{shift})^{int(rank)}"
-            free_modules.append(
+            row_payload = {
+                "homological_degree": homological_degree,
+                "multidegree": list(degree),
+                "rank": int(rank),
+                "display": display,
+                "grading": "multigraded_bidegree_shift",
+                "multidegree_shifts_available": True,
+            }
+            free_modules.append(row_payload)
+            betti_table_rows.append(
                 {
                     "homological_degree": homological_degree,
                     "multidegree": list(degree),
+                    "shift_display": f"({shift})",
                     "rank": int(rank),
-                    "display": display,
+                    "multiplicity": int(rank),
                     "grading": "multigraded_bidegree_shift",
+                    "source": "macaulay2_free_module_degree_block",
+                    "not_multigraded": False,
                     "multidegree_shifts_available": True,
+                    "safe_for_multigraded_claims": True,
                 }
             )
         if row:
@@ -1058,6 +1072,7 @@ def _parse_macaulay2_multigraded_artifacts(parsed: dict[str, Any], *, backend: s
         "backend": backend,
         "grading": "multigraded_bidegree_shifts_over_F2_polynomial_ring",
         "free_modules": free_modules,
+        "betti_table_rows": betti_table_rows,
         "betti_by_homological_and_multidegree": betti_by_multidegree,
         "differentials": differentials,
         "fitting_ideals": fitting_ideals,
@@ -1204,11 +1219,32 @@ def _ungraded_from_total_graded_betti(total_graded: dict[str, Any], *, backend: 
     if not isinstance(rows, dict):
         rows = {}
     column_ranks: dict[int, int] = {}
+    betti_table_rows: list[dict[str, Any]] = []
     for homological_degree, row in rows.items():
         if not isinstance(row, dict):
             continue
         degree = int(homological_degree)
         column_ranks[degree] = sum(int(rank) for rank in row.values())
+        for total_degree, rank in sorted(row.items(), key=lambda item: int(item[0])):
+            rank_int = int(rank)
+            if rank_int == 0:
+                continue
+            total_degree_int = int(total_degree)
+            betti_table_rows.append(
+                {
+                    "homological_degree": degree,
+                    "total_degree": total_degree_int,
+                    "multidegree": [],
+                    "shift_display": f"total degree {total_degree_int}",
+                    "rank": rank_int,
+                    "multiplicity": rank_int,
+                    "grading": "total_graded_rank",
+                    "source": f"{backend}_total_graded_betti_json",
+                    "not_multigraded": True,
+                    "multidegree_shifts_available": False,
+                    "safe_for_multigraded_claims": False,
+                }
+            )
     free_modules = [
         {
             "homological_degree": degree,
@@ -1226,6 +1262,7 @@ def _ungraded_from_total_graded_betti(total_graded: dict[str, Any], *, backend: 
         "grading": "total_graded_betti_ranks_aggregated_by_homological_degree",
         "homological_column_ranks": [rank for _, rank in sorted(column_ranks.items())],
         "free_modules": free_modules,
+        "betti_table_rows": betti_table_rows,
         "total_rank": int(sum(column_ranks.values())),
         "not_multigraded": True,
         "safe_for_multigraded_claims": False,
@@ -1263,6 +1300,7 @@ def _parse_ungraded_betti_table(text: str, *, backend: str) -> dict[str, Any]:
                 "grading": "ungraded_total_betti_ranks_from_macaulay2_total_row",
                 "homological_column_ranks": values,
                 "free_modules": free_modules,
+                "betti_table_rows": _ungraded_betti_rows_from_column_ranks(values, backend=backend, source="macaulay2_total_row"),
                 "total_rank": int(sum(values)),
                 "not_multigraded": True,
                 "safe_for_multigraded_claims": False,
@@ -1296,6 +1334,27 @@ def _parse_ungraded_betti_table(text: str, *, backend: str) -> dict[str, Any]:
         for degree, rank in enumerate(column_ranks)
         if int(rank) != 0
     ]
+    betti_table_rows = []
+    for matrix_row, row in enumerate(matrix):
+        for degree, rank in enumerate(row):
+            rank_int = int(rank)
+            if rank_int == 0:
+                continue
+            betti_table_rows.append(
+                {
+                    "homological_degree": degree,
+                    "matrix_row": matrix_row,
+                    "multidegree": [],
+                    "shift_display": f"ungraded row {matrix_row}",
+                    "rank": rank_int,
+                    "multiplicity": rank_int,
+                    "grading": "ungraded_total_rank",
+                    "source": f"{backend}_betti_matrix",
+                    "not_multigraded": True,
+                    "multidegree_shifts_available": False,
+                    "safe_for_multigraded_claims": False,
+                }
+            )
     return {
         "available": bool(free_modules),
         "backend": backend,
@@ -1303,6 +1362,7 @@ def _parse_ungraded_betti_table(text: str, *, backend: str) -> dict[str, Any]:
         "matrix": matrix,
         "homological_column_ranks": column_ranks,
         "free_modules": free_modules,
+        "betti_table_rows": betti_table_rows,
         "reason": "CAS Betti table had no nonzero free-module ranks after parsing." if not free_modules else "",
         "total_rank": int(sum(column_ranks)),
         "not_multigraded": True,
@@ -1313,6 +1373,29 @@ def _parse_ungraded_betti_table(text: str, *, backend: str) -> dict[str, Any]:
             "Fitting ideals, minors, or Buchsbaum-Eisenbud diagnostics."
         ),
     }
+
+
+def _ungraded_betti_rows_from_column_ranks(values: list[int], *, backend: str, source: str) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    for degree, rank in enumerate(values):
+        rank_int = int(rank)
+        if rank_int == 0:
+            continue
+        rows.append(
+            {
+                "homological_degree": degree,
+                "multidegree": [],
+                "shift_display": "ungraded",
+                "rank": rank_int,
+                "multiplicity": rank_int,
+                "grading": "ungraded_total_rank",
+                "source": f"{backend}_{source}",
+                "not_multigraded": True,
+                "multidegree_shifts_available": False,
+                "safe_for_multigraded_claims": False,
+            }
+        )
+    return rows
 
 
 def _is_int_literal(value: str) -> bool:
