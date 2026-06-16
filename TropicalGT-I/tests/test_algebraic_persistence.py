@@ -1346,6 +1346,32 @@ def test_level_radius_bifiltration_reports_scoped_real_staircase_resolution(tmp_
     assert all(card["quotient_basis_lattice_count"] == len(card["quotient_basis_lattice_points"]) for card in staircase_cards)
     assert all("hilbert_numerator_terms" in card for card in staircase_cards)
     assert any(card["adjacent_lcm_syzygies"] for card in staircase_cards)
+    staircase_evidence = visual_payload["miller_sturmfels_staircase_evidence"]
+    assert staircase_evidence["schema_version"] == "tropicalgt.miller_sturmfels_staircase_evidence.v1"
+    assert staircase_evidence["source"] == "staircase_cards_from_bifiltration.chain_module_generators[*].multidegree"
+    assert staircase_evidence["coefficient_ring"] == "F2[x_level,x_radius]"
+    assert staircase_evidence["actual_data_only"] is True
+    assert staircase_evidence["no_proxy_or_fallback"] is True
+    assert staircase_evidence["primary_view"] == "miller_sturmfels_bivariate_staircase"
+    assert staircase_evidence["axes"] == {"horizontal": "x_radius", "vertical": "x_level", "coordinate_one_dimensional_cones": ["rho_x_radius", "rho_x_level"]}
+    assert staircase_evidence["card_count"] == len(staircase_cards)
+    assert staircase_evidence["primary_card_count"] == 1
+    assert staircase_evidence["primary_card_index"] == next(index for index, card in enumerate(staircase_cards) if card["primary_card"])
+    assert staircase_evidence["total_actual_generator_bidegree_count"] == sum(card["actual_generator_bidegree_count"] for card in staircase_cards)
+    assert staircase_evidence["total_minimal_antichain_count"] == sum(len(card["minimal_antichain"]) for card in staircase_cards)
+    assert staircase_evidence["total_generator_label_count"] == sum(len(card["generator_labels"]) for card in staircase_cards)
+    assert staircase_evidence["total_upward_closed_region_count"] == sum(len(card["upward_closed_regions"]) for card in staircase_cards)
+    assert staircase_evidence["total_quotient_basis_lattice_count"] == sum(card["quotient_basis_lattice_count"] for card in staircase_cards)
+    assert staircase_evidence["total_hilbert_numerator_term_count"] == sum(len(card["hilbert_numerator_terms"]) for card in staircase_cards)
+    assert staircase_evidence["total_adjacent_lcm_syzygy_count"] == sum(len(card["adjacent_lcm_syzygies"]) for card in staircase_cards)
+    assert len(staircase_evidence["per_card_counts"]) == len(staircase_cards)
+    assert staircase_evidence["all_cards_have_generator_labels"] is True
+    assert staircase_evidence["all_cards_have_upward_closed_regions"] is True
+    assert staircase_evidence["all_cards_have_quotient_basis_lattice_points"] is True
+    assert staircase_evidence["quotient_basis_counts_match_lattice_points"] is True
+    assert staircase_evidence["theorem_scope_boundary_all_cards"] is True
+    assert staircase_evidence["coordinate_axes_are_one_dimensional_cones"] is True
+    assert staircase_evidence["safe_to_render_miller_sturmfels_staircase"] is True
     primary_card = next(card for card in staircase_cards if card["primary_card"])
     assert primary_card["generator_labels"][0]["label"].startswith("g")
     assert primary_card["upward_closed_regions"][0]["x_radius_max_displayed"] >= primary_card["upward_closed_regions"][0]["x_radius_min"]

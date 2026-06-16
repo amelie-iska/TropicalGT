@@ -995,9 +995,61 @@ def _row(root: Path, name: str) -> Path:
                     "module_lattice_overlay_trace_names": ["actual x_level structure maps over F2", "actual x_radius structure maps over F2"],
                     "no_proxy_or_fallback": True,
                 },
+                "miller_sturmfels_staircase_evidence": {
+                    "schema_version": "tropicalgt.miller_sturmfels_staircase_evidence.v1",
+                    "coefficient_ring": "F2[x_level,x_radius]",
+                    "source": "staircase_cards_from_bifiltration.chain_module_generators[*].multidegree",
+                    "actual_data_only": True,
+                    "no_proxy_or_fallback": True,
+                    "primary_view": "miller_sturmfels_bivariate_staircase",
+                    "axes": {"horizontal": "x_radius", "vertical": "x_level", "coordinate_one_dimensional_cones": ["rho_x_radius", "rho_x_level"]},
+                    "card_count": 1,
+                    "primary_card_count": 1,
+                    "primary_card_index": 0,
+                    "primary_homological_degree": 1,
+                    "total_actual_generator_bidegree_count": 2,
+                    "total_minimal_antichain_count": 2,
+                    "total_generator_label_count": 2,
+                    "total_upward_closed_region_count": 2,
+                    "total_quotient_basis_lattice_count": 3,
+                    "total_hilbert_numerator_term_count": 1,
+                    "total_adjacent_lcm_syzygy_count": 1,
+                    "cards_with_quotient_basis_count": 1,
+                    "cards_with_hilbert_numerator_terms_count": 1,
+                    "cards_with_adjacent_lcm_syzygies_count": 1,
+                    "per_card_counts": [
+                        {
+                            "homological_degree": 1,
+                            "primary_card": True,
+                            "actual_generator_bidegree_count": 2,
+                            "minimal_antichain_count": 2,
+                            "generator_label_count": 2,
+                            "upward_closed_region_count": 2,
+                            "quotient_basis_lattice_count": 3,
+                            "hilbert_numerator_term_count": 1,
+                            "adjacent_lcm_syzygy_count": 1,
+                            "theorem_scope": "exact two-variable monomial-ideal staircase resolution when adjacent-LCM theorem applies; not a full persistence-module free resolution without CAS certification",
+                        }
+                    ],
+                    "all_cards_have_generator_labels": True,
+                    "all_cards_have_upward_closed_regions": True,
+                    "all_cards_have_quotient_basis_lattice_points": True,
+                    "all_cards_have_hilbert_numerator_terms": True,
+                    "all_cards_have_adjacent_lcm_syzygy_lists": True,
+                    "quotient_basis_counts_match_lattice_points": True,
+                    "theorem_scope_boundary_all_cards": True,
+                    "coordinate_axes_are_one_dimensional_cones": True,
+                    "safe_to_render_miller_sturmfels_staircase": True,
+                },
                 "staircase_cards": [
                     {
+                        "schema_version": "tropicalgt.two_parameter_staircase_card.v1",
                         "homological_degree": 1,
+                        "actual_generator_bidegrees_source": "bifiltration.chain_module_generators[*].multidegree grouped by homological_degree",
+                        "x_radius_horizontal": True,
+                        "x_level_vertical": True,
+                        "shaded_regions_are_upward_closed_generated_submodules": True,
+                        "white_points_are_displayed_quotient_basis_lattice_points": True,
                         "primary_card": True,
                         "actual_generator_bidegree_count": 2,
                         "minimal_antichain": [[2, 1], [1, 2]],
@@ -1258,6 +1310,34 @@ def test_validate_audit_root_rejects_missing_bifiltration_structure_map_summary(
     report = validator.validate_audit_root(audit, min_rows=1, min_candidates=4, min_depth=2)
     assert not report["ok"]
     assert any("structure-map summary" in err for err in report["errors"])
+
+
+def test_validate_audit_root_rejects_missing_miller_sturmfels_staircase_evidence(tmp_path: Path):
+    validator = _load_validator()
+    audit = tmp_path / "step_00000001" / "got_audit"
+    row = _row(audit, ".")
+    visual_path = row / "trajectory_persistence" / "two_parameter_bifiltration.json"
+    payload = json.loads(visual_path.read_text(encoding="utf-8"))
+    payload.pop("miller_sturmfels_staircase_evidence")
+    visual_path.write_text(json.dumps(payload), encoding="utf-8")
+    _write(audit / "codex_browser_index.html", _codex_browser_html(_browser_samples(audit, ["."])))
+    report = validator.validate_audit_root(audit, min_rows=1, min_candidates=4, min_depth=2)
+    assert not report["ok"]
+    assert any("Miller-Sturmfels staircase evidence" in err for err in report["errors"])
+
+
+def test_validate_audit_root_rejects_miller_sturmfels_staircase_aggregate_mismatch(tmp_path: Path):
+    validator = _load_validator()
+    audit = tmp_path / "step_00000001" / "got_audit"
+    row = _row(audit, ".")
+    visual_path = row / "trajectory_persistence" / "two_parameter_bifiltration.json"
+    payload = json.loads(visual_path.read_text(encoding="utf-8"))
+    payload["miller_sturmfels_staircase_evidence"]["total_quotient_basis_lattice_count"] = 999
+    visual_path.write_text(json.dumps(payload), encoding="utf-8")
+    _write(audit / "codex_browser_index.html", _codex_browser_html(_browser_samples(audit, ["."])))
+    report = validator.validate_audit_root(audit, min_rows=1, min_candidates=4, min_depth=2)
+    assert not report["ok"]
+    assert any("quotient-basis aggregate" in err for err in report["errors"])
 
 
 def test_validate_audit_root_rejects_absolute_analogical_pair_pages(tmp_path: Path):

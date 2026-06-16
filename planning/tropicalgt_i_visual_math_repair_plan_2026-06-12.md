@@ -1170,3 +1170,26 @@ CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/t
 CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_simplicial_visualization.py TropicalGT-I/tests/test_interactive_artifact_validator.py -q -p no:cacheprovider --basetemp=/tmp/tropicalgt-pytest-graphcg-direction-evidence-full
 # 71 passed
 ```
+
+## 2026-06-16 Miller-Sturmfels Staircase Aggregate Evidence
+
+Sequential two-parameter persistence repair continued after the GraphCG direction evidence contract:
+
+- Added `tropicalgt.miller_sturmfels_staircase_evidence.v1` to `trajectory_persistence/two_parameter_bifiltration.json` so the primary Miller-Sturmfels view is certified by an aggregate record, not just inferred from individual cards.
+- The aggregate cites only `bifiltration.chain_module_generators[*].multidegree`, declares actual-data/no-proxy rendering over `F2[x_level,x_radius]`, records x_radius horizontal / x_level vertical axes, and explicitly records the `rho_x_radius` and `rho_x_level` one-dimensional cone labels.
+- The evidence cross-checks card count, primary card index, actual generator totals, minimal-antichain totals, generator-label totals, upward-closed region totals, quotient-basis lattice totals, Hilbert numerator totals, and adjacent-LCM syzygy totals.
+- The validator now rejects missing Miller-Sturmfels aggregate evidence, proxy/fallback aggregate claims, coordinate-axis gaps, unsafe theorem-scope boundaries, missing per-card aggregate rows, and aggregate count mismatches.
+- This keeps the two-parameter page within the no-fallback rule: exact staircase evidence is shown when backed by actual bifiltration data, and no chain diagnostic is promoted into a fake free resolution.
+
+Validation:
+
+```text
+CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m py_compile TropicalGT-I/src/tropicalgt/visualization.py TropicalGT-I/scripts/validate_interactive_audit_artifacts.py TropicalGT-I/tests/test_algebraic_persistence.py TropicalGT-I/tests/test_interactive_artifact_validator.py
+# passed
+CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_algebraic_persistence.py::test_level_radius_bifiltration_reports_scoped_real_staircase_resolution TropicalGT-I/tests/test_interactive_artifact_validator.py::test_validate_audit_root_accepts_three_interactive_rows TropicalGT-I/tests/test_interactive_artifact_validator.py::test_validate_audit_root_rejects_missing_miller_sturmfels_staircase_evidence TropicalGT-I/tests/test_interactive_artifact_validator.py::test_validate_audit_root_rejects_miller_sturmfels_staircase_aggregate_mismatch -q -p no:cacheprovider --basetemp=/tmp/tropicalgt-pytest-ms-staircase-evidence
+# 4 passed
+CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_algebraic_persistence.py TropicalGT-I/tests/test_interactive_artifact_validator.py -q -p no:cacheprovider --basetemp=/tmp/tropicalgt-pytest-ms-staircase-evidence-full
+# 59 passed
+CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_simplicial_visualization.py TropicalGT-I/tests/test_interactive_artifact_validator.py -q -p no:cacheprovider --basetemp=/tmp/tropicalgt-pytest-ms-staircase-evidence-visual-full
+# 73 passed
+```

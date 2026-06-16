@@ -6504,6 +6504,98 @@ def _write_two_parameter_bifiltration_staircase_html(
     if not staircase_svgs:
         staircase_svgs = "<p class='lede'>No chain-generator bidegrees were available for a bivariate staircase diagram.</p>"
 
+    def _miller_sturmfels_staircase_evidence(cards: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
+        def _list_len(card: Mapping[str, Any], key: str) -> int:
+            value = card.get(key, [])
+            return len(value) if isinstance(value, list) else 0
+
+        def _int_value(card: Mapping[str, Any], key: str) -> int:
+            try:
+                return int(card.get(key, 0))
+            except Exception:
+                return 0
+
+        card_list = [card for card in cards if isinstance(card, Mapping)]
+        primary_indices = [index for index, card in enumerate(card_list) if card.get("primary_card") is True]
+        primary_index = primary_indices[0] if primary_indices else -1
+        primary_card = card_list[primary_index] if 0 <= primary_index < len(card_list) else {}
+        per_card_counts = [
+            {
+                "homological_degree": int(card.get("homological_degree", -1)),
+                "primary_card": bool(card.get("primary_card", False)),
+                "actual_generator_bidegree_count": _int_value(card, "actual_generator_bidegree_count"),
+                "minimal_antichain_count": _list_len(card, "minimal_antichain"),
+                "generator_label_count": _list_len(card, "generator_labels"),
+                "upward_closed_region_count": _list_len(card, "upward_closed_regions"),
+                "quotient_basis_lattice_count": _int_value(card, "quotient_basis_lattice_count"),
+                "hilbert_numerator_term_count": _list_len(card, "hilbert_numerator_terms"),
+                "adjacent_lcm_syzygy_count": _list_len(card, "adjacent_lcm_syzygies"),
+                "theorem_scope": str(card.get("theorem_scope", "")),
+            }
+            for card in card_list
+        ]
+        all_cards_have_generator_labels = all(_list_len(card, "generator_labels") > 0 for card in card_list)
+        all_cards_have_upward_closed_regions = all(_list_len(card, "upward_closed_regions") > 0 for card in card_list)
+        all_cards_have_quotient_basis_lattice_points = all(isinstance(card.get("quotient_basis_lattice_points"), list) for card in card_list)
+        all_cards_have_hilbert_numerator_terms = all(isinstance(card.get("hilbert_numerator_terms"), list) for card in card_list)
+        all_cards_have_adjacent_lcm_syzygy_lists = all(isinstance(card.get("adjacent_lcm_syzygies"), list) for card in card_list)
+        theorem_scope_boundary_all_cards = all(
+            "not a full persistence-module free resolution" in str(card.get("theorem_scope", ""))
+            for card in card_list
+        )
+        quotient_count_matches_rows = all(
+            _int_value(card, "quotient_basis_lattice_count") == _list_len(card, "quotient_basis_lattice_points")
+            for card in card_list
+        )
+        safe = bool(card_list) and len(primary_indices) == 1 and all([
+            all_cards_have_generator_labels,
+            all_cards_have_upward_closed_regions,
+            all_cards_have_quotient_basis_lattice_points,
+            all_cards_have_hilbert_numerator_terms,
+            all_cards_have_adjacent_lcm_syzygy_lists,
+            theorem_scope_boundary_all_cards,
+            quotient_count_matches_rows,
+        ])
+        return {
+            "schema_version": "tropicalgt.miller_sturmfels_staircase_evidence.v1",
+            "coefficient_ring": "F2[x_level,x_radius]",
+            "source": "staircase_cards_from_bifiltration.chain_module_generators[*].multidegree",
+            "actual_data_only": True,
+            "no_proxy_or_fallback": True,
+            "primary_view": "miller_sturmfels_bivariate_staircase",
+            "axes": {
+                "horizontal": "x_radius",
+                "vertical": "x_level",
+                "coordinate_one_dimensional_cones": ["rho_x_radius", "rho_x_level"],
+            },
+            "card_count": int(len(card_list)),
+            "primary_card_count": int(len(primary_indices)),
+            "primary_card_index": int(primary_index),
+            "primary_homological_degree": int(primary_card.get("homological_degree", -1)) if primary_card else -1,
+            "total_actual_generator_bidegree_count": int(sum(row["actual_generator_bidegree_count"] for row in per_card_counts)),
+            "total_minimal_antichain_count": int(sum(row["minimal_antichain_count"] for row in per_card_counts)),
+            "total_generator_label_count": int(sum(row["generator_label_count"] for row in per_card_counts)),
+            "total_upward_closed_region_count": int(sum(row["upward_closed_region_count"] for row in per_card_counts)),
+            "total_quotient_basis_lattice_count": int(sum(row["quotient_basis_lattice_count"] for row in per_card_counts)),
+            "total_hilbert_numerator_term_count": int(sum(row["hilbert_numerator_term_count"] for row in per_card_counts)),
+            "total_adjacent_lcm_syzygy_count": int(sum(row["adjacent_lcm_syzygy_count"] for row in per_card_counts)),
+            "cards_with_quotient_basis_count": int(sum(1 for card in card_list if _list_len(card, "quotient_basis_lattice_points") > 0)),
+            "cards_with_hilbert_numerator_terms_count": int(sum(1 for card in card_list if _list_len(card, "hilbert_numerator_terms") > 0)),
+            "cards_with_adjacent_lcm_syzygies_count": int(sum(1 for card in card_list if _list_len(card, "adjacent_lcm_syzygies") > 0)),
+            "per_card_counts": per_card_counts,
+            "all_cards_have_generator_labels": bool(all_cards_have_generator_labels),
+            "all_cards_have_upward_closed_regions": bool(all_cards_have_upward_closed_regions),
+            "all_cards_have_quotient_basis_lattice_points": bool(all_cards_have_quotient_basis_lattice_points),
+            "all_cards_have_hilbert_numerator_terms": bool(all_cards_have_hilbert_numerator_terms),
+            "all_cards_have_adjacent_lcm_syzygy_lists": bool(all_cards_have_adjacent_lcm_syzygy_lists),
+            "quotient_basis_counts_match_lattice_points": bool(quotient_count_matches_rows),
+            "theorem_scope_boundary_all_cards": bool(theorem_scope_boundary_all_cards),
+            "coordinate_axes_are_one_dimensional_cones": True,
+            "safe_to_render_miller_sturmfels_staircase": bool(safe),
+        }
+
+    staircase_evidence = _miller_sturmfels_staircase_evidence(staircase_contracts)
+
     def _table_html(headers: Sequence[str], columns: Sequence[Sequence[Any]], caption: str) -> str:
         width = max((len(col) for col in columns), default=0)
         rows_html = []
@@ -6620,6 +6712,7 @@ td {{ background:#07111f; color:#d7e8ff; }}
             "module_lattice_overlay_trace_names": structure_overlay_trace_names,
             "no_proxy_or_fallback": True,
         },
+        "miller_sturmfels_staircase_evidence": staircase_evidence,
         "module_visual_contract": {
             "schema_version": "tropicalgt.two_parameter_module_staircase_contract.v1",
             "no_proxy_or_fallback": True,
