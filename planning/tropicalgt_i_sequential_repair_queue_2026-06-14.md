@@ -124,7 +124,7 @@
 
 - [x] Research Macaulay2 `Tropical` package, Sage tropical polynomial/variety APIs, Maclagan tropical schemes in toric varieties, and `references/1710.10651v2.pdf`.
 - [x] Implement toric embeddings only where the embedding is mathematically correct and tool-backed.
-- [ ] Use "one dimensional cone(s)" terminology in the paper/plans where rays/cone generators are meant.
+- [x] Use "one dimensional cone(s)" terminology in the paper/plans where rays/cone generators are meant.
 - [ ] Add scheme/sheaf-theoretic and vector-bundle material to `TropicalGT-I/assets/tropicalgt_neurips_research_paper.tex` as implementations mature.
 - [ ] Distinguish scoped monomial-ideal exponent-chart certificates from full tropical-variety embeddings into toric varieties.
 
@@ -454,4 +454,14 @@ The live item-by-item repair inventory is maintained in `planning/tropicalgt_i_c
 - [x] Live smoke certified the small exponent matrix `[[1,1,1],[0,1,2]]` as `ideal(z_1^2-z_0*z_2)` and explicitly kept `safe_to_use_as_normal_fan_certificate=false`.
 - [x] Verification completed: py-compile for touched source/tests, focused toric embedding tests (`3 passed`), focused chart-bundle tests (`3 passed`), `pytest TropicalGT-I/tests/test_algebraic_persistence.py -q` (`27 passed`), `pytest TropicalGT-I/tests/test_losses_and_model.py -q` (`10 passed`).
 - [x] b60 latest checked training state remained at step `2000` with train loss/NLL `1.139/1.116`; trainer PID `378962` and watcher PID `379304` remain alive under the step-5000 gate.
-- [ ] Next Section 11 item: use "one dimensional cone(s)" terminology in the paper/plans where rays/cone generators are meant.
+- [x] Next Section 11 item completed: visible paper/planning prose now uses "one dimensional cone(s)" where fan rays/cone generators are meant; literal CAS method names such as `rays` remain unchanged.
+
+### Current Objective Update - One Dimensional Cone Terminology Pass
+
+- [x] Updated visible prose in `TropicalGT-I/assets/tropicalgt_neurips_research_paper.tex` from hyphenated one-dimensional-cone wording to the requested fan-theoretic "one dimensional cone(s)" terminology.
+- [x] Updated stale planning bullets in `planning/tropicalgt_i_visual_math_repair_plan_2026-06-12.md` from `matroid/ray` and `ray-filtration` phrasing to one dimensional cone terminology.
+- [x] Preserved literal CAS method/output names such as Macaulay2 `rays`, `rays(T)`, and `maxCones`; these are backend API names, not prose substitutes for the fan-theoretic language.
+- [x] Verification completed: terminology audit found no visible hyphenated one-dimensional prose and no stale `ray-only`/`ray-filtration` planning phrases; lightweight TeX environment-balance check passed.
+- [x] Remote `pdflatex` compile was attempted into `/tmp/tropicalgt_paper_compile`; it is blocked by missing TeX dependency `mathtools.sty`, so no PDF artifact was produced or staged.
+- [x] b60 latest checked training state reached step `2005` with train loss/NLL `1.191/1.167`; trainer PID `378962` and watcher PID `379304` remain alive under the step-5000 gate.
+- [ ] Next Section 11 item: add scheme/sheaf-theoretic and vector-bundle material to `TropicalGT-I/assets/tropicalgt_neurips_research_paper.tex` as implementations mature.

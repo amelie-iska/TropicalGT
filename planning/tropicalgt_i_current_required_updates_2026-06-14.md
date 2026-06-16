@@ -551,10 +551,17 @@ git diff --check
 - Verification completed: py-compile for touched source/tests, focused toric embedding tests (`3 passed`), focused chart-bundle tests (`3 passed`), `pytest TropicalGT-I/tests/test_algebraic_persistence.py -q` (`27 passed`), and `pytest TropicalGT-I/tests/test_losses_and_model.py -q` (`10 passed`).
 - b60 latest checked training state remained at step `2000` with train loss/NLL `1.139/1.116`; trainer PID `378962` and watcher PID `379304` remain alive under the step-5000 gate.
 
+## 2026-06-16 One Dimensional Cone Terminology Addendum
+
+- Visible paper prose now uses "one dimensional cone" / "one dimensional cones" for fan-theoretic cone-indexed filtrations, probes, incidence, and vector-bundle compatibility statements. Machine labels and literal backend APIs remain unchanged where appropriate.
+- Older planning bullets in `planning/tropicalgt_i_visual_math_repair_plan_2026-06-12.md` now use one dimensional cone terminology instead of `matroid/ray`, `ray-only`, or `ray-filtration` shorthand.
+- Verification completed: terminology audit passed, lightweight TeX environment-balance check passed, and remote `pdflatex` compile was attempted in `/tmp/tropicalgt_paper_compile` but stopped because `mathtools.sty` is missing from the remote TeX installation.
+- b60 latest checked training state reached step `2005` with train loss/NLL `1.191/1.167`; trainer PID `378962` and watcher PID `379304` remain alive under the step-5000 gate.
+
 ## Real Implementations Only Policy
 
 No TropicalGT-I metric, loss, visualization, analogical map, persistence module, free resolution, derived comparison, tropical-cycle diagnostic, or CAS artifact should be presented as a mathematical object unless it is computed from the actual model outputs, graph states, embeddings, probabilities, simplex trees, bifiltrations, or certified CAS/backend output that define that object. Temporary placeholders, synthetic fallback objects, mock charts, fabricated simplices, and convenience stand-ins are not acceptable. When a requested object cannot yet be computed, the artifact must render an explicit unavailable/uncertified state and the training metric must either be disabled or logged under an audit-only unavailable flag. Finite chain-presentation diagnostics may be shown only as chain diagnostics, never as free resolutions. Total-graded or ungraded CAS output may be shown as real CAS output only under its actual grading; it must not be advertised as a multigraded `F2[x_level,x_radius]` free resolution unless the backend certifies that multigraded structure.
 
 Use "one dimensional cone" or "one dimensional cones" as the preferred fan-theoretic language whenever the intended object is a cone of a fan or a cone-indexed filtration datum. Use singular or plural according to ordinary grammar.
 
-_Last updated: 2026-06-16T07:51:03Z_
+_Last updated: 2026-06-16T07:56:00Z_

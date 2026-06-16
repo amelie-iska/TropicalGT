@@ -191,11 +191,11 @@
 
 ### Paper-Theory Repair Addendum
 
-- [ ] Add the vector-bundle ablation matrix to the active repair goal: zero auxiliary, telemetry-only, transport-only, matroid/ray-only, toric/GraphCG-only, memory-landscape-only, chart-BPB-only, and full-stack variants, each gated by validation BPB/graph-BPB and read-only artifact checks.
-- [ ] Fold the vector-bundle paper sidecar into the active repair checklist: chart ids, monomial transport ids, toric active rows, ray-filtration flat defects, GraphCG-toric agreement, and transported persistence-landscape metrics must be emitted as model-backed audit payload fields.
+- [ ] Add the vector-bundle ablation matrix to the active repair goal: zero auxiliary, telemetry-only, transport-only, matroid/one dimensional cone-only, toric/GraphCG-only, memory-landscape-only, chart-BPB-only, and full-stack variants, each gated by validation BPB/graph-BPB and read-only artifact checks.
+- [ ] Fold the vector-bundle paper sidecar into the active repair checklist: chart ids, monomial transport ids, toric active rows, one dimensional cone-filtration flat defects, GraphCG-toric agreement, and transported persistence-landscape metrics must be emitted as model-backed audit payload fields.
 - [ ] Add BPB/graph-BPB promotion gates for every new vector-bundle or toric auxiliary. The browser may display the diagnostics before promotion, but decoding/training acceptance must remain BPB-first.
 - [ ] Add tests that distinguish real GUDHI persistence landscape `lambda_k(t)` vectors from GoT NLL/fitness/density fields and prove unavailable landscapes are not converted to zero vectors.
-- [ ] Keep paper claims conservative in code/docs: monomial transports and matroid/ray filtrations are mathematically motivated regularizers unless the implementation constructs an actual tropical toric variety or tropical scheme.
+- [ ] Keep paper claims conservative in code/docs: monomial transports and matroid/one dimensional cone filtrations are mathematically motivated regularizers unless the implementation constructs an actual tropical toric variety or tropical scheme.
 
 ## 2026-06-14 Main-Agent Status Addendum: v6 Restart, Paper Sidecar, and Density Repair
 
@@ -207,7 +207,7 @@
 
 ### Paper sidecar integration
 - Avicenna reviewed `references/2405.03505v1.pdf` and `references/2009.03030v2.pdf` and updated `TropicalGT-I/assets/tropicalgt_neurips_research_paper.tex` plus `planning/tropicalgt_i_vector_bundle_toric_embedding_training_plan.md`.
-- Implementation hooks now required by the paper sidecar: tropical vector-bundle chart ids on graph tokens, tropical toric embedding features, ray-filtration defects, chart-transition penalties, GraphCG/tropical-toric agreement, and BPB/graph-BPB ablations for these terms.
+- Implementation hooks now required by the paper sidecar: tropical vector-bundle chart ids on graph tokens, tropical toric embedding features, one dimensional cone-filtration defects, chart-transition penalties, GraphCG/tropical-toric agreement, and BPB/graph-BPB ablations for these terms.
 - These additions are theory-backed training ideas only until code paths expose exact metrics and tests; do not log them as active losses before implementation.
 
 ### NLL / energy-density visualization repair
