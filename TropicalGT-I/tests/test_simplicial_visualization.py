@@ -1536,6 +1536,7 @@ def test_analogical_memory_visualization_renders_simplicial_maps(tmp_path: Path)
     rank2_html = Path(paths["analogical_memory_map_02_html"]).read_text(encoding="utf-8")
     assert "Analogical top-k probability correspondences" in index_html
     assert "Edge, face, and filtration preservation can fail" in index_html
+    assert "Index readability contract" in index_html
     assert "landscape L2 sim" in index_html
     assert "landscape cosine" in index_html
     assert "vector aggregate" in index_html
@@ -1561,6 +1562,17 @@ def test_analogical_memory_visualization_renders_simplicial_maps(tmp_path: Path)
     assert maps["topk_contract"]["qualified_model_probability_memory_count"] == 2
     assert maps["topk_contract"]["top_k_rendered"] == 2
     assert maps["topk_contract"]["query_complex_source"] == "trajectory_probability_filtered_simplicial_object"
+    readability = maps["topk_contract"]["readability_contract"]
+    assert readability["schema_version"] == "tropicalgt.analogical_topk_readability.v1"
+    assert readability["topk_index_has_readable_table"] is True
+    assert readability["one_selected_map_view_per_rendered_rank"] is True
+    assert readability["table_rows_link_to_pair_pages"] is True
+    assert readability["displays_quality_gate_and_filtered_counts"] is True
+    assert readability["separates_retrieval_probability_topology_algebra_columns"] is True
+    assert readability["edge_face_filtration_preservation_not_overclaimed"] is True
+    assert "coarse signature" in readability["signature_cosine_column_policy"]
+    assert "cannot substitute" in readability["derived_algebraic_column_policy"]
+    assert {"map claim", "coarse signature", "simplex-tree map"}.issubset(set(readability["required_table_columns"]))
     assert maps["maps"][1]["pair_page"].endswith("analogical_memory_map_02.html")
     assert not Path(maps["maps"][0]["pair_page"]).is_absolute()
     assert not Path(maps["maps"][1]["pair_page"]).is_absolute()
@@ -2031,6 +2043,8 @@ def test_analogical_memory_without_retrieval_emits_unavailable_surfaces(tmp_path
     assert maps["topk_contract"]["no_proxy_or_fallback"] is True
     assert maps["topk_contract"]["retrieval_requires_model_probability_vectors"] is True
     assert maps["topk_contract"]["top_k_rendered"] == 0
+    assert maps["topk_contract"]["readability_contract"]["schema_version"] == "tropicalgt.analogical_topk_readability.v1"
+    assert maps["topk_contract"]["readability_contract"]["insufficient_memory_state_explicit"] is True
     assert maps["maps"] == []
     assert "Analogical top-k probability correspondences" in index_html
     assert "Insufficient model-probability memory" in index_html

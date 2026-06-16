@@ -772,11 +772,50 @@ def validate_row(row_dir: Path, *, min_candidates: int = 8, min_depth: int = 2, 
     if maps_path.exists():
         map_payload = _read_json(maps_path)
         maps = map_payload.get("maps", [])
+        topk_contract = map_payload.get("topk_contract", {}) if isinstance(map_payload, dict) else {}
+        topk_readability = topk_contract.get("readability_contract", {}) if isinstance(topk_contract, dict) else {}
+        _assert(isinstance(topk_contract, dict) and topk_contract.get("schema_version") == "tropicalgt.analogical_topk.v1", errors, "analogical top-k contract is missing or has wrong schema")
+        if isinstance(topk_contract, dict):
+            _assert(topk_contract.get("no_proxy_or_fallback") is True, errors, "analogical top-k contract is missing no-proxy flag")
+            _assert(topk_contract.get("retrieval_requires_model_probability_vectors") is True, errors, "analogical top-k contract does not require model probability vectors")
+            _assert(topk_contract.get("embedding_only_assignment_allowed") is False, errors, "analogical top-k contract allows embedding-only assignment")
+            _assert(topk_contract.get("assignment_metric") == "jensen_shannon_distance_on_model_probability_vectors", errors, "analogical top-k contract has wrong assignment metric")
+            _assert(topk_contract.get("query_complex_required") == "trajectory_probability_filtered_simplicial_object", errors, "analogical top-k contract has wrong query complex requirement")
+            _assert(topk_contract.get("codomain_complex_required") == "trajectory_probability_filtered_simplicial_object", errors, "analogical top-k contract has wrong codomain complex requirement")
+            _assert(
+                isinstance(topk_readability, dict) and topk_readability.get("schema_version") == "tropicalgt.analogical_topk_readability.v1",
+                errors,
+                "analogical top-k readability contract is missing or has wrong schema",
+            )
+            if isinstance(topk_readability, dict):
+                required_columns = set(topk_readability.get("required_table_columns", [])) if isinstance(topk_readability.get("required_table_columns"), list) else set()
+                expected_columns = {"correspondence", "retrieval", "prob-map source", "map claim", "derived/algebraic", "coarse signature", "simplex-tree map", "edge certificate"}
+                _assert(topk_readability.get("no_proxy_or_fallback") is True, errors, "analogical top-k readability contract is missing no-proxy flag")
+                _assert(topk_readability.get("topk_index_has_readable_table") is True, errors, "analogical top-k readability contract does not require a readable table")
+                _assert(topk_readability.get("one_selected_map_view_per_rendered_rank") is True, errors, "analogical top-k readability contract does not require one map per rendered rank")
+                _assert(topk_readability.get("table_rows_link_to_pair_pages") is True, errors, "analogical top-k readability contract does not require linked pair pages")
+                _assert(topk_readability.get("insufficient_memory_state_explicit") is True, errors, "analogical top-k readability contract hides insufficient-memory state")
+                _assert(topk_readability.get("displays_quality_gate_and_filtered_counts") is True, errors, "analogical top-k readability contract omits quality-gate/filter counts")
+                _assert(topk_readability.get("separates_retrieval_probability_topology_algebra_columns") is True, errors, "analogical top-k readability contract merges evidence columns")
+                _assert(topk_readability.get("probability_js_assignment_column_required") is True, errors, "analogical top-k readability contract omits probability-JS assignment column")
+                _assert(topk_readability.get("map_claim_column_required") is True, errors, "analogical top-k readability contract omits map-claim column")
+                _assert(topk_readability.get("simplex_tree_preservation_column_required") is True, errors, "analogical top-k readability contract omits simplex-tree preservation column")
+                _assert(topk_readability.get("edge_face_filtration_preservation_not_overclaimed") is True, errors, "analogical top-k readability contract allows overclaimed preservation")
+                _assert(expected_columns.issubset(required_columns), errors, "analogical top-k readability contract lacks required table columns")
+                _assert("coarse signature" in str(topk_readability.get("signature_cosine_column_policy", "")), errors, "analogical top-k readability contract does not separate coarse signature cosine")
+                _assert("cannot substitute" in str(topk_readability.get("derived_algebraic_column_policy", "")), errors, "analogical top-k readability contract does not clamp derived/algebraic overclaims")
         if map_payload.get("available") is False:
             _assert(map_payload.get("reason") in {"missing_model_probability_query_complex", "missing_model_probability_codomain_complex", "no_non_self_model_memory"}, errors, "analogical maps are unavailable for an unrecognized reason")
+            if isinstance(topk_contract, dict):
+                _assert(int(_finite_float(topk_contract.get("top_k_rendered"), -1.0)) == 0, errors, "unavailable analogical top-k contract renders map rows")
         else:
             allowed_sources = {"trajectory_probability_filtered_simplicial_object"}
             _assert(bool(maps), errors, "analogical_simplicial_maps.json contains no maps")
+            if isinstance(topk_contract, dict):
+                _assert(int(_finite_float(topk_contract.get("top_k_rendered"), -1.0)) == len(maps), errors, "analogical top-k rendered count does not match maps")
+                _assert(int(_finite_float(topk_contract.get("qualified_model_probability_memory_count"), -1.0)) >= len(maps), errors, "analogical top-k qualified count is smaller than rendered maps")
+                _assert(int(_finite_float(topk_contract.get("raw_retrieved_count"), -1.0)) >= int(_finite_float(topk_contract.get("qualified_model_probability_memory_count"), 0.0)), errors, "analogical top-k raw retrieved count is smaller than qualified count")
+                _assert(topk_contract.get("query_complex_source") in allowed_sources, errors, "analogical top-k contract query source is not trajectory model-probability complex")
             _assert(all(row.get("query_complex_source") in allowed_sources for row in maps if isinstance(row, dict)), errors, "analogical maps are not using query trajectory-level model-probability complexes")
             _assert(all(row.get("codomain_complex_source") in allowed_sources for row in maps if isinstance(row, dict)), errors, "analogical maps are not using codomain trajectory-level model-probability complexes")
             _assert(all(not bool(row.get("is_identity_self_map")) for row in maps if isinstance(row, dict)), errors, "analogical maps include identity self-maps")

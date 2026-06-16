@@ -636,3 +636,24 @@ CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/t
 CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_simplicial_visualization.py -q -p no:cacheprovider --basetemp=/tmp/tropicalgt-pytest-support-simplicial-full
 # 43 passed
 ```
+
+## 2026-06-16 Analogical Top-K Readability Contract Repair
+
+Sequential analogical-memory item completed after the tropical-support readability contract:
+
+- Added a machine-readable `tropicalgt.analogical_topk_readability.v1` contract inside the analogical top-k contract emitted to `analogical_simplicial_maps.json`.
+- The contract requires a readable top-k table, one linked pair/map view for each rendered rank, explicit insufficient-memory states, displayed quality-gate/filter counts, and separate columns for retrieval score, probability-JS assignment, PH/vector topology, chain/commutative algebra, map claim, conservative derived/algebraic score, coarse signature cosine, simplex-tree preservation, and edge certificates.
+- The HTML index now explicitly names the index readability contract and reiterates that retrieval, probability-JS assignment, topological, algebraic, map-claim, simplex-tree, and edge-certificate evidence remain separate columns.
+- The interactive artifact validator now rejects analogical outputs with missing/wrong top-k contract schema, embedding-only assignment allowance, non-Jensen-Shannon assignment source, missing readability contract, hidden insufficient-memory state, missing table/link requirements, merged evidence columns, missing map-claim/simplex-tree/preservation columns, or overclaimed derived/algebraic similarity from coarse signature cosine.
+- Renderer and validator coverage prove both available top-k outputs and unavailable/insufficient-memory outputs carry the no-proxy readability contract.
+
+Validation:
+
+```text
+CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_simplicial_visualization.py TropicalGT-I/tests/test_interactive_artifact_validator.py -q -p no:cacheprovider --basetemp=/tmp/tropicalgt-pytest-analogical-topk -k "analogical"
+# 11 passed, 45 deselected
+CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_interactive_artifact_validator.py -q -p no:cacheprovider --basetemp=/tmp/tropicalgt-pytest-analogical-validator-full
+# 13 passed
+CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_simplicial_visualization.py -q -p no:cacheprovider --basetemp=/tmp/tropicalgt-pytest-analogical-simplicial-full
+# 43 passed
+```

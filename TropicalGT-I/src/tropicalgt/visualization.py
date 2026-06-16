@@ -8027,6 +8027,37 @@ def _analogical_memory_quality_gate(memory: Mapping[str, object]) -> object:
     return "not_reported"
 
 
+def _analogical_topk_readability_contract(status: str, top_k_rendered: int) -> dict[str, object]:
+    return {
+        "schema_version": "tropicalgt.analogical_topk_readability.v1",
+        "status": status,
+        "top_k_rendered": int(top_k_rendered),
+        "no_proxy_or_fallback": True,
+        "topk_index_has_readable_table": True,
+        "one_selected_map_view_per_rendered_rank": True,
+        "table_rows_link_to_pair_pages": True,
+        "insufficient_memory_state_explicit": True,
+        "displays_quality_gate_and_filtered_counts": True,
+        "separates_retrieval_probability_topology_algebra_columns": True,
+        "probability_js_assignment_column_required": True,
+        "map_claim_column_required": True,
+        "simplex_tree_preservation_column_required": True,
+        "edge_face_filtration_preservation_not_overclaimed": True,
+        "derived_algebraic_column_policy": "conservative derived/algebraic score; high coarse signatures cannot substitute for missing PH/free-resolution/rank/chain-map evidence",
+        "signature_cosine_column_policy": "coarse signature cosine is displayed separately and is not a derived-equivalence claim",
+        "required_table_columns": [
+            "correspondence",
+            "retrieval",
+            "prob-map source",
+            "map claim",
+            "derived/algebraic",
+            "coarse signature",
+            "simplex-tree map",
+            "edge certificate",
+        ],
+    }
+
+
 def _analogical_topk_contract(
     memory: Mapping[str, object] | None,
     *,
@@ -8061,6 +8092,7 @@ def _analogical_topk_contract(
         "top_k_rendered": int(top_k_rendered),
         "quality_gate": _analogical_memory_quality_gate(memory),
         "bank_path": str(memory.get("bank_path", "")),
+        "readability_contract": _analogical_topk_readability_contract(status, top_k_rendered),
     }
 
 
@@ -8080,6 +8112,8 @@ def _analogical_contract_panel(contract: Mapping[str, object] | None) -> str:
         f"<p><strong>Assignment contract:</strong> {html.escape(str(contract.get('assignment_metric', 'unavailable')))}; "
         f"query source {html.escape(str(contract.get('query_complex_source', 'unavailable')))}; "
         f"quality gate {html.escape(str(contract.get('quality_gate', 'not_reported')))}.</p>"
+        "<p><strong>Index readability contract:</strong> readable top-k table with one linked map view per rendered rank; "
+        "retrieval, probability-JS assignment, topology, algebra, map-claim, simplex-tree, and edge-certificate evidence remain separate columns.</p>"
         f"{reason_html}"
         "</aside>"
     )

@@ -261,7 +261,59 @@ def _row(root: Path, name: str) -> Path:
         for idx in range(4)
     ]
     _write(row / "reasoning_step_complex_maps/manifest.json", json.dumps({"steps": steps}))
-    _write(row / "analogical_simplicial_maps.json", json.dumps({"maps": [
+    analogical_topk_readability_contract = {
+        "schema_version": "tropicalgt.analogical_topk_readability.v1",
+        "status": "available",
+        "top_k_rendered": 2,
+        "no_proxy_or_fallback": True,
+        "topk_index_has_readable_table": True,
+        "one_selected_map_view_per_rendered_rank": True,
+        "table_rows_link_to_pair_pages": True,
+        "insufficient_memory_state_explicit": True,
+        "displays_quality_gate_and_filtered_counts": True,
+        "separates_retrieval_probability_topology_algebra_columns": True,
+        "probability_js_assignment_column_required": True,
+        "map_claim_column_required": True,
+        "simplex_tree_preservation_column_required": True,
+        "edge_face_filtration_preservation_not_overclaimed": True,
+        "derived_algebraic_column_policy": "conservative derived/algebraic score; high coarse signatures cannot substitute for missing PH/free-resolution/rank/chain-map evidence",
+        "signature_cosine_column_policy": "coarse signature cosine is displayed separately and is not a derived-equivalence claim",
+        "required_table_columns": [
+            "correspondence",
+            "retrieval",
+            "prob-map source",
+            "map claim",
+            "derived/algebraic",
+            "coarse signature",
+            "simplex-tree map",
+            "edge certificate",
+        ],
+    }
+    analogical_topk_contract = {
+        "schema_version": "tropicalgt.analogical_topk.v1",
+        "available": True,
+        "status": "available",
+        "reason_detail": "",
+        "no_proxy_or_fallback": True,
+        "retrieval_requires_model_probability_vectors": True,
+        "query_complex_required": "trajectory_probability_filtered_simplicial_object",
+        "codomain_complex_required": "trajectory_probability_filtered_simplicial_object",
+        "embedding_only_assignment_allowed": False,
+        "assignment_metric": "jensen_shannon_distance_on_model_probability_vectors",
+        "simplicial_map_claim_requires": "vertex_edge_face_simplex_tree_and_filtration_preservation",
+        "chain_map_claim_requires": "certified_filtered_simplicial_map",
+        "persistence_module_morphism_claim_requires": "certified_filtered_simplicial_map",
+        "query_complex_source": "trajectory_probability_filtered_simplicial_object",
+        "raw_retrieved_count": 2,
+        "qualified_model_probability_memory_count": 2,
+        "rejected_retrieved_count": 0,
+        "top_k_requested": 2,
+        "top_k_rendered": 2,
+        "quality_gate": {"min_quality_score": 0.2},
+        "bank_path": "",
+        "readability_contract": analogical_topk_readability_contract,
+    }
+    _write(row / "analogical_simplicial_maps.json", json.dumps({"topk_contract": analogical_topk_contract, "maps": [
         {
             "query_complex_source": "trajectory_probability_filtered_simplicial_object",
             "codomain_complex_source": "trajectory_probability_filtered_simplicial_object",
@@ -568,7 +620,7 @@ def _row(root: Path, name: str) -> Path:
         "tropical_support_heatmap.html": _html("Tropical active support", "Plotly.newPlot observed supports only top-support collapse rate No support-token proxies tropical_support_render_contract tropical_support_readability_contract Collapse metrics"),
         "tropical_fan_diagnostics.html": _html("Tropical fan diagnostics unavailable", "Plotly.newPlot Macaulay2 one dimensional cones not a multigraded free-resolution"),
         "graphcg_direction_cosines.html": _html("GraphCG full-rank direction audit", "Plotly.newPlot Readable top-direction heatmap"),
-        "analogical_memory_topk_index.html": "<!doctype html><title>Analogical top-k probability correspondences</title><body>Analogical top-k probability correspondences <a href='analogical_memory_retrieval.html'>rank 1</a> <a href='analogical_memory_map_02.html'>rank 2</a></body>",
+        "analogical_memory_topk_index.html": "<!doctype html><title>Analogical top-k probability correspondences</title><body>Analogical top-k probability correspondences Index readability contract <a href='analogical_memory_retrieval.html'>rank 1</a> <a href='analogical_memory_map_02.html'>rank 2</a></body>",
         "analogical_memory_retrieval.html": _html("Analogical probability-matched correspondence filtered-complex certificate", "Plotly.newPlot query trajectory complex retrieved memory complex slider filters domain and codomain sliders vertex-only correspondences preserved 1-simplex map simplicial-object-plot selected-complex-graph plotly_click"),
         "analogical_memory_map_02.html": _html("Analogical probability-matched correspondence filtered-complex certificate", "Plotly.newPlot query trajectory complex retrieved memory complex slider filters domain and codomain sliders vertex-only correspondences preserved 1-simplex map simplicial-object-plot selected-complex-graph plotly_click"),
         "trajectory_persistence/persistence_barcode.html": _html("Trajectory persistence barcode", "Plotly.newPlot simplicial-object-plot selected-complex-graph plotly_click"),
@@ -717,6 +769,20 @@ def test_validate_audit_root_rejects_missing_tropical_support_readability_contra
     report = validator.validate_audit_root(audit, min_rows=1, min_candidates=4, min_depth=2)
     assert not report["ok"]
     assert any("tropical support payload is missing readability contract" in err for err in report["errors"])
+
+
+def test_validate_audit_root_rejects_missing_analogical_topk_readability_contract(tmp_path: Path):
+    validator = _load_validator()
+    audit = tmp_path / "step_00000001" / "got_audit"
+    row = _row(audit, ".")
+    maps_path = row / "analogical_simplicial_maps.json"
+    payload = json.loads(maps_path.read_text(encoding="utf-8"))
+    payload["topk_contract"].pop("readability_contract")
+    maps_path.write_text(json.dumps(payload), encoding="utf-8")
+    _write(audit / "codex_browser_index.html", _codex_browser_html(_browser_samples(audit, ["."])))
+    report = validator.validate_audit_root(audit, min_rows=1, min_candidates=4, min_depth=2)
+    assert not report["ok"]
+    assert any("analogical top-k readability contract" in err for err in report["errors"])
 
 
 def test_validate_audit_root_rejects_missing_graphcg_basis_certificate(tmp_path: Path):
