@@ -600,3 +600,12 @@ The live item-by-item repair inventory is maintained in `planning/tropicalgt_i_c
 - [x] Pruned only generated `step_00003250/got_audit` under the active periodic retention policy while step-3750 audit generation was consuming disk; milestone audits, step 3500, step 3750, compact validation reports, and non-audit artifacts remain, with a manifest record in `periodic/got_audit_retention_manifest.jsonl`.
 - [x] Confirmed training resumed after the step-3750 audit at step `3752/5000`; step-5000 validation and audit artifacts remain absent, so post-5K analyses, Codex subagent review, and any step-0 restart remain blocked on real 5K evidence.
 - [ ] Continue Section 12 linearly: preserve trainer PID `378962` and watcher PID `379304`, keep the browser attached to the latest complete real audit, and wait for step-5000 evidence before analysis, subagent review, or restart.
+
+### Current Objective Update - Step-4000 Browser Refresh And Retention Pass
+
+- [x] Verified b60 step-4000 `validation_report.json`, `periodic_validation_artifacts.json`, and `got_audit/inference_audit.html` all exist as real generated artifacts.
+- [x] Reattached remote `127.0.0.1:8991` and the local Codex tunnel to the step-4000 `got_audit` directory without copying generated artifacts; remote server PID at verification time: `630984`.
+- [x] Recorded real step-4000 validation metrics: BPB/exact BPB `1.4740326876332792`, graph-BPB `20.160454592266568`, graph-conditioned BPB without side cost `1.2959433100364168`, NLL `1.021721601486206`, and invalid graph rate `0.0`.
+- [x] Pruned only generated `step_00003500/got_audit` under the active periodic retention policy while step-4000 audit generation was consuming disk; milestone audits, step 3750, step 4000, compact validation reports, and non-audit artifacts remain, with a manifest record in `periodic/got_audit_retention_manifest.jsonl`.
+- [x] Confirmed training resumed after the step-4000 audit at step `4006/5000`; step-5000 validation and audit artifacts remain absent, so post-5K analyses, Codex subagent review, and any step-0 restart remain blocked on real 5K evidence.
+- [ ] Continue Section 12 linearly: preserve trainer PID `378962` and watcher PID `379304`, keep the browser attached to the latest complete real audit, and wait for step-5000 evidence before analysis, subagent review, or restart.
