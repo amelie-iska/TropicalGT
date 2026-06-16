@@ -4100,6 +4100,35 @@ def _m2_selected_staircase_resolution(m2: Mapping[str, Any]) -> Dict[str, Any]:
     return {}
 
 
+def _rank_invariant_columns(bifiltration: Mapping[str, Any], max_rows: int = 18) -> Tuple[List[str], List[List[str]]]:
+    samples = bifiltration.get("rank_invariant_samples") if isinstance(bifiltration, Mapping) else None
+    rows = [row for row in samples if isinstance(row, Mapping)] if isinstance(samples, list) else []
+    if not rows:
+        return ["source grade", "target grade", "H0 rank", "source monomial", "target monomial"], [["unavailable"], [""], [""], [""], ["no computed rank-invariant samples in bifiltration report"]]
+
+    def _grade_text(value: Any) -> str:
+        if isinstance(value, Sequence) and not isinstance(value, (str, bytes)) and len(value) >= 2:
+            return f"({int(value[0] or 0)}, {int(value[1] or 0)})"
+        return str(value)
+
+    def _monomial_text(value: Any) -> str:
+        if isinstance(value, Sequence) and not isinstance(value, (str, bytes)) and len(value) >= 2:
+            return f"x_level^{int(value[0] or 0)} x_radius^{int(value[1] or 0)}"
+        return "unavailable"
+
+    rows = rows[:max_rows]
+    return (
+        ["source grade", "target grade", "H0 rank", "source monomial", "target monomial"],
+        [
+            [_grade_text(row.get("source_grade")) for row in rows],
+            [_grade_text(row.get("target_grade")) for row in rows],
+            [str(row.get("h0_rank", "")) for row in rows],
+            [_monomial_text(row.get("source_grade")) for row in rows],
+            [_monomial_text(row.get("target_grade")) for row in rows],
+        ],
+    )
+
+
 def _m2_betti_columns(m2: Mapping[str, Any]) -> Tuple[List[str], List[List[str]]]:
     resolution = _m2_selected_staircase_resolution(m2)
     rows = list((resolution.get("betti_table_rows") if resolution else []) or [])
@@ -4321,6 +4350,7 @@ def _write_two_parameter_bifiltration_staircase_html(
 
     rows = [r for r in (bifiltration.get("fiber_rows") or bifiltration.get("fiber_rank_profile") or []) if isinstance(r, Mapping)] if isinstance(bifiltration, Mapping) else []
     m2 = _m2_style_report_from_bifiltration(bifiltration)
+    rank_inv_rows = [row for row in (bifiltration.get("rank_invariant_samples") if isinstance(bifiltration, Mapping) else []) or [] if isinstance(row, Mapping)]
 
     def _grade(row: Mapping[str, Any]) -> tuple[int, int]:
         grade = row.get("grade")
@@ -4900,6 +4930,7 @@ def _write_two_parameter_bifiltration_staircase_html(
         head = "".join(f"<th>{html.escape(str(h))}</th>" for h in headers)
         return f"<section class='card'><h2>{html.escape(caption)}</h2><table><thead><tr>{head}</tr></thead><tbody>{''.join(rows_html)}</tbody></table></section>"
 
+    rank_h, rank_c = _rank_invariant_columns(bifiltration)
     betti_h, betti_c = _m2_betti_columns(m2)
     free_h, free_c = _m2_free_module_columns(m2)
     diff_h, diff_c = _m2_differential_columns(m2)
@@ -4962,7 +4993,7 @@ td {{ background:#07111f; color:#d7e8ff; }}
 <p class='lede'>Actual 2-parameter module fibers and multigraded chain-generator bidegrees over F2[x_level,x_radius]. The primary view is the Miller-Sturmfels staircase view of the bivariate module diagram: horizontal lattice coordinates are x_radius and vertical lattice coordinates are x_level; x_radius runs horizontally, x_level vertically, shaded upward-closed regions are generated submodules, and white lattice points are the displayed S/I_C basis complement.</p>
 <div class='callout'><b>Computed bifiltration:</b> {html.escape(rank_note)}<br>This section is an exponent-lattice module diagram in the sense of the two-variable monomial-ideal staircase picture: the coordinate axes are the x_radius and x_level one dimensional cone(s). The large gold/cyan/blue boundary points are minimal antichain generators; smaller dim-colored points are dominated observed bidegrees and are not treated as additional generators. White lattice points are displayed quotient-basis complements, colored cells/points are actual H1 fiber ranks. Adjacent structure maps persisted={len(bifiltration.get("structure_maps", [])) if isinstance(bifiltration, Mapping) else 0}. Staircase cards render exact two-variable monomial-ideal resolutions when the Miller-Sturmfels adjacent-LCM theorem applies. Lower CAS tables render only certified CAS output under its actual grading; diagnostic chain data is not substituted for a free resolution.</div>
 <section class='panel'><h2>Miller-Sturmfels bivariate module staircases from actual multidegree generators</h2><div class='staircase-grid'>{staircase_svgs}</div></section>
-<details class='secondary-disclosure'><summary>Secondary fiber-rank diagnostics</summary><section class='panel'><h2>F2[x_level,x_radius] support and homology fiber ranks</h2>{chart1}</section><section class='panel'><h2>Fiber-rank lattice with H0/H1 layer offsets</h2>{chart2}</section></details>
+<details class='secondary-disclosure'><summary>Secondary fiber-rank diagnostics</summary><section class='panel'><h2>F2[x_level,x_radius] support and homology fiber ranks</h2>{chart1}</section><section class='panel'><h2>Fiber-rank lattice with H0/H1 layer offsets</h2>{chart2}</section><div class='card-grid'>{_table_html(rank_h, rank_c, 'Rank-invariant samples over F2[x_level,x_radius]')}</div></details>
 <details class='secondary-disclosure'><summary>Certified algebra tables and CAS certificates</summary><div class='card-grid'>{_table_html(betti_h, betti_c, 'Betti-style diagnostics')}{_table_html(free_h, free_c, 'Free chain modules / certified free modules')}{_table_html(diff_h, diff_c, 'Differentials / boundary maps')}{_table_html(ideal_h, ideal_c, 'Certified Fitting ideals and determinantal minors')}{_table_html(be_h, be_c, 'Buchsbaum-Eisenbud rank and multiplier diagnostics')}{_table_html(cert_h, cert_c, 'CAS certificate summary')}</div></details>
 </main>
 </body>
@@ -4973,7 +5004,8 @@ td {{ background:#07111f; color:#d7e8ff; }}
         "coefficient_ring": "F2[x_level,x_radius]",
         "primary_view": "miller_sturmfels_bivariate_staircase",
         "primary_view_contract": "The primary view is an exponent-lattice staircase over F2[x_level,x_radius]: x_radius is horizontal, x_level is vertical, shaded regions are upward-closed generated submodules, and white lattice points are displayed quotient-basis complements from actual bifiltration chain-generator bidegrees.",
-        "secondary_views": ["fiber_rank_heatmap", "fiber_rank_lattice_3d", "certified_algebra_tables", "certified_fitting_minor_tables", "buchsbaum_eisenbud_diagnostic_tables"],
+        "secondary_views": ["fiber_rank_heatmap", "fiber_rank_lattice_3d", "rank_invariant_samples_table", "certified_algebra_tables", "certified_fitting_minor_tables", "buchsbaum_eisenbud_diagnostic_tables"],
+        "rank_invariant_sample_count": len(rank_inv_rows),
         "rank_surface_primary": False,
         "rank_surface_policy": "3D fiber-rank displays are secondary diagnostics only and are not rendered as the primary module view.",
         "axes": {

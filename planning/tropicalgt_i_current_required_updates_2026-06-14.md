@@ -232,7 +232,7 @@ git diff --check
 - CAS package survey: look for Sage, Macaulay2, Singular, RIVET/multipers, polymake, Normaliz, and related packages that compute real multigraded modules, minimal resolutions, Betti tables, Fitting ideals, minors, Buchsbaum-Eisenbud diagnostics, tropical fans, toric varieties, and stable intersections.
 - Maclagan-style toric embedding research direction: investigate whether the transformer graph-state and tropical-attention coordinate system can be embedded into a toric variety via model-derived monomial coordinates, Newton polytopes, fan data, and one dimensional cone data. Any resulting implementation must distinguish theorem-level certified constructions from diagnostic embeddings or visual probes.
 
-_Last updated: 2026-06-16T07:20:00Z_
+_Last updated: 2026-06-16T07:27:00Z_
 
 
 ## 2026-06-16 Fresh b59 5K Review Gate and Worker Handoff
@@ -333,10 +333,19 @@ _Last updated: 2026-06-16T07:20:00Z_
 - Verification completed: `python -m py_compile TropicalGT-I/src/tropicalgt/visualization.py TropicalGT-I/tests/test_simplicial_visualization.py`, `pytest TropicalGT-I/tests/test_simplicial_visualization.py::test_inference_audit_materializes_unavailable_bifiltration_for_legacy_nonempty_scaling -q` (`1 passed`), `pytest TropicalGT-I/tests/test_simplicial_visualization.py -q` (`33 passed`), `pytest TropicalGT-I/tests/test_algebraic_persistence.py -q` (`20 passed`), `pytest TropicalGT-I/tests/test_interactive_artifact_validator.py -q` (`10 passed`), and `git diff --check`.
 
 
+## 2026-06-16 Rank-Invariant Table And 2-Parameter Persistence Display Addendum
+
+- The two-parameter bifiltration page now renders a secondary `Rank-invariant samples over F2[x_level,x_radius]` table sourced only from computed `rank_invariant_samples`. Rows show source grade, target grade, H0 inclusion rank, and the corresponding source/target monomials.
+- The visual payload now advertises `rank_invariant_samples_table` and records `rank_invariant_sample_count`, so browser/audit validators can distinguish the primary Miller-Sturmfels staircase from secondary rank-invariant diagnostics.
+- This completes the current actual 2-parameter persistence display checklist: grid fibers come from closed GUDHI simplex-tree simplices and stored grades, adjacent `x_level`/`x_radius` structure maps are emitted, rank/Betti fiber displays and rank-invariant samples are rendered, downloadable JSON carries fiber bases/ranks/grades/provenance, and the 3D lattice remains a secondary view with small H0/H1 offsets while z stays actual fiber rank.
+- b60 latest checked training state reached step `614` with train loss/NLL `1.346/1.324`; trainer PID `378962` and watcher PID `379304` remain alive under the step-5000 gate.
+- Verification completed: `python -m py_compile TropicalGT-I/src/tropicalgt/visualization.py TropicalGT-I/tests/test_algebraic_persistence.py`, `pytest TropicalGT-I/tests/test_algebraic_persistence.py::test_level_radius_bifiltration_reports_scoped_real_staircase_resolution -q` (`1 passed`), `pytest TropicalGT-I/tests/test_algebraic_persistence.py -q` (`20 passed`), `pytest TropicalGT-I/tests/test_simplicial_visualization.py -q` (`33 passed`), `pytest TropicalGT-I/tests/test_interactive_artifact_validator.py -q` (`10 passed`), and `git diff --check`.
+
+
 ## Real Implementations Only Policy
 
 No TropicalGT-I metric, loss, visualization, analogical map, persistence module, free resolution, derived comparison, tropical-cycle diagnostic, or CAS artifact should be presented as a mathematical object unless it is computed from the actual model outputs, graph states, embeddings, probabilities, simplex trees, bifiltrations, or certified CAS/backend output that define that object. Temporary placeholders, synthetic fallback objects, mock charts, fabricated simplices, and convenience stand-ins are not acceptable. When a requested object cannot yet be computed, the artifact must render an explicit unavailable/uncertified state and the training metric must either be disabled or logged under an audit-only unavailable flag. Finite chain-presentation diagnostics may be shown only as chain diagnostics, never as free resolutions. Total-graded or ungraded CAS output may be shown as real CAS output only under its actual grading; it must not be advertised as a multigraded `F2[x_level,x_radius]` free resolution unless the backend certifies that multigraded structure.
 
 Use "one dimensional cone" or "one dimensional cones" as the preferred fan-theoretic language whenever the intended object is a cone of a fan or a cone-indexed filtration datum. Use singular or plural according to ordinary grammar.
 
-_Last updated: 2026-06-16T07:20:00Z_
+_Last updated: 2026-06-16T07:27:00Z_

@@ -48,11 +48,11 @@
 
 ### 2. Actual 2-Parameter Persistence
 
-- [ ] Compute grid fibers `K_(level,radius)` directly from GUDHI simplex trees and stored bifiltration grades.
-- [ ] Compute structure maps between adjacent lattice fibers along `x_level` and `x_radius`.
-- [ ] Render rank-invariant samples and Betti surfaces as lattice modules over `F2[x_level,x_radius]`.
-- [ ] Add downloadable JSON with fiber bases, structure maps, ranks, grades, and provenance.
-- [ ] Add a clearer 3D lattice plot with low separated module layers when multiple modules overlap, preserving fiber rank as z.
+- [x] Compute grid fibers `K_(level,radius)` directly from GUDHI simplex trees and stored bifiltration grades.
+- [x] Compute structure maps between adjacent lattice fibers along `x_level` and `x_radius`.
+- [x] Render rank-invariant samples and Betti surfaces as lattice modules over `F2[x_level,x_radius]`.
+- [x] Add downloadable JSON with fiber bases, structure maps, ranks, grades, and provenance.
+- [x] Add a clearer 3D lattice plot with low separated module layers when multiple modules overlap, preserving fiber rank as z.
 
 ### 3. Review and Implement `references/2210.11433v1.pdf`
 
@@ -222,6 +222,14 @@ The live item-by-item repair inventory is maintained in `planning/tropicalgt_i_c
 - [x] Preserved the Jensen-Shannon probability SimplexTree unavailable state when model probability vectors are absent.
 - [x] Focused verification passed: visualization plus artifact validator `33 passed`.
 - [x] Pushed this simplex-tree contract repair on the non-main branch.
+
+
+### Current Objective Update - Rank-Invariant Table And 2-Parameter Persistence Pass
+
+- [x] Added a secondary rank-invariant table to the two-parameter bifiltration page, backed only by computed `rank_invariant_samples` over `F2[x_level,x_radius]`.
+- [x] Extended the visual payload with `rank_invariant_samples_table` and `rank_invariant_sample_count` so downstream validators and reviewers can audit this secondary view separately from the primary Miller-Sturmfels staircase.
+- [x] Confirmed the full actual 2-parameter persistence section is covered by existing/new tests: GUDHI simplex-tree fiber provenance, adjacent structure maps, fiber bases/ranks/grades, downloadable JSON payload, rank-invariant samples, and the secondary 3D rank lattice with H0/H1 offsets.
+- [x] Focused verification passed: bifiltration page test `1 passed`; full algebraic persistence `20 passed`; full simplicial visualization `33 passed`; artifact validator `10 passed`.
 
 
 ### Current Objective Update - Missing-Bifiltration Unavailable-State Pass
