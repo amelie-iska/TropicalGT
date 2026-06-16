@@ -18,6 +18,7 @@ from .memory import (
     persistence_vector_representation_similarity,
 )
 from .metrics import aggregate_bpb_metrics, batch_bpb_metrics, explicit_graph_json_bytes, graph_token_structural_bytes
+from .cas_tropical import try_compute_tropical_fan_diagnostics
 from .scaling import apply_reasoning_action, run_inference_scaling
 
 __all__ = [
@@ -51,6 +52,7 @@ __all__ = [
     "batch_bpb_metrics",
     "explicit_graph_json_bytes",
     "graph_token_structural_bytes",
+    "try_compute_tropical_fan_diagnostics",
     "apply_reasoning_action",
     "run_inference_scaling",
 ]

@@ -335,3 +335,10 @@
 - Added scalar `bundle_overlap_pair_count` and `bundle_overlap_triple_count` metrics for W&B/audit traces. Disabled chart-bundle mode emits unavailable metadata and zero counts.
 - The metadata is static per chart count and does not CPU-sync learned transport tensors during training; later audit visualizations can attach transport L1/cocycle values to these exact ids.
 - Verification: `python -m py_compile TropicalGT-I/src/tropicalgt/model.py TropicalGT-I/src/tropicalgt/run.py` passed; `PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_losses_and_model.py -q` returned `9 passed`.
+
+## Iteration 41: Macaulay2 Tropical Fan Diagnostics
+
+- Added `tropicalgt.cas_tropical` as a real-only Macaulay2 `Tropical` wrapper for bounded tropical fan/cycle diagnostics. The wrapper canonicalizes QQ ideal inputs, builds a tagged Macaulay2 script, uses the local `Tropical` package, enforces timeout/cache behavior, and returns explicit unavailable states for invalid input, missing backend, timeout, backend error, or failed certificate tags.
+- Certified reports expose actual Macaulay2 `tropicalVariety` output: rays, max cones, lineality space, multiplicities, balance, purity, simpliciality, raw tagged output, backend probe, command template, and one dimensional cone language. The report explicitly warns that tropical fan diagnostics are not multigraded free-resolution or derived-equivalence certificates.
+- Exported `try_compute_tropical_fan_diagnostics` from the package for later visual/audit integration.
+- Verification: `python -m py_compile TropicalGT-I/src/tropicalgt/cas_tropical.py TropicalGT-I/src/tropicalgt/__init__.py` passed; `PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_algebraic_persistence.py -q` returned `18 passed`, including a live bounded Macaulay2 Tropical smoke on `ideal(x+y+1)` when the backend is available.

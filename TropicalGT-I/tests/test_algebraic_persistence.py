@@ -3,6 +3,7 @@ import sys
 import torch
 
 import tropicalgt.cas_free_resolution as cas_free_resolution
+import tropicalgt.cas_tropical as cas_tropical
 from tropicalgt.algebra import compute_level_radius_bifiltration_report, compute_topological_algebra_report, summarize_algebra_reports
 from tropicalgt.cas_free_resolution import build_singular_script, canonicalize_module, try_compute_real_free_resolution
 from tropicalgt.data import FixtureGraphDataset
@@ -322,6 +323,79 @@ def test_certified_cas_result_surfaces_buchsbaum_eisenbud_diagnostics():
     assert "aMultiplier(1,C,ComputeRanks=>true)" in m2_script
     assert "buchsbaum_eisenbud_diagnostics_begin" in singular_script
     assert "buchsbaum_eisenbud_diagnostics_begin" in sage_script
+
+
+def test_macaulay2_tropical_fan_diagnostic_parser_and_script():
+    schema = cas_tropical.canonicalize_tropical_ideal({"variables": ["x", "y"], "generators": ["x+y+1"]})
+    script = cas_tropical.build_macaulay2_tropical_script(schema)
+    assert 'needsPackage "Tropical"' in script
+    assert "tropicalVariety I" in script
+    assert "rays T" in script
+    tagged = "\n".join([
+        "backend=Macaulay2",
+        "tropical_package_available=true",
+        "certificate_type=Macaulay2 Tropical tropicalVariety fan diagnostics",
+        "tropical_cycle_certified=true",
+        "class=TropicalCycle",
+        "rays=matrix {{1, -1, 0}, {0, -1, 1}}",
+        "max_cones={{1}, {0}, {2}}",
+        "lineality_space=matrix {{}, {}}",
+        "multiplicities={1, 1, 1}",
+        "is_balanced=true",
+        "is_pure=true",
+        "is_simplicial=true",
+        "fan_text=Fan{...1...}",
+    ])
+    parsed = cas_free_resolution._parse_key_value_lines(tagged)
+    report = cas_tropical._certified_tropical_result(schema, parsed, tagged, attempts=[{"backend": "Macaulay2", "status": "ran"}])
+    assert report["available"] is True
+    assert report["schema_version"] == "tropicalgt.cas_tropical_fan.v1"
+    assert report["tropical_cycle_certified"] is True
+    assert report["safe_to_render_as_tropical_fan"] is True
+    summary = report["fan_summary"]
+    assert summary["ambient_dimension"] == 2
+    assert summary["ray_count"] == 3
+    assert summary["rays"] == [[1, -1, 0], [0, -1, 1]]
+    assert summary["max_cones"] == [[1], [0], [2]]
+    assert summary["multiplicities"] == [1, 1, 1]
+    assert summary["is_balanced"] is True
+    assert "one dimensional cones" in summary["one_dimensional_cone_language"]
+    assert "not a multigraded free-resolution" in report["render_warning"]
+
+
+def test_macaulay2_tropical_fan_diagnostic_live_or_unavailable():
+    report = cas_tropical.try_compute_tropical_fan_diagnostics(
+        {"variables": ["x", "y"], "generators": ["x+y+1"], "source": "unit_test_tropical_line"},
+        timeout_s=20,
+        use_cache=False,
+    )
+    assert report["schema_version"] == "tropicalgt.cas_tropical_fan.v1"
+    if report["available"]:
+        assert report["backend"] == "Macaulay2"
+        assert report["certificate_attached"] is True
+        assert report["fan_diagnostics_certified"] is True
+        assert report["fan_summary"]["ray_count"] == 3
+        assert report["fan_summary"]["is_balanced"] is True
+        assert report["cas_artifacts"]["raw_tagged_output"]
+    else:
+        assert report["status"] in {"backend_not_installed", "timeout", "backend_error", "certificate_failed", "invalid_input"}
+        assert report["certificate_attached"] is False
+        assert report["safe_to_render_as_tropical_fan"] is False
+
+
+def test_macaulay2_tropical_fan_diagnostic_invalid_input_unavailable():
+    report = cas_tropical.try_compute_tropical_fan_diagnostics({"variables": ["x"], "generators": []}, use_cache=False)
+    assert report["available"] is False
+    assert report["status"] == "invalid_input"
+    assert report["cas_artifacts"] == {}
+
+    unsafe = cas_tropical.try_compute_tropical_fan_diagnostics(
+        {"variables": ["x"], "generators": ['x; print "oops"']},
+        use_cache=False,
+    )
+    assert unsafe["available"] is False
+    assert unsafe["status"] == "invalid_input"
+    assert "unsupported Macaulay2 polynomial generator text" in unsafe["reason"]
 
 
 def test_cas_canonicalization_preserves_generator_id_boundaries():

@@ -301,3 +301,19 @@ Verification:
 - `PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_losses_and_model.py -q` -> `9 passed`.
 
 Next sequential item: run matched BPB/graph-BPB ablations after the b59 5K evidence review before promoting nonzero bundle/toric coefficients.
+
+## 2026-06-16 Macaulay2 Tropical Fan Diagnostic Pass
+
+Status: implemented and focused-tested.
+
+Changes made:
+- Added a certificate-gated Macaulay2 `Tropical` wrapper for model/audit ideals over `QQ[x_i]`.
+- The wrapper emits real tropical fan/cycle diagnostics from `tropicalVariety`: rays, max cones, lineality space, multiplicities, balance, purity, and simpliciality.
+- Missing or failed backend output returns explicit unavailable states and never substitutes these tropical diagnostics for free resolutions.
+- The report uses one dimensional cone language only for fan rays and carries the warning that the artifact is not a multigraded free-resolution/derived-equivalence certificate.
+
+Verification:
+- `python -m py_compile TropicalGT-I/src/tropicalgt/cas_tropical.py TropicalGT-I/src/tropicalgt/__init__.py` passed.
+- `PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_algebraic_persistence.py -q` -> `18 passed`.
+
+Next sequential item: connect the certified tropical fan diagnostic to a bounded visualization/audit surface when a model-derived tropical ideal is actually exported; unavailable state remains mandatory otherwise.
