@@ -197,6 +197,7 @@
 - [x] Focused verification passed: readiness/training-metrics/data-loader tests `36 passed`, with the same two SentencePiece/SWIG deprecation warnings.
 - [x] Pushed source/config/test/planning changes through commit `a5440e8`; no secrets, datasets, checkpoints, W&B folders, caches, or generated audit bundles were staged.
 - [x] Added source-level trainer enforcement so BPB-focused configs that fail the advanced readiness contract cannot start training or write a train report.
+- [x] Required explicit W&B organization/entity for BPB-focused runs and set tracked b54/b55 gate configs to `amelie-iska-math`.
 
 ### Current Remaining Implementation List - 2026-06-16
 

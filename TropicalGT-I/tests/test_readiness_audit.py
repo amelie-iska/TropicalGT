@@ -51,6 +51,7 @@ def test_advanced_bpb_contract_blocks_disabled_advanced_methods():
     cfg["hybrid_data"]["sources"][0]["name"] = "hf_only"
     cfg.pop("wandb_name", None)
     cfg.pop("wandb_run_name", None)
+    cfg["wandb"].pop("entity", None)
 
     _, gates = advanced_bpb_contract_report(cfg)
     failed = {gate["name"] for gate in gates if gate["status"] == "fail"}
@@ -64,6 +65,7 @@ def test_advanced_bpb_contract_blocks_disabled_advanced_methods():
     assert "advanced_bpb_meet_in_middle_roar_random_order" in failed
     assert "advanced_bpb_memory_quality_probability_complex" in failed
     assert "advanced_bpb_wandb_online_project" in failed
+    assert "advanced_bpb_wandb_entity_configured" in failed
     assert "advanced_bpb_wandb_run_name_matches_config" in failed
 
 

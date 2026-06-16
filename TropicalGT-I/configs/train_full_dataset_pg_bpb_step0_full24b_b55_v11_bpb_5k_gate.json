@@ -220,7 +220,8 @@
     "html_artifact_limit": 0,
     "log_interactive_artifacts": false,
     "mode": "online",
-    "project": "TropicalGT-I"
+    "project": "TropicalGT-I",
+    "entity": "amelie-iska-math"
   },
   "wandb_html_artifact_limit": 0,
   "wandb_html_max_bytes": 5000000,

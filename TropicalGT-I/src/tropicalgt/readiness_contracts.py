@@ -196,6 +196,12 @@ def advanced_bpb_contract_report(cfg: dict[str, Any]) -> tuple[dict[str, Any], l
     )
     add_gate(
         gates,
+        "advanced_bpb_wandb_entity_configured",
+        section["wandb"]["entity_configured"],
+        json.dumps({"project": section["wandb"]["project"], "entity": section["wandb"]["entity"]}, sort_keys=True),
+    )
+    add_gate(
+        gates,
         "advanced_bpb_wandb_run_name_matches_config",
         section["wandb"]["run_name_matches_config"],
         json.dumps({"run_name": run_name, "wandb_run_name": section["wandb"]["run_name"]}, sort_keys=True),

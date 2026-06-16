@@ -724,4 +724,24 @@ PYTHONPATH=TropicalGT-I/scripts:TropicalGT-I/src /home/iska/miniconda3/envs/toke
 # 40 passed, 2 warnings in 1.77s
 ```
 
-_Last updated: 2026-06-16T21:05:00Z_
+
+## 2026-06-16 Sequential Training/Readiness Update: W&B Organization Gate
+
+Status: complete for source/config readiness hardening.
+
+- BPB-focused advanced readiness now requires an explicit non-secret W&B entity/organization in `wandb.entity`, closing the remaining gap in the original W&B organization requirement.
+- Tracked b54 and b55 5K-gate configs now set `wandb.entity` to the observed project organization `amelie-iska-math`, matching the real historical W&B URLs under `https://wandb.ai/amelie-iska-math/TropicalGT-I/...`.
+- Added regression coverage proving missing W&B entity fails with `advanced_bpb_wandb_entity_configured`.
+- Direct source-contract probes confirm b54 and b55 still pass all advanced BPB gates after adding the entity field.
+
+Verification:
+
+```bash
+PYTHONPATH=TropicalGT-I/scripts:TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m py_compile TropicalGT-I/src/tropicalgt/readiness_contracts.py TropicalGT-I/tests/test_readiness_audit.py
+PYTHONPATH=TropicalGT-I/scripts:TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_readiness_audit.py TropicalGT-I/tests/test_training_resume.py -q
+# 12 passed in 1.49s
+PYTHONPATH=TropicalGT-I/scripts:TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_training_resume.py TropicalGT-I/tests/test_readiness_audit.py TropicalGT-I/tests/test_training_metrics.py TropicalGT-I/tests/test_data_loader.py -q
+# 40 passed, 2 warnings in 1.66s
+```
+
+_Last updated: 2026-06-16T21:22:00Z_
