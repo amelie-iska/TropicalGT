@@ -448,3 +448,19 @@ Verification:
 - `git diff --check` passed.
 
 Operational follow-up: prune bulky generated intermediate `got_audit` directories, preserve compact validation reports/checkpoints, resume b59 from the step-2500 checkpoint, and keep the 5K artifact gate active.
+
+## 2026-06-16 Periodic Audit Retention Policy Pass
+
+Status: implemented and focused-tested.
+
+Changes made:
+- Added a config-gated retention policy for generated periodic `got_audit` bundles so future runs can avoid another disk-exhaustion stop.
+- Retention keeps the latest N audit bundles plus configured protected milestone steps, and removes only generated `got_audit` directories.
+- Retained validation reports and non-audit periodic artifacts preserve the compact metric curve even when bulky generated trace payloads are pruned.
+
+Verification:
+- `python -m py_compile TropicalGT-I/src/tropicalgt/run.py` passed.
+- `PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_training_metrics.py -q` -> `12 passed`.
+- `git diff --check` passed.
+
+Operational note: the live b59 resume is already running from the step-2250 checkpoint under PID `334581` with watcher PID `334852`; this source change is for subsequent launches/restarts.

@@ -188,7 +188,7 @@ Remaining CAS items:
 - CAS package survey: look for Sage, Macaulay2, Singular, RIVET/multipers, polymake, Normaliz, and related packages that compute real multigraded modules, minimal resolutions, Betti tables, Fitting ideals, minors, Buchsbaum-Eisenbud diagnostics, tropical fans, toric varieties, and stable intersections.
 - Maclagan-style toric embedding research direction: investigate whether the transformer graph-state and tropical-attention coordinate system can be embedded into a toric variety via model-derived monomial coordinates, Newton polytopes, fan data, and one dimensional cone data. Any resulting implementation must distinguish theorem-level certified constructions from diagnostic embeddings or visual probes.
 
-_Last updated: 2026-06-16T04:41:46Z_
+_Last updated: 2026-06-16T04:46:41Z_
 
 
 ## 2026-06-16 Fresh b59 5K Review Gate and Worker Handoff
@@ -234,10 +234,17 @@ _Last updated: 2026-06-16T04:41:46Z_
 - Resume b59 from `TropicalGT-I/checkpoints/tropicalgt_i_pg_bpb_step0_full24b_b59_20260616T001122Z_fresh_bpb112_5k_gate.latest.pt` and continue to the 5000-step gate after pruning generated intermediate audit bundles.
 
 
+## 2026-06-16 Periodic Audit Retention Addendum
+
+- Future long runs may set `periodic_prune_got_audit_keep_latest` and `periodic_prune_got_audit_keep_steps` to keep generated audit evidence bounded without losing compact validation reports.
+- The retention policy removes only generated `periodic/step_*/got_audit` folders and records actions in `periodic/got_audit_retention_manifest.jsonl`.
+- Use this for post-5K restarts that retain frequent validation but do not need every intermediate multi-gigabyte interactive audit bundle.
+
+
 ## Real Implementations Only Policy
 
 No TropicalGT-I metric, loss, visualization, analogical map, persistence module, free resolution, derived comparison, tropical-cycle diagnostic, or CAS artifact should be presented as a mathematical object unless it is computed from the actual model outputs, graph states, embeddings, probabilities, simplex trees, bifiltrations, or certified CAS/backend output that define that object. Temporary placeholders, synthetic fallback objects, mock charts, fabricated simplices, and convenience stand-ins are not acceptable. When a requested object cannot yet be computed, the artifact must render an explicit unavailable/uncertified state and the training metric must either be disabled or logged under an audit-only unavailable flag. Finite chain-presentation diagnostics may be shown only as chain diagnostics, never as free resolutions. Total-graded or ungraded CAS output may be shown as real CAS output only under its actual grading; it must not be advertised as a multigraded `F2[x_level,x_radius]` free resolution unless the backend certifies that multigraded structure.
 
 Use "one dimensional cone" or "one dimensional cones" as the preferred fan-theoretic language whenever the intended object is a cone of a fan or a cone-indexed filtration datum. Use singular or plural according to ordinary grammar.
 
-_Last updated: 2026-06-16T04:41:46Z_
+_Last updated: 2026-06-16T04:46:41Z_

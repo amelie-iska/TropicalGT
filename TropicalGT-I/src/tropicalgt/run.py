@@ -4,6 +4,7 @@ import json
 import math
 import os
 import random
+import re
 import time
 from pathlib import Path
 from typing import Any
@@ -715,6 +716,10 @@ def train(config_path: str | Path, resume_from: str | Path | None = None, max_st
                     audit_max_simplices=periodic_audit_max_simplices,
                 )
                 periodic_artifacts.append(periodic_report)
+                retention_actions = _prune_periodic_generated_audits(out_dir, cfg)
+                if retention_actions:
+                    periodic_report["retention_actions"] = retention_actions
+                    metrics_last["periodic_got_audit_pruned_count"] = float(len(retention_actions))
                 memory_records_added = int(periodic_report.get("memory_records_added_total", memory_records_added))
                 periodic_metrics = {
                     key: value
@@ -954,6 +959,76 @@ def _periodic_got_budget_metrics(budget: dict[str, Any]) -> dict[str, float]:
         "periodic_got_scaling_effective_trace_limit": float(budget.get("effective_trace_limit", 0)),
         "periodic_got_scaling_bounded_for_training": float(bool(budget.get("bounded_for_training_survivability", False))),
     }
+
+
+def _step_number_from_periodic_dir(path: Path) -> int | None:
+    match = re.fullmatch(r"step_(\d+)", path.name)
+    return int(match.group(1)) if match else None
+
+
+def _cfg_int_list(value: Any) -> set[int]:
+    if value is None:
+        return set()
+    if isinstance(value, (int, float)):
+        return {int(value)}
+    if isinstance(value, str):
+        values = [part.strip() for part in value.split(",")]
+    elif isinstance(value, (list, tuple, set)):
+        values = list(value)
+    else:
+        return set()
+    out: set[int] = set()
+    for item in values:
+        if item in (None, ""):
+            continue
+        try:
+            out.add(int(item))
+        except (TypeError, ValueError):
+            continue
+    return out
+
+
+def _prune_periodic_generated_audits(out_dir: Path, cfg: dict[str, Any]) -> list[dict[str, Any]]:
+    keep_latest = max(_cfg_int(cfg, ("periodic_prune_got_audit_keep_latest",), 0), 0)
+    if keep_latest <= 0:
+        return []
+    periodic_dir = out_dir / "periodic"
+    if not periodic_dir.exists():
+        return []
+    keep_steps = _cfg_int_list(cfg.get("periodic_prune_got_audit_keep_steps"))
+    step_dirs: list[tuple[int, Path]] = []
+    for path in periodic_dir.glob("step_*"):
+        if not path.is_dir():
+            continue
+        step_no = _step_number_from_periodic_dir(path)
+        if step_no is not None:
+            step_dirs.append((step_no, path))
+    step_dirs.sort()
+    latest_keep = {step for step, _ in step_dirs[-keep_latest:]}
+    protected = latest_keep | keep_steps
+    actions: list[dict[str, Any]] = []
+    for step_no, step_dir in step_dirs:
+        if step_no in protected:
+            continue
+        audit_dir = step_dir / "got_audit"
+        if not audit_dir.exists():
+            continue
+        import shutil
+
+        shutil.rmtree(audit_dir)
+        actions.append(
+            {
+                "step": int(step_no),
+                "removed": str(audit_dir),
+                "reason": "Removed generated periodic got_audit payloads according to retention policy; compact validation reports and non-audit artifacts remain.",
+            }
+        )
+    if actions:
+        manifest_path = periodic_dir / "got_audit_retention_manifest.jsonl"
+        with manifest_path.open("a", encoding="utf-8") as handle:
+            for action in actions:
+                handle.write(json.dumps(action, sort_keys=True) + "\n")
+    return actions
 
 
 def _run_periodic_validation_round(

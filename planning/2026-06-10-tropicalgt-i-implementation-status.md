@@ -403,3 +403,10 @@
 - Periodic in-training GoT audits now use the effective bounded trace limit from the training-safe budget instead of blindly reusing the global offline `viz_trace_limit`. With the existing `record_incomplete_without_fabrication` policy, `viz_trace_limit=2048` is bounded to `periodic_viz_got_max_trace_limit=256` unless explicitly changed.
 - This preserves the real-only/no-proxy audit contract while preventing every 250-step periodic validation from retaining enormous trace payloads. Offline/post-5K analysis can still request larger traces deliberately once disk has been pruned.
 - Verification: `python -m py_compile TropicalGT-I/src/tropicalgt/run.py` passed; `PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_training_metrics.py -q` returned `11 passed`; `git diff --check` passed.
+
+## Iteration 50: Optional Periodic Audit Retention Policy
+
+- Added an opt-in periodic `got_audit` retention guard for future long runs: `periodic_prune_got_audit_keep_latest` keeps the newest N generated audit bundles, and `periodic_prune_got_audit_keep_steps` protects explicit milestone steps.
+- The pruner removes only generated `periodic/step_*/got_audit` directories. It leaves compact `validation_report.json` files, metric plots, graph diagnostics, reasoning visualizations, checkpoints, logs, and source files untouched.
+- Retention actions are appended to `periodic/got_audit_retention_manifest.jsonl` so post-run reviewers can see exactly which bulky generated bundles were removed and why.
+- Verification: `python -m py_compile TropicalGT-I/src/tropicalgt/run.py` passed; `PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_training_metrics.py -q` returned `12 passed`; `git diff --check` passed.

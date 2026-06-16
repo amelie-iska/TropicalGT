@@ -329,6 +329,32 @@ def test_periodic_got_visualization_bounds_training_safe_failure_policy(tmp_path
     assert report["metrics"]["periodic_got_scaling_available"] == 1.0
 
 
+def test_periodic_got_audit_retention_prunes_only_unprotected_generated_audits(tmp_path: Path):
+    import tropicalgt.run as run_mod
+
+    out_dir = tmp_path / "run"
+    for step in (100, 200, 300):
+        step_dir = out_dir / "periodic" / f"step_{step:08d}"
+        audit_dir = step_dir / "got_audit"
+        audit_dir.mkdir(parents=True)
+        (audit_dir / "large_payload.json").write_text("{}", encoding="utf-8")
+        (step_dir / "validation_report.json").write_text(json.dumps({"step": step}), encoding="utf-8")
+
+    actions = run_mod._prune_periodic_generated_audits(
+        out_dir,
+        {"periodic_prune_got_audit_keep_latest": 1, "periodic_prune_got_audit_keep_steps": [100]},
+    )
+
+    assert [row["step"] for row in actions] == [200]
+    assert (out_dir / "periodic" / "step_00000100" / "got_audit").exists()
+    assert not (out_dir / "periodic" / "step_00000200" / "got_audit").exists()
+    assert (out_dir / "periodic" / "step_00000300" / "got_audit").exists()
+    assert (out_dir / "periodic" / "step_00000200" / "validation_report.json").exists()
+    manifest = out_dir / "periodic" / "got_audit_retention_manifest.jsonl"
+    assert manifest.exists()
+    assert json.loads(manifest.read_text(encoding="utf-8"))["step"] == 200
+
+
 def test_periodic_got_visualization_records_unavailable_on_failure_policy(tmp_path: Path, monkeypatch):
     import tropicalgt.run as run_mod
 
