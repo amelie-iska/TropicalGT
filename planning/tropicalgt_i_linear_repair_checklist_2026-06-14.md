@@ -8,7 +8,7 @@
 
 **Remote workspace:** `/home/iska/Documents/amelie/bio/TropicalGT`
 
-**Current active training run:** `tropicalgt_i_pg_bpb_step0_full24b_b55_v11_bpb_5k_gate`; keep it alive until the 5K-step policy or explicit user request requires a restart.
+**Current active training run:** none. The b60 step-0 run reached the 5K gate with BPB `1.4304583543547733`; an actual restart remains blocked by the zero-byte b60 checkpoint under the no-proxy/no-fallback evidence policy.
 
 **Execution behavior:** exactly one active repair item at a time. Update this checklist and the browser status before and after each item. Visual QA in `http://127.0.0.1:8990/` is required for every artifact-facing change. No secrets, datasets, checkpoints, W&B run directories, caches, or bulky generated artifacts are staged.
 
@@ -64,7 +64,7 @@
 
 ### Item 3: Real CAS Backend Expansion
 
-**Status:** active.
+**Status:** done for current certified backend/provenance contract; continue only when new backend evidence or a specific CAS capability gap is identified.
 
 **Files:**
 - Modify: `TropicalGT-I/src/tropicalgt/cas_free_resolution.py`
@@ -82,6 +82,8 @@
 
 ### Item 4: Analogical Memory and Derived/Module Maps
 
+**Status:** done for probability-vector/Jensen-Shannon retrieval, simplex-map validation, and CAS-only derived comparison; early empty-memory states remain explicit unavailable states.
+
 **Files:**
 - Modify: `TropicalGT-I/src/tropicalgt/memory.py`
 - Modify: `TropicalGT-I/src/tropicalgt/visualization.py`
@@ -98,6 +100,8 @@
 
 ### Item 5: Simplicial Complex and Simplex Tree Visuals
 
+**Status:** done for current GUDHI SimplexTree/no-fallback rendering contract, radius complexes, and decoding-edge visual contracts.
+
 **Files:**
 - Modify: `TropicalGT-I/src/tropicalgt/visualization.py`
 - Modify tests for visualization payloads if present
@@ -113,6 +117,8 @@
 
 ### Item 6: Two-Parameter Persistence and Lattice Rendering
 
+**Status:** done for actual `F2[x_level,x_radius]` bifiltration payloads, staircase/lattice rendering, and unavailable states for legacy nonempty payloads without trajectory growth.
+
 **Files:**
 - Modify: `TropicalGT-I/src/tropicalgt/algebra.py`
 - Modify: `TropicalGT-I/src/tropicalgt/visualization.py`
@@ -126,6 +132,8 @@
 
 ### Item 7: NLL Density and Energy/Fitness Landscape
 
+**Status:** done for actual-anchor PCA NLL density clouds and non-model support-point labeling.
+
 **Files:**
 - Modify: `TropicalGT-I/src/tropicalgt/visualization.py`
 
@@ -137,6 +145,8 @@
 **Definition of done:** browser plot reads as a continuous density/energy object rather than a flat simplex.
 
 ### Item 8: Tropical/Toric Embedding Tooling and Paper Integration
+
+**Status:** done for current finite toric/tropical certificate boundaries, paper wording, and explicit unavailable states; full toric-variety embeddings remain future work only when backed by exact fan/module/CAS evidence.
 
 **Files:**
 - Modify: vector-bundle and toric/tropical planning files
@@ -153,6 +163,8 @@
 
 ### Item 9: Training and Metric Stabilization
 
+**Status:** active but blocked for actual restart by missing loadable b60 checkpoint evidence; source-side readiness/preflight hardening continues.
+
 **Files:**
 - Modify config after current item sequence or 5K policy indicates.
 - Do not interrupt active training unless explicitly requested or policy triggers.
@@ -166,6 +178,8 @@
 
 ### Item 10: Docs, Browser QA, Commit, Push
 
+**Status:** recurring active item; latest pushed head is `a5440e8` on `tropicalgt-i-real-cas-no-proxy-20260614`, and the browser is serving the real b60 step-5000 audit at `http://127.0.0.1:8991/`.
+
 **Files:**
 - Modify: `README.md` and relevant planning files after code changes.
 
@@ -173,3 +187,20 @@
 - After each item, run focused tests, update browser status, inspect `http://127.0.0.1:8990/`, and commit/push safe files to the non-main branch.
 
 **Definition of done:** pushed non-main branch contains only safe source/planning/docs/reference changes.
+
+### Current Objective Update - Advanced BPB Readiness Contract Pass
+
+- [x] Added `advanced_bpb_contract` readiness output for BPB-focused step-0/5K configs.
+- [x] Gates now require explicit TokenGT graph tokens, graph autoregressive decoding, required Parameter-Golf and HF reasoning sources, real data, long-context/multi-record shape, positive advanced objective weights, full-rank GraphCG directions, memory quality thresholds, graph-BPB side weighting, 250-step visual cadence, periodic browser artifacts, meet-in-the-middle forward/reverse plus ROAR/random-order settings, and explicit online W&B project/run-name configuration.
+- [x] Corrected stale tracked b54 W&B run-name fields and added a readiness gate requiring explicit W&B run names to match the config `run_name`.
+- [x] Browser inspection confirmed `http://127.0.0.1:8991/` is serving the real b60 step-5000 `TropicalGT-I Inference Audit` index with generated topology/algebra/GraphCG/tropical/memory/GoT links.
+- [x] Focused verification passed: readiness/training-metrics/data-loader tests `36 passed`, with the same two SentencePiece/SWIG deprecation warnings.
+- [x] Pushed source/config/test/planning changes through commit `a5440e8`; no secrets, datasets, checkpoints, W&B folders, caches, or generated audit bundles were staged.
+
+### Current Remaining Implementation List - 2026-06-16
+
+1. Keep actual BPB restart blocked until a nonempty loadable checkpoint or explicitly revised evidence policy exists.
+2. Continue source-side preflight and evidence hardening for future BPB runs, especially places where stale config fields, cross-run state, missing datasets, unavailable CAS, or missing memory evidence could otherwise look successful.
+3. If the no-proxy checkpoint block is resolved, run checkpoint-backed post-5K evaluation/backfill/visual validation, then produce an evidence-backed step-0 restart config targeting BPB `< 1.12`.
+4. Keep browser QA attached to the real step-5000 audit or the next real audit bundle; do not copy generated artifacts into source control.
+5. Commit and push only safe source, config, planning, docs, and tests after each verified repair.
