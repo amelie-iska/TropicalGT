@@ -48,6 +48,7 @@ PRIMARY_ARTIFACTS: tuple[ArtifactSpec, ...] = (
     ArtifactSpec("GraphCG directions", "graphcg_direction_cosines.html", "rank"),
     ArtifactSpec("Tropical support", "tropical_support_heatmap.html", "support"),
     ArtifactSpec("Toric embedding sidecar", "toric_embedding_sidecar.html", "toric"),
+    ArtifactSpec("Chart-bundle transport sidecar", "chart_bundle_transport_sidecar.html", "bundle"),
     ArtifactSpec("Generated sample index", "browser_index.html", "raw"),
     ArtifactSpec("Generated audit dashboard", "inference_audit.html", "audit"),
 )

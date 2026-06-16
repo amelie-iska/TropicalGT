@@ -599,6 +599,34 @@ def validate_row(row_dir: Path, *, min_candidates: int = 8, min_depth: int = 2, 
             _assert(toric_payload.get("safe_to_render_as_finite_toric_ideal_sidecar") is False, errors, "unavailable toric sidecar marked safe to render")
             _assert(toric_diag.get("safe_to_render_as_toric_embedding") is False, errors, "unavailable CAS toric report marked safe to render")
 
+    chart_bundle_path = row_dir / "chart_bundle_transport_sidecar.json"
+    chart_bundle_payload = _read_json(chart_bundle_path) if chart_bundle_path.exists() else {}
+    if chart_bundle_payload:
+        metadata = chart_bundle_payload.get("metadata", {}) if isinstance(chart_bundle_payload.get("metadata"), dict) else {}
+        transport_contract = chart_bundle_payload.get("monomial_transport_contract", {}) if isinstance(chart_bundle_payload.get("monomial_transport_contract"), dict) else {}
+        matroid_contract = chart_bundle_payload.get("bundle_matroid_contract", {}) if isinstance(chart_bundle_payload.get("bundle_matroid_contract"), dict) else {}
+        _assert(chart_bundle_payload.get("schema_version") == "tropicalgt.chart_bundle_transport_sidecar.v1", errors, "chart-bundle transport sidecar payload has wrong schema")
+        _assert(chart_bundle_payload.get("actual_data_only") is True, errors, "chart-bundle transport sidecar missing actual-data-only flag")
+        _assert(chart_bundle_payload.get("no_proxy_or_fallback") is True, errors, "chart-bundle transport sidecar missing no-proxy flag")
+        render_contract = str(chart_bundle_payload.get("render_contract", ""))
+        _assert("not toric embedding" in render_contract or "not a toric embedding" in render_contract, errors, "chart-bundle transport sidecar missing non-toric render contract")
+        _assert("no proxies" in render_contract or "no proxy" in render_contract, errors, "chart-bundle transport sidecar missing no-proxy render contract")
+        _assert(chart_bundle_payload.get("safe_to_render_as_toric_embedding_certificate") is False, errors, "chart-bundle sidecar incorrectly claims toric embedding certificate safety")
+        _assert(chart_bundle_payload.get("safe_to_render_as_tropical_variety_embedding") is False, errors, "chart-bundle sidecar incorrectly claims tropical-variety embedding")
+        _assert(chart_bundle_payload.get("safe_to_render_as_global_toric_variety_embedding") is False, errors, "chart-bundle sidecar incorrectly claims global toric-variety embedding")
+        _assert(chart_bundle_payload.get("safe_to_use_as_normal_fan_certificate") is False, errors, "chart-bundle sidecar incorrectly claims normal-fan certificate")
+        if chart_bundle_payload.get("available") is True:
+            chart_ids = chart_bundle_payload.get("chart_ids", []) if isinstance(chart_bundle_payload.get("chart_ids"), list) else []
+            overlap_pairs = metadata.get("overlap_pairs", []) if isinstance(metadata.get("overlap_pairs"), list) else []
+            overlap_triples = metadata.get("overlap_triples", []) if isinstance(metadata.get("overlap_triples"), list) else []
+            _assert(metadata.get("schema_version") == "tropicalgt.chart_bundle_transport_metadata.v1", errors, "available chart-bundle sidecar missing metadata schema")
+            _assert(metadata.get("available") is True, errors, "available chart-bundle sidecar metadata is not available")
+            _assert(bool(chart_ids), errors, "available chart-bundle sidecar missing chart ids")
+            _assert(int(chart_bundle_payload.get("overlap_pair_count", -1)) == len(overlap_pairs), errors, "chart-bundle sidecar overlap pair count mismatch")
+            _assert(int(chart_bundle_payload.get("overlap_triple_count", -1)) == len(overlap_triples), errors, "chart-bundle sidecar overlap triple count mismatch")
+            _assert(transport_contract.get("actual_data_only") is True and transport_contract.get("no_proxy_or_fallback") is True, errors, "available chart-bundle transport contract is not no-proxy")
+            _assert(matroid_contract.get("actual_data_only") is True and matroid_contract.get("no_proxy_or_fallback") is True, errors, "available chart-bundle matroid contract is not no-proxy")
+
     support_payload = _read_json(row_dir / REQUIRED_JSON["tropical_support_payload"]) if (row_dir / REQUIRED_JSON["tropical_support_payload"]).exists() else {}
     graphcg_payload = _read_json(row_dir / REQUIRED_JSON["graphcg_payload"]) if (row_dir / REQUIRED_JSON["graphcg_payload"]).exists() else {}
     analogical_simplex_tree_payload = _read_json(row_dir / REQUIRED_JSON["analogical_simplex_tree_analogy"]) if (row_dir / REQUIRED_JSON["analogical_simplex_tree_analogy"]).exists() else {}

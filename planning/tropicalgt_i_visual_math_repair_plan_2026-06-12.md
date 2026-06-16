@@ -1282,3 +1282,29 @@ CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/t
 CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_losses_and_model.py TropicalGT-I/tests/test_bpb_ablation_grid.py TropicalGT-I/tests/test_bpb_ablation.py -q -p no:cacheprovider --basetemp=/tmp/tropicalgt-pytest-bundle-monomial-transport-full
 # 14 passed
 ```
+
+## 2026-06-16 Chart-Bundle Transport Browser Sidecar
+
+Sequential vector-bundle/toric browser hardening continued after monomial transport and flat-incidence bundle metrics:
+
+- Added `chart_bundle_transport_sidecar.html` and `chart_bundle_transport_sidecar.json` to new audit bundles written by `write_inference_audit_artifacts`.
+- The sidecar searches only exported `tropicalgt.chart_bundle_transport_metadata.v1` payloads in model/result/GoT candidate outputs and renders unavailable when that metadata is absent.
+- The payload exposes chart ids, overlap pair/triple counts, sample transport ids, monomial-transport contracts, bundle matroid/flat-incidence contracts, toric-certificate status, and strict actual-data/no-proxy flags.
+- The render contract explicitly says chart-bundle telemetry is not a toric embedding, tropical-variety embedding, global toric-variety embedding, or normal-fan certificate; those still require separate CAS-certified sidecars.
+- The sample browser now links the chart-bundle transport sidecar when present.
+- The interactive artifact validator now checks any present chart-bundle transport sidecar for schema, no-proxy flags, non-toric/non-normal-fan safety flags, overlap count consistency, and nested no-proxy transport/matroid contracts.
+
+Validation:
+
+```text
+CUDA_VISIBLE_DEVICES="" python3 -m py_compile TropicalGT-I/src/tropicalgt/visualization.py TropicalGT-I/scripts/validate_interactive_audit_artifacts.py TropicalGT-I/scripts/build_sample_browser_index.py TropicalGT-I/tests/test_simplicial_visualization.py TropicalGT-I/tests/test_interactive_artifact_validator.py TropicalGT-I/tests/test_sample_browser_index.py
+# passed
+CUDA_VISIBLE_DEVICES="" /home/iska/miniconda3/bin/conda run -n tokengt python -m pytest -q tests/test_simplicial_visualization.py -k "chart_bundle_transport_sidecar or toric_embedding_sidecar"
+# 4 passed, 43 deselected
+CUDA_VISIBLE_DEVICES="" /home/iska/miniconda3/bin/conda run -n tokengt python -m pytest -q tests/test_sample_browser_index.py
+# 2 passed
+CUDA_VISIBLE_DEVICES="" /home/iska/miniconda3/bin/conda run -n tokengt python -m pytest -q tests/test_interactive_artifact_validator.py -k "chart_bundle_sidecar_proxy_claim or accepts_three_interactive_rows"
+# 2 passed, 30 deselected
+CUDA_VISIBLE_DEVICES="" /home/iska/miniconda3/bin/conda run -n tokengt python -m pytest -q tests/test_simplicial_visualization.py tests/test_interactive_artifact_validator.py tests/test_sample_browser_index.py
+# 81 passed
+```

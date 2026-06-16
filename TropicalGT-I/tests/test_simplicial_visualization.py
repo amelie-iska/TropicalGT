@@ -31,6 +31,7 @@ from tropicalgt.visualization import (
     _topological_similarity_summary,
     write_analogical_memory_visualization,
     write_graphcg_trajectory_visualization,
+    write_chart_bundle_transport_sidecar,
     write_got_trajectory_visualization,
     write_inference_audit_artifacts,
     write_persistence_visualizations,
@@ -1142,6 +1143,91 @@ def test_toric_embedding_sidecar_renders_precomputed_finite_toric_ideal_certific
     assert "not a normal-fan" in html
     assert "z_1^2-z_0*z_2" in html
     assert "toric_embedding_sidecar_contract" in html
+
+
+
+def _chart_bundle_transport_metadata_fixture() -> dict[str, object]:
+    chart_ids = ["chart_00", "chart_01", "chart_02"]
+    pairs = [
+        {"id": "chart_00__to__chart_01", "source_chart": "chart_00", "target_chart": "chart_01", "transport_logit_index": [0, 1]},
+        {"id": "chart_01__to__chart_02", "source_chart": "chart_01", "target_chart": "chart_02", "transport_logit_index": [1, 2]},
+    ]
+    triples = [
+        {
+            "id": "chart_00__to__chart_01__to__chart_02",
+            "source_chart": "chart_00",
+            "middle_chart": "chart_01",
+            "target_chart": "chart_02",
+            "pair_ids": ["chart_00__to__chart_01", "chart_01__to__chart_02", "chart_00__to__chart_02"],
+        }
+    ]
+    return {
+        "schema_version": "tropicalgt.chart_bundle_transport_metadata.v1",
+        "available": True,
+        "source": "test.fixture",
+        "chart_ids": chart_ids,
+        "overlap_pairs": pairs,
+        "overlap_triples": triples,
+        "overlap_pair_count": len(pairs),
+        "overlap_triple_count": len(triples),
+        "directed_overlap_policy": "ordered chart pairs/triples matching transport T_ab and cocycle T_bc T_ab = T_ac",
+        "monomial_transport_contract": {
+            "schema_version": "tropicalgt.monomial_transport_head.v1",
+            "source": "test.transport_head",
+            "chart_ids": chart_ids,
+            "transport_ids": [row["id"] for row in pairs],
+            "shift_representation": "tropical_shift_logits_on_ordered_chart_pairs",
+            "permutation_representation": "chart_permutation_logits_on_ordered_chart_pairs",
+            "permutation_target_policy": "identity_chart_permutation_telemetry_until_data_chart_matching_labels_exist",
+            "actual_data_only": True,
+            "no_proxy_or_fallback": True,
+        },
+        "bundle_matroid_contract": {
+            "schema_version": "tropicalgt.bundle_matroid_flat_incidence.v1",
+            "source": "test.flat_incidence_head",
+            "chart_ids": chart_ids,
+            "toric_active_row_count": 5,
+            "flat_incidence_shape": [3, 5],
+            "rank_defect_metric": "svd_flat_rank_defect_on_chart_probability_rows",
+            "flat_incidence_metric": "sigmoid_binary_defect_on_chart_by_toric_row_incidence",
+            "actual_data_only": True,
+            "no_proxy_or_fallback": True,
+        },
+        "toric_embedding_certificate": {"schema_version": "tropicalgt.cas_toric_embedding.v1", "available": False, "certificate_attached": False},
+    }
+
+
+def test_chart_bundle_transport_sidecar_unavailable_without_metadata(tmp_path: Path):
+    paths = write_chart_bundle_transport_sidecar({}, tmp_path)
+    payload = json.loads(Path(paths["chart_bundle_transport_sidecar_payload"]).read_text(encoding="utf-8"))
+    html = Path(paths["chart_bundle_transport_sidecar"]).read_text(encoding="utf-8")
+    assert payload["schema_version"] == "tropicalgt.chart_bundle_transport_sidecar.v1"
+    assert payload["available"] is False
+    assert payload["actual_data_only"] is True
+    assert payload["no_proxy_or_fallback"] is True
+    assert payload["safe_to_render_as_toric_embedding_certificate"] is False
+    assert payload["metadata"] is None
+    assert "No chart-bundle transport metadata" in html
+    assert "Chart-bundle transport sidecar unavailable" in html
+
+
+def test_chart_bundle_transport_sidecar_renders_metadata_contracts(tmp_path: Path):
+    metadata = _chart_bundle_transport_metadata_fixture()
+    result = {"inference_scaling": {"candidates": [{"record_id": "q0", "chart_bundle_transport_metadata": metadata}]}}
+    paths = write_chart_bundle_transport_sidecar(result, tmp_path)
+    payload = json.loads(Path(paths["chart_bundle_transport_sidecar_payload"]).read_text(encoding="utf-8"))
+    html = Path(paths["chart_bundle_transport_sidecar"]).read_text(encoding="utf-8")
+    assert payload["available"] is True
+    assert payload["source_path"] == "result.inference_scaling.candidates[0].chart_bundle_transport_metadata"
+    assert payload["chart_ids"] == ["chart_00", "chart_01", "chart_02"]
+    assert payload["overlap_pair_count"] == 2
+    assert payload["overlap_triple_count"] == 1
+    assert payload["monomial_transport_contract"]["no_proxy_or_fallback"] is True
+    assert payload["bundle_matroid_contract"]["flat_incidence_shape"] == [3, 5]
+    assert payload["safe_to_render_as_tropical_variety_embedding"] is False
+    assert "chart_00__to__chart_01" in html
+    assert "not a toric embedding" in html
+    assert "chart_bundle_transport_sidecar_contract" in html
 
 
 def test_tropical_support_heatmap_does_not_fabricate_invalid_supports(tmp_path: Path):

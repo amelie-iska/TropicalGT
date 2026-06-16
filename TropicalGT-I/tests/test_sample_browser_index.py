@@ -32,6 +32,7 @@ def _write_minimal_sample(root: Path, name: str = "sample_000") -> Path:
     )
     (sample / "got_trajectory_pca_3d.html").write_text("<html>nll</html>", encoding="utf-8")
     (sample / "toric_embedding_sidecar.html").write_text("<html>toric</html>", encoding="utf-8")
+    (sample / "chart_bundle_transport_sidecar.html").write_text("<html>bundle</html>", encoding="utf-8")
     (sample / "got_full_trajectory_complex_payload.json").write_text("{}", encoding="utf-8")
     for idx in range(3):
         (step_dir / f"reasoning_step_{idx:03d}.html").write_text(f"<html>step {idx}</html>", encoding="utf-8")
@@ -56,6 +57,8 @@ def test_build_index_writes_catalog_and_prominent_link(tmp_path: Path):
     assert "interactive_visualization_catalog.html" in html
     assert "Toric embedding sidecar" in html
     assert "sample_000/toric_embedding_sidecar.html" in html
+    assert "Chart-bundle transport sidecar" in html
+    assert "sample_000/chart_bundle_transport_sidecar.html" in html
     catalog_html = catalog.read_text(encoding="utf-8")
     assert "sample_000/reasoning_step_complex_maps/reasoning_step_000.html" in catalog_html
     assert "sample_000/got_full_trajectory_complex_payload.json" in catalog_html

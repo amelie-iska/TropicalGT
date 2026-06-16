@@ -428,6 +428,7 @@ def write_inference_audit_artifacts(
         paths.update(write_tropical_support_heatmap(result, output_dir))
         paths.update(write_tropical_fan_diagnostics(result, output_dir))
         paths.update(write_toric_embedding_sidecar(result, output_dir))
+        paths.update(write_chart_bundle_transport_sidecar(result, output_dir))
         if isinstance(topology, dict):
             paths.update(write_persistence_visualizations(topology, output_dir))
         trajectory_topology = scaling.get("trajectory_topological_algebra") if isinstance(scaling, dict) else None
@@ -5242,6 +5243,217 @@ def write_toric_embedding_sidecar(result: dict[str, object], output_dir: str | P
     payload_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
     _write_toric_embedding_html(html_path, payload)
     return {"toric_embedding_sidecar": str(html_path), "toric_embedding_sidecar_payload": str(payload_path)}
+
+
+_CHART_BUNDLE_TRANSPORT_SCHEMA = "tropicalgt.chart_bundle_transport_metadata.v1"
+
+
+def _find_chart_bundle_transport_metadata(result: Mapping[str, Any]) -> tuple[str, Mapping[str, Any]] | None:
+    def direct(path: str, value: Any) -> tuple[str, Mapping[str, Any]] | None:
+        if not isinstance(value, Mapping):
+            return None
+        if value.get("schema_version") == _CHART_BUNDLE_TRANSPORT_SCHEMA:
+            return path, value
+        meta = value.get("chart_bundle_transport_metadata")
+        if isinstance(meta, Mapping):
+            return f"{path}.chart_bundle_transport_metadata", meta
+        return None
+
+    seen: set[int] = set()
+
+    def visit(path: str, value: Any, depth: int = 0) -> tuple[str, Mapping[str, Any]] | None:
+        if depth > 6 or not isinstance(value, (Mapping, Sequence)) or isinstance(value, (str, bytes)):
+            return None
+        object_id = id(value)
+        if object_id in seen:
+            return None
+        seen.add(object_id)
+        found = direct(path, value)
+        if found is not None:
+            return found
+        if isinstance(value, Mapping):
+            priority_keys = (
+                "metrics",
+                "graph_token_trace",
+                "model_output",
+                "output",
+                "diagnostics",
+                "inference_scaling",
+                "best",
+                "candidate",
+            )
+            for key in priority_keys:
+                if key in value:
+                    found = visit(f"{path}.{key}", value[key], depth + 1)
+                    if found is not None:
+                        return found
+            candidates = value.get("candidates")
+            if isinstance(candidates, Sequence) and not isinstance(candidates, (str, bytes)):
+                for idx, candidate in enumerate(candidates[:16]):
+                    found = visit(f"{path}.candidates[{idx}]", candidate, depth + 1)
+                    if found is not None:
+                        return found
+        elif isinstance(value, Sequence):
+            for idx, item in enumerate(value[:16]):
+                found = visit(f"{path}[{idx}]", item, depth + 1)
+                if found is not None:
+                    return found
+        return None
+
+    return visit("result", result)
+
+
+def _safe_int_count(value: Any, fallback: int = 0) -> int:
+    try:
+        return int(value)
+    except Exception:
+        return int(fallback)
+
+
+def _chart_bundle_transport_payload(
+    *,
+    source_path: str,
+    metadata: Mapping[str, Any] | None,
+    available: bool,
+    reason: str,
+) -> dict[str, Any]:
+    meta = dict(metadata) if isinstance(metadata, Mapping) else None
+    transport_contract = meta.get("monomial_transport_contract") if isinstance(meta, Mapping) and isinstance(meta.get("monomial_transport_contract"), Mapping) else {}
+    matroid_contract = meta.get("bundle_matroid_contract") if isinstance(meta, Mapping) and isinstance(meta.get("bundle_matroid_contract"), Mapping) else {}
+    toric_certificate = meta.get("toric_embedding_certificate") if isinstance(meta, Mapping) and isinstance(meta.get("toric_embedding_certificate"), Mapping) else {}
+    chart_ids = meta.get("chart_ids") if isinstance(meta, Mapping) and isinstance(meta.get("chart_ids"), Sequence) and not isinstance(meta.get("chart_ids"), (str, bytes)) else []
+    overlap_pairs = meta.get("overlap_pairs") if isinstance(meta, Mapping) and isinstance(meta.get("overlap_pairs"), Sequence) and not isinstance(meta.get("overlap_pairs"), (str, bytes)) else []
+    overlap_triples = meta.get("overlap_triples") if isinstance(meta, Mapping) and isinstance(meta.get("overlap_triples"), Sequence) and not isinstance(meta.get("overlap_triples"), (str, bytes)) else []
+    return {
+        "schema_version": "tropicalgt.chart_bundle_transport_sidecar.v1",
+        "available": bool(available),
+        "source_path": source_path,
+        "reason": reason,
+        "metadata": meta,
+        "chart_ids": list(chart_ids),
+        "overlap_pair_count": _safe_int_count(meta.get("overlap_pair_count") if isinstance(meta, Mapping) else None, len(overlap_pairs)),
+        "overlap_triple_count": _safe_int_count(meta.get("overlap_triple_count") if isinstance(meta, Mapping) else None, len(overlap_triples)),
+        "monomial_transport_contract": dict(transport_contract),
+        "bundle_matroid_contract": dict(matroid_contract),
+        "toric_embedding_certificate": dict(toric_certificate),
+        "actual_data_only": True,
+        "no_proxy_or_fallback": True,
+        "safe_to_render_as_toric_embedding_certificate": False,
+        "safe_to_render_as_tropical_variety_embedding": False,
+        "safe_to_render_as_global_toric_variety_embedding": False,
+        "safe_to_use_as_normal_fan_certificate": False,
+        "render_contract": "Chart-bundle transport sidecars render only exported chart-bundle metadata, overlap ids, monomial transport contracts, and bundle matroid/flat-incidence contracts. They are not a toric embedding, tropical variety, global toric variety, or normal-fan certificate; unavailable states remain explicit and no proxies or fallbacks are substituted.",
+    }
+
+
+def _write_chart_bundle_transport_html(path: Path, payload: Mapping[str, Any]) -> None:
+    metadata = payload.get("metadata") if isinstance(payload.get("metadata"), Mapping) else {}
+    transport_contract = payload.get("monomial_transport_contract") if isinstance(payload.get("monomial_transport_contract"), Mapping) else {}
+    matroid_contract = payload.get("bundle_matroid_contract") if isinstance(payload.get("bundle_matroid_contract"), Mapping) else {}
+    toric_certificate = payload.get("toric_embedding_certificate") if isinstance(payload.get("toric_embedding_certificate"), Mapping) else {}
+    chart_ids = payload.get("chart_ids") if isinstance(payload.get("chart_ids"), Sequence) and not isinstance(payload.get("chart_ids"), (str, bytes)) else []
+    overlap_pairs = metadata.get("overlap_pairs") if isinstance(metadata.get("overlap_pairs"), Sequence) and not isinstance(metadata.get("overlap_pairs"), (str, bytes)) else []
+    overlap_triples = metadata.get("overlap_triples") if isinstance(metadata.get("overlap_triples"), Sequence) and not isinstance(metadata.get("overlap_triples"), (str, bytes)) else []
+    transport_ids = transport_contract.get("transport_ids") if isinstance(transport_contract.get("transport_ids"), Sequence) and not isinstance(transport_contract.get("transport_ids"), (str, bytes)) else []
+    rows = [
+        ("status", "available" if payload.get("available") is True else "unavailable"),
+        ("source", payload.get("source_path", "unavailable")),
+        ("reason", payload.get("reason", "available" if payload.get("available") else "chart-bundle metadata unavailable")),
+        ("metadata schema", metadata.get("schema_version", "unavailable")),
+        ("metadata source", metadata.get("source", "unavailable")),
+        ("chart ids", _json_clip(chart_ids, 260)),
+        ("overlap pair count", payload.get("overlap_pair_count", 0)),
+        ("overlap triple count", payload.get("overlap_triple_count", 0)),
+        ("sample overlap pairs", _json_clip(overlap_pairs[:8], 360)),
+        ("sample overlap triples", _json_clip(overlap_triples[:6], 360)),
+        ("directed overlap policy", metadata.get("directed_overlap_policy", "unavailable")),
+        ("transport schema", transport_contract.get("schema_version", "unavailable")),
+        ("transport source", transport_contract.get("source", "unavailable")),
+        ("transport ids", _json_clip(transport_ids[:12], 360)),
+        ("shift representation", transport_contract.get("shift_representation", "unavailable")),
+        ("permutation representation", transport_contract.get("permutation_representation", "unavailable")),
+        ("permutation target policy", transport_contract.get("permutation_target_policy", "unavailable")),
+        ("flat-incidence schema", matroid_contract.get("schema_version", "unavailable")),
+        ("flat-incidence shape", _json_clip(matroid_contract.get("flat_incidence_shape", []), 180)),
+        ("flat-incidence metric", matroid_contract.get("flat_incidence_metric", "unavailable")),
+        ("rank-defect metric", matroid_contract.get("rank_defect_metric", "unavailable")),
+        ("toric certificate schema", toric_certificate.get("schema_version", "unavailable")),
+        ("toric certificate attached", toric_certificate.get("certificate_attached", False)),
+        ("safe as toric embedding certificate", payload.get("safe_to_render_as_toric_embedding_certificate", False)),
+        ("safe as tropical variety embedding", payload.get("safe_to_render_as_tropical_variety_embedding", False)),
+        ("safe as normal fan certificate", payload.get("safe_to_use_as_normal_fan_certificate", False)),
+        ("actual data only", payload.get("actual_data_only", False)),
+        ("no proxy or fallback", payload.get("no_proxy_or_fallback", False)),
+        ("render contract", payload.get("render_contract", "unavailable")),
+    ]
+    fig = go.Figure(
+        data=[
+            go.Table(
+                header=dict(values=["diagnostic", "value"], fill_color="#10243f", font=dict(color="#e8f2ff", size=13), align="left"),
+                cells=dict(values=[[str(k) for k, _ in rows], [str(v) for _, v in rows]], fill_color="#07111f", font=dict(color="#d7e8ff", size=12), align="left", height=28),
+            )
+        ]
+    )
+    if payload.get("available") is True:
+        title = "Chart-bundle transport sidecar: exported overlap and transport metadata"
+        subtitle = "Actual chart ids, transport ids, and flat-incidence contracts only; this is not a toric embedding, normal-fan, or tropical-variety certificate."
+        height = 860
+    else:
+        title = "Chart-bundle transport sidecar unavailable"
+        subtitle = "No chart-bundle transport metadata is rendered by proxy; train/eval exports must attach tropicalgt.chart_bundle_transport_metadata.v1."
+        height = 620
+    fig.update_layout(
+        title=f"{title}<br><sup>{subtitle}</sup>",
+        height=height,
+        margin=dict(t=116, l=44, r=44, b=44),
+        meta={"chart_bundle_transport_sidecar_contract": payload.get("render_contract")},
+    )
+    _write_plotly_dark_html(path, fig, "Chart bundle transport sidecar")
+
+
+def write_chart_bundle_transport_sidecar(result: dict[str, object], output_dir: str | Path) -> dict[str, str]:
+    output_dir = Path(output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    html_path = output_dir / "chart_bundle_transport_sidecar.html"
+    payload_path = output_dir / "chart_bundle_transport_sidecar.json"
+
+    found = _find_chart_bundle_transport_metadata(result if isinstance(result, Mapping) else {})
+    if found is None:
+        payload = _chart_bundle_transport_payload(
+            source_path="unavailable",
+            metadata=None,
+            available=False,
+            reason="No exported chart_bundle_transport_metadata with schema tropicalgt.chart_bundle_transport_metadata.v1 was found in result, metrics, graph_token_trace, or inference_scaling candidates.",
+        )
+    else:
+        source_path, metadata = found
+        schema_ok = metadata.get("schema_version") == _CHART_BUNDLE_TRANSPORT_SCHEMA
+        meta_available = metadata.get("available") is True
+        transport_contract = metadata.get("monomial_transport_contract") if isinstance(metadata.get("monomial_transport_contract"), Mapping) else {}
+        matroid_contract = metadata.get("bundle_matroid_contract") if isinstance(metadata.get("bundle_matroid_contract"), Mapping) else {}
+        transport_safe = transport_contract.get("actual_data_only") is True and transport_contract.get("no_proxy_or_fallback") is True
+        matroid_safe = matroid_contract.get("actual_data_only") is True and matroid_contract.get("no_proxy_or_fallback") is True
+        chart_ids = metadata.get("chart_ids") if isinstance(metadata.get("chart_ids"), Sequence) and not isinstance(metadata.get("chart_ids"), (str, bytes)) else []
+        available = bool(schema_ok and meta_available and transport_safe and matroid_safe and chart_ids)
+        if available:
+            reason = "exported_chart_bundle_transport_metadata_available"
+        elif not schema_ok:
+            reason = "chart_bundle_transport_metadata_schema_mismatch"
+        elif not meta_available:
+            reason = str(metadata.get("reason", "chart_bundle_transport_metadata_marked_unavailable"))
+        elif not chart_ids:
+            reason = "chart_bundle_transport_metadata_missing_chart_ids"
+        else:
+            reason = "chart_bundle_transport_contracts_missing_actual_data_only_or_no_proxy_flags"
+        payload = _chart_bundle_transport_payload(
+            source_path=source_path,
+            metadata=metadata,
+            available=available,
+            reason=reason,
+        )
+    payload_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+    _write_chart_bundle_transport_html(html_path, payload)
+    return {"chart_bundle_transport_sidecar": str(html_path), "chart_bundle_transport_sidecar_payload": str(payload_path)}
 
 
 def _support_token_label(index: int, token: dict[str, object], long: bool = False) -> str:
