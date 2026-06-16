@@ -121,7 +121,17 @@
     "use_sequence_tropical": true,
     "sequence_tropical_weight": 0.125,
     "sequence_tropical_max_tokens": 32,
-    "sequence_tropical_block_size": 16
+    "sequence_tropical_block_size": 16,
+    "enable_chart_bundle_auxiliary": false,
+    "bundle_num_charts": 4,
+    "toric_num_active_rows": 16,
+    "bundle_transport_weight": 0.0,
+    "bundle_cocycle_weight": 0.0,
+    "bundle_flat_rank_weight": 0.0,
+    "toric_normal_fan_weight": 0.0,
+    "graphcg_toric_cell_agreement_weight": 0.0,
+    "chart_bpb_consistency_weight": 0.0,
+    "bundle_atom_stability_weight": 0.0
   },
   "meet_in_middle": {
     "enabled": false,

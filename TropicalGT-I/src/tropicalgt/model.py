@@ -34,6 +34,166 @@ class TropicalGTConfig:
     sequence_tropical_weight: float = 0.125
     sequence_tropical_max_tokens: int = 32
     sequence_tropical_block_size: int = 16
+    enable_chart_bundle_auxiliary: bool = False
+    bundle_num_charts: int = 4
+    toric_num_active_rows: int = 16
+    bundle_transport_weight: float = 0.0
+    bundle_cocycle_weight: float = 0.0
+    bundle_flat_rank_weight: float = 0.0
+    toric_normal_fan_weight: float = 0.0
+    graphcg_toric_cell_agreement_weight: float = 0.0
+    chart_bpb_consistency_weight: float = 0.0
+    bundle_atom_stability_weight: float = 0.0
+
+
+class ChartBundleToricHead(nn.Module):
+    """Telemetry/loss head for zero-default tropical chart-bundle diagnostics.
+
+    The head reads model graph states and tropical support probabilities. It never
+    feeds back into token logits; the main model only adds weighted auxiliary
+    losses when the corresponding config coefficients are nonzero.
+    """
+
+    def __init__(self, dim: int, num_charts: int = 4, toric_rows: int = 16) -> None:
+        super().__init__()
+        self.num_charts = max(1, int(num_charts))
+        self.toric_rows = max(1, int(toric_rows))
+        self.chart_head = nn.Sequential(nn.LayerNorm(dim), nn.Linear(dim, self.num_charts))
+        self.transport_head = nn.Sequential(nn.LayerNorm(dim), nn.Linear(dim, self.num_charts * self.num_charts))
+        self.toric_head = nn.Sequential(nn.LayerNorm(dim), nn.Linear(dim, self.toric_rows))
+
+    def forward(
+        self,
+        graph_state: Tensor,
+        graph_token_support_probabilities: Tensor | None = None,
+        graph_token_mask: Tensor | None = None,
+        graphcg_projection: Tensor | None = None,
+    ) -> tuple[dict[str, Tensor], dict[str, Tensor]]:
+        zero = graph_state.sum() * 0.0
+        batch = graph_state.shape[0]
+        chart_logits = self.chart_head(graph_state)
+        chart_probs = torch.softmax(chart_logits, dim=-1)
+        chart_ids = chart_probs.argmax(dim=-1)
+        monomial_projection = F.one_hot(chart_ids, num_classes=self.num_charts).to(graph_state.dtype)
+        monomial_one_hotness = monomial_projection.max(dim=-1).values.mean() if batch else zero
+        chart_confidence = chart_probs.max(dim=-1).values
+
+        transport = self.transport_head(graph_state).reshape(batch, self.num_charts, self.num_charts)
+        eye = torch.eye(self.num_charts, dtype=torch.bool, device=graph_state.device)
+        offdiag = transport[:, ~eye] if self.num_charts > 1 else transport.reshape(batch, -1)
+        transport_l1 = offdiag.abs().mean() if offdiag.numel() else zero
+        if self.num_charts >= 3:
+            cocycles = []
+            for i in range(self.num_charts):
+                for j in range(self.num_charts):
+                    for k in range(self.num_charts):
+                        if i == j or j == k or i == k:
+                            continue
+                        cocycles.append((transport[:, i, j] + transport[:, j, k] - transport[:, i, k]).abs())
+            cocycle_defect = torch.stack(cocycles, dim=0).mean() if cocycles else zero
+        else:
+            cocycle_defect = zero
+
+        centered = chart_probs - chart_probs.mean(dim=0, keepdim=True)
+        rank_target = min(max(batch - 1, 0), self.num_charts)
+        if batch >= 2 and rank_target > 0:
+            singular_values = torch.linalg.svdvals(centered)[:rank_target]
+            flat_rank_defect = F.relu(0.05 - singular_values).pow(2).mean()
+        else:
+            flat_rank_defect = zero
+
+        toric_logits = self.toric_head(graph_state)
+        toric_probs = torch.softmax(toric_logits, dim=-1)
+        toric_top = toric_probs.topk(k=min(2, self.toric_rows), dim=-1).values
+        if toric_top.shape[-1] >= 2:
+            toric_margin = toric_top[:, 0] - toric_top[:, 1]
+        else:
+            toric_margin = torch.ones(batch, dtype=graph_state.dtype, device=graph_state.device)
+        toric_normal_fan_loss = F.relu(0.05 - toric_margin).mean() if toric_margin.numel() else zero
+        toric_active_rows = toric_probs.argmax(dim=-1)
+
+        if graphcg_projection is not None and graphcg_projection.numel() and graphcg_projection.shape[0] == batch:
+            graphcg_cells = graphcg_projection.detach().abs().argmax(dim=-1).remainder(self.toric_rows)
+            graphcg_toric_cell_agreement = toric_active_rows.detach().eq(graphcg_cells).float().mean()
+            graphcg_toric_cell_agreement_loss = F.cross_entropy(toric_logits, graphcg_cells)
+            graphcg_toric_cell_available = torch.ones((), dtype=graph_state.dtype, device=graph_state.device)
+        else:
+            graphcg_toric_cell_agreement = zero
+            graphcg_toric_cell_agreement_loss = zero
+            graphcg_toric_cell_available = zero
+
+        if graph_token_support_probabilities is not None and graph_token_support_probabilities.numel():
+            support_conf = graph_token_support_probabilities.max(dim=-1).values
+            if graph_token_mask is not None:
+                mask = graph_token_mask.to(dtype=support_conf.dtype)
+                per_record_support_conf = (support_conf * mask).sum(dim=-1) / mask.sum(dim=-1).clamp_min(1.0)
+            else:
+                per_record_support_conf = support_conf.mean(dim=-1)
+            atom_stability_gap = (chart_confidence - per_record_support_conf).abs().mean()
+            atom_stability_available = torch.ones((), dtype=graph_state.dtype, device=graph_state.device)
+        else:
+            atom_stability_gap = zero
+            atom_stability_available = zero
+
+        chart_bpb_consistency = zero
+        chart_bpb_consistency_available = zero
+
+        metrics = {
+            "bundle_transport_l1": transport_l1,
+            "bundle_cocycle_defect": cocycle_defect,
+            "bundle_flat_rank_defect": flat_rank_defect,
+            "bundle_monomial_projection_one_hotness": monomial_one_hotness,
+            "bundle_chart_confidence_mean": chart_confidence.mean() if chart_confidence.numel() else zero,
+            "bundle_chart_count": torch.tensor(float(self.num_charts), dtype=graph_state.dtype, device=graph_state.device),
+            "toric_normal_fan_loss": toric_normal_fan_loss,
+            "toric_active_row_count": torch.tensor(float(self.toric_rows), dtype=graph_state.dtype, device=graph_state.device),
+            "graphcg_toric_cell_agreement": graphcg_toric_cell_agreement,
+            "graphcg_toric_cell_agreement_available": graphcg_toric_cell_available,
+            "chart_bpb_consistency": chart_bpb_consistency,
+            "chart_bpb_consistency_available": chart_bpb_consistency_available,
+            "bundle_atom_stability_gap": atom_stability_gap,
+            "bundle_atom_stability_available": atom_stability_available,
+        }
+        losses = {
+            "bundle_transport_l1": transport_l1,
+            "bundle_cocycle_defect": cocycle_defect,
+            "bundle_flat_rank_defect": flat_rank_defect,
+            "toric_normal_fan_loss": toric_normal_fan_loss,
+            "graphcg_toric_cell_agreement": graphcg_toric_cell_agreement_loss,
+            "chart_bpb_consistency": chart_bpb_consistency,
+            "bundle_atom_stability_gap": atom_stability_gap,
+        }
+        return metrics, losses
+
+
+def _zero_chart_bundle_outputs(reference: Tensor) -> tuple[dict[str, Tensor], dict[str, Tensor]]:
+    zero = reference.sum() * 0.0
+    metrics = {
+        "bundle_transport_l1": zero.detach(),
+        "bundle_cocycle_defect": zero.detach(),
+        "bundle_flat_rank_defect": zero.detach(),
+        "bundle_monomial_projection_one_hotness": zero.detach(),
+        "bundle_chart_confidence_mean": zero.detach(),
+        "bundle_chart_count": zero.detach(),
+        "toric_normal_fan_loss": zero.detach(),
+        "toric_active_row_count": zero.detach(),
+        "graphcg_toric_cell_agreement": zero.detach(),
+        "graphcg_toric_cell_agreement_available": zero.detach(),
+        "chart_bpb_consistency": zero.detach(),
+        "chart_bpb_consistency_available": zero.detach(),
+        "bundle_atom_stability_gap": zero.detach(),
+        "bundle_atom_stability_available": zero.detach(),
+    }
+    losses = {
+        "bundle_transport_l1": zero,
+        "bundle_cocycle_defect": zero,
+        "bundle_flat_rank_defect": zero,
+        "toric_normal_fan_loss": zero,
+        "graphcg_toric_cell_agreement": zero,
+        "chart_bpb_consistency": zero,
+        "bundle_atom_stability_gap": zero,
+    }
+    return metrics, losses
 
 
 class TropicalGTModel(nn.Module):
@@ -54,6 +214,11 @@ class TropicalGTModel(nn.Module):
             active_directions=config.graphcg_active_directions,
         )
         self.memory = AnalogicalMemoryHead(config.dim, config.memory_dim)
+        self.chart_bundle = (
+            ChartBundleToricHead(config.dim, config.bundle_num_charts, config.toric_num_active_rows)
+            if config.enable_chart_bundle_auxiliary
+            else None
+        )
 
     def forward(self, input_ids: Tensor, graph_batch: GraphTokenBatch, target_ids: Tensor | None = None) -> dict[str, Tensor]:
         graph_batch = graph_batch.to(input_ids.device)
@@ -101,6 +266,17 @@ class TropicalGTModel(nn.Module):
         node_edge_ratio = graph_batch.node_counts.float().sum() / graph_batch.edge_counts.float().sum().clamp_min(1.0)
         self_support_rate = tropical_self_support_rate(trop.support, graph_batch.attention_mask)
         invalid_support_rate = tropical_invalid_support_rate(trop.support, graph_batch.attention_mask, graph_batch.graph_token_counts)
+        if self.chart_bundle is not None:
+            graphcg_projection = graph_state @ self.graphcg.effective_directions(detach=True).to(graph_state.device).t()
+            chart_bundle_metrics_raw, chart_bundle_loss_terms = self.chart_bundle(
+                graph_state,
+                graph_token_support_probabilities=graph_token_support_probabilities,
+                graph_token_mask=graph_batch.attention_mask,
+                graphcg_projection=graphcg_projection,
+            )
+            chart_bundle_metrics = {key: value.detach() for key, value in chart_bundle_metrics_raw.items()}
+        else:
+            chart_bundle_metrics, chart_bundle_loss_terms = _zero_chart_bundle_outputs(graph_state)
         metrics: dict[str, Tensor] = {
             "support_entropy": support_entropy.detach(),
             "support_soft_entropy": soft_entropy.detach(),
@@ -125,6 +301,7 @@ class TropicalGTModel(nn.Module):
             "analogical_memory_query_norm": self.memory(graph_state).detach().norm(dim=-1).mean(),
             **sequence_tropical_metrics,
             **certificate_metrics,
+            **chart_bundle_metrics,
         }
         loss = None
         if target_ids is not None:
@@ -149,7 +326,30 @@ class TropicalGTModel(nn.Module):
             margin_weighted = self.config.margin_weight * margin_loss
             entropy_weighted = self.config.entropy_weight * entropy_loss
             certificate_weighted = self.config.certificate_weight * certificate_loss
-            regularizer_total = gfn_weighted + graphcg_weighted + margin_weighted + entropy_weighted + certificate_weighted
+            bundle_transport_weighted = self.config.bundle_transport_weight * chart_bundle_loss_terms["bundle_transport_l1"]
+            bundle_cocycle_weighted = self.config.bundle_cocycle_weight * chart_bundle_loss_terms["bundle_cocycle_defect"]
+            bundle_flat_rank_weighted = self.config.bundle_flat_rank_weight * chart_bundle_loss_terms["bundle_flat_rank_defect"]
+            toric_normal_fan_weighted = self.config.toric_normal_fan_weight * chart_bundle_loss_terms["toric_normal_fan_loss"]
+            graphcg_toric_cell_agreement_weighted = self.config.graphcg_toric_cell_agreement_weight * chart_bundle_loss_terms["graphcg_toric_cell_agreement"]
+            chart_bpb_consistency_weighted = self.config.chart_bpb_consistency_weight * chart_bundle_loss_terms["chart_bpb_consistency"]
+            bundle_atom_stability_weighted = self.config.bundle_atom_stability_weight * chart_bundle_loss_terms["bundle_atom_stability_gap"]
+            bundle_toric_regularizer_total = (
+                bundle_transport_weighted
+                + bundle_cocycle_weighted
+                + bundle_flat_rank_weighted
+                + toric_normal_fan_weighted
+                + graphcg_toric_cell_agreement_weighted
+                + chart_bpb_consistency_weighted
+                + bundle_atom_stability_weighted
+            )
+            regularizer_total = (
+                gfn_weighted
+                + graphcg_weighted
+                + margin_weighted
+                + entropy_weighted
+                + certificate_weighted
+                + bundle_toric_regularizer_total
+            )
             loss = (
                 nll
                 + regularizer_total
@@ -171,6 +371,14 @@ class TropicalGTModel(nn.Module):
                     "loss_margin_weighted": margin_weighted.detach(),
                     "loss_entropy_weighted": entropy_weighted.detach(),
                     "loss_certificate_weighted": certificate_weighted.detach(),
+                    "loss_bundle_transport_weighted": bundle_transport_weighted.detach(),
+                    "loss_bundle_cocycle_weighted": bundle_cocycle_weighted.detach(),
+                    "loss_bundle_flat_rank_weighted": bundle_flat_rank_weighted.detach(),
+                    "loss_toric_normal_fan_weighted": toric_normal_fan_weighted.detach(),
+                    "loss_graphcg_toric_cell_agreement_weighted": graphcg_toric_cell_agreement_weighted.detach(),
+                    "loss_chart_bpb_consistency_weighted": chart_bpb_consistency_weighted.detach(),
+                    "loss_bundle_atom_stability_weighted": bundle_atom_stability_weighted.detach(),
+                    "loss_bundle_toric_regularizer_total": bundle_toric_regularizer_total.detach(),
                     "loss_regularizer_total": regularizer_total.detach(),
                     "loss_regularizer_ratio": (regularizer_total.detach().abs() / nll.detach().abs().clamp_min(1e-8)),
                     **gfn_metrics,

@@ -106,6 +106,12 @@ This checklist merges the browser/photo review, the current active training stat
 - Treat all of these as auxiliary until matched ablations show BPB/graph-BPB benefit.
 
 
+Implementation checkpoint, 2026-06-16:
+- Zero-default config flags and model hooks are now implemented for chart-bundle/toric telemetry and losses: bundle transport L1, cocycle defect, flat-rank defect, toric normal-fan loss, GraphCG-toric cell agreement, chart-BPB consistency availability, and atom-stability gap.
+- The implementation is deliberately auxiliary and gated. Disabled defaults emit zero metrics; enabled zero-weight hooks preserve logits and loss; positive coefficients affect only the auxiliary regularizer.
+- Remaining items in this section are deeper math/rendering work: true chart-local NLL/BPB partitions, explicit overlap-pair/triple transport ids, landscape transport metrics, and matched BPB/graph-BPB ablations before promoting any nonzero coefficient.
+
+
 ### Paper Workstream Status: Vector Bundles and Tropical Toric Embeddings
 
 - Subagent Avicenna reviewed `references/2405.03505v1.pdf` and `references/2009.03030v2.pdf` in full from extracted text and updated `TropicalGT-I/assets/tropicalgt_neurips_research_paper.tex`.
@@ -182,7 +188,7 @@ Remaining CAS items:
 - CAS package survey: look for Sage, Macaulay2, Singular, RIVET/multipers, polymake, Normaliz, and related packages that compute real multigraded modules, minimal resolutions, Betti tables, Fitting ideals, minors, Buchsbaum-Eisenbud diagnostics, tropical fans, toric varieties, and stable intersections.
 - Maclagan-style toric embedding research direction: investigate whether the transformer graph-state and tropical-attention coordinate system can be embedded into a toric variety via model-derived monomial coordinates, Newton polytopes, fan data, and one dimensional cone data. Any resulting implementation must distinguish theorem-level certified constructions from diagnostic embeddings or visual probes.
 
-_Last updated: 2026-06-16T00:18:00+00:00_
+_Last updated: 2026-06-16T00:58:00+00:00_
 
 
 ## 2026-06-16 Fresh b59 5K Review Gate and Worker Handoff
@@ -200,4 +206,4 @@ No TropicalGT-I metric, loss, visualization, analogical map, persistence module,
 
 Use "one dimensional cone" or "one dimensional cones" as the preferred fan-theoretic language whenever the intended object is a cone of a fan or a cone-indexed filtration datum. Use singular or plural according to ordinary grammar.
 
-_Last updated: 2026-06-14T15:34:45+00:00_
+_Last updated: 2026-06-16T00:58:00+00:00_

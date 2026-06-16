@@ -126,7 +126,17 @@
     "sequence_tropical_max_tokens": 48,
     "sequence_tropical_weight": 0.045,
     "use_sequence_tropical": true,
-    "wall_margin_threshold": 0.0004
+    "wall_margin_threshold": 0.0004,
+    "enable_chart_bundle_auxiliary": false,
+    "bundle_num_charts": 4,
+    "toric_num_active_rows": 16,
+    "bundle_transport_weight": 0.0,
+    "bundle_cocycle_weight": 0.0,
+    "bundle_flat_rank_weight": 0.0,
+    "toric_normal_fan_weight": 0.0,
+    "graphcg_toric_cell_agreement_weight": 0.0,
+    "chart_bpb_consistency_weight": 0.0,
+    "bundle_atom_stability_weight": 0.0
   },
   "notes": "b55 post-cleanup BPB-first restart: no b44-b54 dependencies, >=5K no-restart gate, advanced tropical/GFlowNet/GraphCG/memory/CAS telemetry active with real-implementation-only visualization policy.",
   "num_workers": 0,

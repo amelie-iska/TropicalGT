@@ -117,6 +117,28 @@ def test_model_forward_fixture():
         "sequence_tropical_tokens_mean",
         "sequence_tropical_margin_mean",
         "sequence_tropical_support_entropy",
+        "bundle_transport_l1",
+        "bundle_cocycle_defect",
+        "bundle_flat_rank_defect",
+        "bundle_monomial_projection_one_hotness",
+        "bundle_chart_confidence_mean",
+        "bundle_chart_count",
+        "bundle_atom_stability_gap",
+        "bundle_atom_stability_available",
+        "toric_normal_fan_loss",
+        "toric_active_row_count",
+        "graphcg_toric_cell_agreement",
+        "graphcg_toric_cell_agreement_available",
+        "chart_bpb_consistency",
+        "chart_bpb_consistency_available",
+        "loss_bundle_transport_weighted",
+        "loss_bundle_cocycle_weighted",
+        "loss_bundle_flat_rank_weighted",
+        "loss_toric_normal_fan_weighted",
+        "loss_graphcg_toric_cell_agreement_weighted",
+        "loss_chart_bpb_consistency_weighted",
+        "loss_bundle_atom_stability_weighted",
+        "loss_bundle_toric_regularizer_total",
     ]:
         assert key in out
         assert torch.isfinite(out[key])
@@ -129,6 +151,84 @@ def test_model_forward_fixture():
     assert torch.allclose(out["wall_hit_rate"], out["strict_wall_hit_rate"])
     assert out["near_wall_hit_rate"].item() >= out["strict_wall_hit_rate"].item()
     assert out["near_wall_margin_threshold"].item() >= out["wall_margin_threshold"].item()
+
+
+def _fixture_batch(batch_size: int = 2, seq_len: int = 32):
+    ds = FixtureGraphDataset(batch_size)
+    records = [ds[idx] for idx in range(batch_size)]
+    tok = TokenGTTokenizer(feature_dim=48)
+    gb = tok.batch_encode(records)
+    xs, ys = zip(*(encode_bytes(r.text, seq_len) for r in records))
+    return torch.stack(xs), gb, torch.stack(ys)
+
+
+def test_chart_bundle_auxiliary_zero_weights_do_not_change_logits_or_loss():
+    input_ids, graph_batch, target_ids = _fixture_batch()
+    base = TropicalGTModel(TropicalGTConfig(dim=32, hidden_dim=32, graph_feature_dim=48, graphcg_num_directions=32))
+    aux = TropicalGTModel(
+        TropicalGTConfig(
+            dim=32,
+            hidden_dim=32,
+            graph_feature_dim=48,
+            graphcg_num_directions=32,
+            enable_chart_bundle_auxiliary=True,
+            bundle_num_charts=3,
+            toric_num_active_rows=5,
+            bundle_transport_weight=0.0,
+            bundle_cocycle_weight=0.0,
+            bundle_flat_rank_weight=0.0,
+            toric_normal_fan_weight=0.0,
+            graphcg_toric_cell_agreement_weight=0.0,
+            chart_bpb_consistency_weight=0.0,
+            bundle_atom_stability_weight=0.0,
+        )
+    )
+    aux.load_state_dict(base.state_dict(), strict=False)
+    base_out = base(input_ids, graph_batch, target_ids)
+    aux_out = aux(input_ids, graph_batch, target_ids)
+    assert torch.allclose(aux_out["logits"], base_out["logits"], atol=0.0, rtol=0.0)
+    assert torch.allclose(aux_out["loss"], base_out["loss"], atol=1e-6, rtol=1e-6)
+    assert aux_out["loss_bundle_toric_regularizer_total"].item() == 0.0
+    assert aux_out["bundle_monomial_projection_one_hotness"].item() == 1.0
+    assert aux_out["bundle_chart_count"].item() == 3.0
+    assert aux_out["toric_active_row_count"].item() == 5.0
+    assert aux_out["chart_bpb_consistency_available"].item() == 0.0
+    assert aux_out["bundle_atom_stability_available"].item() == 1.0
+
+
+def test_chart_bundle_auxiliary_positive_weights_change_loss_not_logits():
+    input_ids, graph_batch, target_ids = _fixture_batch()
+    model = TropicalGTModel(
+        TropicalGTConfig(
+            dim=32,
+            hidden_dim=32,
+            graph_feature_dim=48,
+            graphcg_num_directions=32,
+            enable_chart_bundle_auxiliary=True,
+            bundle_num_charts=4,
+            toric_num_active_rows=6,
+            bundle_transport_weight=0.0,
+            bundle_cocycle_weight=0.0,
+            bundle_flat_rank_weight=0.0,
+            toric_normal_fan_weight=0.0,
+            graphcg_toric_cell_agreement_weight=0.0,
+            chart_bpb_consistency_weight=0.0,
+            bundle_atom_stability_weight=0.0,
+        )
+    )
+    zero_out = model(input_ids, graph_batch, target_ids)
+    model.config.bundle_transport_weight = 0.05
+    model.config.bundle_cocycle_weight = 0.02
+    model.config.toric_normal_fan_weight = 0.03
+    model.config.bundle_atom_stability_weight = 0.01
+    weighted_out = model(input_ids, graph_batch, target_ids)
+    assert torch.allclose(weighted_out["logits"], zero_out["logits"], atol=0.0, rtol=0.0)
+    assert weighted_out["loss_bundle_toric_regularizer_total"].item() >= 0.0
+    assert weighted_out["loss"].item() >= zero_out["loss"].item()
+    assert weighted_out["bundle_transport_l1"].item() >= 0.0
+    assert weighted_out["bundle_cocycle_defect"].item() >= 0.0
+    assert weighted_out["toric_normal_fan_loss"].item() >= 0.0
+    assert weighted_out["graphcg_toric_cell_agreement_available"].item() == 1.0
 
 
 def test_model_allows_explicit_full_embedding_graphcg_bank():

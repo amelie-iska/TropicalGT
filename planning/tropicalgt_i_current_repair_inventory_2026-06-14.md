@@ -237,3 +237,21 @@ Verification:
 - Local headless Chrome DOM check confirmed Plotly markers and density/anchor provenance strings. Screenshot rasterization remains blocked by headless Chrome WebGL support for this 3D Plotly page. The upgraded validator passes b59's complete step-250 and step-500 audits under the compatibility path; step-500 BPB is `2.011564489777277` with graph-conditioned BPB without side cost `1.7685317056430416`.
 
 Next sequential item: continue the remaining topological/geometric/algebraic audit repairs while b59 trains toward the 5K evidence gate.
+
+## 2026-06-16 Chart-Bundle/Toric Training Hook Pass
+
+Status: implemented and focused-tested as a zero-default auxiliary hook for future restarts.
+
+Changes made:
+- `TropicalGTModel` now has an opt-in chart-bundle/toric auxiliary head that computes chart confidence, monomial projection one-hotness, overlap transport L1, cocycle defect, flat-rank defect, toric normal-fan margin, GraphCG/toric active-cell agreement, chart-BPB availability, and atom-stability gap.
+- The disabled default path emits explicit zero metrics. The enabled zero-weight path is tested to preserve logits and loss exactly, so current training behavior is not changed unless a restart config turns coefficients on.
+- W&B priority groups now expose the new bundle/toric metrics under `10_bundle_toric`; default train configs declare all related coefficients as `0.0`.
+
+Verification:
+- `python -m py_compile TropicalGT-I/src/tropicalgt/model.py TropicalGT-I/src/tropicalgt/run.py` passed.
+- `PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_losses_and_model.py TropicalGT-I/tests/test_training_metrics.py -q` -> `19 passed`.
+
+Training gate note:
+- b59 continues running toward the required step `5000` minimum review gate. The new hook is for the next evidence-backed restart or ablation, not a mid-run mutation.
+
+Next sequential item: continue source-side audit repairs that do not interfere with b59, then use the step-5000 metrics, sidecars, topology/geometric/algebraic visualizations, and Galileo review to choose restart coefficients and hyperparameters.
