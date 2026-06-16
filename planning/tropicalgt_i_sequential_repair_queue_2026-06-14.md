@@ -132,7 +132,7 @@
 
 - [x] Keep the current BPB run alive until the 5K gate unless explicitly restarted.
 - [ ] Optimize for BPB with the advanced losses/metrics that are actually implemented.
-- [ ] Clean old local/online W&B runs and generated artifacts when they become irrelevant.
+- [x] Audit old local W&B runs and generated artifacts; only cache directories were deleted automatically, while large old run outputs/checkpoints were preserved as provenance until explicit cleanup approval.
 - [x] Generate periodic visual audits every 250 steps.
 - [x] Restart only after the requested 5K gate or explicit user request; the 5K review currently blocks restart because the checkpoint evidence is unavailable.
 
@@ -663,4 +663,13 @@ The live item-by-item repair inventory is maintained in `planning/tropicalgt_i_c
 - [x] Added `checkpoint_verify_load` with default verified loading; setting it false only skips load verification, not the nonempty atomic-write guard.
 - [x] Added regression coverage proving normal periodic `.latest.pt` checkpoints are nonempty/loadable and failed empty temp writes do not replace an existing checkpoint or leave temp files behind.
 - [x] Verification passed: py-compile for `run.py`, `test_training_resume.py`, and `test_training_metrics.py`; `pytest TropicalGT-I/tests/test_training_resume.py TropicalGT-I/tests/test_training_metrics.py -q` (`16 passed`); `git diff --check` clean.
-- [ ] Next Section 12 item: audit cleanup candidates for stale W&B/generated artifacts without deleting required b60 5K evidence, checkpoints, review docs, or source-controlled files.
+- [x] Audited cleanup candidates for stale W&B/generated artifacts without deleting required b60 5K evidence, checkpoints, review docs, or source-controlled files.
+
+### Current Objective Update - Generated Artifact Cleanup Audit Pass
+
+- [x] Audited remote disk pressure after b60 5K review: root filesystem remained at about `32G` available; `TropicalGT-I/outputs` was about `91G`, `TropicalGT-I/checkpoints` about `1.9G`, and local `wandb` about `317M`.
+- [x] Removed only clearly safe cache directories: project `.pytest_cache` plus Python `__pycache__` directories under `TropicalGT-I/scripts`, `TropicalGT-I/tests`, `TropicalGT-I/src/tropicalgt`, and `external/parameter-golf`.
+- [x] Preserved all b60 step-5000 evidence, review bundles, stop records, launch configs, and the zero-byte checkpoint path; no generated evidence was repaired, replaced, or fabricated.
+- [x] Preserved old b55-b59 output/checkpoint/W&B provenance rather than deleting it silently. Largest cleanup candidates remain generated output dirs: b57 about `6.2G`, `multi_sample_browser` about `3.1G`, b59 fresh about `2.1G`, b58 about `1.1G`, plus older checkpoint files around `0.48G` each.
+- [x] Verification: `git status --short` remained clean after cache deletion; no source-controlled files, datasets, checkpoints, W&B directories, or generated audit bundles were staged.
+- [ ] Next Section 12 item: leave BPB restart blocked until real checkpoint-dependent evidence exists or the user explicitly changes the no-proxy evidence requirement; continue with the next source-side implementation/repair item that does not require a restart.

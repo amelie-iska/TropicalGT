@@ -587,4 +587,11 @@ Use "one dimensional cone" or "one dimensional cones" as the preferred fan-theor
 - The guard is source-side only and does not repair or mutate the already-empty b60 checkpoint; the b60 restart decision remains blocked on missing real checkpoint-dependent evidence.
 - Focused verification passed: `pytest TropicalGT-I/tests/test_training_resume.py TropicalGT-I/tests/test_training_metrics.py -q` (`16 passed`).
 
-_Last updated: 2026-06-16T19:05:00Z_
+
+## 2026-06-16 Generated Artifact Cleanup Audit Result
+
+- Removed only safe cache directories (`.pytest_cache` and Python `__pycache__` directories) after the atomic-checkpoint verification run. The git tree remained clean after cache deletion.
+- Preserved b60 5K evidence, generated review bundles, stop records, launch configs, checkpoint paths, and old b55-b59 provenance. Large generated cleanup candidates were recorded in the sequential queue but not deleted without explicit approval.
+- Disk remains tight, with about `32G` available on `/`, dominated by the b60 generated evidence directory and older generated run outputs.
+
+_Last updated: 2026-06-16T19:18:00Z_
