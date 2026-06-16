@@ -2061,14 +2061,19 @@ def _write_reasoning_step_complex_maps(candidates: list[dict[str, object]], outp
                 "simplex_tree_file": tree_file_name,
                 "summary": obj_summary.get("summary", {}),
                 "simplex_tree": obj_summary.get("simplex_tree", {}),
+                "simplex_tree_backend": (obj_summary.get("simplex_tree", {}) if isinstance(obj_summary.get("simplex_tree"), dict) else {}).get("backend", "missing"),
+                "simplex_tree_available": (obj_summary.get("simplex_tree", {}) if isinstance(obj_summary.get("simplex_tree"), dict) else {}).get("available") is not False,
+                "complex_render_contract": "actual per-step radius-filtered complex from this model-evaluated reasoning state; no trajectory-map proxy",
+                "simplex_tree_render_contract": "actual GUDHI SimplexTree face-coface poset when available; unavailable is explicit and not substituted",
                 "graph_token_direction_overlay": obj.get("graph_token_direction_overlay", {}),
                 "decoding_causal_overlay": obj.get("decoding_causal_overlay", {}),
             }
         )
     index_path = directory / "index.html"
-    _write_reasoning_step_complex_index(index_path, rows)
+    contract = _reasoning_step_complex_manifest_contract(rows)
+    _write_reasoning_step_complex_index(index_path, rows, contract=contract)
     manifest_path = directory / "manifest.json"
-    manifest_path.write_text(json.dumps({"steps": rows}, indent=2), encoding="utf-8")
+    manifest_path.write_text(json.dumps({"contract": contract, "steps": rows}, indent=2), encoding="utf-8")
     return {
         "got_reasoning_step_complex_index": str(index_path),
         "got_reasoning_step_complex_manifest": str(manifest_path),
@@ -3026,7 +3031,59 @@ def _display_thresholds(obj: dict[str, object], max_steps: int = 32) -> list[flo
     return [values[int(idx)] for idx in keep]
 
 
-def _write_reasoning_step_complex_index(path: Path, rows: list[dict[str, object]]) -> None:
+def _reasoning_step_complex_manifest_contract(rows: list[dict[str, object]]) -> dict[str, object]:
+    simplex_tree_available = [row for row in rows if bool(row.get("simplex_tree_available"))]
+    unavailable = []
+    for row in rows:
+        if bool(row.get("simplex_tree_available")):
+            continue
+        tree = row.get("simplex_tree") if isinstance(row.get("simplex_tree"), dict) else {}
+        unavailable.append(
+            {
+                "index": int(row.get("index", 0) or 0),
+                "record_id": str(row.get("record_id", "")),
+                "backend": str(row.get("simplex_tree_backend", tree.get("backend", "missing"))),
+                "reason": str(tree.get("reason") or tree.get("error") or "simplex_tree_unavailable"),
+            }
+        )
+    return {
+        "schema_version": "tropicalgt.reasoning_step_complex_maps.v1",
+        "available": bool(rows),
+        "no_proxy_or_fallback": True,
+        "actual_data_only": True,
+        "one_page_per_model_evaluated_reasoning_step": True,
+        "complex_source": "filtered_simplicial_object on each observed model-evaluated GoT state",
+        "complex_filtration": "radius/filtration values from the serialized filtered simplicial object",
+        "simplex_tree_source": "serialized GUDHI SimplexTree attached to each filtered simplicial object when available",
+        "embedding_trajectory_map_is_not_a_step_complex": True,
+        "step_count": int(len(rows)),
+        "rendered_complex_pages": int(len([row for row in rows if row.get("file")])),
+        "rendered_simplex_tree_pages": int(len([row for row in rows if row.get("simplex_tree_file")])),
+        "gudhi_simplex_tree_step_count": int(len(simplex_tree_available)),
+        "simplex_tree_unavailable_count": int(len(unavailable)),
+        "simplex_tree_unavailable_steps": unavailable,
+        "claim": "Each listed step opens its own radius-filtered complex and SimplexTree/explicit-unavailable page; no global trajectory PCA surface is used as a substitute.",
+    }
+
+
+def _reasoning_step_contract_panel(contract: Mapping[str, object] | None) -> str:
+    if not isinstance(contract, Mapping):
+        return ""
+    return (
+        "<aside class='contract'>"
+        "<div><span class='badge'>no proxy</span><span class='badge'>per-step complex</span><span class='badge'>simplex-tree explicit</span></div>"
+        f"<p><strong>Status:</strong> rendered {int(contract.get('rendered_complex_pages', 0) or 0)} complex pages and "
+        f"{int(contract.get('rendered_simplex_tree_pages', 0) or 0)} simplex-tree pages for "
+        f"{int(contract.get('step_count', 0) or 0)} model-evaluated reasoning states.</p>"
+        f"<p><strong>Contract:</strong> {html.escape(str(contract.get('claim', '')))} "
+        f"GUDHI SimplexTree available for {int(contract.get('gudhi_simplex_tree_step_count', 0) or 0)} step(s); "
+        f"explicitly unavailable for {int(contract.get('simplex_tree_unavailable_count', 0) or 0)}.</p>"
+        "</aside>"
+    )
+
+
+def _write_reasoning_step_complex_index(path: Path, rows: list[dict[str, object]], *, contract: Mapping[str, object] | None = None) -> None:
+    contract_panel = _reasoning_step_contract_panel(contract)
     body = "\n".join(
         "<tr>"
         f"<td>{int(row['index'])}</td>"
@@ -3055,12 +3112,16 @@ def _write_reasoning_step_complex_index(path: Path, rows: list[dict[str, object]
     a {{ color: #7dd3fc; text-decoration: none; }}
     a:hover {{ text-decoration: underline; }}
     p {{ color: #9fb3c8; line-height: 1.55; }}
+    .contract {{ border: 1px solid rgba(125,211,252,0.28); background: #0d1626; padding: 14px 16px; margin: 18px 0; }}
+    .contract p {{ margin: 8px 0 0; }}
+    .badge {{ display: inline-block; margin: 0 8px 8px 0; padding: 3px 8px; border: 1px solid rgba(153,246,228,0.35); color: #99f6e4; font-size: 11px; text-transform: uppercase; letter-spacing: 0; }}
   </style>
 </head>
 <body>
   <main>
     <h1>Reasoning step filtered simplicial complex maps</h1>
-    <p>Each row opens a separate 3D PCoA/MDS radius-filtered complex for one observed model-evaluated graph-of-thought state.  These are deliberately separate from the embedding-space trajectory map.</p>
+    <p>Each row opens a separate 3D PCoA/MDS radius-filtered complex for one observed model-evaluated graph-of-thought state. These are deliberately separate from the embedding-space trajectory map and are not reconstructed from the global trajectory PCA surface.</p>
+    {contract_panel}
     <table>
       <thead><tr><th>index</th><th>complex map</th><th>simplex tree</th><th>level</th><th>path</th><th>summary</th></tr></thead>
       <tbody>{body}</tbody>

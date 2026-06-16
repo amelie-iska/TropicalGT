@@ -485,3 +485,26 @@ User-requested cleanup pass completed immediately after the analogical top-k con
 - Disk recovered from about 45 GB free to about 61 GB free, and b63 stayed active. Latest parsed post-cleanup health was step 304/5000 with train loss/NLL about 1.533/1.510 and no traceback or ENOSPC.
 
 Next operational watch: step 500 will generate the next periodic audit. If it again creates very large non-final payloads, the controller/Herschel should verify retention or prune non-final generated payloads promptly while preserving the final 5K gate requirements.
+
+
+## 2026-06-16 Reasoning-Step Complex Manifest Contract Pass
+
+Sequential visual/math repair item completed after the deep cleanup pass:
+
+- Added a `tropicalgt.reasoning_step_complex_maps.v1` manifest contract to `reasoning_step_complex_maps/manifest.json`.
+- The contract records that each listed model-evaluated GoT state has its own per-step radius-filtered complex page and simplex-tree/explicit-unavailable page, and that the global embedding trajectory PCA map is not used as a proxy for those complexes.
+- Each step row now carries explicit complex/simplex-tree render contracts plus simplex-tree backend/availability metadata, so downstream validators and Herschel can count real GUDHI SimplexTree evidence versus unavailable states without inferring from HTML filenames.
+- The per-step index page now exposes the no-proxy contract visibly and clarifies that the step complexes are not reconstructed from the global trajectory PCA surface.
+
+Validation:
+
+```text
+PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_simplicial_visualization.py -q -p no:cacheprovider --basetemp=/tmp/tropicalgt-pytest-step-contract -k "got_trajectory_visualization_renders_simplicial_panel_and_nll_surface"
+# 1 passed, 41 deselected
+PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m py_compile TropicalGT-I/src/tropicalgt/visualization.py TropicalGT-I/tests/test_simplicial_visualization.py
+# passed
+```
+
+Operational note: b63 remained active during validation and was parsed at step 412/5000 with train loss/NLL about 1.463/1.442 and no traceback or ENOSPC.
+
+Next linear item: continue the visual/math repair queue, with an immediate operational check around step 500 to confirm large non-final periodic artifacts do not threaten the 5K run.
