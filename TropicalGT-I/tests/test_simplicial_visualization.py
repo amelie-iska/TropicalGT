@@ -1287,6 +1287,7 @@ def test_analogical_memory_visualization_renders_simplicial_maps(tmp_path: Path)
     maps = json.loads(Path(paths["analogical_simplicial_maps"]).read_text(encoding="utf-8"))
     assert "Analogical probability-matched correspondence" in html
     assert "filtered-complex certificate from model-probability Jensen-Shannon assignment" in html
+    assert "certified filtered simplicial map" in html
     assert "model_probability_jensen_shannon_assignment" in html
     assert "persistent homology similarity" in html
     assert "chain-presentation diagnostic similarity" in html
@@ -1321,6 +1322,8 @@ def test_analogical_memory_visualization_renders_simplicial_maps(tmp_path: Path)
     assert "vector aggregate" in index_html
     assert "prob-map contrib." in index_html
     assert "prob-map source" in index_html
+    assert "map claim" in index_html
+    assert "certified_filtered_simplicial_map" in index_html
     assert "retrieval-side probability-map score contribution" in index_html
     assert "vectorized GUDHI family" in index_html
     assert "BettiCurve, Silhouette" in index_html
@@ -1361,6 +1364,12 @@ def test_analogical_memory_visualization_renders_simplicial_maps(tmp_path: Path)
     assert "is_simplicial_on_displayed_skeleton" in maps["maps"][0]
     assert maps["maps"][0]["chain_map_diagnostics"]["available"] is True
     assert maps["maps"][0]["persistence_module_morphism_diagnostics"]["available"] is True
+    assert maps["maps"][0]["safe_to_render_as_simplicial_map"] is True
+    assert maps["maps"][0]["safe_to_render_as_chain_map"] is True
+    assert maps["maps"][0]["safe_to_render_as_persistence_module_morphism"] is True
+    assert maps["maps"][0]["map_render_claim"] == "certified_filtered_simplicial_map"
+    assert maps["maps"][0]["map_claim_failure_reason"] is None
+    assert maps["maps"][0]["simplex_tree_map"]["filtered_simplicial_map_certified"] is True
     assert maps["maps"][0]["persistence_module_morphism_diagnostics"]["free_resolution_required"] is False
     assert maps["maps"][0]["derived_invariant_comparison"]["real_free_resolution_comparison"]["safe_for_derived_category_claims"] is False
     assert "free_resolution_similarity_interpretation" in maps["maps"][0]["derived_invariant_comparison"]
@@ -1659,6 +1668,76 @@ def test_analogical_memory_visualization_requires_retrieval_probability_map_cert
     assert report["simplicial_map_certificate"]["no_proxy_or_fallback"] is True
     assert report["chain_map_diagnostics"]["available"] is False
     assert report["persistence_module_morphism_diagnostics"]["available"] is False
+    assert report["safe_to_render_as_simplicial_map"] is False
+    assert report["safe_to_render_as_chain_map"] is False
+    assert report["safe_to_render_as_persistence_module_morphism"] is False
+    assert report["map_render_claim"] == "unavailable_probability_correspondence_certificate"
+    assert report["map_claim_failure_reason"] == "missing_retrieval_probability_simplicial_map_certificate"
+
+
+def test_analogical_memory_visualization_labels_failed_probability_correspondence_not_map(tmp_path: Path):
+    record = FixtureGraphDataset(1)[0]
+    descriptors = [
+        {"index": 0, "kind": "node", "node_id": "a", "text": "alpha"},
+        {"index": 1, "kind": "node", "node_id": "b", "text": "beta"},
+        {"index": 2, "kind": "node", "node_id": "c", "text": "gamma"},
+    ]
+    embeddings = [[0.0, 0.0, 0.0], [1.0, 0.2, 0.0], [0.2, 1.0, 0.1]]
+    probabilities = [[0.82, 0.12, 0.06], [0.10, 0.78, 0.12], [0.08, 0.14, 0.78]]
+    query_obj = build_embedding_radius_simplicial_object(
+        record,
+        descriptors,
+        embeddings,
+        token_probabilities=probabilities,
+        metric="jensen_shannon",
+    )
+    vertex_only = {
+        **query_obj,
+        "simplices": [row for row in query_obj["simplices"] if row.get("dimension") == 0],
+        "summary": {**query_obj["summary"], "simplices": 3, "edges": 0, "faces": 0},
+    }
+    failed_probability_map = probability_simplicial_map_diagnostics(query_obj, vertex_only)
+    assert failed_probability_map["available"] is False
+    topo = _toy_topology(intervals=[{"dimension": 0, "birth": 0.0, "death": None, "infinite": True}])
+    memory = {
+        "bank_path": "",
+        "retrieved": [
+            {
+                "memory_id": "mem-failed-map",
+                "record_id": "rec-failed-map",
+                "retrieval_score": 0.6,
+                "probability_simplicial_map": failed_probability_map,
+                "probability_simplicial_map_source": "model_probability_jensen_shannon_assignment",
+                "probability_simplicial_map_available": False,
+                "trajectory_probability_filtered_simplicial_object": vertex_only,
+                "topological_algebra": topo,
+            }
+        ],
+    }
+    paths = write_analogical_memory_visualization(
+        memory,
+        tmp_path,
+        query_context={"trajectory_probability_filtered_simplicial_object": query_obj, "topological_algebra": topo},
+    )
+    html = Path(paths["analogical_memory_retrieval_html"]).read_text(encoding="utf-8")
+    index_html = Path(paths["analogical_memory_topk_index_html"]).read_text(encoding="utf-8")
+    maps = json.loads(Path(paths["analogical_simplicial_maps"]).read_text(encoding="utf-8"))
+    report = maps["maps"][0]
+    assert ("probability correspondence only; no simplicial/chain/persistence morphism is asserted" in html) or ("probability correspondence only; no simplicial\\u002fchain\\u002fpersistence morphism is asserted" in html)
+    assert "not a simplicial map on the displayed skeleton" in html
+    assert "map claim" in index_html
+    assert "probability_correspondence_not_a_simplicial_map" in index_html
+    assert report["retrieval_probability_certificate_available"] is True
+    assert report["is_filtered_simplicial_map"] is False
+    assert report["safe_to_render_as_simplicial_map"] is False
+    assert report["safe_to_render_as_chain_map"] is False
+    assert report["safe_to_render_as_persistence_module_morphism"] is False
+    assert report["map_render_claim"] == "probability_correspondence_not_a_simplicial_map"
+    assert report["map_claim_failure_reason"] == "simplex_tree_map_not_fully_preserved"
+    assert report["chain_map_diagnostics"]["available"] is False
+    assert report["persistence_module_morphism_diagnostics"]["available"] is False
+    assert report["simplex_tree_map"]["filtered_simplicial_map_certified"] is False
+    assert "no simplicial map" in report["simplex_tree_map"]["interpretation"]
 
 
 def test_analogical_memory_visualization_rejects_non_trajectory_probability_fallback(tmp_path: Path):

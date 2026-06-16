@@ -479,6 +479,14 @@ def test_probability_simplicial_map_diagnostics_certifies_filtered_chain_map():
     assert report["chain_map_diagnostics"]["available"] is True
     assert report["chain_map_diagnostics"]["boundary_commutation_certified"] is True
     assert report["persistence_module_morphism_diagnostics"]["morphism_certified"] is True
+    assert report["safe_to_render_as_simplicial_map"] is True
+    assert report["safe_to_render_as_chain_map"] is True
+    assert report["safe_to_render_as_persistence_module_morphism"] is True
+    assert report["map_render_claim"] == "certified_filtered_simplicial_map"
+    assert report["map_claim_failure_reason"] is None
+    assert report["no_proxy_or_fallback"] is True
+    assert report["simplex_tree_map"]["filtered_simplicial_map_certified"] is True
+    assert "certifies a filtered simplicial map" in report["simplex_tree_map"]["interpretation"]
     wrapped = {"inference_scaling": {"trajectory_probability_filtered_simplicial_object": query_complex}}
     assert query_probability_complex_from_report(wrapped) == query_complex
 
@@ -557,6 +565,14 @@ def test_analogical_memory_probability_map_must_preserve_simplex_tree_to_score(t
     assert hits[0]["probability_simplicial_map_missing_two_simplices"] == 1
     assert hits[0]["probability_simplicial_map_chain_map_certified"] is False
     assert hits[0]["probability_simplicial_map_persistence_morphism_certified"] is False
+    assert hits[0]["probability_simplicial_map_safe_to_render_as_simplicial_map"] is False
+    assert hits[0]["probability_simplicial_map_safe_to_render_as_chain_map"] is False
+    assert hits[0]["probability_simplicial_map_safe_to_render_as_persistence_module_morphism"] is False
+    assert hits[0]["probability_simplicial_map_render_claim"] == "probability_correspondence_not_a_simplicial_map"
+    assert hits[0]["probability_simplicial_map_claim_failure_reason"] == "simplex_tree_map_not_fully_preserved"
+    assert hits[0]["probability_simplicial_map_no_proxy_or_fallback"] is True
+    assert hits[0]["probability_simplicial_map"]["simplex_tree_map"]["filtered_simplicial_map_certified"] is False
+    assert "no simplicial map" in hits[0]["probability_simplicial_map"]["simplex_tree_map"]["interpretation"]
 
 
 def test_analogical_memory_retrieval_reports_transported_landscape_diagnostics(tmp_path):

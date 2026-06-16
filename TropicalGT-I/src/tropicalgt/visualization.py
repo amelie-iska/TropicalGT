@@ -6847,6 +6847,7 @@ def _analogical_pair_figure(
     derived_comparison = _derived_invariant_comparison(query_topology, mem_topology, sim)
     sim_map["derived_invariant_comparison"] = derived_comparison
     sim_map["algebraic_realization_certificate"] = _analogical_realization_certificate(sim, sim_map, derived_comparison)
+    map_claim_label = str(sim_map.get("map_claim_label") or ("certified filtered simplicial map" if sim_map.get("is_filtered_simplicial_map") else "probability correspondence only; no map asserted"))
     map_report = {
         "memory_id": row.get("memory_id"),
         "record_id": row.get("record_id"),
@@ -6939,7 +6940,7 @@ def _analogical_pair_figure(
         title=(
             f"Analogical probability-matched correspondence: rank {idx + 1}"
             "<br><sup>query trajectory complex to retrieved memory complex</sup>"
-            "<br><sup>filtered-complex certificate from model-probability Jensen-Shannon assignment; gold=preserved 1-simplices, rose=vertex-only correspondences; slider filters domain/codomain/certificate edges</sup>"
+            f"<br><sup>{html.escape(map_claim_label)}; filtered-complex certificate from model-probability Jensen-Shannon assignment; gold=preserved 1-simplices, rose=vertex-only correspondences; slider filters domain/codomain/certificate edges</sup>"
         ),
         height=1040,
         margin=dict(t=154, l=24, r=24, b=164),
@@ -6979,7 +6980,7 @@ def _analogical_quality_table_trace(
     sim_map: dict[str, object],
     idx: int,
 ) -> go.Table:
-    status = "filtered correspondence certificate passed" if bool(sim_map.get("is_filtered_simplicial_map")) else "filtered correspondence certificate failed"
+    status = str(sim_map.get("map_claim_label") or ("certified filtered simplicial map; chain/persistence morphism diagnostics may be used" if bool(sim_map.get("is_filtered_simplicial_map")) else "probability correspondence only; no simplicial/chain/persistence morphism is asserted"))
     derived = sim_map.get("derived_invariant_comparison", {}) if isinstance(sim_map.get("derived_invariant_comparison"), dict) else {}
     source_label = str(sim_map.get("map_source", "unknown")).replace("model_probability_jensen_shannon_assignment", "prob-JS assignment")
     vector_methods_raw = str(sim.get("persistence_vector_methods", "")) or "unavailable"
@@ -7016,6 +7017,11 @@ def _analogical_quality_table_trace(
         ("edge preservation", f"{int(sim_map.get('preserved_edges', 0))}/{int(sim_map.get('checked_edges', 0))} = {float(sim_map.get('edge_preservation_rate', 0.0)):.3f}"),
         ("face preservation", f"{int(sim_map.get('preserved_two_simplices', 0))}/{int(sim_map.get('checked_two_simplices', 0))} = {float(sim_map.get('two_simplex_preservation_rate', 0.0)):.3f}"),
         ("simplex-tree map", f"{int(sim_map.get('simplex_tree_map_preserved', 0))}/{int(sim_map.get('simplex_tree_map_checked', 0))} = {float(sim_map.get('simplex_tree_map_preservation_rate', 0.0)):.3f}"),
+        ("map render claim", html.escape(str(sim_map.get("map_render_claim", "unavailable")))),
+        ("safe as simplicial map", str(bool(sim_map.get("safe_to_render_as_simplicial_map")))),
+        ("safe as chain map", str(bool(sim_map.get("safe_to_render_as_chain_map")))),
+        ("safe as module morphism", str(bool(sim_map.get("safe_to_render_as_persistence_module_morphism")))),
+        ("claim failure reason", html.escape(str(sim_map.get("map_claim_failure_reason") or "n/a"))),
         ("derived witness", str(derived.get("derived_equivalence_claim", "n/a"))),
         ("finite match", str(derived.get("finite_invariants_match", "n/a"))),
         ("display status", status),
@@ -7369,6 +7375,11 @@ def _write_analogical_topk_index(path: Path, pair_pages: list[dict[str, object]]
             f"<td>{float(report.get('persistence_landscape_cosine', 0.0)):.4f}</td>"
             f"<td>{float(report.get('persistence_vector_aggregate_similarity', 0.0)):.4f}</td>"
             f"<td>{html.escape(str(report.get('persistence_vector_component_summary', report.get('persistence_vector_methods', ''))))}</td>"
+            f'<td>{float(report.get("probability_simplicial_map_score_contribution", 0.0)):.4f}</td>'
+            f'<td>{float(report.get("probability_simplicial_map_similarity", 0.0)):.4f}</td>'
+            f'<td>{float(report.get("probability_simplicial_map_preservation_rate", report.get("simplex_tree_map_preservation_rate", 0.0))):.4f}</td>'
+            f'<td>{html.escape(str(report.get("probability_simplicial_map_source", report.get("map_source", "none"))))}</td>'
+            f'<td>{html.escape(str(report.get("map_render_claim", "unavailable")))}</td>'
             f"<td>{float(report.get('derived_algebraic_similarity', 0.0)):.4f}</td>"
             f"<td>{float(report.get('derived_signature_similarity', 0.0)):.4f}</td>"
             f"<td>{int(report.get('simplex_tree_map_preserved', 0))}/{int(report.get('simplex_tree_map_checked', 0))} = {float(report.get('simplex_tree_map_preservation_rate', 0.0)):.4f}</td>"
@@ -7401,7 +7412,7 @@ def _write_analogical_topk_index(path: Path, pair_pages: list[dict[str, object]]
 	    <h1>Analogical top-k probability correspondences</h1>
 	    <p>Each row opens one query-to-memory vertex assignment with a finite filtered-complex certificate. The NLL/fitness landscape and the GUDHI persistence landscape are different objects: this table reports the persistence-landscape vector plus the wider vectorized GUDHI family (Landscape, BettiCurve, Silhouette, Entropy, PersistenceLengths, TopologicalVector, PersistenceImage) and the retrieval-side probability-map score contribution. These are real cached vectors and finite probability-complex certificates; the cosine/L2 comparisons are differentiable with respect to those vectors, while this HTML does not claim autograd through GUDHI diagram vectorization. Unavailable vectors stay zero rather than being fabricated. Edge, face, and filtration preservation can fail and are reported on the rank page.</p>
 	    <table>
-	      <thead><tr><th>rank</th><th>correspondence</th><th>retrieval</th><th>landscape contrib.</th><th>vector contrib.</th><th>PH</th><th>chain pres.</th><th>comm. alg.</th><th>persistence-landscape L2 sim</th><th>persistence-landscape cosine</th><th>vector aggregate</th><th>vector methods</th><th>prob-map contrib.</th><th>prob-map sim</th><th>prob-map preserved</th><th>prob-map source</th><th>derived/algebraic</th><th>coarse signature</th><th>simplex-tree map</th><th>edge certificate</th></tr></thead>
+	      <thead><tr><th>rank</th><th>correspondence</th><th>retrieval</th><th>landscape contrib.</th><th>vector contrib.</th><th>PH</th><th>chain pres.</th><th>comm. alg.</th><th>persistence-landscape L2 sim</th><th>persistence-landscape cosine</th><th>vector aggregate</th><th>vector methods</th><th>prob-map contrib.</th><th>prob-map sim</th><th>prob-map preserved</th><th>prob-map source</th><th>map claim</th><th>derived/algebraic</th><th>coarse signature</th><th>simplex-tree map</th><th>edge certificate</th></tr></thead>
       <tbody>{body}</tbody>
     </table>
   </main>
@@ -7856,6 +7867,14 @@ def _retrieval_probability_simplicial_map_unavailable(reason: str, report: dict[
             "simplex_tree_map_checked": int(report.get("simplex_tree_map_checked", 0) or 0),
             "simplex_tree_map_preserved": int(report.get("simplex_tree_map_preserved", 0) or 0),
             "simplex_tree_map_preservation_rate": float(report.get("simplex_tree_map_preservation_rate", 0.0) or 0.0),
+            "safe_to_render_as_simplicial_map": False,
+            "safe_to_render_as_chain_map": False,
+            "safe_to_render_as_persistence_module_morphism": False,
+            "map_render_claim": "unavailable_probability_correspondence_certificate",
+            "map_claim_status": "unavailable_probability_correspondence_certificate",
+            "map_claim_label": "certificate unavailable; no simplicial map rendered",
+            "map_claim_failure_reason": reason,
+            "no_proxy_or_fallback": True,
             "simplicial_map_certificate": {
                 "source": "unavailable_retrieval_probability_simplicial_map_certificate",
                 "reason": reason,
@@ -7906,6 +7925,11 @@ def _retrieval_probability_simplicial_map_report(row: dict[str, object]) -> dict
     preserved = int(report.get("simplex_tree_map_preserved", tree_report.get("preserved_simplices", 0)) or 0)
     rate = float(report.get("simplex_tree_map_preservation_rate", tree_report.get("preservation_rate", 0.0)) or 0.0)
     is_map = bool(report.get("available") and report.get("is_filtered_simplicial_map") and checked > 0 and checked == preserved and rate >= 0.999)
+    chain_report = report.get("chain_map_diagnostics") if isinstance(report.get("chain_map_diagnostics"), dict) else _unavailable_chain_map_diagnostics("missing_chain_map_diagnostics")
+    morphism_report = report.get("persistence_module_morphism_diagnostics") if isinstance(report.get("persistence_module_morphism_diagnostics"), dict) else _persistence_module_morphism_diagnostics(_unavailable_chain_map_diagnostics("missing_chain_map_diagnostics"))
+    map_claim = "certified_filtered_simplicial_map" if is_map else "probability_correspondence_not_a_simplicial_map"
+    map_label = "certified filtered simplicial map; chain/persistence morphism diagnostics may be used" if is_map else "probability correspondence only; no simplicial/chain/persistence morphism is asserted"
+    claim_reason = None if is_map else ("simplex_tree_map_not_fully_preserved" if checked else "simplex_tree_map_unchecked")
     return {
         "vertex_map": vertex_map,
         "displayed_domain_vertices": int(report.get("displayed_domain_vertices", 0) or 0),
@@ -7938,10 +7962,18 @@ def _retrieval_probability_simplicial_map_report(row: dict[str, object]) -> dict
         "simplex_tree_map_checked": checked,
         "simplex_tree_map_preserved": preserved,
         "simplex_tree_map_preservation_rate": rate,
-        "chain_map_diagnostics": report.get("chain_map_diagnostics", {}) if isinstance(report.get("chain_map_diagnostics"), dict) else _unavailable_chain_map_diagnostics("missing_chain_map_diagnostics"),
-        "persistence_module_morphism_diagnostics": report.get("persistence_module_morphism_diagnostics", {}) if isinstance(report.get("persistence_module_morphism_diagnostics"), dict) else _persistence_module_morphism_diagnostics(_unavailable_chain_map_diagnostics("missing_chain_map_diagnostics")),
+        "chain_map_diagnostics": chain_report,
+        "persistence_module_morphism_diagnostics": morphism_report,
         "is_filtered_simplicial_map": is_map,
         "is_simplicial_on_displayed_skeleton": is_map,
+        "safe_to_render_as_simplicial_map": is_map,
+        "safe_to_render_as_chain_map": bool(is_map and chain_report.get("safe_to_use_as_persistence_module_morphism")),
+        "safe_to_render_as_persistence_module_morphism": bool(is_map and morphism_report.get("available")),
+        "map_render_claim": map_claim,
+        "map_claim_status": map_claim,
+        "map_claim_label": map_label,
+        "map_claim_failure_reason": claim_reason,
+        "no_proxy_or_fallback": True,
         "simplicial_map_certificate": {
             "source": "retrieval_probability_simplicial_map_certificate",
             "rule": "stored retrieval certificate: model-probability Jensen-Shannon vertex assignment must extend to a filtration-preserving simplex-tree map",
@@ -8087,7 +8119,11 @@ def _analogical_realization_certificate(
             "filtered simplex-tree map induced by model probabilities",
         ],
         "module_to_geometry_note": "A real derived/free-resolution claim requires a CAS-certified resolution or chain map; the displayed analogy is geometrically realized only when the probability-induced vertex map extends to a filtration-preserving simplex-tree map.",
-        "chain_map_note": "A filtration-preserving simplicial map induces a chain map and hence a morphism of the associated F2[x,y] persistence modules.",
+        "chain_map_note": (
+            "The certified filtration-preserving simplicial map induces a chain map and hence a morphism of the associated F2[x,y] persistence modules."
+            if tree_ok
+            else "No chain map or persistence-module morphism is asserted because the probability correspondence did not certify a filtration-preserving simplex-tree map."
+        ),
         "finite_invariants_match": derived_ok,
         "real_free_resolution_certified": real_resolution_certified,
         "real_free_resolution_pair_available": bool(real_resolution_comparison.get("available")),
@@ -8395,6 +8431,13 @@ def _simplex_tree_map_report(
                     "failure_reason": None if preserved_flag else ("missing_codomain_simplex" if not exists else "filtration_not_preserved"),
                 }
             )
+    rate = float(preserved / checked) if checked else 0.0
+    certified = bool(checked > 0 and preserved == checked and rate >= 0.999)
+    interpretation = (
+        "This finite simplex-tree enumeration certifies a filtered simplicial map on the displayed simplex trees; its F2-linear extension is safe to interpret as a chain map and persistence-module morphism."
+        if certified
+        else "This finite simplex-tree enumeration is only a failed or incomplete preservation check; no simplicial map, chain map, or persistence-module morphism is asserted from it."
+    )
     return {
         "source": "gudhi.SimplexTree finite simplex enumeration",
         "ring": "F2[x_level,x_radius]",
@@ -8402,11 +8445,14 @@ def _simplex_tree_map_report(
         "checked_simplices": int(checked),
         "preserved_simplices": int(preserved),
         "missing_codomain_simplices": int(missing),
-        "preservation_rate": float(preserved / checked) if checked else 0.0,
+        "preservation_rate": rate,
+        "filtered_simplicial_map_certified": certified,
+        "safe_to_render_as_chain_map": certified,
+        "safe_to_render_as_persistence_module_morphism": certified,
         "positive_filtration_distortion_summary": _numeric_summary(positive_distortions),
         "dimension_counts": dim_counts,
         "rows": rows,
-        "interpretation": "A filtered simplicial map on the displayed simplex trees induces a chain map and hence a morphism of the associated F2[x,y] persistence modules; failure here blocks geometric realization of any derived analogy.",
+        "interpretation": interpretation,
     }
 
 

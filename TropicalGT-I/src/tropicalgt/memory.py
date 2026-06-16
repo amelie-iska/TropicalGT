@@ -382,6 +382,9 @@ def probability_simplicial_map_diagnostics(query_obj: dict[str, Any] | None, mem
     costs = [float(row.get("assignment_cost", 0.0)) for row in vertex_map if row.get("assignment_cost") is not None]
     available = bool(mapping and checked > 0 and checked == preserved and rate >= 0.999)
     chain_map = _memory_chain_map_diagnostics(tree_report, available, mapping)
+    morphism = _memory_persistence_morphism_diagnostics(chain_map)
+    map_claim = "certified_filtered_simplicial_map" if available else "probability_correspondence_not_a_simplicial_map"
+    claim_reason = None if available else ("simplex_tree_map_not_fully_preserved" if checked else "simplex_tree_map_unchecked")
     return {
         "available": available,
         "map_source": "model_probability_jensen_shannon_assignment",
@@ -398,9 +401,20 @@ def probability_simplicial_map_diagnostics(query_obj: dict[str, Any] | None, mem
         "simplex_tree_map_preserved": preserved,
         "simplex_tree_map_preservation_rate": rate,
         "is_filtered_simplicial_map": available,
+        "safe_to_render_as_simplicial_map": available,
+        "safe_to_render_as_chain_map": bool(chain_map.get("safe_to_use_as_persistence_module_morphism")),
+        "safe_to_render_as_persistence_module_morphism": bool(morphism.get("available")),
+        "map_render_claim": map_claim,
+        "map_claim_status": map_claim,
+        "map_claim_failure_reason": claim_reason,
+        "no_proxy_or_fallback": True,
         "chain_map_diagnostics": chain_map,
-        "persistence_module_morphism_diagnostics": _memory_persistence_morphism_diagnostics(chain_map),
-        "interpretation": "Probability-vector analogical retrieval is geometrically realized only when the Jensen-Shannon vertex assignment extends to a filtration-preserving simplex-tree map.",
+        "persistence_module_morphism_diagnostics": morphism,
+        "interpretation": (
+            "The probability-vector Jensen-Shannon assignment is certified as a filtered simplicial map and its F2-linear extension is safe to use as a chain/persistence-module morphism."
+            if available
+            else "The probability-vector Jensen-Shannon assignment is only a vertex correspondence; it is not rendered as a simplicial, chain, or persistence-module map because simplex-tree/filtration preservation failed or was unchecked."
+        ),
     }
 
 
@@ -456,6 +470,8 @@ def _probability_simplicial_map_retrieval_fields(
     distortion_summary = tree.get("positive_filtration_distortion_summary", {}) if isinstance(tree, dict) else {}
     available = bool(report.get("available"))
     source = str(report.get("map_source", "none"))
+    render_claim = str(report.get("map_render_claim") or ("certified_filtered_simplicial_map" if available else "probability_correspondence_not_a_simplicial_map"))
+    claim_reason = report.get("map_claim_failure_reason")
     return {
         "probability_simplicial_map_score_contribution": float(score_contribution),
         "probability_simplicial_map_similarity": float(similarity),
@@ -483,6 +499,13 @@ def _probability_simplicial_map_retrieval_fields(
         "probability_simplicial_map_boundary_commutation_certified": bool(chain.get("boundary_commutation_certified")),
         "probability_simplicial_map_persistence_morphism_certified": bool(morphism.get("morphism_certified")),
         "probability_simplicial_map_safe_for_module_morphism": bool(morphism.get("available")),
+        "probability_simplicial_map_safe_to_render_as_simplicial_map": bool(report.get("safe_to_render_as_simplicial_map", available)),
+        "probability_simplicial_map_safe_to_render_as_chain_map": bool(report.get("safe_to_render_as_chain_map", chain.get("safe_to_use_as_persistence_module_morphism"))),
+        "probability_simplicial_map_safe_to_render_as_persistence_module_morphism": bool(report.get("safe_to_render_as_persistence_module_morphism", morphism.get("available"))),
+        "probability_simplicial_map_render_claim": render_claim,
+        "probability_simplicial_map_claim_status": render_claim,
+        "probability_simplicial_map_claim_failure_reason": claim_reason,
+        "probability_simplicial_map_no_proxy_or_fallback": bool(report.get("no_proxy_or_fallback", True)),
     }
 
 
@@ -499,6 +522,13 @@ def _empty_probability_map(query_vertices: list[dict[str, Any]], memory_vertices
         "simplex_tree_map_preserved": 0,
         "simplex_tree_map_preservation_rate": 0.0,
         "is_filtered_simplicial_map": False,
+        "safe_to_render_as_simplicial_map": False,
+        "safe_to_render_as_chain_map": False,
+        "safe_to_render_as_persistence_module_morphism": False,
+        "map_render_claim": "unavailable_probability_correspondence_certificate",
+        "map_claim_status": "unavailable_probability_correspondence_certificate",
+        "map_claim_failure_reason": reason,
+        "no_proxy_or_fallback": True,
         "chain_map_diagnostics": chain_map,
         "persistence_module_morphism_diagnostics": _memory_persistence_morphism_diagnostics(chain_map),
     }
@@ -712,16 +742,27 @@ def _simplex_tree_map_report(
                     "failure_reason": None if preserved_flag else ("missing_codomain_simplex" if not exists else "filtration_not_preserved"),
                 }
             )
+    rate = float(preserved / checked) if checked else 0.0
+    certified = bool(checked > 0 and preserved == checked and rate >= 0.999)
+    interpretation = (
+        "This finite simplex-tree enumeration certifies a filtered simplicial map on the displayed simplex trees; its F2-linear extension is safe to interpret as a chain map and persistence-module morphism."
+        if certified
+        else "This finite simplex-tree enumeration is only a failed or incomplete preservation check; no simplicial map, chain map, or persistence-module morphism is asserted from it."
+    )
     return {
         "source": "finite simplex enumeration from probability filtered complexes",
         "map_kind": "vertex_probability_assignment_extended_to_simplex_tree",
         "checked_simplices": int(checked),
         "preserved_simplices": int(preserved),
         "missing_codomain_simplices": int(missing),
-        "preservation_rate": float(preserved / checked) if checked else 0.0,
+        "preservation_rate": rate,
+        "filtered_simplicial_map_certified": certified,
+        "safe_to_render_as_chain_map": certified,
+        "safe_to_render_as_persistence_module_morphism": certified,
         "positive_filtration_distortion_summary": _numeric_summary(positive_distortions),
         "dimension_counts": dimension_counts,
         "rows": rows,
+        "interpretation": interpretation,
     }
 
 

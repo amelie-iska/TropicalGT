@@ -268,3 +268,29 @@ Operational note: b62 remained alive during verification and had advanced past s
 
 Next linear visual/math item: continue from slider-contract verification into remaining no-proxy simplex-tree, analogical-map, NLL-density, and tropical-support readability repairs.
 
+
+
+## 2026-06-16 Analogical Map Claim Contract Repair
+
+Sequential visual/math item completed after the radius-slider contract repair:
+
+- Added explicit no-proxy render-claim fields to probability-vector analogical map diagnostics: `safe_to_render_as_simplicial_map`, `safe_to_render_as_chain_map`, `safe_to_render_as_persistence_module_morphism`, `map_render_claim`, `map_claim_failure_reason`, and `no_proxy_or_fallback`.
+- Memory retrieval sidecars now distinguish certified filtered simplicial maps from vertex correspondences that fail simplex-tree or filtration preservation. Failed correspondences receive zero probability-map score contribution and are labeled `probability_correspondence_not_a_simplicial_map`.
+- Analogical visualization JSON, pair pages, quality table, hover text, and top-k index now expose the same certified/not-certified status. The top-k table body now fills the advertised probability-map contribution, similarity, preservation, source, and map-claim columns.
+- Simplex-tree map reports now have conditional interpretations: certified reports may mention induced F2 chain maps and persistence-module morphisms; failed or incomplete reports explicitly state that no simplicial map, chain map, or persistence-module morphism is asserted.
+- The algebraic realization certificate now uses a conditional chain-map note so non-certified probability correspondences cannot be read as persistence-module morphisms.
+
+Validation:
+
+```text
+/home/iska/miniconda3/envs/tokengt/bin/python -m py_compile TropicalGT-I/src/tropicalgt/memory.py TropicalGT-I/src/tropicalgt/visualization.py TropicalGT-I/tests/test_metrics_and_memory.py TropicalGT-I/tests/test_simplicial_visualization.py
+# passed
+CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/scripts:TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_metrics_and_memory.py TropicalGT-I/tests/test_simplicial_visualization.py -q
+# 49 passed
+```
+
+Operational cleanup note: after b62 was verified active, the failed generated b61 output directory was removed to free space, with small logs/JSON metadata preserved under `TropicalGT-I/outputs/training_stop_records/preserved_b61_failure_20260616T155103Z`. Datasets, checkpoints, W&B folders, current b62 outputs, b60 evidence outputs, secrets, and source history were not removed.
+
+Operational note: b62 remained alive during verification and had advanced past step 372/5000 with train loss/NLL around 1.487/1.465 when checked.
+
+Next linear visual/math item: continue from the analogical-map claim contract into remaining no-proxy simplex-tree trie/face-coface-poset, NLL-density, and tropical-support readability repairs.
