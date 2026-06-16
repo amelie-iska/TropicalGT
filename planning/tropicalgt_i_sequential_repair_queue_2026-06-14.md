@@ -109,8 +109,8 @@
 
 - [x] Ensure GraphCG directions are full rank relative to embedding dimension.
 - [x] Improve direction heatmaps, spectra, candidate activity, and signed bias plots with readable layouts.
-- [ ] Log GraphCG metrics in priority order for W&B and browser audit.
-- [ ] Add tests that direction-rank configuration matches embedding dimension.
+- [x] Log GraphCG metrics in priority order for W&B and browser audit.
+- [x] Add tests that direction-rank configuration matches embedding dimension.
 
 ### 10. Decoding and Dataset Graph Causality
 
@@ -387,3 +387,12 @@ The live item-by-item repair inventory is maintained in `planning/tropicalgt_i_c
 - [x] The payload now records panel names/count, per-panel availability flags, and `directions_sampled_for_heatmap=false`; exact direction ids remain available in hover text and JSON.
 - [x] Strengthened visualization regression coverage for all four visible panel titles plus candidate effective-direction and signed-mean arrays.
 - [x] Verification passed: focused GraphCG visualization test `1 passed`; full simplicial visualization `35 passed`; artifact validator `10 passed`; compile checks passed for modified visualization source/test.
+
+### Current Objective Update - GraphCG Metric Priority Pass
+
+- [x] Reordered W&B GraphCG priority metrics so embedding-span full-rank status, direction-bank clamp status, requested/effective direction counts, and rank target are emitted before lower-level rank and singular-value diagnostics.
+- [x] Added a browser metric priority tuple used by `training_metrics.html`, covering the same real GraphCG rank facts plus active-direction and singular-value diagnostics without proxy values.
+- [x] Added regression coverage proving the W&B payload order and generated browser Plotly traces expose the GraphCG rank-audit metrics in the intended priority order.
+- [x] Section 9 is complete: embedding-rank direction-bank enforcement, readable GraphCG trajectory panels, priority GraphCG metrics, and direction-rank configuration tests are all implemented.
+- [x] b60 latest checked training state reached step `1542` with train loss/NLL `1.225/1.202`; trainer PID `378962` and watcher PID `379304` remain alive under the step-5000 gate.
+- [x] Verification passed: compile checks for modified run/visualization/training-metrics files; focused GraphCG metric-order tests `2 passed`; full training-metrics tests `13 passed`; full simplicial visualization tests `35 passed`.

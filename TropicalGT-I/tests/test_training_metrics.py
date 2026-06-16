@@ -146,7 +146,12 @@ def test_wandb_metrics_are_namespaced_by_priority():
             "loss_tropical_margin_signed_weighted": -0.01,
             "loss_tropical_margin_shortfall_weighted": 0.0,
             "graphcg_full_rank": 1.0,
+            "graphcg_direction_bank_clamped_to_embedding_dim": 1.0,
+            "graphcg_requested_num_directions": 4096.0,
+            "graphcg_effective_num_directions": 1760.0,
+            "graphcg_embedding_span_rank_target": 1760.0,
             "graphcg_embedding_span_full_rank": 1.0,
+            "graphcg_active_rank_fraction": 1.0,
             "sequence_tropical_margin_mean": 0.4,
             "certificate_allowed_mass_mean": 0.9,
             "certificate_objective_loss": 0.2,
@@ -171,9 +176,52 @@ def test_wandb_metrics_are_namespaced_by_priority():
     assert payload["03_tropical/support_transition_rate"] == 0.25
     assert payload["08_memory/analogical_memory_rejected"] == 2.0
     assert payload["05_graphcg/graphcg_full_rank"] == 1.0
+    graphcg_keys = [key for key in payload if key.startswith("05_graphcg/")]
+    assert graphcg_keys[:6] == [
+        "05_graphcg/graphcg_embedding_span_full_rank",
+        "05_graphcg/graphcg_direction_bank_clamped_to_embedding_dim",
+        "05_graphcg/graphcg_requested_num_directions",
+        "05_graphcg/graphcg_effective_num_directions",
+        "05_graphcg/graphcg_embedding_span_rank_target",
+        "05_graphcg/graphcg_full_rank",
+    ]
     assert payload["05_graphcg/graphcg_embedding_span_full_rank"] == 1.0
     assert payload["06_graph_data/causal_dag_ar_rate"] == 0.75
     assert payload["00_primary/gpu_mem_mb"] == 21484.0
+
+
+def test_browser_metric_visualization_prioritizes_graphcg_rank_audit(tmp_path: Path):
+    from tropicalgt.visualization import GRAPHCG_BROWSER_PRIORITY_METRICS, write_metric_visualizations
+
+    priority_keys = [
+        "graphcg_loss",
+        "graphcg_embedding_span_full_rank",
+        "graphcg_direction_bank_clamped_to_embedding_dim",
+        "graphcg_requested_num_directions",
+        "graphcg_effective_num_directions",
+        "graphcg_embedding_span_rank_target",
+        "graphcg_num_directions",
+        "graphcg_embedding_dim",
+        "graphcg_active_directions",
+        "graphcg_full_rank",
+        "graphcg_active_full_rank",
+        "graphcg_active_rank_fraction",
+        "graphcg_direction_effective_rank",
+        "graphcg_direction_numerical_rank",
+        "graphcg_direction_rank_target",
+        "graphcg_direction_singular_min",
+        "graphcg_direction_singular_max",
+        "graphcg_direction_svd_condition_number",
+    ]
+    assert [key for key in GRAPHCG_BROWSER_PRIORITY_METRICS if key in priority_keys] == priority_keys
+
+    row = {"step": 1, "loss": 1.0, "nll": 0.9}
+    row.update({key: float(idx + 1) for idx, key in enumerate(priority_keys)})
+    paths = write_metric_visualizations([row], tmp_path)
+
+    html = Path(paths["metrics"]).read_text(encoding="utf-8")
+    positions = [html.index('"name":"' + key + '"') for key in priority_keys]
+    assert positions == sorted(positions)
 
 
 class _FakeWandbRun:
