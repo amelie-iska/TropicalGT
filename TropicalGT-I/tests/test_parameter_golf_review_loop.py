@@ -1,6 +1,8 @@
 import importlib.util
 from pathlib import Path
 
+import pytest
+
 
 def _load_review_loop():
     path = Path(__file__).resolve().parents[1] / "scripts" / "parameter_golf_codex_review_loop.py"
@@ -140,6 +142,30 @@ def test_review_loop_reads_periodic_and_validation_report_metrics():
     assert loop._metric_value(periodic_report, {}, "eval.graph_bpb") == 2.4
     assert loop._metric_value(validation_report, {}, "eval.bpb") == 1.31
     assert loop._metric_value(validation_report, {}, "eval.graph_bpb") == 2.6
+
+
+def test_review_loop_enforces_advanced_contract_before_training_wrapper_launch():
+    loop = _load_review_loop()
+    cfg = {
+        "run_name": "bad_bpb_wrapper_gate",
+        "parameter_golf_bpb_focus": True,
+        "target_bpb": 1.12,
+        "fixture_size": 2,
+        "train_limit": 2,
+        "val_limit": 1,
+        "seq_len": 32,
+        "batch_size": 1,
+        "device": "cpu",
+        "tokengt": {"feature_dim": 48},
+        "model": {"dim": 16, "hidden_dim": 16, "graph_feature_dim": 48},
+        "wandb": {"enabled": False},
+    }
+
+    with pytest.raises(RuntimeError, match="Advanced BPB training contract failed") as exc:
+        loop._enforce_train_launch_contract(cfg)
+
+    assert "advanced_bpb_real_data_required" in str(exc.value)
+    assert "advanced_bpb_wandb_online_project" in str(exc.value)
 
 
 def test_active_training_contract_reads_top_level_validation_metrics():

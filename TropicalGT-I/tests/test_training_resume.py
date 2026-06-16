@@ -83,7 +83,7 @@ def test_short_max_steps_override_does_not_fail_full_budget_gate(tmp_path: Path)
     assert report["data_budget"]["effective_training_token_slots"] == 32
 
 
-def test_train_blocks_bpb_config_that_fails_advanced_contract(tmp_path: Path):
+def test_train_blocks_bpb_config_that_fails_advanced_contract(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     cfg = {
         "run_name": "bad_bpb_5k_gate",
         "parameter_golf_bpb_focus": True,
@@ -103,6 +103,14 @@ def test_train_blocks_bpb_config_that_fails_advanced_contract(tmp_path: Path):
     }
     config_path = tmp_path / "bad_bpb.json"
     config_path.write_text(json.dumps(cfg), encoding="utf-8")
+
+    def fail_if_called(*_args, **_kwargs):
+        raise AssertionError("training helper should not run after failed advanced BPB contract")
+
+    monkeypatch.setattr(run_module, "make_dataset_from_config", fail_if_called)
+    monkeypatch.setattr(run_module, "build_model", fail_if_called)
+    monkeypatch.setattr(run_module, "setup_wandb", fail_if_called)
+    monkeypatch.setattr(run_module, "load_checkpoint", fail_if_called)
 
     with pytest.raises(RuntimeError, match="Advanced BPB training contract failed") as exc:
         train(config_path)

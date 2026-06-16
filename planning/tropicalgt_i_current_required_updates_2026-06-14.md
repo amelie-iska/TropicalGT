@@ -744,4 +744,23 @@ PYTHONPATH=TropicalGT-I/scripts:TropicalGT-I/src /home/iska/miniconda3/envs/toke
 # 40 passed, 2 warnings in 1.66s
 ```
 
-_Last updated: 2026-06-16T21:22:00Z_
+## 2026-06-16 Sequential Training/Readiness Update: BPB Wrapper And Preflight Bypass Hardening
+
+Status: complete for the wrapper/preflight bypass-hardening checkpoint; actual BPB restart remains blocked by the zero-byte b60 checkpoint.
+
+- `parameter_golf_codex_review_loop.py` now enforces the shared advanced BPB contract before launching any training subprocess. The default train script was already safe through `train()`, and this closes the user-supplied `--train-script` wrapper bypass.
+- `audit_tropicalgt_i_readiness.py --train-dry-run` and CUDA-required preflight now short-circuit before dataset loading or model/optimizer construction when a BPB-focused config fails the advanced contract. The report stays truthful and blocked, with `advanced_bpb_contract_failed_before_train_preflight` rather than synthetic dry-run evidence.
+- `run_bpb_ablation_grid.py` now audits each generated variant in memory before writing configs. BPB-focused variants that fail the contract are blocked before files are written unless `--allow-contract-breaking-ablation-configs` is explicitly passed for analysis-only config emission, and such manifest rows carry `contract_safe_to_run=false` plus named failed gates.
+- Strengthened trainer regression coverage to assert data, model, W&B, and checkpoint helpers are not called after a failed advanced BPB contract.
+- No generated audit bundles, datasets, checkpoints, W&B folders, caches, or secrets were staged.
+
+Verification:
+
+```bash
+PYTHONPATH=TropicalGT-I/scripts:TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_parameter_golf_review_loop.py TropicalGT-I/tests/test_bpb_ablation_grid.py TropicalGT-I/tests/test_readiness_audit.py TropicalGT-I/tests/test_training_resume.py -q
+# 24 passed in 5.35s
+PYTHONPATH=TropicalGT-I/scripts:TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_parameter_golf_review_loop.py TropicalGT-I/tests/test_bpb_ablation_grid.py TropicalGT-I/tests/test_training_resume.py TropicalGT-I/tests/test_readiness_audit.py TropicalGT-I/tests/test_training_metrics.py TropicalGT-I/tests/test_data_loader.py -q
+# 52 passed, 2 warnings in 5.53s
+```
+
+_Last updated: 2026-06-16T14:46:31Z_

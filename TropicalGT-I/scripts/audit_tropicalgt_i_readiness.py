@@ -168,6 +168,26 @@ def build_readiness_report(
     advanced_contract, advanced_contract_gates = advanced_bpb_contract_report(cfg)
     report["advanced_bpb_contract"] = advanced_contract
     gates.extend(advanced_contract_gates)
+    advanced_contract_failed = bool(
+        advanced_contract.get("required")
+        and any(gate.get("status") == "fail" for gate in advanced_contract_gates)
+    )
+    if advanced_contract_failed and (train_dry_run or require_cuda):
+        reason = "advanced_bpb_contract_failed_before_train_preflight"
+        add_gate(gates, "advanced_bpb_contract_blocks_train_preflight", False, reason)
+        report["data"] = {"unavailable": True, "unavailable_reason": reason}
+        if train_dry_run:
+            report["train_dry_run"] = {"skipped": True, "unavailable_reason": reason}
+        if checkpoint_path is not None:
+            report["checkpoint"] = {"skipped": True, "unavailable_reason": reason, "path": str(checkpoint_path)}
+        elif require_checkpoint:
+            add_gate(gates, "checkpoint_reload", False, "skipped: advanced BPB contract failed")
+        else:
+            add_gate(gates, "checkpoint_reload", True, "skipped: advanced BPB contract failed")
+        failed = [gate["name"] for gate in gates if gate["status"] == "fail"]
+        report["failed_gates"] = failed
+        report["status"] = "ready" if not failed else "blocked"
+        return report
 
     root = cfg.get("data_root")
     require_data = bool(cfg.get("require_data", bool(root)))

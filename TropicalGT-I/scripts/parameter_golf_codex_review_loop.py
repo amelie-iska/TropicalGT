@@ -20,6 +20,7 @@ if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
 from tropicalgt.run import load_config  # noqa: E402
+from tropicalgt.readiness_contracts import enforce_advanced_bpb_contract  # noqa: E402
 
 
 def main() -> None:
@@ -44,6 +45,8 @@ def main() -> None:
     args = parser.parse_args()
 
     cfg = load_config(args.config)
+    if not args.once:
+        _enforce_train_launch_contract(cfg)
     output_dir = args.output_dir
     output_dir.mkdir(parents=True, exist_ok=True)
     report_path = Path(cfg.get("output_dir", "TropicalGT-I/outputs/train")) / "train_report.json"
@@ -199,6 +202,10 @@ def _train_command(python: str, train_script: Path, config: Path, max_steps: int
     if resume_from:
         cmd.extend(["--resume-from", str(resume_from)])
     return cmd
+
+
+def _enforce_train_launch_contract(cfg: dict[str, Any]) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+    return enforce_advanced_bpb_contract(cfg)
 
 
 def _load_report(path: Path) -> dict[str, Any]:

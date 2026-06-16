@@ -2,6 +2,7 @@ import json
 from pathlib import Path
 
 import pandas as pd
+import audit_tropicalgt_i_readiness as readiness_module
 
 from audit_tropicalgt_i_readiness import advanced_bpb_contract_report, build_readiness_report, render_markdown
 from tropicalgt.run import load_keys
@@ -249,3 +250,55 @@ def test_readiness_audit_train_dry_run_fixture(tmp_path):
     assert report["train_dry_run"]["loss"] == report["train_dry_run"]["loss"]
     assert report["train_dry_run"]["compression"]["bpb"] > 0
     assert any(gate["name"] == "train_dry_run_forward_backward" and gate["status"] == "pass" for gate in report["gates"])
+
+
+def test_readiness_audit_train_dry_run_short_circuits_failed_bpb_contract(tmp_path, monkeypatch):
+    config = tmp_path / "bad_bpb_config.json"
+    config.write_text(
+        """
+{
+  "run_name": "bad_bpb_readiness_gate",
+  "parameter_golf_bpb_focus": true,
+  "target_bpb": 1.12,
+  "fixture_size": 4,
+  "train_limit": 4,
+  "val_limit": 4,
+  "batch_size": 1,
+  "seq_len": 32,
+  "seed": 1729,
+  "device": "cpu",
+  "output_dir": "%s",
+  "model": {"dim": 32, "hidden_dim": 32, "graph_feature_dim": 48},
+  "tokengt": {"feature_dim": 48},
+  "wandb": {"enabled": false}
+}
+"""
+        % (tmp_path / "outputs"),
+        encoding="utf-8",
+    )
+
+    def fail_if_called(*_args, **_kwargs):
+        raise AssertionError("training preflight helper should not run after failed advanced BPB contract")
+
+    monkeypatch.setattr(readiness_module, "make_dataset_from_config", fail_if_called)
+    monkeypatch.setattr(readiness_module, "build_model", fail_if_called)
+    report = build_readiness_report(
+        config_path=config,
+        checkpoint_path=None,
+        split="train",
+        sample_limit=4,
+        details_limit=1,
+        trace_limit=4,
+        scale_depth=0,
+        scale_width=2,
+        scale_branch_factor=2,
+        train_dry_run=True,
+        require_cuda=False,
+        require_checkpoint=False,
+        render_visualizations=False,
+    )
+
+    assert report["status"] == "blocked"
+    assert report["data"]["unavailable_reason"] == "advanced_bpb_contract_failed_before_train_preflight"
+    assert report["train_dry_run"]["skipped"] is True
+    assert "advanced_bpb_contract_blocks_train_preflight" in report["failed_gates"]

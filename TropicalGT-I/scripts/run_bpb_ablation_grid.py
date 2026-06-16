@@ -13,6 +13,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
 from tropicalgt.ablation import write_bpb_ablation_artifacts
+from tropicalgt.readiness_contracts import advanced_bpb_contract_report
 from tropicalgt.run import load_config, train
 
 
@@ -115,6 +116,11 @@ def main() -> None:
     parser.add_argument("--wandb", action="store_true", help="Keep W&B enabled from the base config. Defaults to disabled for ablation grids.")
     parser.add_argument("--render-html", action="store_true", help="Render Plotly correlation report after running")
     parser.add_argument("--top-k", type=int, default=20)
+    parser.add_argument(
+        "--allow-contract-breaking-ablation-configs",
+        action="store_true",
+        help="Permit analysis-only config emission for BPB-focused variants that fail the advanced BPB contract. These configs are never run by this script.",
+    )
     args = parser.parse_args()
 
     base = load_config(args.config)
@@ -128,6 +134,7 @@ def main() -> None:
     report_paths: list[str] = []
     configs = []
     run_id = time.strftime("%Y%m%d_%H%M%S")
+    variant_rows: list[dict[str, Any]] = []
     for idx, name in enumerate(variant_names):
         cfg = _variant_config(
             base,
@@ -141,10 +148,38 @@ def main() -> None:
             device=args.device,
             wandb=args.wandb,
         )
+        contract_summary = _advanced_contract_summary(cfg)
+        variant_rows.append({"idx": idx, "name": name, "cfg": cfg, "contract": contract_summary})
+
+    contract_breaking = [row for row in variant_rows if row["contract"]["failed_gates"]]
+    if contract_breaking and args.run:
+        detail = "; ".join("{}={}".format(row["name"], ",".join(row["contract"]["failed_gates"])) for row in contract_breaking)
+        raise SystemExit(f"advanced BPB contract failed before runnable ablation configs were written: {detail}")
+    if contract_breaking and not args.allow_contract_breaking_ablation_configs:
+        detail = "; ".join("{}={}".format(row["name"], ",".join(row["contract"]["failed_gates"])) for row in contract_breaking)
+        raise SystemExit(
+            "advanced BPB contract failed before ablation configs were written; "
+            "pass --allow-contract-breaking-ablation-configs to emit analysis-only configs: "
+            f"{detail}"
+        )
+
+    for row in variant_rows:
+        idx = int(row["idx"])
+        name = str(row["name"])
+        cfg = row["cfg"]
+        contract_summary = row["contract"]
         config_dir.mkdir(parents=True, exist_ok=True)
         config_path = config_dir / f"{idx:02d}_{name}.json"
         config_path.write_text(json.dumps(cfg, indent=2), encoding="utf-8")
-        configs.append({"variant": name, "config": str(config_path), "overrides": VARIANTS[name]})
+        configs.append(
+            {
+                "variant": name,
+                "config": str(config_path),
+                "overrides": VARIANTS[name],
+                "contract_safe_to_run": not contract_summary["failed_gates"],
+                "advanced_bpb_contract": contract_summary,
+            }
+        )
         if args.run:
             train(config_path, max_steps_override=args.max_steps)
             report_path = Path(cfg["output_dir"]) / "train_report.json"
@@ -227,6 +262,17 @@ def _set_dotted(cfg: dict[str, Any], key: str, value: Any) -> None:
     for part in parts[:-1]:
         current = current.setdefault(part, {})
     current[parts[-1]] = value
+
+
+def _advanced_contract_summary(cfg: dict[str, Any]) -> dict[str, Any]:
+    section, gates = advanced_bpb_contract_report(cfg)
+    failed = [str(gate.get("name", "")) for gate in gates if gate.get("status") == "fail"]
+    return {
+        "required": bool(section.get("required", False)),
+        "failed_gates": failed,
+        "gate_count": len(gates),
+        "policy": section.get("policy", ""),
+    }
 
 
 if __name__ == "__main__":
