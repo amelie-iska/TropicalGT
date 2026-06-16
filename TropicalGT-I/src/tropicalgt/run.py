@@ -776,13 +776,7 @@ def train(config_path: str | Path, resume_from: str | Path | None = None, max_st
         epoch += 1
     pbar.close()
     ckpt_path = ckpt_dir / f"{run_name}.pt"
-    checkpoint_integrity = _save_training_checkpoint(ckpt_path, model, opt, cfg, metrics_last, history, step, run_name)
     verify_checkpoint_load = _cfg_bool(cfg.get("checkpoint_verify_load"), True)
-    latest_checkpoint_integrity = (
-        _checkpoint_integrity_report(latest_ckpt_path, expected_step=None, verify_load=verify_checkpoint_load)
-        if latest_ckpt_path.exists()
-        else {"available": False, "path": str(latest_ckpt_path), "unavailable_reason": "checkpoint_missing"}
-    )
     eval_report = evaluate_model(
         model,
         val_ds,
@@ -797,6 +791,8 @@ def train(config_path: str | Path, resume_from: str | Path | None = None, max_st
     )
     final_eval_metrics = {f"eval_{k}": v for k, v in eval_report.items() if isinstance(v, (int, float))}
     metrics_last.update(final_eval_metrics)
+    if history:
+        history[-1].update(final_eval_metrics)
     if wb:
         wb.log(organize_wandb_metrics({"step": step, **final_eval_metrics}), step=step)
     vis_paths: dict[str, str] = {}
@@ -879,6 +875,8 @@ def train(config_path: str | Path, resume_from: str | Path | None = None, max_st
                     ).items()
                 }
             )
+    checkpoint_integrity = _save_training_checkpoint(ckpt_path, model, opt, cfg, metrics_last, history, step, run_name)
+    latest_checkpoint_integrity = _save_training_checkpoint(latest_ckpt_path, model, opt, cfg, metrics_last, history, step, run_name)
     report = {
         "checkpoint": str(ckpt_path),
         "latest_checkpoint": str(latest_ckpt_path) if latest_ckpt_path.exists() else "",

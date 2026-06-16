@@ -206,6 +206,7 @@
 - [x] Hardened shared checkpoint loading so empty, unloadable, or malformed checkpoints raise explicit `checkpoint_*` evidence errors before inference/eval/readiness callers can use them.
 - [x] Hardened review-loop boundary checkpoint snapshots so missing, empty, unloadable, or malformed checkpoints are recorded as unavailable evidence and are not copied into review outputs or reused as boundary checkpoints.
 - [x] Added checkpoint integrity metadata to training reports so final/latest checkpoint evidence records availability, size, expected step, observed step, and load-verification status.
+- [x] Moved final/latest checkpoint writes after final evaluation so future checkpoints carry `eval_bpb` and `eval_graph_bpb` in their own metrics payloads.
 
 ### Current Remaining Implementation List - 2026-06-16
 

@@ -38,6 +38,10 @@ def test_training_checkpoint_resume(tmp_path: Path):
     assert first["checkpoint_integrity"]["available"] is True
     assert first["checkpoint_integrity"]["observed_step"] == 1
     assert first["checkpoint_integrity"]["size_bytes"] > 0
+    final_obj = torch.load(first["checkpoint"], map_location="cpu")
+    assert final_obj["metrics"]["eval_bpb"] == first["metrics"]["eval_bpb"]
+    assert final_obj["metrics"]["eval_graph_bpb"] == first["metrics"]["eval_graph_bpb"]
+    assert final_obj["history"][-1]["eval_bpb"] == first["metrics"]["eval_bpb"]
     latest_checkpoint = Path(first["latest_checkpoint"])
     assert latest_checkpoint.exists()
     assert latest_checkpoint.stat().st_size > 0
@@ -46,6 +50,8 @@ def test_training_checkpoint_resume(tmp_path: Path):
     latest_obj = torch.load(latest_checkpoint, map_location="cpu")
     assert latest_obj["step"] == 1
     assert latest_obj["run_name"] == "resume_test"
+    assert latest_obj["metrics"]["eval_bpb"] == first["metrics"]["eval_bpb"]
+    assert latest_obj["metrics"]["eval_graph_bpb"] == first["metrics"]["eval_graph_bpb"]
 
     cfg["max_steps"] = 2
     config_path.write_text(json.dumps(cfg), encoding="utf-8")

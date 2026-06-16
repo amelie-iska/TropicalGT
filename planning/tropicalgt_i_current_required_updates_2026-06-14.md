@@ -896,4 +896,25 @@ git diff --check
 # clean
 ```
 
-_Last updated: 2026-06-16T15:27:52Z_
+## 2026-06-16 Sequential Training/Readiness Update: Final Eval Metrics In Checkpoints
+
+Status: complete for future final/latest checkpoint metric evidence; actual BPB restart remains blocked by the existing zero-byte b60 checkpoint.
+
+- Final and latest checkpoints are now written after final validation evaluation, so their payload metrics include final `eval_bpb`, `eval_graph_bpb`, and other numeric eval metrics rather than only pre-eval training metrics.
+- The final history row is updated with final eval metrics before checkpoint save, keeping report history and checkpoint history aligned for post-5K review.
+- Regression tests now load both the final and latest checkpoint from a tiny training run and assert their payload metrics match the final report eval BPB and graph-BPB values.
+- No checkpoints, generated reports, datasets, W&B folders, caches, or secrets were staged.
+
+Verification:
+
+```bash
+PYTHONPATH=TropicalGT-I/scripts:TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m py_compile TropicalGT-I/src/tropicalgt/run.py TropicalGT-I/tests/test_training_resume.py
+PYTHONPATH=TropicalGT-I/scripts:TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_training_resume.py -q
+# 7 passed in 1.53s
+PYTHONPATH=TropicalGT-I/scripts:TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_training_resume.py TropicalGT-I/tests/test_readiness_audit.py TropicalGT-I/tests/test_training_metrics.py TropicalGT-I/tests/test_data_loader.py -q
+# 44 passed, 2 warnings in 1.73s
+git diff --check
+# clean
+```
+
+_Last updated: 2026-06-16T15:31:09Z_
