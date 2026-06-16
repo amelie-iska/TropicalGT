@@ -985,3 +985,24 @@ CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/t
 CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_algebraic_persistence.py::test_multipers_unavailable_status_uses_signed_measure_backend_language TropicalGT-I/tests/test_metric_provenance.py::test_metric_provenance_registry_covers_current_risky_terms -q -p no:cacheprovider --basetemp=/tmp/tropicalgt-pytest-multipers-signed-measure
 # 2 passed
 ```
+
+
+## 2026-06-16 Two-Parameter Structure-Map Evidence Contract
+
+Sequential two-parameter bifiltration visual repair completed after the multipers signed-measure terminology repair:
+
+- Added a first-class `tropicalgt.two_parameter_structure_maps.v1` summary to `two_parameter_bifiltration.json` so adjacent `x_level` and `x_radius` structure maps are inspectable as machine-readable evidence, not only hover text.
+- The summary records raw `bifiltration.structure_maps` provenance, F2 field counts, east/north direction counts, valid source/target bidegrees in `[x_level, x_radius]` order, per-map H0/H1 rank rows, and an explicit no-proxy/no-fallback flag.
+- Tightened the interactive artifact validator so the raw bifiltration payload must contain actual F2 east and north structure maps, and the visual summary must match the raw map counts exactly.
+- Added regression coverage for the generated bifiltration visual payload and for validator rejection when the structure-map summary is missing.
+
+Validation:
+
+```text
+CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m py_compile TropicalGT-I/src/tropicalgt/visualization.py TropicalGT-I/scripts/validate_interactive_audit_artifacts.py TropicalGT-I/tests/test_algebraic_persistence.py TropicalGT-I/tests/test_interactive_artifact_validator.py
+# passed
+CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_algebraic_persistence.py::test_level_radius_bifiltration_reports_scoped_real_staircase_resolution TropicalGT-I/tests/test_interactive_artifact_validator.py::test_validate_audit_root_rejects_missing_bifiltration_structure_map_summary -q -p no:cacheprovider --basetemp=/tmp/tropicalgt-pytest-two-param-structure-summary
+# 2 passed
+CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_algebraic_persistence.py TropicalGT-I/tests/test_interactive_artifact_validator.py -q -p no:cacheprovider --basetemp=/tmp/tropicalgt-pytest-two-param-structure-summary-full
+# 48 passed
+```

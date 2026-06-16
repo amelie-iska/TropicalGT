@@ -5580,13 +5580,77 @@ def _write_two_parameter_bifiltration_staircase_html(
     fig_module.update_yaxes(title_text="x_level exponent / reasoning growth level", gridcolor="#203d5e", zerolinecolor="#6ee7f9", dtick=1, range=[-0.65, max_y + 0.35])
 
     structure_by_edge: dict[tuple[tuple[int, int], tuple[int, int]], Mapping[str, Any]] = {}
+    structure_map_rows: list[Mapping[str, Any]] = []
+    structure_direction_counts: Counter[str] = Counter()
+    structure_field_counts: Counter[str] = Counter()
+    structure_homology_dimensions: set[int] = set()
+    structure_rank_rows: list[dict[str, Any]] = []
     for row in bifiltration.get("structure_maps", []) if isinstance(bifiltration, Mapping) else []:
         if not isinstance(row, Mapping):
             continue
+        structure_map_rows.append(row)
+        direction = str(row.get("direction", "unknown"))
+        field = str(row.get("field", "unknown"))
+        structure_direction_counts[direction] += 1
+        structure_field_counts[field] += 1
         src = row.get("source_grade")
         tgt = row.get("target_grade")
-        if isinstance(src, Sequence) and not isinstance(src, (str, bytes)) and isinstance(tgt, Sequence) and not isinstance(tgt, (str, bytes)) and len(src) >= 2 and len(tgt) >= 2:
-            structure_by_edge[((int(src[0]), int(src[1])), (int(tgt[0]), int(tgt[1])))] = row
+        src_grade: list[int] | None = None
+        tgt_grade: list[int] | None = None
+        try:
+            if isinstance(src, Sequence) and not isinstance(src, (str, bytes)) and len(src) >= 2:
+                src_grade = [int(src[0]), int(src[1])]
+            if isinstance(tgt, Sequence) and not isinstance(tgt, (str, bytes)) and len(tgt) >= 2:
+                tgt_grade = [int(tgt[0]), int(tgt[1])]
+        except (TypeError, ValueError):
+            src_grade = None
+            tgt_grade = None
+        if src_grade is not None and tgt_grade is not None:
+            structure_by_edge[((src_grade[0], src_grade[1]), (tgt_grade[0], tgt_grade[1]))] = row
+        ranks = row.get("homology_rank", {})
+        normalized_ranks: dict[str, Any] = {}
+        if isinstance(ranks, Mapping):
+            for key, value in ranks.items():
+                try:
+                    dim = int(key)
+                except (TypeError, ValueError):
+                    continue
+                structure_homology_dimensions.add(dim)
+                try:
+                    normalized_ranks[str(dim)] = int(value)
+                except (TypeError, ValueError):
+                    normalized_ranks[str(dim)] = value
+        structure_rank_rows.append(
+            {
+                "source_bidegree_x_level_x_radius": src_grade or [],
+                "target_bidegree_x_level_x_radius": tgt_grade or [],
+                "source_monomial": f"x_level^{src_grade[0]} x_radius^{src_grade[1]}" if src_grade is not None else None,
+                "target_monomial": f"x_level^{tgt_grade[0]} x_radius^{tgt_grade[1]}" if tgt_grade is not None else None,
+                "direction": direction,
+                "field": field,
+                "homology_rank": normalized_ranks,
+                "method": str(row.get("method", "")),
+            }
+        )
+    direction_counts_payload = {key: int(structure_direction_counts.get(key, 0)) for key in ("x_level", "x_radius")}
+    for key, value in sorted(structure_direction_counts.items()):
+        direction_counts_payload.setdefault(str(key), int(value))
+    structure_fields = sorted(structure_field_counts)
+    structure_map_summary = {
+        "schema_version": "tropicalgt.two_parameter_structure_maps.v1",
+        "source": "bifiltration.structure_maps",
+        "source_grade_convention": "[x_level_exponent, x_radius_exponent]",
+        "coefficient_ring": "F2[x_level,x_radius]",
+        "actual_adjacent_map_count": len(structure_map_rows),
+        "valid_grade_edge_count": len(structure_by_edge),
+        "direction_counts": direction_counts_payload,
+        "field": "F2" if structure_fields == ["F2"] else ("unavailable" if not structure_map_rows else "mixed_or_unavailable"),
+        "field_counts": {str(key): int(value) for key, value in sorted(structure_field_counts.items())},
+        "homology_dimensions_observed": sorted(structure_homology_dimensions),
+        "east_north_structure_maps_present": bool(structure_direction_counts.get("x_level") and structure_direction_counts.get("x_radius")),
+        "rank_rows": structure_rank_rows,
+        "no_proxy_or_fallback": True,
+    }
 
     fig_3d = go.Figure()
     dim_offsets = {0: -0.045, 1: 0.045}
@@ -6095,6 +6159,7 @@ td {{ background:#07111f; color:#d7e8ff; }}
         },
         "actual_data_only": True,
         "no_proxy_resolution_claim": True,
+        "structure_map_summary": structure_map_summary,
         "module_visual_contract": {
             "schema_version": "tropicalgt.two_parameter_module_staircase_contract.v1",
             "no_proxy_or_fallback": True,
@@ -6105,6 +6170,9 @@ td {{ background:#07111f; color:#d7e8ff; }}
             "x_level_vertical": True,
             "shaded_regions_are_upward_closed_generated_submodules": True,
             "white_points_are_displayed_quotient_basis_lattice_points": True,
+            "structure_map_summary_required": True,
+            "structure_map_summary_schema": "tropicalgt.two_parameter_structure_maps.v1",
+            "structure_map_summary_source": "bifiltration.structure_maps",
             "raw_bifiltration_required_fields": [
                 "fiber_rank_profile",
                 "chain_module_generators",

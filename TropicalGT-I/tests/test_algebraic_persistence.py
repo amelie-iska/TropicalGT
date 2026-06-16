@@ -1259,6 +1259,18 @@ def test_level_radius_bifiltration_reports_scoped_real_staircase_resolution(tmp_
     assert visual_payload["axes"] == {"horizontal": "x_radius", "vertical": "x_level", "coordinate_one_dimensional_cones": ["rho_x_radius", "rho_x_level"]}
     assert visual_payload["actual_data_only"] is True
     assert visual_payload["no_proxy_resolution_claim"] is True
+    structure_summary = visual_payload["structure_map_summary"]
+    assert structure_summary["schema_version"] == "tropicalgt.two_parameter_structure_maps.v1"
+    assert structure_summary["source"] == "bifiltration.structure_maps"
+    assert structure_summary["actual_adjacent_map_count"] == len(structure_maps)
+    assert structure_summary["valid_grade_edge_count"] == len(structure_maps)
+    assert structure_summary["direction_counts"]["x_level"] > 0
+    assert structure_summary["direction_counts"]["x_radius"] > 0
+    assert structure_summary["field"] == "F2"
+    assert structure_summary["east_north_structure_maps_present"] is True
+    assert structure_summary["no_proxy_or_fallback"] is True
+    assert len(structure_summary["rank_rows"]) == len(structure_maps)
+    assert all(set(row["homology_rank"]) >= {"0", "1"} for row in structure_summary["rank_rows"])
     contract = visual_payload["module_visual_contract"]
     assert contract["schema_version"] == "tropicalgt.two_parameter_module_staircase_contract.v1"
     assert contract["no_proxy_or_fallback"] is True
@@ -1267,6 +1279,9 @@ def test_level_radius_bifiltration_reports_scoped_real_staircase_resolution(tmp_
     assert contract["secondary_rank_diagnostics_labeled"] is True
     assert contract["x_radius_horizontal"] is True
     assert contract["x_level_vertical"] is True
+    assert contract["structure_map_summary_required"] is True
+    assert contract["structure_map_summary_schema"] == "tropicalgt.two_parameter_structure_maps.v1"
+    assert contract["structure_map_summary_source"] == "bifiltration.structure_maps"
     assert contract["raw_bifiltration_payload"] == "../trajectory_level_radius_bifiltration.json"
     assert "chain-presentation diagnostics are never substituted" in contract["safe_resolution_policy"]
     assert set(contract["raw_bifiltration_required_fields"]) >= {

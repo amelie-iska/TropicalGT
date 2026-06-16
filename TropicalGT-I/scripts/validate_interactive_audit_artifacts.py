@@ -407,6 +407,26 @@ def validate_row(row_dir: Path, *, min_candidates: int = 8, min_depth: int = 2, 
     _assert(levels_axis == list(range(len(bif_levels))), errors, "trajectory bifiltration level grid axis does not match level grades")
     _assert(radius_axis == list(range(len(bif_radii))), errors, "trajectory bifiltration radius grid axis does not match radius grades")
     _assert(bifiltration_payload.get("radius_grade_policy") == "exact_sorted_radius_grid_index_no_bucket_collision", errors, "trajectory bifiltration radius grades are not exact sorted radius-grid indices")
+    structure_maps = bifiltration_payload.get("structure_maps", [])
+    structure_direction_counts: Counter[str] = Counter()
+    _assert(isinstance(structure_maps, list) and bool(structure_maps), errors, "trajectory bifiltration has no adjacent F2 structure maps")
+    if isinstance(structure_maps, list):
+        for index, row in enumerate(structure_maps):
+            if not isinstance(row, dict):
+                errors.append(f"trajectory bifiltration structure map {index} is not an object")
+                continue
+            direction = row.get("direction")
+            if isinstance(direction, str):
+                structure_direction_counts[direction] += 1
+            _assert(direction in {"x_level", "x_radius"}, errors, f"trajectory bifiltration structure map {index} has invalid direction")
+            _assert(row.get("field") == "F2", errors, f"trajectory bifiltration structure map {index} is not over F2")
+            source_grade = row.get("source_grade")
+            target_grade = row.get("target_grade")
+            _assert(isinstance(source_grade, list) and len(source_grade) >= 2, errors, f"trajectory bifiltration structure map {index} lacks a source bidegree")
+            _assert(isinstance(target_grade, list) and len(target_grade) >= 2, errors, f"trajectory bifiltration structure map {index} lacks a target bidegree")
+            ranks = row.get("homology_rank")
+            _assert(isinstance(ranks, dict) and {"0", "1"}.issubset(set(ranks)), errors, f"trajectory bifiltration structure map {index} lacks H0/H1 rank evidence")
+    _assert(structure_direction_counts.get("x_level", 0) > 0 and structure_direction_counts.get("x_radius", 0) > 0, errors, "trajectory bifiltration lacks both x_level and x_radius adjacent structure maps")
     if bifiltration_visual_payload:
         _assert(bifiltration_visual_payload.get("schema_version") == "tropicalgt.two_parameter_bifiltration_visual.v1", errors, "trajectory bifiltration visual payload has wrong schema")
         _assert(bifiltration_visual_payload.get("primary_view") == "miller_sturmfels_bivariate_staircase", errors, "trajectory bifiltration primary view is not the Miller-Sturmfels staircase")
@@ -416,6 +436,18 @@ def validate_row(row_dir: Path, *, min_candidates: int = 8, min_depth: int = 2, 
         _assert("rho_x_radius" in axes.get("coordinate_one_dimensional_cones", []) and "rho_x_level" in axes.get("coordinate_one_dimensional_cones", []), errors, "trajectory bifiltration visual payload lacks coordinate one dimensional cone records")
         _assert(bifiltration_visual_payload.get("actual_data_only") is True, errors, "trajectory bifiltration visual payload does not assert actual-data-only rendering")
         _assert(bifiltration_visual_payload.get("no_proxy_resolution_claim") is True, errors, "trajectory bifiltration visual payload allows proxy resolution claims")
+        structure_summary = bifiltration_visual_payload.get("structure_map_summary", {}) if isinstance(bifiltration_visual_payload.get("structure_map_summary"), dict) else {}
+        _assert(structure_summary.get("schema_version") == "tropicalgt.two_parameter_structure_maps.v1", errors, "trajectory bifiltration visual payload lacks the structure-map summary schema")
+        _assert(structure_summary.get("source") == "bifiltration.structure_maps", errors, "trajectory bifiltration structure-map summary does not cite raw structure maps")
+        _assert(int(_finite_float(structure_summary.get("actual_adjacent_map_count"), -1.0)) == (len(structure_maps) if isinstance(structure_maps, list) else 0), errors, "trajectory bifiltration structure-map summary count does not match raw structure maps")
+        _assert(structure_summary.get("field") == "F2", errors, "trajectory bifiltration structure-map summary is not over F2")
+        _assert(structure_summary.get("east_north_structure_maps_present") is True, errors, "trajectory bifiltration structure-map summary lacks east/north map evidence")
+        _assert(structure_summary.get("no_proxy_or_fallback") is True, errors, "trajectory bifiltration structure-map summary allows proxy/fallback evidence")
+        summary_direction_counts = structure_summary.get("direction_counts", {}) if isinstance(structure_summary.get("direction_counts"), dict) else {}
+        _assert(int(_finite_float(summary_direction_counts.get("x_level"), -1.0)) == structure_direction_counts.get("x_level", 0), errors, "trajectory bifiltration x_level structure-map count does not match raw data")
+        _assert(int(_finite_float(summary_direction_counts.get("x_radius"), -1.0)) == structure_direction_counts.get("x_radius", 0), errors, "trajectory bifiltration x_radius structure-map count does not match raw data")
+        rank_rows = structure_summary.get("rank_rows", [])
+        _assert(isinstance(rank_rows, list) and len(rank_rows) == (len(structure_maps) if isinstance(structure_maps, list) else 0), errors, "trajectory bifiltration structure-map summary lacks per-map rank rows")
         staircase_cards = bifiltration_visual_payload.get("staircase_cards", [])
         _assert(isinstance(staircase_cards, list) and bool(staircase_cards), errors, "trajectory bifiltration visual payload lacks staircase card contracts")
         if isinstance(staircase_cards, list):

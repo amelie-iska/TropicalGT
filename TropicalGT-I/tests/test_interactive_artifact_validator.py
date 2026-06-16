@@ -715,6 +715,10 @@ def _row(root: Path, name: str) -> Path:
                     {"source_grade": [0, 0], "target_grade": [0, 1], "h0_rank": 1},
                     {"source_grade": [0, 0], "target_grade": [1, 1], "h0_rank": 1},
                 ],
+                "structure_maps": [
+                    {"source_grade": [0, 0], "target_grade": [1, 0], "direction": "x_level", "field": "F2", "homology_rank": {"0": 1, "1": 0}, "method": "rank(B_target + image(Z_source)) over F2"},
+                    {"source_grade": [0, 0], "target_grade": [0, 1], "direction": "x_radius", "field": "F2", "homology_rank": {"0": 1, "1": 0}, "method": "rank(B_target + image(Z_source)) over F2"},
+                ],
                 "boundary_monomials": {"d1": [{"monomial": "x_level", "monomial_exponent": [1, 0]}]},
                 "chain_presentation_diagnostics": {
                     "ring": "F2[x_level,x_radius]",
@@ -739,6 +743,24 @@ def _row(root: Path, name: str) -> Path:
                 },
                 "actual_data_only": True,
                 "no_proxy_resolution_claim": True,
+                "structure_map_summary": {
+                    "schema_version": "tropicalgt.two_parameter_structure_maps.v1",
+                    "source": "bifiltration.structure_maps",
+                    "source_grade_convention": "[x_level_exponent, x_radius_exponent]",
+                    "coefficient_ring": "F2[x_level,x_radius]",
+                    "actual_adjacent_map_count": 2,
+                    "valid_grade_edge_count": 2,
+                    "direction_counts": {"x_level": 1, "x_radius": 1},
+                    "field": "F2",
+                    "field_counts": {"F2": 2},
+                    "homology_dimensions_observed": [0, 1],
+                    "east_north_structure_maps_present": True,
+                    "rank_rows": [
+                        {"source_bidegree_x_level_x_radius": [0, 0], "target_bidegree_x_level_x_radius": [1, 0], "source_monomial": "x_level^0 x_radius^0", "target_monomial": "x_level^1 x_radius^0", "direction": "x_level", "field": "F2", "homology_rank": {"0": 1, "1": 0}, "method": "rank(B_target + image(Z_source)) over F2"},
+                        {"source_bidegree_x_level_x_radius": [0, 0], "target_bidegree_x_level_x_radius": [0, 1], "source_monomial": "x_level^0 x_radius^0", "target_monomial": "x_level^0 x_radius^1", "direction": "x_radius", "field": "F2", "homology_rank": {"0": 1, "1": 0}, "method": "rank(B_target + image(Z_source)) over F2"},
+                    ],
+                    "no_proxy_or_fallback": True,
+                },
                 "staircase_cards": [
                     {
                         "homological_degree": 1,
@@ -872,6 +894,20 @@ def test_validate_audit_root_accepts_three_interactive_rows(tmp_path: Path):
     assert report["rows_checked"] == 3
     assert report["validation_metrics"]["bpb"] == 1.5
     assert all(row["step_complex_maps"] == 4 for row in report["row_reports"])
+
+
+def test_validate_audit_root_rejects_missing_bifiltration_structure_map_summary(tmp_path: Path):
+    validator = _load_validator()
+    audit = tmp_path / "step_00000001" / "got_audit"
+    row = _row(audit, ".")
+    visual_path = row / "trajectory_persistence" / "two_parameter_bifiltration.json"
+    payload = json.loads(visual_path.read_text(encoding="utf-8"))
+    payload.pop("structure_map_summary")
+    visual_path.write_text(json.dumps(payload), encoding="utf-8")
+    _write(audit / "codex_browser_index.html", _codex_browser_html(_browser_samples(audit, ["."])))
+    report = validator.validate_audit_root(audit, min_rows=1, min_candidates=4, min_depth=2)
+    assert not report["ok"]
+    assert any("structure-map summary" in err for err in report["errors"])
 
 
 def test_validate_audit_root_rejects_absolute_analogical_pair_pages(tmp_path: Path):
