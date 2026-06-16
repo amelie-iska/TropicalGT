@@ -332,6 +332,10 @@ WANDB_PRIORITY_GROUPS: tuple[tuple[str, tuple[str, ...]], ...] = (
     ),
 )
 
+WANDB_METRIC_DISPLAY_KEYS: dict[str, str] = {
+    "graph_json_fallback_rate": "legacy_graph_json_substitution_guardrail_rate",
+}
+
 
 def load_config(path: str | Path) -> dict[str, Any]:
     with open(path, "r", encoding="utf-8") as fh:
@@ -438,7 +442,7 @@ def organize_wandb_metrics(metrics: dict[str, Any]) -> dict[str, Any]:
     for group, keys in WANDB_PRIORITY_GROUPS:
         for key in keys:
             if key in metrics and _wandb_scalar(metrics[key]):
-                payload[f"{group}/{key}"] = metrics[key]
+                payload[f"{group}/{WANDB_METRIC_DISPLAY_KEYS.get(key, key)}"] = metrics[key]
                 used.add(key)
     for key, value in metrics.items():
         if key in used or key == "step" or not _wandb_scalar(value):

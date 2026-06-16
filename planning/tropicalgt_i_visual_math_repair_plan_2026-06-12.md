@@ -865,3 +865,20 @@ CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/t
 CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_training_metrics.py::test_browser_metric_visualization_prioritizes_graphcg_rank_audit -q -p no:cacheprovider --basetemp=/tmp/tropicalgt-pytest-graph-json-label
 # 1 passed
 ```
+
+## 2026-06-16 Graph JSON W&B Legacy Guardrail Alias
+
+Sequential training-readout no-proxy item completed after the browser trace-label repair:
+
+- Kept the stored `graph_json_fallback_rate` history/eval/readiness key as a backwards-compatible legacy must-remain-zero guardrail.
+- Renamed the W&B-visible priority key to `06_graph_data/legacy_graph_json_substitution_guardrail_rate`, so dashboards no longer present the retired fallback term as an active graph-data path.
+- Preserved the active graph-data evidence keys `graph_json_derived_text_graph_rate` and `graph_json_parse_unavailable_rate` unchanged.
+
+Validation:
+
+```text
+CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m py_compile TropicalGT-I/src/tropicalgt/run.py TropicalGT-I/tests/test_training_metrics.py
+# passed
+CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_training_metrics.py::test_wandb_metrics_are_namespaced_by_priority -q -p no:cacheprovider --basetemp=/tmp/tropicalgt-pytest-wandb-graph-json-alias
+# 1 passed
+```

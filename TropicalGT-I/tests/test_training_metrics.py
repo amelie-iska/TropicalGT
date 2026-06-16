@@ -165,6 +165,8 @@ def test_wandb_metrics_are_namespaced_by_priority():
             "certificate_loss_reconstruction_error": 0.0,
             "support_transition_rate": 0.25,
             "analogical_memory_rejected": 2.0,
+            "graph_json_fallback_rate": 0.0,
+            "graph_json_derived_text_graph_rate": 1.0,
             "causal_dag_ar_rate": 0.75,
             "gpu_mem_mb": 21484.0,
         }
@@ -192,6 +194,9 @@ def test_wandb_metrics_are_namespaced_by_priority():
         "05_graphcg/graphcg_full_rank",
     ]
     assert payload["05_graphcg/graphcg_embedding_span_full_rank"] == 1.0
+    assert "06_graph_data/graph_json_fallback_rate" not in payload
+    assert payload["06_graph_data/legacy_graph_json_substitution_guardrail_rate"] == 0.0
+    assert payload["06_graph_data/graph_json_derived_text_graph_rate"] == 1.0
     assert payload["06_graph_data/causal_dag_ar_rate"] == 0.75
     assert payload["00_primary/gpu_mem_mb"] == 21484.0
 
