@@ -1261,3 +1261,24 @@ CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/t
 CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_simplicial_visualization.py TropicalGT-I/tests/test_interactive_artifact_validator.py -q -p no:cacheprovider --basetemp=/tmp/tropicalgt-pytest-simplex-tree-poset-sidecar-full
 # 76 passed
 ```
+
+## 2026-06-16 Monomial Transport and Flat-Incidence Bundle Metrics
+
+Sequential vector-bundle/toric implementation continued after simplex-tree poset sidecars:
+
+- Extended `ChartBundleToricHead` with explicit monomial-transport permutation logits and chart-by-toric-row flat-incidence logits, both isolated from token logits and zero-default in the training objective.
+- Added `bundle_monomial_transport_permutation_loss`, `bundle_monomial_transport_permutation_one_hotness`, `bundle_monomial_transport_available`, `bundle_flat_incidence_binary_defect`, `bundle_flat_incidence_mean`, and `bundle_flat_incidence_available` metrics.
+- Added zero-default config weights `bundle_monomial_transport_weight` and `bundle_flat_incidence_weight`; they contribute only when explicitly nonzero, preserving BPB-first training and logits/loss equality for telemetry-only chart-bundle runs.
+- Added structured `tropicalgt.chart_bundle_transport_metadata.v1` metadata with nested `tropicalgt.monomial_transport_head.v1` and `tropicalgt.bundle_matroid_flat_incidence.v1` contracts, including transport ids, chart ids, flat-incidence shape, and no-proxy flags.
+- Extended training metric grouping so Herschel/review reports can see the new monomial-transport and flat-incidence metrics/loss sidecars when chart-bundle telemetry is enabled.
+
+Validation:
+
+```text
+CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m py_compile TropicalGT-I/src/tropicalgt/model.py TropicalGT-I/src/tropicalgt/run.py TropicalGT-I/tests/test_losses_and_model.py
+# passed
+CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_losses_and_model.py::test_chart_bundle_auxiliary_zero_weights_do_not_change_logits_or_loss TropicalGT-I/tests/test_losses_and_model.py::test_chart_bundle_bpb_partition_unavailable_without_targets TropicalGT-I/tests/test_losses_and_model.py::test_chart_bundle_auxiliary_positive_weights_change_loss_not_logits -q -p no:cacheprovider --basetemp=/tmp/tropicalgt-pytest-bundle-monomial-transport
+# 3 passed
+CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_losses_and_model.py TropicalGT-I/tests/test_bpb_ablation_grid.py TropicalGT-I/tests/test_bpb_ablation.py -q -p no:cacheprovider --basetemp=/tmp/tropicalgt-pytest-bundle-monomial-transport-full
+# 14 passed
+```

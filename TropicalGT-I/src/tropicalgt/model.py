@@ -39,8 +39,10 @@ class TropicalGTConfig:
     bundle_num_charts: int = 4
     toric_num_active_rows: int = 16
     bundle_transport_weight: float = 0.0
+    bundle_monomial_transport_weight: float = 0.0
     bundle_cocycle_weight: float = 0.0
     bundle_flat_rank_weight: float = 0.0
+    bundle_flat_incidence_weight: float = 0.0
     toric_normal_fan_weight: float = 0.0
     graphcg_toric_cell_agreement_weight: float = 0.0
     chart_bpb_consistency_weight: float = 0.0
@@ -85,6 +87,8 @@ class ChartBundleToricHead(nn.Module):
         self.toric_rows = max(1, int(toric_rows))
         self.chart_head = nn.Sequential(nn.LayerNorm(dim), nn.Linear(dim, self.num_charts))
         self.transport_head = nn.Sequential(nn.LayerNorm(dim), nn.Linear(dim, self.num_charts * self.num_charts))
+        self.transport_permutation_head = nn.Sequential(nn.LayerNorm(dim), nn.Linear(dim, self.num_charts * self.num_charts * self.num_charts))
+        self.flat_incidence_head = nn.Sequential(nn.LayerNorm(dim), nn.Linear(dim, self.num_charts * self.toric_rows))
         self.toric_head = nn.Sequential(nn.LayerNorm(dim), nn.Linear(dim, self.toric_rows))
 
     def transport_metadata(self) -> dict[str, Any]:
@@ -114,6 +118,7 @@ class ChartBundleToricHead(nn.Module):
             if i != j and j != k and i != k
         ]
         return {
+            "schema_version": "tropicalgt.chart_bundle_transport_metadata.v1",
             "available": True,
             "source": "ChartBundleToricHead.transport_metadata",
             "chart_ids": chart_ids,
@@ -122,6 +127,28 @@ class ChartBundleToricHead(nn.Module):
             "overlap_pair_count": len(pairs),
             "overlap_triple_count": len(triples),
             "directed_overlap_policy": "ordered chart pairs/triples matching transport T_ab and cocycle T_bc T_ab = T_ac",
+            "monomial_transport_contract": {
+                "schema_version": "tropicalgt.monomial_transport_head.v1",
+                "source": "ChartBundleToricHead.transport_head+transport_permutation_head",
+                "chart_ids": chart_ids,
+                "transport_ids": [row["id"] for row in pairs],
+                "shift_representation": "tropical_shift_logits_on_ordered_chart_pairs",
+                "permutation_representation": "chart_permutation_logits_on_ordered_chart_pairs",
+                "permutation_target_policy": "identity_chart_permutation_telemetry_until_data_chart_matching_labels_exist",
+                "actual_data_only": True,
+                "no_proxy_or_fallback": True,
+            },
+            "bundle_matroid_contract": {
+                "schema_version": "tropicalgt.bundle_matroid_flat_incidence.v1",
+                "source": "ChartBundleToricHead.flat_incidence_head",
+                "chart_ids": chart_ids,
+                "toric_active_row_count": self.toric_rows,
+                "flat_incidence_shape": [self.num_charts, self.toric_rows],
+                "rank_defect_metric": "svd_flat_rank_defect_on_chart_probability_rows",
+                "flat_incidence_metric": "sigmoid_binary_defect_on_chart_by_toric_row_incidence",
+                "actual_data_only": True,
+                "no_proxy_or_fallback": True,
+            },
             "toric_embedding_certificate": _uncertified_toric_embedding_metadata("ChartBundleToricHead.activation_rows"),
         }
 
@@ -146,6 +173,20 @@ class ChartBundleToricHead(nn.Module):
         eye = torch.eye(self.num_charts, dtype=torch.bool, device=graph_state.device)
         offdiag = transport[:, ~eye] if self.num_charts > 1 else transport.reshape(batch, -1)
         transport_l1 = offdiag.abs().mean() if offdiag.numel() else zero
+        permutation_logits = self.transport_permutation_head(graph_state).reshape(batch, self.num_charts, self.num_charts, self.num_charts)
+        permutation_probs = torch.softmax(permutation_logits, dim=-1)
+        if permutation_logits.numel() and self.num_charts > 1:
+            identity_targets = torch.arange(self.num_charts, device=graph_state.device).view(1, 1, self.num_charts).expand(batch, self.num_charts, self.num_charts)
+            monomial_transport_permutation_loss = F.cross_entropy(
+                permutation_logits.reshape(-1, self.num_charts),
+                identity_targets.reshape(-1),
+            )
+            monomial_transport_permutation_one_hotness = permutation_probs.max(dim=-1).values.mean()
+            monomial_transport_available = torch.ones((), dtype=graph_state.dtype, device=graph_state.device)
+        else:
+            monomial_transport_permutation_loss = zero
+            monomial_transport_permutation_one_hotness = zero
+            monomial_transport_available = zero
         if self.num_charts >= 3:
             cocycles = []
             for i in range(self.num_charts):
@@ -157,6 +198,12 @@ class ChartBundleToricHead(nn.Module):
             cocycle_defect = torch.stack(cocycles, dim=0).mean() if cocycles else zero
         else:
             cocycle_defect = zero
+
+        flat_incidence_logits = self.flat_incidence_head(graph_state).reshape(batch, self.num_charts, self.toric_rows)
+        flat_incidence_probs = torch.sigmoid(flat_incidence_logits)
+        flat_incidence_binary_defect = (flat_incidence_probs * (1.0 - flat_incidence_probs)).mean() if flat_incidence_probs.numel() else zero
+        flat_incidence_mean = flat_incidence_probs.mean() if flat_incidence_probs.numel() else zero
+        flat_incidence_available = torch.ones((), dtype=graph_state.dtype, device=graph_state.device) if flat_incidence_probs.numel() else zero
 
         centered = chart_probs - chart_probs.mean(dim=0, keepdim=True)
         rank_target = min(max(batch - 1, 0), self.num_charts)
@@ -231,8 +278,14 @@ class ChartBundleToricHead(nn.Module):
 
         metrics = {
             "bundle_transport_l1": transport_l1,
+            "bundle_monomial_transport_permutation_loss": monomial_transport_permutation_loss,
+            "bundle_monomial_transport_permutation_one_hotness": monomial_transport_permutation_one_hotness,
+            "bundle_monomial_transport_available": monomial_transport_available,
             "bundle_cocycle_defect": cocycle_defect,
             "bundle_flat_rank_defect": flat_rank_defect,
+            "bundle_flat_incidence_binary_defect": flat_incidence_binary_defect,
+            "bundle_flat_incidence_mean": flat_incidence_mean,
+            "bundle_flat_incidence_available": flat_incidence_available,
             "bundle_monomial_projection_one_hotness": monomial_one_hotness,
             "bundle_chart_confidence_mean": chart_confidence.mean() if chart_confidence.numel() else zero,
             "bundle_chart_count": torch.tensor(float(self.num_charts), dtype=graph_state.dtype, device=graph_state.device),
@@ -255,8 +308,10 @@ class ChartBundleToricHead(nn.Module):
         }
         losses = {
             "bundle_transport_l1": transport_l1,
+            "bundle_monomial_transport_permutation_loss": monomial_transport_permutation_loss,
             "bundle_cocycle_defect": cocycle_defect,
             "bundle_flat_rank_defect": flat_rank_defect,
+            "bundle_flat_incidence_binary_defect": flat_incidence_binary_defect,
             "toric_activation_cell_margin_loss": toric_activation_cell_margin_loss,
             "toric_normal_fan_loss": toric_normal_fan_loss,
             "graphcg_toric_cell_agreement": graphcg_toric_cell_agreement_loss,
@@ -270,8 +325,14 @@ def _zero_chart_bundle_outputs(reference: Tensor) -> tuple[dict[str, Tensor], di
     zero = reference.sum() * 0.0
     metrics = {
         "bundle_transport_l1": zero.detach(),
+        "bundle_monomial_transport_permutation_loss": zero.detach(),
+        "bundle_monomial_transport_permutation_one_hotness": zero.detach(),
+        "bundle_monomial_transport_available": zero.detach(),
         "bundle_cocycle_defect": zero.detach(),
         "bundle_flat_rank_defect": zero.detach(),
+        "bundle_flat_incidence_binary_defect": zero.detach(),
+        "bundle_flat_incidence_mean": zero.detach(),
+        "bundle_flat_incidence_available": zero.detach(),
         "bundle_monomial_projection_one_hotness": zero.detach(),
         "bundle_chart_confidence_mean": zero.detach(),
         "bundle_chart_count": zero.detach(),
@@ -294,8 +355,10 @@ def _zero_chart_bundle_outputs(reference: Tensor) -> tuple[dict[str, Tensor], di
     }
     losses = {
         "bundle_transport_l1": zero,
+        "bundle_monomial_transport_permutation_loss": zero,
         "bundle_cocycle_defect": zero,
         "bundle_flat_rank_defect": zero,
+        "bundle_flat_incidence_binary_defect": zero,
         "toric_activation_cell_margin_loss": zero,
         "toric_normal_fan_loss": zero,
         "graphcg_toric_cell_agreement": zero,
@@ -418,6 +481,7 @@ class TropicalGTModel(nn.Module):
         else:
             chart_bundle_metrics, chart_bundle_loss_terms = _zero_chart_bundle_outputs(graph_state)
             chart_bundle_transport_metadata = {
+                "schema_version": "tropicalgt.chart_bundle_transport_metadata.v1",
                 "available": False,
                 "source": "chart_bundle_disabled",
                 "chart_ids": [],
@@ -425,6 +489,8 @@ class TropicalGTModel(nn.Module):
                 "overlap_triples": [],
                 "overlap_pair_count": 0,
                 "overlap_triple_count": 0,
+                "monomial_transport_contract": {"schema_version": "tropicalgt.monomial_transport_head.v1", "available": False, "source": "chart_bundle_disabled", "actual_data_only": True, "no_proxy_or_fallback": True},
+                "bundle_matroid_contract": {"schema_version": "tropicalgt.bundle_matroid_flat_incidence.v1", "available": False, "source": "chart_bundle_disabled", "actual_data_only": True, "no_proxy_or_fallback": True},
                 "toric_embedding_certificate": _uncertified_toric_embedding_metadata("chart_bundle_disabled"),
             }
         metrics: dict[str, Tensor] = {
@@ -479,8 +545,10 @@ class TropicalGTModel(nn.Module):
             certificate_weighted = self.config.certificate_weight * certificate_loss
             certificate_diagnostic_penalty_weighted = self.config.certificate_weight * certificate_metrics["certificate_diagnostic_penalty"].to(certificate_loss.device)
             bundle_transport_weighted = self.config.bundle_transport_weight * chart_bundle_loss_terms["bundle_transport_l1"]
+            bundle_monomial_transport_weighted = self.config.bundle_monomial_transport_weight * chart_bundle_loss_terms["bundle_monomial_transport_permutation_loss"]
             bundle_cocycle_weighted = self.config.bundle_cocycle_weight * chart_bundle_loss_terms["bundle_cocycle_defect"]
             bundle_flat_rank_weighted = self.config.bundle_flat_rank_weight * chart_bundle_loss_terms["bundle_flat_rank_defect"]
+            bundle_flat_incidence_weighted = self.config.bundle_flat_incidence_weight * chart_bundle_loss_terms["bundle_flat_incidence_binary_defect"]
             toric_activation_cell_margin_weighted = self.config.toric_normal_fan_weight * chart_bundle_loss_terms["toric_activation_cell_margin_loss"]
             toric_normal_fan_weighted = toric_activation_cell_margin_weighted
             graphcg_toric_cell_agreement_weighted = self.config.graphcg_toric_cell_agreement_weight * chart_bundle_loss_terms["graphcg_toric_cell_agreement"]
@@ -488,8 +556,10 @@ class TropicalGTModel(nn.Module):
             bundle_atom_stability_weighted = self.config.bundle_atom_stability_weight * chart_bundle_loss_terms["bundle_atom_stability_gap"]
             bundle_toric_regularizer_total = (
                 bundle_transport_weighted
+                + bundle_monomial_transport_weighted
                 + bundle_cocycle_weighted
                 + bundle_flat_rank_weighted
+                + bundle_flat_incidence_weighted
                 + toric_normal_fan_weighted
                 + graphcg_toric_cell_agreement_weighted
                 + chart_bpb_consistency_weighted
@@ -530,8 +600,10 @@ class TropicalGTModel(nn.Module):
                     "loss_certificate_objective_weighted": certificate_weighted.detach(),
                     "loss_certificate_diagnostic_penalty_weighted": certificate_diagnostic_penalty_weighted.detach(),
                     "loss_bundle_transport_weighted": bundle_transport_weighted.detach(),
+                    "loss_bundle_monomial_transport_weighted": bundle_monomial_transport_weighted.detach(),
                     "loss_bundle_cocycle_weighted": bundle_cocycle_weighted.detach(),
                     "loss_bundle_flat_rank_weighted": bundle_flat_rank_weighted.detach(),
+                    "loss_bundle_flat_incidence_weighted": bundle_flat_incidence_weighted.detach(),
                     "loss_toric_activation_cell_margin_weighted": toric_activation_cell_margin_weighted.detach(),
                     "loss_toric_normal_fan_weighted": toric_normal_fan_weighted.detach(),
                     "loss_graphcg_toric_cell_agreement_weighted": graphcg_toric_cell_agreement_weighted.detach(),

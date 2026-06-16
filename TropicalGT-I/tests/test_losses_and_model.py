@@ -144,8 +144,14 @@ def test_model_forward_fixture():
         "sequence_tropical_margin_mean",
         "sequence_tropical_support_entropy",
         "bundle_transport_l1",
+        "bundle_monomial_transport_permutation_loss",
+        "bundle_monomial_transport_permutation_one_hotness",
+        "bundle_monomial_transport_available",
         "bundle_cocycle_defect",
         "bundle_flat_rank_defect",
+        "bundle_flat_incidence_binary_defect",
+        "bundle_flat_incidence_mean",
+        "bundle_flat_incidence_available",
         "bundle_monomial_projection_one_hotness",
         "bundle_chart_confidence_mean",
         "bundle_chart_count",
@@ -168,8 +174,10 @@ def test_model_forward_fixture():
         "loss_tropical_margin_signed_weighted",
         "loss_tropical_margin_shortfall_weighted",
         "loss_bundle_transport_weighted",
+        "loss_bundle_monomial_transport_weighted",
         "loss_bundle_cocycle_weighted",
         "loss_bundle_flat_rank_weighted",
+        "loss_bundle_flat_incidence_weighted",
         "loss_toric_activation_cell_margin_weighted",
         "loss_toric_normal_fan_weighted",
         "loss_graphcg_toric_cell_agreement_weighted",
@@ -237,8 +245,10 @@ def test_chart_bundle_auxiliary_zero_weights_do_not_change_logits_or_loss():
             bundle_num_charts=3,
             toric_num_active_rows=5,
             bundle_transport_weight=0.0,
+            bundle_monomial_transport_weight=0.0,
             bundle_cocycle_weight=0.0,
             bundle_flat_rank_weight=0.0,
+            bundle_flat_incidence_weight=0.0,
             toric_normal_fan_weight=0.0,
             graphcg_toric_cell_agreement_weight=0.0,
             chart_bpb_consistency_weight=0.0,
@@ -252,15 +262,33 @@ def test_chart_bundle_auxiliary_zero_weights_do_not_change_logits_or_loss():
     assert torch.allclose(aux_out["loss"], base_out["loss"], atol=1e-6, rtol=1e-6)
     assert aux_out["loss_bundle_toric_regularizer_total"].item() == 0.0
     assert aux_out["bundle_monomial_projection_one_hotness"].item() == 1.0
+    assert aux_out["bundle_monomial_transport_available"].item() == 1.0
+    assert aux_out["bundle_monomial_transport_permutation_loss"].item() >= 0.0
+    assert 0.0 <= aux_out["bundle_monomial_transport_permutation_one_hotness"].item() <= 1.0
+    assert aux_out["bundle_flat_incidence_available"].item() == 1.0
+    assert aux_out["bundle_flat_incidence_binary_defect"].item() >= 0.0
+    assert 0.0 <= aux_out["bundle_flat_incidence_mean"].item() <= 1.0
+    assert aux_out["loss_bundle_monomial_transport_weighted"].item() == 0.0
+    assert aux_out["loss_bundle_flat_incidence_weighted"].item() == 0.0
     assert aux_out["bundle_chart_count"].item() == 3.0
     assert aux_out["bundle_overlap_pair_count"].item() == 6.0
     assert aux_out["bundle_overlap_triple_count"].item() == 6.0
     assert aux_out["toric_active_row_count"].item() == 5.0
     metadata = aux_out["chart_bundle_transport_metadata"]
+    assert metadata["schema_version"] == "tropicalgt.chart_bundle_transport_metadata.v1"
     assert metadata["available"] is True
     assert metadata["chart_ids"] == ["chart_00", "chart_01", "chart_02"]
     assert {row["id"] for row in metadata["overlap_pairs"]} >= {"chart_00__to__chart_01", "chart_01__to__chart_02"}
     assert metadata["overlap_triples"][0]["pair_ids"]
+    transport_contract = metadata["monomial_transport_contract"]
+    assert transport_contract["schema_version"] == "tropicalgt.monomial_transport_head.v1"
+    assert transport_contract["permutation_representation"] == "chart_permutation_logits_on_ordered_chart_pairs"
+    assert transport_contract["no_proxy_or_fallback"] is True
+    assert len(transport_contract["transport_ids"]) == 6
+    matroid_contract = metadata["bundle_matroid_contract"]
+    assert matroid_contract["schema_version"] == "tropicalgt.bundle_matroid_flat_incidence.v1"
+    assert matroid_contract["flat_incidence_shape"] == [3, 5]
+    assert matroid_contract["no_proxy_or_fallback"] is True
     toric_cert = metadata["toric_embedding_certificate"]
     assert toric_cert["available"] is False
     assert toric_cert["status"] == "uncertified_activation_chart"
@@ -309,8 +337,10 @@ def test_chart_bundle_auxiliary_positive_weights_change_loss_not_logits():
             bundle_num_charts=4,
             toric_num_active_rows=6,
             bundle_transport_weight=0.0,
+            bundle_monomial_transport_weight=0.0,
             bundle_cocycle_weight=0.0,
             bundle_flat_rank_weight=0.0,
+            bundle_flat_incidence_weight=0.0,
             toric_normal_fan_weight=0.0,
             graphcg_toric_cell_agreement_weight=0.0,
             chart_bpb_consistency_weight=0.0,
@@ -319,7 +349,9 @@ def test_chart_bundle_auxiliary_positive_weights_change_loss_not_logits():
     )
     zero_out = model(input_ids, graph_batch, target_ids)
     model.config.bundle_transport_weight = 0.05
+    model.config.bundle_monomial_transport_weight = 0.01
     model.config.bundle_cocycle_weight = 0.02
+    model.config.bundle_flat_incidence_weight = 0.01
     model.config.toric_normal_fan_weight = 0.03
     model.config.chart_bpb_consistency_weight = 0.04
     model.config.bundle_atom_stability_weight = 0.01
@@ -328,6 +360,8 @@ def test_chart_bundle_auxiliary_positive_weights_change_loss_not_logits():
     assert weighted_out["loss_bundle_toric_regularizer_total"].item() >= 0.0
     assert weighted_out["loss"].item() >= zero_out["loss"].item()
     assert weighted_out["bundle_transport_l1"].item() >= 0.0
+    assert weighted_out["loss_bundle_monomial_transport_weighted"].item() >= 0.0
+    assert weighted_out["loss_bundle_flat_incidence_weighted"].item() >= 0.0
     assert weighted_out["bundle_cocycle_defect"].item() >= 0.0
     assert weighted_out["toric_activation_cell_margin_loss"].item() >= 0.0
     assert torch.allclose(weighted_out["toric_normal_fan_loss"], weighted_out["toric_activation_cell_margin_loss"])
