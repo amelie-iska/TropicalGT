@@ -363,3 +363,11 @@
 - Added a bounded `artifact_inventory` section to each 5K active training contract. It records the output directory, report path, recent periodic step directories, latest `got_audit` directory, bounded HTML/JSON/PNG/SVG/MD artifact paths, advanced sidecar paths, existing report visualizations, and ready-to-run interactive audit validator commands.
 - The inventory is path-only and explicitly does not copy, stage, or commit generated artifacts; it is meant to guide the Codex/Galileo post-5K review of metrics, sidecars, topological/geometric/algebraic visualizations, and restart evidence.
 - Verification: `python -m py_compile TropicalGT-I/scripts/parameter_golf_codex_review_loop.py` passed; `PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_parameter_golf_review_loop.py -q` returned `3 passed`.
+
+## Iteration 45: Training Step Gate Monitor
+
+- Added `TropicalGT-I/scripts/monitor_training_step_gate.py`, a small detached-safe monitor for long TropicalGT-I training runs. It parses the live TQDM log for the latest completed step, records a bounded JSON status file on each poll, exits on fatal markers or a dead process, and sends `SIGTERM` to the configured PID only when the parsed step reaches the requested gate.
+- The monitor supports `--target-step 5000`, `--record`, `--poll-seconds`, `--signal TERM|INT`, `--once`, and `--dry-run`, so post-5K reviews can be coordinated without modifying the already-running b59 training process.
+- Added focused tests for TQDM step parsing, fatal marker detection, once-mode status recording, and dry-run target handling.
+- Verification: `python -m py_compile TropicalGT-I/scripts/monitor_training_step_gate.py` passed; `PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_training_step_gate_monitor.py -q` returned `4 passed`.
+- Live b59 status during this pass: PID `73189` remained alive around step `1194`, latest train loss/NLL around `1.229/1.206`, with no fatal marker observed. The 5K stop record will be written under `TropicalGT-I/outputs/training_stop_records/` and left untracked.

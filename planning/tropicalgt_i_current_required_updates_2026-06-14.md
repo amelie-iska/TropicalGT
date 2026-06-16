@@ -4,8 +4,8 @@ This checklist merges the browser/photo review, the current active training stat
 
 ## 1. Active Training and BPB Priority
 
-- Keep `tropicalgt_i_pg_bpb_step0_full24b_b59_20260616T001122Z_fresh_bpb112_5k_gate` alive until at least step 5K unless it crashes, OOMs, or produces nonfinite/invalid losses. Current detached launch PID at last check: `73189`; W&B run id: `itxgxj40`; run URL: `https://wandb.ai/amelie-iska-math/TropicalGT-I/runs/itxgxj40`; config: `TropicalGT-I/outputs/launch_configs/tropicalgt_i_pg_bpb_step0_full24b_b59_20260616T001122Z_fresh_bpb112_5k_gate.json`; output dir: `TropicalGT-I/outputs/tropicalgt_i_pg_bpb_step0_full24b_b59_20260616T001122Z_fresh_bpb112_5k_gate`.
-- Do not restart before 5K merely because early metrics are noisy. At 5K, the Galileo Codex worker should run the analysis/eval/visualization sidecars, inspect BPB, graph-BPB, NLL, advanced topology/geometric/algebraic diagnostics, and then restart from step 0 only with evidence-backed hyperparameter/config adjustments.
+- Keep `tropicalgt_i_pg_bpb_step0_full24b_b59_20260616T001122Z_fresh_bpb112_5k_gate` alive until at least step 5K unless it crashes, OOMs, or produces nonfinite/invalid losses. Current detached launch PID at last check: `73189`; W&B run id: `itxgxj40`; run URL: `https://wandb.ai/amelie-iska-math/TropicalGT-I/runs/itxgxj40`; config: `TropicalGT-I/outputs/launch_configs/tropicalgt_i_pg_bpb_step0_full24b_b59_20260616T001122Z_fresh_bpb112_5k_gate.json`; output dir: `TropicalGT-I/outputs/tropicalgt_i_pg_bpb_step0_full24b_b59_20260616T001122Z_fresh_bpb112_5k_gate`; tested 5K monitor record target: `TropicalGT-I/outputs/training_stop_records/b59_step5000_gate.json`.
+- Do not restart before 5K merely because early metrics are noisy. A tested `monitor_training_step_gate.py` watcher should stop b59 at or after the parsed step `5000`, write the stop record, and then Galileo should run the analysis/eval/visualization sidecars, inspect BPB, graph-BPB, NLL, advanced topology/geometric/algebraic diagnostics, and restart from step 0 only with evidence-backed hyperparameter/config adjustments.
 - Preserve BPB and graph-BPB as primary optimization and promotion gates.
 - Use advanced auxiliaries only when they are zero-default or BPB-gated and ablated: tropical support, GFlowNet GoT rewards, GraphCG, persistence/landscape diagnostics, chart-bundle transports, tropical toric active-cell agreement, and memory retrieval.
 - Track step, VRAM, wall time, train/eval NLL, BPB, graph-BPB, certificate loss, tropical wall-hit rate, support entropy, GraphCG rank, meet-in-the-middle agreement, ROAR/causal decoding path mix, and artifact-generation status.
@@ -188,7 +188,7 @@ Remaining CAS items:
 - CAS package survey: look for Sage, Macaulay2, Singular, RIVET/multipers, polymake, Normaliz, and related packages that compute real multigraded modules, minimal resolutions, Betti tables, Fitting ideals, minors, Buchsbaum-Eisenbud diagnostics, tropical fans, toric varieties, and stable intersections.
 - Maclagan-style toric embedding research direction: investigate whether the transformer graph-state and tropical-attention coordinate system can be embedded into a toric variety via model-derived monomial coordinates, Newton polytopes, fan data, and one dimensional cone data. Any resulting implementation must distinguish theorem-level certified constructions from diagnostic embeddings or visual probes.
 
-_Last updated: 2026-06-16T02:58:00+00:00_
+_Last updated: 2026-06-16T03:05:00+00:00_
 
 
 ## 2026-06-16 Fresh b59 5K Review Gate and Worker Handoff
@@ -200,10 +200,17 @@ _Last updated: 2026-06-16T02:58:00+00:00_
 - Fresh run launch details: PID `73189`, W&B id `itxgxj40`, run URL `https://wandb.ai/amelie-iska-math/TropicalGT-I/runs/itxgxj40`, log `TropicalGT-I/outputs/tropicalgt_i_pg_bpb_step0_full24b_b59_20260616T001122Z_fresh_bpb112_5k_gate/logs/train_nohup_20260616T001158Z.log`. Early log review reached step `112` with latest train loss/NLL around `1.748/1.724`, no traceback, no OOM, and GPU allocation around `17.8` GiB on the RTX 4090.
 - Galileo (`019ecdc9-a3b8-7761-b0e5-36e6adad8e15`) owns the post-5K sidecar: monitor b59 to at least step `5000`, run project analyses/evaluations/visualizations, review metrics and topological/geometric/algebraic artifacts, write `planning/tropicalgt_i_b59_5k_worker_review_2026-06-16.md`, then stop b59 and launch an evidence-backed step-0 restart with adjusted hyperparameters/configs for lower BPB.
 
+
+## 2026-06-16 5K Step Gate Monitor Addendum
+
+- Added and focused-tested `TropicalGT-I/scripts/monitor_training_step_gate.py` plus `TropicalGT-I/tests/test_training_step_gate_monitor.py`.
+- The b59 operational plan is now: keep training alive, run the detached watcher against PID `73189` and the b59 log, terminate only when the parsed step reaches `5000`, then hand the resulting stop record and artifact inventory to Galileo for post-5K review and evidence-backed restart.
+- The monitor writes generated records under `TropicalGT-I/outputs/training_stop_records/`; those records are operational artifacts and should remain untracked.
+
 ## Real Implementations Only Policy
 
 No TropicalGT-I metric, loss, visualization, analogical map, persistence module, free resolution, derived comparison, tropical-cycle diagnostic, or CAS artifact should be presented as a mathematical object unless it is computed from the actual model outputs, graph states, embeddings, probabilities, simplex trees, bifiltrations, or certified CAS/backend output that define that object. Temporary placeholders, synthetic fallback objects, mock charts, fabricated simplices, and convenience stand-ins are not acceptable. When a requested object cannot yet be computed, the artifact must render an explicit unavailable/uncertified state and the training metric must either be disabled or logged under an audit-only unavailable flag. Finite chain-presentation diagnostics may be shown only as chain diagnostics, never as free resolutions. Total-graded or ungraded CAS output may be shown as real CAS output only under its actual grading; it must not be advertised as a multigraded `F2[x_level,x_radius]` free resolution unless the backend certifies that multigraded structure.
 
 Use "one dimensional cone" or "one dimensional cones" as the preferred fan-theoretic language whenever the intended object is a cone of a fan or a cone-indexed filtration datum. Use singular or plural according to ordinary grammar.
 
-_Last updated: 2026-06-16T02:58:00+00:00_
+_Last updated: 2026-06-16T03:05:00+00:00_

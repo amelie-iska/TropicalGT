@@ -366,3 +366,18 @@ Verification:
 - `PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_parameter_golf_review_loop.py -q` -> `3 passed`.
 
 Next sequential item: after b59 reaches 5000, use this inventory to guide the subagent review and step-0 restart; until then continue non-interfering source/audit hardening.
+
+## 2026-06-16 5K Step Gate Monitor Pass
+
+Status: implemented and focused-tested.
+
+Changes made:
+- Added a reusable training step-gate monitor that watches the b59 log and writes a bounded JSON status/stop record.
+- The monitor terminates the configured PID only after the parsed training step reaches `5000`, and otherwise exits early only for fatal markers or a process that dies before the gate.
+- This keeps the user-requested 5K evidence policy operational without changing the already-running training config or fabricating a review boundary.
+
+Verification:
+- `python -m py_compile TropicalGT-I/scripts/monitor_training_step_gate.py` passed.
+- `PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_training_step_gate_monitor.py -q` -> `4 passed`.
+
+Next sequential item: launch the 5K watcher for b59, notify Galileo of the new source commit, then keep hardening non-interfering audit paths while b59 trains.
