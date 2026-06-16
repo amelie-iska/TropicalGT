@@ -1433,6 +1433,25 @@ def test_certified_cas_diagnostic_tables_require_explicit_structured_certificate
         "is_independent_certificate": False,
         "paper_method_note": "For an exact finite free complex, Buchsbaum-Eisenbud rank equalities apply.",
     }
+    real_with_structured["cas_artifacts"]["grade_depth_regular_diagnostics"] = {
+        "available": True,
+        "backend": "Macaulay2",
+        "source": "Macaulay2 codim/depth/rank ideals on certified resolution differentials",
+        "ambient_ring_dimension": 2,
+        "rank_ideal_diagnostics": [
+            {
+                "homological_degree": 1,
+                "rank": 1,
+                "rank_ideal": "ideal(x_level)",
+                "rank_ideal_codim": 1,
+                "rank_ideal_depth": 1,
+                "grade_lower_bound_holds": True,
+            }
+        ],
+        "regular_element_certificate_available": False,
+        "regular_element_certificate_reason": "No independent regular-sequence certificate is substituted.",
+        "not_a_resolution_certificate_by_itself": True,
+    }
 
     _, structured_ideal_columns = _m2_ideal_diagnostic_columns({"real_free_resolution": real_with_structured})
     ideal_rows = list(zip(*structured_ideal_columns))
@@ -1445,6 +1464,8 @@ def test_certified_cas_diagnostic_tables_require_explicit_structured_certificate
     assert any(row[0] == "BEMultipliers" and row[2] == "1x1" for row in be_rows)
     assert any(row[0] == "BEMultipliers contract" and "substitute=False" in row[2] and "resolution_backend=False" in row[3] for row in be_rows)
     assert any(row[0] == "BE rank condition" and row[1] == "d1" and "rank=1" in row[2] for row in be_rows)
+    assert any(row[0] == "grade/depth diagnostic" and row[1] == "d1" and "codim=1" in row[2] and "regular_element_certificate=False" in row[3] for row in be_rows)
+    assert any(row[0] == "regular-element note" and row[1] == "CAS grade/depth" for row in be_rows)
     assert any(row[0] == "method note" and row[1] == "Buchsbaum-Eisenbud" for row in be_rows)
 
     display = _cas_real_resolution_display(real_with_structured)
@@ -1452,6 +1473,7 @@ def test_certified_cas_diagnostic_tables_require_explicit_structured_certificate
     assert display["buchsbaum_eisenbud_diagnostics"]["safe_to_render_multiplier_output"] is True
     assert display["buchsbaum_eisenbud_diagnostics"]["is_resolution_backend"] is False
     assert display["buchsbaum_eisenbud_diagnostics"]["safe_to_substitute_for_resolution"] is False
+    assert display["grade_depth_regular_diagnostics"]["rank_ideal_diagnostics"][0]["rank_ideal_codim"] == 1
     cert_headers, cert_columns = _m2_certificate_columns({"real_free_resolution": real_with_structured}, {"module_ring": "F2[x_level,x_radius]"})
     assert cert_headers == ["diagnostic", "value"]
     cert_rows = dict(zip(cert_columns[0], cert_columns[1]))
@@ -1462,6 +1484,8 @@ def test_certified_cas_diagnostic_tables_require_explicit_structured_certificate
     assert cert_rows["BEMultipliers safe render"] == "True"
     assert cert_rows["BEMultipliers is resolution backend"] == "False"
     assert cert_rows["BEMultipliers substitute for resolution"] == "False"
+    assert "rank_ideal_codim" in cert_rows["grade/depth diagnostics"]
+    assert cert_rows["regular-element certificate"] == "False"
 
 
 def test_derived_comparison_requires_matching_certified_cas_artifacts():

@@ -195,7 +195,7 @@ git diff --check
 
 ## 2026-06-16 Sequential CAS Update: Structured Fitting/Minor And BE Rank Diagnostics
 
-Status: complete for the structured diagnostic checkpoint; still incomplete for full grade/depth/regular-element certification beyond what the CAS backend explicitly emits.
+Status: complete for structured Fitting/minor, Buchsbaum-Eisenbud rank, and CAS-emitted grade/depth diagnostic checkpoints. Independent regular-element certification remains unavailable unless a backend explicitly emits such a certificate.
 
 - Added structured `ideal_diagnostics` for real CAS Fitting ideals and determinantal minor ideals. Rows record fitting index, inferred determinantal order for the displayed presentation matrix, ideal text, source backend, and the method note `Fitt_j(coker(PM)) = I_{rows-j}(PM)`.
 - Added `buchsbaum_eisenbud_rank_conditions` computed from certified free-module ranks and differential shapes. These rows expose BE-style nonnegative rank-condition sanity checks while explicitly marking `is_independent_certificate=false`; exactness/minimality still come only from the CAS certificate.
@@ -645,6 +645,26 @@ Verification:
 PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m py_compile TropicalGT-I/src/tropicalgt/ablation.py TropicalGT-I/src/tropicalgt/run.py TropicalGT-I/scripts/run_bpb_ablation_grid.py TropicalGT-I/tests/test_bpb_ablation.py TropicalGT-I/tests/test_bpb_ablation_grid.py
 PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_bpb_ablation.py TropicalGT-I/tests/test_bpb_ablation_grid.py TropicalGT-I/tests/test_training_resume.py -q
 # 6 passed in 2.89s
+git diff --check
+# clean
+```
+
+## 2026-06-16 Sequential CAS Update: Grade/Depth Diagnostic Certificate Surface
+
+Status: complete for CAS-emitted grade/depth diagnostics; independent regular-element certification remains unavailable unless emitted by the backend.
+
+- Macaulay2 script generation now emits `grade_depth_regular_diagnostics_begin/end` around rank-ideal diagnostics for certified resolution differentials.
+- Parsed diagnostics include ambient ring dimension, differential rank, rank ideal, rank-ideal codimension, rank-ideal depth, and grade lower-bound status where Macaulay2 emits those values.
+- Certificate summaries now expose `grade_depth_regular_diagnostics_available` and `regular_element_certificate_available`.
+- Visualization payloads and Macaulay2-style tables now render grade/depth diagnostics and a regular-element note. These diagnostics are explicit CAS output and never replace the free-resolution certificate or a regular-sequence certificate.
+- Backends or certificates without the block remain explicitly unavailable with reason text; no rank-only inference is used.
+
+Verification:
+
+```bash
+PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m py_compile TropicalGT-I/src/tropicalgt/cas_free_resolution.py TropicalGT-I/src/tropicalgt/visualization.py TropicalGT-I/tests/test_algebraic_persistence.py TropicalGT-I/tests/test_simplicial_visualization.py
+PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_algebraic_persistence.py TropicalGT-I/tests/test_simplicial_visualization.py -q
+# 64 passed in 5.68s
 git diff --check
 # clean
 ```

@@ -4214,6 +4214,7 @@ def _cas_real_resolution_display(real: Mapping[str, Any]) -> Dict[str, Any]:
     ideal_diagnostics = artifacts.get("ideal_diagnostics") if isinstance(artifacts.get("ideal_diagnostics"), Mapping) else summary.get("ideal_diagnostics", {})
     be_artifacts = artifacts.get("buchsbaum_eisenbud_diagnostics") if isinstance(artifacts.get("buchsbaum_eisenbud_diagnostics"), Mapping) else {}
     be_rank_conditions = artifacts.get("buchsbaum_eisenbud_rank_conditions") if isinstance(artifacts.get("buchsbaum_eisenbud_rank_conditions"), Mapping) else summary.get("buchsbaum_eisenbud_rank_conditions", {})
+    grade_depth_regular = artifacts.get("grade_depth_regular_diagnostics") if isinstance(artifacts.get("grade_depth_regular_diagnostics"), Mapping) else summary.get("grade_depth_regular_diagnostics", {})
     certificate_summary = artifacts.get("certificate_summary") if isinstance(artifacts.get("certificate_summary"), Mapping) else {}
     return {
         "available": bool(modules),
@@ -4228,6 +4229,7 @@ def _cas_real_resolution_display(real: Mapping[str, Any]) -> Dict[str, Any]:
         "minors": dict(minors) if isinstance(minors, Mapping) else {},
         "ideal_diagnostics": dict(ideal_diagnostics) if isinstance(ideal_diagnostics, Mapping) else {},
         "buchsbaum_eisenbud_rank_conditions": dict(be_rank_conditions) if isinstance(be_rank_conditions, Mapping) else {},
+        "grade_depth_regular_diagnostics": dict(grade_depth_regular) if isinstance(grade_depth_regular, Mapping) else {},
         "certificate_summary": dict(certificate_summary) if isinstance(certificate_summary, Mapping) else {},
         "buchsbaum_eisenbud_diagnostics": {
             "minimality_certified": bool(real.get("minimality_certified")),
@@ -4420,8 +4422,10 @@ def _m2_be_diagnostic_columns(m2: Mapping[str, Any]) -> Tuple[List[str], List[Li
         return ["diagnostic", "object", "value", "certificate/scope"], [["unavailable"], [""], [""], ["no certified CAS resolution; Buchsbaum-Eisenbud diagnostics are unavailable"]]
     res_be_raw = resolution.get("buchsbaum_eisenbud_diagnostics")
     be_rank_raw = resolution.get("buchsbaum_eisenbud_rank_conditions")
+    grade_depth_raw = resolution.get("grade_depth_regular_diagnostics")
     res_be = res_be_raw if isinstance(res_be_raw, Mapping) else {}
     be_rank = be_rank_raw if isinstance(be_rank_raw, Mapping) else {}
+    grade_depth = grade_depth_raw if isinstance(grade_depth_raw, Mapping) else {}
     rows: list[tuple[str, str, str, str]] = []
     if res_be:
         if "exactness_certified" in res_be:
@@ -4441,6 +4445,18 @@ def _m2_be_diagnostic_columns(m2: Mapping[str, Any]) -> Tuple[List[str], List[Li
     shape_bounds = be_rank.get("shape_bounds_hold")
     for name in sorted(set(image_ranks) | set(shapes)):
         rows.append(("BE rank condition", str(name), f"rank={image_ranks.get(name, 'unavailable')}; shape={shapes.get(name, 'unavailable')}", f"shape_bounds_hold={shape_bounds}; independent_certificate={be_rank.get('is_independent_certificate', False)}"))
+    rank_ideal_rows = grade_depth.get("rank_ideal_diagnostics", []) if isinstance(grade_depth.get("rank_ideal_diagnostics"), list) else []
+    for row in rank_ideal_rows:
+        if not isinstance(row, Mapping):
+            continue
+        rows.append((
+            "grade/depth diagnostic",
+            f"d{row.get('homological_degree', '')}",
+            f"rank={row.get('rank', 'unavailable')}; codim={row.get('rank_ideal_codim', 'unavailable')}; depth={row.get('rank_ideal_depth', 'unavailable')}",
+            f"grade_lower_bound_holds={row.get('grade_lower_bound_holds', 'unavailable')}; regular_element_certificate={grade_depth.get('regular_element_certificate_available', False)}",
+        ))
+    if grade_depth.get("regular_element_certificate_reason"):
+        rows.append(("regular-element note", "CAS grade/depth", "not substituted", str(grade_depth.get("regular_element_certificate_reason"))))
     if be_rank.get("paper_method_note"):
         rows.append(("method note", "Buchsbaum-Eisenbud", "not inferred as exactness", str(be_rank.get("paper_method_note"))))
     if not rows:
@@ -4463,6 +4479,7 @@ def _m2_certificate_columns(m2: Mapping[str, Any], bifiltration: Mapping[str, An
     res_be = resolution.get("buchsbaum_eisenbud_diagnostics", {}) if isinstance(resolution.get("buchsbaum_eisenbud_diagnostics"), Mapping) else {}
     ideal_diag = resolution.get("ideal_diagnostics", {}) if isinstance(resolution.get("ideal_diagnostics"), Mapping) else {}
     be_rank = resolution.get("buchsbaum_eisenbud_rank_conditions", {}) if isinstance(resolution.get("buchsbaum_eisenbud_rank_conditions"), Mapping) else {}
+    grade_depth = resolution.get("grade_depth_regular_diagnostics", {}) if isinstance(resolution.get("grade_depth_regular_diagnostics"), Mapping) else {}
     cert_summary = resolution.get("certificate_summary", {}) if isinstance(resolution.get("certificate_summary"), Mapping) else {}
     items = [
         ("ring", resolution.get("ring", m2.get("ring", bifiltration.get("module_ring", "F2[x_level,x_radius]")))),
@@ -4485,6 +4502,8 @@ def _m2_certificate_columns(m2: Mapping[str, Any], bifiltration: Mapping[str, An
         ("BEMultipliers status", res_be.get("bemultipliers_status", "unreported")),
         ("aMultiplier(1) shape", res_be.get("a_multiplier_1_shape", "")),
         ("BE rank conditions", _json_clip(be_rank, 260)),
+        ("grade/depth diagnostics", _json_clip(grade_depth, 520)),
+        ("regular-element certificate", grade_depth.get("regular_element_certificate_available", False)),
         ("ideal diagnostics", _json_clip(ideal_diag, 260)),
         ("not full persistence-module resolution", resolution.get("not_full_persistence_module_resolution", True)),
         ("derived equivalence certified", cert.get("derived_equivalence_certified", False)),

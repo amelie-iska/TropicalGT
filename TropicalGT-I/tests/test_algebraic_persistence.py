@@ -365,6 +365,9 @@ def test_singular_certified_result_structures_ungraded_betti_rows_without_multig
     assert ideal_diag["fitting_invariants"][0]["determinantal_order"] == 1
     assert ideal_diag["determinantal_minors"][0]["minor_order"] == 1
     assert ideal_diag["not_a_resolution_certificate_by_itself"] is True
+    grade_depth = real["cas_artifacts"]["grade_depth_regular_diagnostics"]
+    assert grade_depth["available"] is False
+    assert "did not include" in grade_depth["reason"]
     be_rank = real["cas_artifacts"]["buchsbaum_eisenbud_rank_conditions"]
     assert be_rank["available"] is True
     assert be_rank["free_module_ranks_by_homological_degree"] == {"0": 2, "1": 1}
@@ -515,6 +518,24 @@ def test_certified_cas_result_surfaces_buchsbaum_eisenbud_diagnostics():
         "minors_begin",
         "minors_1=ideal(x_level,x_radius)",
         "minors_end",
+        "grade_depth_regular_diagnostics_begin",
+        "backend=Macaulay2",
+        "source=Macaulay2 codim/depth/rank ideals on certified resolution differentials",
+        "ambient_ring_dimension=2",
+        "d1_rank=1",
+        "d1_rank_ideal=ideal(x_level,x_radius)",
+        "d1_rank_ideal_codim=2",
+        "d1_rank_ideal_depth=1",
+        "d1_grade_lower_bound_holds=true",
+        "d2_rank=1",
+        "d2_rank_ideal=ideal(x_level,x_radius)",
+        "d2_rank_ideal_codim=2",
+        "d2_rank_ideal_depth=1",
+        "d2_grade_lower_bound_holds=true",
+        "regular_element_certificate_available=false",
+        "regular_element_certificate_reason=Macaulay2 emitted codim/depth diagnostics but no independent regular-sequence certificate is substituted",
+        "not_a_resolution_certificate_by_itself=true",
+        "grade_depth_regular_diagnostics_end",
         "buchsbaum_eisenbud_diagnostics_begin",
         "backend_diagnostics_available=true",
         "exactness_certified=true",
@@ -572,6 +593,30 @@ def test_certified_cas_result_surfaces_buchsbaum_eisenbud_diagnostics():
     assert ideal_diag["presentation_shape"] == [1, 2]
     assert ideal_diag["fitting_invariants"][0]["method"].startswith("Fitt_j")
     assert ideal_diag["determinantal_minors"][0]["minor_order"] == 1
+    grade_depth = real["cas_artifacts"]["grade_depth_regular_diagnostics"]
+    assert grade_depth["available"] is True
+    assert grade_depth["ambient_ring_dimension"] == 2
+    assert grade_depth["regular_element_certificate_available"] is False
+    assert grade_depth["not_a_resolution_certificate_by_itself"] is True
+    assert grade_depth["rank_ideal_diagnostics"] == [
+        {
+            "homological_degree": 1,
+            "rank": 1,
+            "rank_ideal": "ideal(x_level,x_radius)",
+            "rank_ideal_codim": 2,
+            "rank_ideal_depth": 1,
+            "grade_lower_bound_holds": True,
+        },
+        {
+            "homological_degree": 2,
+            "rank": 1,
+            "rank_ideal": "ideal(x_level,x_radius)",
+            "rank_ideal_codim": 2,
+            "rank_ideal_depth": 1,
+            "grade_lower_bound_holds": True,
+        },
+    ]
+    assert "never replace" in grade_depth["no_proxy_policy"]
     be_rank = real["cas_artifacts"]["buchsbaum_eisenbud_rank_conditions"]
     assert be_rank["available"] is True
     assert be_rank["free_module_ranks_by_homological_degree"] == {"0": 1, "1": 2, "2": 1}
@@ -580,6 +625,9 @@ def test_certified_cas_result_surfaces_buchsbaum_eisenbud_diagnostics():
     assert be_rank["paper_method_note"].startswith("For an exact finite free complex")
     assert real["free_resolution_summary"]["ideal_diagnostics"] == ideal_diag
     assert real["free_resolution_summary"]["buchsbaum_eisenbud_rank_conditions"] == be_rank
+    assert real["free_resolution_summary"]["grade_depth_regular_diagnostics"] == grade_depth
+    assert cert["grade_depth_regular_diagnostics_available"] is True
+    assert cert["regular_element_certificate_available"] is False
     assert real["free_resolution_summary"]["betti_table_rows"] == [
         {
             "homological_degree": 0,
@@ -633,6 +681,9 @@ def test_certified_cas_result_surfaces_buchsbaum_eisenbud_diagnostics():
     m2_script = cas_free_resolution.build_macaulay2_script(schema)
     singular_script = build_singular_script(schema)
     sage_script = cas_free_resolution.build_sage_python_script(schema)
+    assert "grade_depth_regular_diagnostics_begin" in m2_script
+    assert "rank_ideal_codim" in m2_script
+    assert "regular_element_certificate_available=false" in m2_script
     assert "buchsbaum_eisenbud_diagnostics_begin" in m2_script
     assert "BEMultipliers" in m2_script
     assert "aMultiplier(1,C,ComputeRanks=>true)" in m2_script

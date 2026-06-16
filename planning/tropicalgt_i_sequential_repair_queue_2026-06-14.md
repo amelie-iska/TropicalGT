@@ -707,3 +707,11 @@ The live item-by-item repair inventory is maintained in `planning/tropicalgt_i_c
 - [x] Added an `advanced_auxiliary_promotion_gate` to BPB ablation reports. It promotes no nonzero chart-bundle/toric coefficient unless matched-seed runs have the same final step and both held-out eval BPB and eval graph-BPB improve against baseline.
 - [x] Kept no-proxy/no-fallback semantics: missing deltas, unmatched seeds/steps, telemetry-only rows, or unrelated variants are blocked or unavailable, not interpreted as wins.
 - [x] Focused verification passed: ablation report/grid plus training resume tests `6 passed`.
+
+### Current Objective Update - CAS Grade/Depth Diagnostic Pass
+
+- [x] Added a Macaulay2 `grade_depth_regular_diagnostics` block that emits rank ideals, codimension, depth, and grade lower-bound checks for certified resolution differentials when the backend can compute them.
+- [x] Parsed grade/depth diagnostics into `cas_artifacts`, `certificate_summary`, and `free_resolution_summary` without treating them as a substitute for exactness, minimality, or a regular-sequence certificate.
+- [x] Rendered grade/depth and regular-element availability in the Macaulay2-style browser diagnostic and certificate tables.
+- [x] Preserved no-proxy behavior for Singular/Sage or older certificates that do not emit the block: grade/depth diagnostics are explicit unavailable states, not inferred from ranks.
+- [x] Focused verification passed: algebraic persistence plus visualization tests `64 passed`.

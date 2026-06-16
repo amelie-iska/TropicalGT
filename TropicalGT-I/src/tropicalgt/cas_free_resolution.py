@@ -567,6 +567,7 @@ def build_macaulay2_script(module_schema: dict[str, Any]) -> str:
             "print \"minors_begin\"",
             *minor_lines,
             "print \"minors_end\"",
+            *_macaulay2_grade_depth_regular_diagnostics_lines(),
             *_macaulay2_be_diagnostics_lines(
                 exactness_expression="okExact",
                 minimality_expression="true",
@@ -610,6 +611,38 @@ def _macaulay2_bemultipliers_skip_reason(rows: int, cols: int, determinant_order
         reasons.append(f"determinantal_order_{determinant_order}_above_bem_limit_{max_order}")
     return ";".join(reasons) if reasons else ""
 
+
+def _macaulay2_grade_depth_regular_diagnostics_lines() -> list[str]:
+    return [
+        'print "grade_depth_regular_diagnostics_begin"',
+        'print "backend=Macaulay2"',
+        'print "source=Macaulay2 codim/depth/rank ideals on certified resolution differentials"',
+        'print concatenate("ambient_ring_dimension=", toString dim R)',
+        'for i from 1 to length C do (',
+        '  D = C.dd_i;',
+        '  r = rank D;',
+        '  print concatenate("d", toString i, "_rank=", toString r);',
+        '  if r > 0 then (',
+        '    I = minors(r, D);',
+        '    print concatenate("d", toString i, "_rank_ideal=", replace("\n", " ", toString I));',
+        '    codimText = try toString codim I else "unavailable_cas_codim_failed";',
+        '    depthText = try toString depth I else "unavailable_cas_depth_failed";',
+        '    gradeText = try toString(codim I >= i) else "unavailable_cas_grade_check_failed";',
+        '    print concatenate("d", toString i, "_rank_ideal_codim=", codimText);',
+        '    print concatenate("d", toString i, "_rank_ideal_depth=", depthText);',
+        '    print concatenate("d", toString i, "_grade_lower_bound_holds=", gradeText);',
+        '  ) else (',
+        '    print concatenate("d", toString i, "_rank_ideal=unavailable_zero_rank_differential");',
+        '    print concatenate("d", toString i, "_rank_ideal_codim=unavailable_zero_rank_differential");',
+        '    print concatenate("d", toString i, "_rank_ideal_depth=unavailable_zero_rank_differential");',
+        '    print concatenate("d", toString i, "_grade_lower_bound_holds=unavailable_zero_rank_differential");',
+        '  );',
+        ')',
+        'print "regular_element_certificate_available=false"',
+        'print "regular_element_certificate_reason=Macaulay2 emitted codim/depth diagnostics for rank ideals, but no independent regular-sequence certificate is substituted"',
+        'print "not_a_resolution_certificate_by_itself=true"',
+        'print "grade_depth_regular_diagnostics_end"',
+    ]
 
 def _macaulay2_be_diagnostics_lines(
     *,
@@ -1048,12 +1081,15 @@ def _certified_result(module_schema: dict[str, Any], backend_result: dict[str, A
         exactness_certified=exact,
         minimality_certified=minimal,
     )
+    grade_depth_regular = _parse_grade_depth_regular_diagnostics(parsed, backend=backend)
     if isinstance(free_resolution_summary, dict) and free_resolution_summary.get("available"):
         free_resolution_summary = dict(free_resolution_summary)
         if ideal_diagnostics.get("available"):
             free_resolution_summary["ideal_diagnostics"] = ideal_diagnostics
         if be_rank_conditions.get("available"):
             free_resolution_summary["buchsbaum_eisenbud_rank_conditions"] = be_rank_conditions
+        if grade_depth_regular.get("available"):
+            free_resolution_summary["grade_depth_regular_diagnostics"] = grade_depth_regular
     certificate_summary = {
         "available": True,
         "backend": backend,
@@ -1080,6 +1116,8 @@ def _certified_result(module_schema: dict[str, Any], backend_result: dict[str, A
         "bemultipliers_status": str(be_diagnostics.get("bemultipliers_status", "unreported")),
         "bemultipliers_safe_to_render_multiplier_output": bool(be_diagnostics.get("safe_to_render_multiplier_output")),
         "bemultipliers_is_resolution_backend": False,
+        "grade_depth_regular_diagnostics_available": bool(grade_depth_regular.get("available")),
+        "regular_element_certificate_available": bool(grade_depth_regular.get("regular_element_certificate_available")),
         "no_proxy_policy": "Only exact CAS certificates with parsed free-resolution summaries are rendered as resolutions; diagnostics alone are not substituted.",
     }
     return {
@@ -1109,6 +1147,7 @@ def _certified_result(module_schema: dict[str, Any], backend_result: dict[str, A
             "ideal_diagnostics": ideal_diagnostics,
             "buchsbaum_eisenbud_diagnostics": be_diagnostics,
             "buchsbaum_eisenbud_rank_conditions": be_rank_conditions,
+            "grade_depth_regular_diagnostics": grade_depth_regular,
             "certificate_summary": certificate_summary,
             "singular_resolution_text": singular_resolution_text,
             "sage_resolution_text": sage_resolution_text,
@@ -1344,6 +1383,51 @@ def _buchsbaum_eisenbud_rank_condition_diagnostics(
             "rank(F_i)=rank(d_i)+rank(d_{i+1}); regular-element/grade conditions and multipliers "
             "are not inferred from these ranks and must come from the CAS diagnostic block."
         ),
+    }
+
+
+def _parse_grade_depth_regular_diagnostics(parsed: dict[str, Any], *, backend: str) -> dict[str, Any]:
+    raw = str(parsed.get("grade_depth_regular_diagnostics", "") or "")
+    values = _parse_key_value_lines(raw)
+    if not values:
+        return {
+            "available": False,
+            "backend": backend,
+            "reason": "CAS output did not include a grade/depth/regular diagnostics block; no grade, depth, or regular-element evidence is inferred.",
+            "regular_element_certificate_available": False,
+            "not_a_resolution_certificate_by_itself": True,
+        }
+    grouped: dict[int, dict[str, Any]] = {}
+    for key, value in values.items():
+        if not key.startswith("d") or "_" not in key:
+            continue
+        prefix, field = key.split("_", 1)
+        degree = _parse_int_or_none(prefix[1:])
+        if degree is None:
+            continue
+        row = grouped.setdefault(degree, {"homological_degree": degree})
+        if field == "rank":
+            row["rank"] = _parse_int_or_none(value) if _parse_int_or_none(value) is not None else value
+        elif field == "rank_ideal":
+            row["rank_ideal"] = value
+        elif field == "rank_ideal_codim":
+            row["rank_ideal_codim"] = _parse_int_or_none(value) if _parse_int_or_none(value) is not None else value
+        elif field == "rank_ideal_depth":
+            row["rank_ideal_depth"] = _parse_int_or_none(value) if _parse_int_or_none(value) is not None else value
+        elif field == "grade_lower_bound_holds":
+            parsed_bool = _parse_bool(value, default=None)
+            row["grade_lower_bound_holds"] = parsed_bool if parsed_bool is not None else value
+    rows = [grouped[key] for key in sorted(grouped)]
+    return {
+        "available": True,
+        "backend": backend,
+        "source": values.get("source", f"{backend} grade/depth diagnostics"),
+        "ambient_ring_dimension": _parse_int_or_none(values.get("ambient_ring_dimension")),
+        "rank_ideal_diagnostics": rows,
+        "regular_element_certificate_available": _parse_bool(values.get("regular_element_certificate_available")),
+        "regular_element_certificate_reason": values.get("regular_element_certificate_reason", "not emitted by CAS"),
+        "not_a_resolution_certificate_by_itself": _parse_bool(values.get("not_a_resolution_certificate_by_itself"), default=True),
+        "no_proxy_policy": "Grade/depth/rank-ideal diagnostics are explicit CAS output and never replace the exact free-resolution certificate or a regular-sequence certificate.",
     }
 
 
@@ -1914,7 +1998,7 @@ def _parse_tagged_output(stdout: str) -> dict[str, str] | None:
         if "=" in line:
             key, value = line.split("=", 1)
             parsed[key.strip()] = value.strip()
-    for key in ("betti_table", "singular_resolution_text", "macaulay2_free_modules", "macaulay2_differentials", "fitting_ideals", "minors", "buchsbaum_eisenbud_diagnostics"):
+    for key in ("betti_table", "singular_resolution_text", "macaulay2_free_modules", "macaulay2_differentials", "fitting_ideals", "minors", "grade_depth_regular_diagnostics", "buchsbaum_eisenbud_diagnostics"):
         nested = _extract_tagged_block(block, f"{key}_begin", f"{key}_end")
         if nested is not None:
             parsed[key] = nested
