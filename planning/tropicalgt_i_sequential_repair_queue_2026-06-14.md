@@ -125,7 +125,7 @@
 - [x] Research Macaulay2 `Tropical` package, Sage tropical polynomial/variety APIs, Maclagan tropical schemes in toric varieties, and `references/1710.10651v2.pdf`.
 - [x] Implement toric embeddings only where the embedding is mathematically correct and tool-backed.
 - [x] Use "one dimensional cone(s)" terminology in the paper/plans where rays/cone generators are meant.
-- [ ] Add scheme/sheaf-theoretic and vector-bundle material to `TropicalGT-I/assets/tropicalgt_neurips_research_paper.tex` as implementations mature.
+- [x] Add scheme/sheaf-theoretic and vector-bundle material to `TropicalGT-I/assets/tropicalgt_neurips_research_paper.tex` as implementations mature.
 - [ ] Distinguish scoped monomial-ideal exponent-chart certificates from full tropical-variety embeddings into toric varieties.
 
 ### 12. Training, BPB, and W&B
@@ -464,4 +464,15 @@ The live item-by-item repair inventory is maintained in `planning/tropicalgt_i_c
 - [x] Verification completed: terminology audit found no visible hyphenated one-dimensional prose and no stale `ray-only`/`ray-filtration` planning phrases; lightweight TeX environment-balance check passed.
 - [x] Remote `pdflatex` compile was attempted into `/tmp/tropicalgt_paper_compile`; it is blocked by missing TeX dependency `mathtools.sty`, so no PDF artifact was produced or staged.
 - [x] b60 latest checked training state reached step `2005` with train loss/NLL `1.191/1.167`; trainer PID `378962` and watcher PID `379304` remain alive under the step-5000 gate.
-- [ ] Next Section 11 item: add scheme/sheaf-theoretic and vector-bundle material to `TropicalGT-I/assets/tropicalgt_neurips_research_paper.tex` as implementations mature.
+- [x] Next Section 11 item completed: paper now records the certified-sidecar boundary for finite toric ideals and scheme/sheaf/vector-bundle diagnostics, with unavailable states required until exact fan, grading, module-presentation, backend-attempt, and certificate-hash data exist.
+
+### Current Objective Update - Scheme/Sheaf Paper Scope Pass
+
+- [x] Updated `TropicalGT-I/assets/tropicalgt_neurips_research_paper.tex` to tie finite toric sidecars to the real Macaulay2 `Quasidegrees` `toricIdeal(A,R)` certificate boundary.
+- [x] Documented the current scheme/sheaf and vector-bundle implementation status: Cox-module, local-cohomology, and vector-bundle diagnostics remain unavailable unless a real CAS report supplies fan, grading, module presentation, backend attempt, and certificate hash.
+- [x] Added explicit no-proxy paper language forbidding activation rows, chain ranks, support tokens, or embedding similarities from replacing missing scheme/sheaf certificates.
+- [x] Normal-fan cell labels are now paper-gated behind certified fan/tropical sidecars; otherwise browser artifacts must retain `uncertified_activation_chart` status.
+- [x] Verification completed for this paper-only pass: paper scope audit passed, unescaped Markdown backtick audit passed, requested no-proxy phrases are present, terminology audit passed, and TeX environment-balance audit passed.
+- [x] Remote `pdflatex` compile was attempted into `/tmp/tropicalgt_paper_compile`; it remains blocked by missing TeX dependency `mathtools.sty`, so no PDF artifact was produced or staged.
+- [x] b60 latest checked training state reached step `2157` with train loss/NLL `1.153/1.129`; trainer PID `378962` and watcher PID `379304` remain alive under the step-5000 gate.
+- [ ] Next Section 11 item: distinguish scoped monomial-ideal exponent-chart certificates from full tropical-variety embeddings into toric varieties.
