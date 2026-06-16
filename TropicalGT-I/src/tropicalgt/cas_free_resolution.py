@@ -1008,6 +1008,30 @@ def _certified_result(module_schema: dict[str, Any], backend_result: dict[str, A
             free_resolution_summary["ideal_diagnostics"] = ideal_diagnostics
         if be_rank_conditions.get("available"):
             free_resolution_summary["buchsbaum_eisenbud_rank_conditions"] = be_rank_conditions
+    certificate_summary = {
+        "available": True,
+        "backend": backend,
+        "certificate_type": str(parsed.get("certificate_type", "")),
+        "certificate_attached": bool(backend_result.get("certificate_attached")),
+        "exactness_certified": bool(exact),
+        "minimality_certified": bool(minimal),
+        "homogeneous_presentation": _parse_bool(parsed.get("homogeneous_presentation")) if "homogeneous_presentation" in parsed else None,
+        "presentation_shape": presentation_shape,
+        "coefficient_ring": module_schema["coefficient_ring"],
+        "module_schema_version": module_schema["schema_version"],
+        "input_sha256": module_schema["input_sha256"],
+        "free_resolution_summary_available": bool(isinstance(free_resolution_summary, dict) and free_resolution_summary.get("available")),
+        "real_free_resolution_certified": bool(exact and free_resolution_summary.get("available")),
+        "total_graded_resolution_certified": total_graded_certified,
+        "ungraded_resolution_certified": ungraded_certified,
+        "multigraded_free_resolution_certified": multigraded_certified,
+        "safe_to_render_as_real_free_resolution": safe_real,
+        "safe_to_render_as_total_graded_resolution": safe_total,
+        "safe_to_render_as_multigraded_free_resolution": safe_multigraded,
+        "raw_tagged_output_attached": bool(backend_result.get("tagged_output")),
+        "backend_attempt_count": len(attempts),
+        "no_proxy_policy": "Only exact CAS certificates with parsed free-resolution summaries are rendered as resolutions; diagnostics alone are not substituted.",
+    }
     return {
         "schema_version": SCHEMA_VERSION,
         "available": True,
@@ -1035,6 +1059,7 @@ def _certified_result(module_schema: dict[str, Any], backend_result: dict[str, A
             "ideal_diagnostics": ideal_diagnostics,
             "buchsbaum_eisenbud_diagnostics": be_diagnostics,
             "buchsbaum_eisenbud_rank_conditions": be_rank_conditions,
+            "certificate_summary": certificate_summary,
             "singular_resolution_text": singular_resolution_text,
             "sage_resolution_text": sage_resolution_text,
             "raw_tagged_output": backend_result.get("tagged_output", ""),

@@ -12,10 +12,12 @@ from tropicalgt.simplicial import build_embedding_radius_simplicial_object, buil
 from tropicalgt.tokenizer import TokenGTTokenizer
 from tropicalgt.visualization import (
     _attach_graph_token_direction_overlay,
+    _cas_real_resolution_display,
     _derived_invariant_comparison,
     _gudhi_canonical_complex,
     _has_real_probability_filtration,
     _m2_be_diagnostic_columns,
+    _m2_certificate_columns,
     _m2_ideal_diagnostic_columns,
     _simplicial_object_svg,
     _simplicial_map_between_complexes,
@@ -1169,6 +1171,18 @@ def _topology_with_certified_real_resolution(*, input_hash: str = "hash-a", fitt
             "free_modules": free_modules,
         },
         "cas_artifacts": {
+            "certificate_summary": {
+                "available": True,
+                "backend": "Macaulay2",
+                "certificate_type": "Macaulay2 res coker presentation over multigraded F2 polynomial ring",
+                "certificate_attached": True,
+                "exactness_certified": True,
+                "minimality_certified": True,
+                "homogeneous_presentation": True,
+                "input_sha256": input_hash,
+                "safe_to_render_as_multigraded_free_resolution": True,
+                "no_proxy_policy": "Only exact CAS certificates are rendered as resolutions.",
+            },
             "differentials": [
                 {
                     "homological_degree": 1,
@@ -1266,6 +1280,16 @@ def test_certified_cas_diagnostic_tables_require_explicit_structured_certificate
     assert any(row[0] == "BEMultipliers" and row[2] == "1x1" for row in be_rows)
     assert any(row[0] == "BE rank condition" and row[1] == "d1" and "rank=1" in row[2] for row in be_rows)
     assert any(row[0] == "method note" and row[1] == "Buchsbaum-Eisenbud" for row in be_rows)
+
+    display = _cas_real_resolution_display(real_with_structured)
+    assert display["certificate_summary"]["certificate_type"].startswith("Macaulay2 res")
+    cert_headers, cert_columns = _m2_certificate_columns({"real_free_resolution": real_with_structured}, {"module_ring": "F2[x_level,x_radius]"})
+    assert cert_headers == ["diagnostic", "value"]
+    cert_rows = dict(zip(cert_columns[0], cert_columns[1]))
+    assert cert_rows["CAS certificate type"].startswith("Macaulay2 res")
+    assert cert_rows["CAS homogeneous presentation"] == "True"
+    assert cert_rows["CAS input sha256"] == real_with_structured["input_sha256"]
+    assert "Only exact CAS certificates" in cert_rows["CAS no-proxy policy"]
 
 
 def test_derived_comparison_requires_matching_certified_cas_artifacts():

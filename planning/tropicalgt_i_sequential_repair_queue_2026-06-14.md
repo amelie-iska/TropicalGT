@@ -68,7 +68,7 @@
 - [x] Detect Macaulay2, SageMath, Singular, and optional `amelie-iska/BEMultipliers` availability on `iska`.
 - [x] Implement a CAS bridge module with strict provenance and no fabricated algebra.
 - [x] Compute minimal multigraded free resolutions over `F2[x_level,x_radius]` when CAS is available.
-- [ ] Compute Betti tables, differential matrices, multidegree shifts, Fitting ideals, minors, Buchsbaum-Eisenbud diagnostics, and exactness/minimality certificates.
+- [x] Compute Betti tables, differential matrices, multidegree shifts, Fitting ideals, minors, Buchsbaum-Eisenbud diagnostics, and exactness/minimality certificates.
 - [ ] Render unavailable only when the real CAS computation cannot run, and make the missing dependency/action explicit.
 - [x] Add tests with known monomial ideals: singleton generator, two-generator staircase, three-generator staircase, and a nontrivial adjacent-LCM syzygy case.
 
@@ -255,6 +255,14 @@ The live item-by-item repair inventory is maintained in `planning/tropicalgt_i_c
 - [x] Updated the live CAS smoke fixture to a homogeneous `F2[x_level,x_radius]` persistence presentation and asserted the certified multigraded Betti rows carry the expected bidegrees `(0,1)`, `(1,0)`, and `(1,1)`.
 - [x] Added a no-claim regression proving a nonhomogeneous stored grading returns `certificate_failed` with no CAS artifacts.
 - [x] Focused verification passed: real CAS smoke `1 passed`; nonhomogeneous rejection `1 passed`; full algebraic persistence `24 passed`; full simplicial visualization `33 passed`; artifact validator `10 passed`.
+
+
+### Current Objective Update - Structured CAS Certificate Content Pass
+
+- [x] Added `cas_artifacts.certificate_summary` to certified CAS outputs with backend, certificate type, attached/exact/minimal flags, homogeneity status, module hash, grading-safe render flags, backend-attempt count, and no-proxy policy.
+- [x] Kept Betti rows, free modules, differential matrices, multidegree shifts, Fitting ideals, determinantal minors, Buchsbaum-Eisenbud rank diagnostics, and BEMultipliers diagnostics as structured CAS artifacts rather than raw-text-only evidence.
+- [x] Passed `certificate_summary` through the two-parameter visualization adapter and certificate table so browser/audit payloads can disclose exactness/minimality evidence directly.
+- [x] Focused verification passed: CAS parser/smoke `2 passed`; certified visualization table `1 passed`; full algebraic persistence `24 passed`; full simplicial visualization `33 passed`; artifact validator `10 passed`.
 
 
 ### Current Objective Update - Rank-Invariant Table And 2-Parameter Persistence Pass

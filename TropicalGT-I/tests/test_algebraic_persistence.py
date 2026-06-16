@@ -418,7 +418,7 @@ def test_real_cas_free_resolution_smoke_when_backend_available():
     assert "F0 = R^{{0,-1},{-1,0}}" in m2_script
     assert "F1 = R^{{-1,-1}}" in m2_script
     assert "homogeneousPresentation = isHomogeneous M" in m2_script
-    real = try_compute_real_free_resolution(module, timeout_s=10)
+    real = try_compute_real_free_resolution(module, timeout_s=10, use_cache=False)
     _assert_real_resolution_guard(real, "F2[x_level,x_radius]")
     if real["available"]:
         assert real["backend"] == "Singular" or real["backend"] in {"Macaulay2", "sage"}
@@ -448,6 +448,13 @@ def test_real_cas_free_resolution_smoke_when_backend_available():
             assert (0, (1, 0), 1) in betti_rows
             assert (1, (1, 1), 1) in betti_rows
             assert real["cas_artifacts"]["macaulay2_multigraded"]["safe_for_multigraded_claims"] is True
+            cert = real["cas_artifacts"]["certificate_summary"]
+            assert cert["certificate_type"] == "Macaulay2 res coker presentation over multigraded F2 polynomial ring"
+            assert cert["exactness_certified"] is True
+            assert cert["minimality_certified"] is True
+            assert cert["homogeneous_presentation"] is True
+            assert cert["input_sha256"] == real["input_sha256"]
+            assert cert["safe_to_render_as_multigraded_free_resolution"] is True
             assert summary["free_modules"]
             assert real["cas_artifacts"]["differentials"]
             assert real["cas_artifacts"]["fitting_ideals"]
@@ -469,6 +476,7 @@ def test_certified_cas_result_surfaces_buchsbaum_eisenbud_diagnostics():
         "backend=Macaulay2",
         "exactness_certified=true",
         "minimality_certified=true",
+        "homogeneous_presentation=true",
         "certificate_type=Macaulay2 res coker presentation over multigraded F2 polynomial ring",
         "presentation_shape=1x2",
         "betti_table_begin",
@@ -525,6 +533,14 @@ def test_certified_cas_result_surfaces_buchsbaum_eisenbud_diagnostics():
     _assert_real_resolution_guard(real, "F2[x_level,x_radius]")
     assert real["backend"] == "Macaulay2"
     assert real["safe_to_render_as_multigraded_free_resolution"] is True
+    cert = real["cas_artifacts"]["certificate_summary"]
+    assert cert["available"] is True
+    assert cert["backend"] == "Macaulay2"
+    assert cert["certificate_attached"] is True
+    assert cert["exactness_certified"] is True
+    assert cert["minimality_certified"] is True
+    assert cert["homogeneous_presentation"] is True
+    assert cert["input_sha256"] == schema["input_sha256"]
     be = real["cas_artifacts"]["buchsbaum_eisenbud_diagnostics"]
     assert be["available"] is True
     assert be["exactness_certified"] is True
