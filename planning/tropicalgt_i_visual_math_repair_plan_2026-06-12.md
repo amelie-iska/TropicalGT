@@ -1216,3 +1216,27 @@ CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/t
 CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_algebraic_persistence.py -q -p no:cacheprovider --basetemp=/tmp/tropicalgt-pytest-cas-guard-algebra
 # 31 passed
 ```
+
+## 2026-06-16 Analogical Probability-Vector Evidence Propagation
+
+Sequential analogical-memory repair began after the nested CAS guard validator contract:
+
+- Propagated `tropicalgt.probability_vector_assignment_evidence.v1` from retrieval-side probability simplicial-map diagnostics into each rendered analogical map report.
+- The map report now carries explicit source, model-probability vector source, Jensen-Shannon assignment metric, assignment solver, probability alignment, displayed query/memory vertex counts, all-displayed-vertices-have-probabilities flags, and no-proxy/embedding-only guards.
+- The interactive artifact validator now rejects analogical maps that omit probability-vector evidence, use an embedding-only assignment, use the wrong metric/source, fail to certify model probabilities on all displayed query/memory vertices, or report vertex counts inconsistent with the rendered complexes.
+- This tightens the analogical-memory contract so top-k map pages cannot pass by showing Jensen-Shannon summaries alone; they must carry the underlying model-probability vector evidence used to solve the assignment.
+
+Validation:
+
+```text
+CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m py_compile TropicalGT-I/src/tropicalgt/visualization.py TropicalGT-I/scripts/validate_interactive_audit_artifacts.py TropicalGT-I/tests/test_interactive_artifact_validator.py
+# passed
+CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_interactive_artifact_validator.py::test_validate_audit_root_accepts_three_interactive_rows TropicalGT-I/tests/test_interactive_artifact_validator.py::test_validate_audit_root_rejects_analogical_probability_js_provenance_gaps -q -p no:cacheprovider --basetemp=/tmp/tropicalgt-pytest-analogical-prob-evidence
+# 2 passed
+CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_simplicial_visualization.py::test_analogical_memory_visualization_renders_simplicial_maps TropicalGT-I/tests/test_simplicial_visualization.py::test_analogical_memory_visualization_requires_retrieval_probability_map_certificate TropicalGT-I/tests/test_simplicial_visualization.py::test_analogical_memory_visualization_labels_failed_probability_correspondence_not_map TropicalGT-I/tests/test_simplicial_visualization.py::test_analogical_memory_visualization_rejects_non_trajectory_probability_fallback TropicalGT-I/tests/test_simplicial_visualization.py::test_analogical_memory_without_retrieval_emits_unavailable_surfaces TropicalGT-I/tests/test_simplicial_visualization.py::test_analogical_memory_without_query_probabilities_is_unavailable_not_fallback -q -p no:cacheprovider --basetemp=/tmp/tropicalgt-pytest-analogical-prob-evidence-viz
+# 6 passed
+CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_interactive_artifact_validator.py TropicalGT-I/tests/test_simplicial_visualization.py -q -p no:cacheprovider --basetemp=/tmp/tropicalgt-pytest-analogical-prob-evidence-full
+# 75 passed
+CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_metrics_and_memory.py::test_probability_simplicial_map_diagnostics_certifies_filtered_chain_map TropicalGT-I/tests/test_metrics_and_memory.py::test_analogical_memory_retrieval_uses_probability_simplicial_map_weight -q -p no:cacheprovider --basetemp=/tmp/tropicalgt-pytest-analogical-prob-evidence-memory
+# 2 passed
+```

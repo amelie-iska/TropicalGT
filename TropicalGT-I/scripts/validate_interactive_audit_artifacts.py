@@ -1271,6 +1271,21 @@ def validate_row(row_dir: Path, *, min_candidates: int = 8, min_depth: int = 2, 
             _assert(all(row.get("codomain_complex_source") in allowed_sources for row in maps if isinstance(row, dict)), errors, "analogical maps are not using codomain trajectory-level model-probability complexes")
             _assert(all(not bool(row.get("is_identity_self_map")) for row in maps if isinstance(row, dict)), errors, "analogical maps include identity self-maps")
             _assert(all(row.get("map_source") == "model_probability_jensen_shannon_assignment" for row in maps if isinstance(row, dict)), errors, "analogical maps are not derived from model probability vectors")
+            for index, row in enumerate(maps):
+                if not isinstance(row, dict):
+                    continue
+                evidence = row.get("probability_vector_evidence", {}) if isinstance(row.get("probability_vector_evidence"), dict) else {}
+                _assert(evidence.get("schema_version") == "tropicalgt.probability_vector_assignment_evidence.v1", errors, f"analogical map {index} lacks probability-vector assignment evidence")
+                _assert(evidence.get("source") == "probability_filtered_complex_vertices", errors, f"analogical map {index} probability-vector evidence has wrong source")
+                _assert(evidence.get("probability_vector_source") == "model_probability_vectors_on_vertices", errors, f"analogical map {index} probability-vector evidence is not model-derived")
+                _assert(evidence.get("assignment_metric") == "jensen_shannon_distance_on_model_probability_vectors", errors, f"analogical map {index} probability-vector evidence has wrong assignment metric")
+                _assert(str(evidence.get("assignment_solver", "")).strip() != "", errors, f"analogical map {index} probability-vector evidence lacks assignment solver")
+                _assert(evidence.get("embedding_only_assignment_used") is False, errors, f"analogical map {index} probability-vector evidence uses embedding-only assignment")
+                _assert(evidence.get("no_proxy_or_fallback") is True, errors, f"analogical map {index} probability-vector evidence allows proxy/fallback data")
+                _assert(evidence.get("all_displayed_query_vertices_have_probability_vectors") is True, errors, f"analogical map {index} does not certify probability vectors on all displayed query vertices")
+                _assert(evidence.get("all_displayed_memory_vertices_have_probability_vectors") is True, errors, f"analogical map {index} does not certify probability vectors on all displayed memory vertices")
+                _assert(int(_finite_float(evidence.get("displayed_query_vertices"), -1.0)) == int(_finite_float(row.get("displayed_domain_vertices"), -2.0)), errors, f"analogical map {index} probability query vertex count mismatches displayed domain")
+                _assert(int(_finite_float(evidence.get("displayed_memory_vertices"), -1.0)) == int(_finite_float(row.get("displayed_codomain_vertices"), -2.0)), errors, f"analogical map {index} probability memory vertex count mismatches displayed codomain")
             _assert(all(isinstance(row.get("jensen_shannon_distance_summary"), dict) and _finite_float(row["jensen_shannon_distance_summary"].get("count"), 0.0) > 0 for row in maps if isinstance(row, dict)), errors, "analogical maps are missing Jensen-Shannon distance summaries")
             _assert(all(isinstance(row.get("assignment_cost_summary"), dict) and _finite_float(row["assignment_cost_summary"].get("count"), 0.0) > 0 for row in maps if isinstance(row, dict)), errors, "analogical maps are missing assignment-cost summaries")
             _assert(all(isinstance(row.get("filtration_distortion_summary"), dict) for row in maps if isinstance(row, dict)), errors, "analogical maps are missing filtration-distortion summaries")

@@ -612,6 +612,7 @@ def _row(root: Path, name: str) -> Path:
             "query_complex_source": "trajectory_probability_filtered_simplicial_object",
             "codomain_complex_source": "trajectory_probability_filtered_simplicial_object",
             "map_source": "model_probability_jensen_shannon_assignment",
+            "probability_vector_evidence": {"schema_version": "tropicalgt.probability_vector_assignment_evidence.v1", "source": "probability_filtered_complex_vertices", "probability_vector_source": "model_probability_vectors_on_vertices", "assignment_metric": "jensen_shannon_distance_on_model_probability_vectors", "assignment_solver": "scipy_linear_sum_assignment", "probability_alignment": "zero_pad_to_common_token_index_feature_space_then_renormalize", "displayed_query_vertices": 2, "displayed_memory_vertices": 2, "query_probability_vertex_count": 2, "memory_probability_vertex_count": 2, "all_displayed_query_vertices_have_probability_vectors": True, "all_displayed_memory_vertices_have_probability_vectors": True, "embedding_only_assignment_used": False, "no_proxy_or_fallback": True},
             "is_identity_self_map": False,
             "pair_page": "analogical_memory_retrieval.html",
             "jensen_shannon_distance_mean": 0.12,
@@ -633,6 +634,7 @@ def _row(root: Path, name: str) -> Path:
             "query_complex_source": "trajectory_probability_filtered_simplicial_object",
             "codomain_complex_source": "trajectory_probability_filtered_simplicial_object",
             "map_source": "model_probability_jensen_shannon_assignment",
+            "probability_vector_evidence": {"schema_version": "tropicalgt.probability_vector_assignment_evidence.v1", "source": "probability_filtered_complex_vertices", "probability_vector_source": "model_probability_vectors_on_vertices", "assignment_metric": "jensen_shannon_distance_on_model_probability_vectors", "assignment_solver": "scipy_linear_sum_assignment", "probability_alignment": "zero_pad_to_common_token_index_feature_space_then_renormalize", "displayed_query_vertices": 2, "displayed_memory_vertices": 2, "query_probability_vertex_count": 2, "memory_probability_vertex_count": 2, "all_displayed_query_vertices_have_probability_vectors": True, "all_displayed_memory_vertices_have_probability_vectors": True, "embedding_only_assignment_used": False, "no_proxy_or_fallback": True},
             "is_identity_self_map": False,
             "pair_page": "analogical_memory_map_02.html",
             "jensen_shannon_distance_mean": 0.23,
@@ -1471,6 +1473,16 @@ def test_validate_audit_root_rejects_analogical_probability_js_provenance_gaps(t
             "missing_js_summary",
             lambda row: row.pop("jensen_shannon_distance_summary"),
             "missing Jensen-Shannon distance summaries",
+        ),
+        (
+            "missing_probability_vector_evidence",
+            lambda row: row.pop("probability_vector_evidence"),
+            "probability-vector assignment evidence",
+        ),
+        (
+            "embedding_only_probability_assignment",
+            lambda row: row["probability_vector_evidence"].__setitem__("embedding_only_assignment_used", True),
+            "embedding-only assignment",
         ),
         (
             "missing_domain_simplex_tree_provenance",

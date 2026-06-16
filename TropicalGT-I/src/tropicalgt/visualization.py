@@ -9829,6 +9829,7 @@ def _retrieval_probability_simplicial_map_report(row: dict[str, object]) -> dict
     )
     js_summary = report.get("jensen_shannon_distance_summary", {})
     cost_summary = report.get("assignment_cost_summary", {})
+    probability_vector_evidence = report.get("probability_vector_evidence", {}) if isinstance(report.get("probability_vector_evidence"), dict) else {}
     distortion_summary = tree_report.get("positive_filtration_distortion_summary", {}) if isinstance(tree_report, dict) else {}
     checked = int(report.get("simplex_tree_map_checked", tree_report.get("checked_simplices", 0)) or 0)
     preserved = int(report.get("simplex_tree_map_preserved", tree_report.get("preserved_simplices", 0)) or 0)
@@ -9847,6 +9848,7 @@ def _retrieval_probability_simplicial_map_report(row: dict[str, object]) -> dict
         "map_certificate_source": "retrieval_probability_simplicial_map_certificate",
         "retrieval_probability_certificate_available": True,
         "probability_alignment": report.get("probability_alignment"),
+        "probability_vector_evidence": probability_vector_evidence,
         "jensen_shannon_distance_summary": js_summary,
         "assignment_cost_summary": cost_summary,
         "jensen_shannon_distance_mean": _summary_float(js_summary, "mean"),
