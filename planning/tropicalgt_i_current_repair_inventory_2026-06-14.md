@@ -378,7 +378,7 @@ Changes made:
 
 Verification:
 - `python -m py_compile TropicalGT-I/scripts/monitor_training_step_gate.py` passed.
-- `PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_training_step_gate_monitor.py -q` -> `7 passed`.
+- `PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_training_step_gate_monitor.py -q` -> `8 passed`.
 
 Next sequential item: relaunch the 5K watcher for b59 with required step-5000 artifact paths, notify Galileo of the new source commit, then keep hardening non-interfering audit paths while b59 trains.
 

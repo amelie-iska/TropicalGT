@@ -129,3 +129,25 @@ def test_step_gate_terminates_after_required_path_grace_expires(tmp_path: Path):
     )
     assert payload["action"] == "target_reached_grace_expired_terminate"
     assert payload["missing_required_paths"] == [str(required)]
+
+
+def test_step_gate_settles_after_target_before_terminating(tmp_path: Path):
+    log = tmp_path / "train.log"
+    record = tmp_path / "record.json"
+    required = tmp_path / "periodic" / "step_00005000" / "validation_report.json"
+    required.parent.mkdir(parents=True)
+    required.write_text("{}", encoding="utf-8")
+    log.write_text("\rTropicalGT-I train:   0%|          | 5000/5000 [00:10<?, ?it/s, loss=1.2, nll=1.1]\n", encoding="utf-8")
+    payload = monitor_step_gate(
+        pid=__import__("os").getpid(),
+        log_path=log,
+        target_step=5000,
+        record_path=record,
+        poll_seconds=1,
+        once=True,
+        dry_run=True,
+        required_paths=[required],
+        settle_polls_after_target=1,
+    )
+    assert payload["action"] == "target_reached_settling"
+    assert payload["target_seen_polls"] == 1

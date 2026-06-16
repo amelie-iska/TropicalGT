@@ -367,9 +367,9 @@
 ## Iteration 45: Training Step Gate Monitor
 
 - Added `TropicalGT-I/scripts/monitor_training_step_gate.py`, a small detached-safe monitor for long TropicalGT-I training runs. It parses the live TQDM log for the latest completed step, records a bounded JSON status file on each poll, exits on fatal markers or a dead process, and sends `SIGTERM` to the configured PID only when the parsed step reaches the requested gate.
-- The monitor supports `--target-step 5000`, `--record`, `--poll-seconds`, `--signal TERM|INT`, `--once`, `--dry-run`, repeated `--require-path`, and `--grace-polls-after-target`, so post-5K reviews can wait for step-5000 validation/audit artifacts before terminating the already-running b59 process.
-- Added focused tests for TQDM step parsing, fatal marker detection, once-mode status recording, dry-run target handling, required-artifact waiting, required-artifact success, and grace-expired termination.
-- Verification: `python -m py_compile TropicalGT-I/scripts/monitor_training_step_gate.py` passed; `PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_training_step_gate_monitor.py -q` returned `7 passed`.
+- The monitor supports `--target-step 5000`, `--record`, `--poll-seconds`, `--signal TERM|INT`, `--once`, `--dry-run`, repeated `--require-path`, `--grace-polls-after-target`, and `--settle-polls-after-target`, so post-5K reviews can wait for step-5000 validation/audit artifacts before terminating the already-running b59 process.
+- Added focused tests for TQDM step parsing, fatal marker detection, once-mode status recording, dry-run target handling, required-artifact waiting, required-artifact success, grace-expired termination, and post-target settling.
+- Verification: `python -m py_compile TropicalGT-I/scripts/monitor_training_step_gate.py` passed; `PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_training_step_gate_monitor.py -q` returned `8 passed`.
 - Live b59 status during this pass: PID `73189` remained alive around step `1194`, latest train loss/NLL around `1.229/1.206`, with no fatal marker observed. The 5K stop record will be written under `TropicalGT-I/outputs/training_stop_records/` and left untracked.
 
 ## Iteration 46: Post-5K Review Bundle Helper

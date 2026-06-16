@@ -65,6 +65,7 @@ def monitor_step_gate(
     dry_run: bool = False,
     required_paths: list[Path] | None = None,
     grace_polls_after_target: int = 30,
+    settle_polls_after_target: int = 0,
 ) -> dict[str, Any]:
     required_paths = list(required_paths or [])
     target_seen_polls = 0
@@ -72,6 +73,8 @@ def monitor_step_gate(
         status = latest_training_status(log_path)
         alive = process_alive(pid)
         missing_required_paths = _missing_required_paths(required_paths)
+        settle_polls = max(int(settle_polls_after_target), 0)
+        required_wait_polls = max(target_seen_polls - settle_polls, 0)
         payload = {
             "pid": int(pid),
             "pid_alive": bool(alive),
@@ -85,13 +88,25 @@ def monitor_step_gate(
             "required_paths": [str(path) for path in required_paths],
             "missing_required_paths": missing_required_paths,
             "target_seen_polls": target_seen_polls,
+            "required_wait_polls": required_wait_polls,
             "grace_polls_after_target": int(grace_polls_after_target),
+            "settle_polls_after_target": settle_polls,
         }
         latest_step = status.get("latest_step")
         if isinstance(latest_step, int) and latest_step >= int(target_step):
-            if alive and missing_required_paths and target_seen_polls < int(grace_polls_after_target):
+            if alive and target_seen_polls < settle_polls:
                 target_seen_polls += 1
                 payload["target_seen_polls"] = target_seen_polls
+                payload["action"] = "target_reached_settling"
+                write_record(record_path, payload)
+                if once:
+                    return payload
+                time.sleep(max(float(poll_seconds), 1.0))
+                continue
+            if alive and missing_required_paths and required_wait_polls < int(grace_polls_after_target):
+                target_seen_polls += 1
+                payload["target_seen_polls"] = target_seen_polls
+                payload["required_wait_polls"] = max(target_seen_polls - settle_polls, 0)
                 payload["action"] = "target_reached_waiting_for_required_paths"
                 write_record(record_path, payload)
                 if once:
@@ -132,6 +147,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--require-path", action="append", type=Path, default=[], help="Artifact path that should exist before terminating after the target step. May be repeated.")
     parser.add_argument("--grace-polls-after-target", type=int, default=30, help="Polls to wait for required paths after the target step before terminating anyway.")
+    parser.add_argument("--settle-polls-after-target", type=int, default=0, help="Polls to wait after first seeing the target step before evaluating termination.")
     args = parser.parse_args(argv)
     sig = signal.SIGTERM if args.signal == "TERM" else signal.SIGINT
     result = monitor_step_gate(
@@ -145,6 +161,7 @@ def main(argv: list[str] | None = None) -> int:
         dry_run=args.dry_run,
         required_paths=args.require_path,
         grace_polls_after_target=args.grace_polls_after_target,
+        settle_polls_after_target=args.settle_polls_after_target,
     )
     print(json.dumps(result, indent=2))
     return 0
