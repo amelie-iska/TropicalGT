@@ -488,3 +488,11 @@ The live item-by-item repair inventory is maintained in `planning/tropicalgt_i_c
 - [x] Remote `pdflatex` compile was attempted into `/tmp/tropicalgt_paper_compile`; it remains blocked by missing TeX dependency `mathtools.sty`, so no PDF artifact was produced or staged.
 - [x] b60 latest checked training state reached step `2250` with train loss/NLL `1.149/1.126`; trainer PID `378962` and watcher PID `379304` remain alive under the step-5000 gate.
 - [ ] Next Section 12 item: keep the current BPB run alive until the 5K gate unless explicitly restarted.
+
+### Current Objective Update - Section 12 Live 5K Gate Status
+
+- [x] Confirmed the current b60 fresh step-0 trainer is alive as PID `378962` on the remote Tailscale machine and remains the only GPU compute process observed by `nvidia-smi` during this audit.
+- [x] Confirmed watcher PID `379304` is alive and monitoring the trainer log until target step `5000`, with required step-5000 paths `periodic/step_00005000/validation_report.json` and `periodic/step_00005000/got_audit/inference_audit.html` before it records completion.
+- [x] Confirmed the existing Codex heartbeat automation `check-tropicalgt-b59-5k-gate` is active on `FREQ=MINUTELY;INTERVAL=150`, i.e. every 2.5 hours, and targets this thread for post-5K follow-up.
+- [x] Latest checked training state during this Section 12 audit reached step `2252/5000` with train loss/NLL `1.126/1.103`; W&B run id remains `ld5u55p5` for `amelie-iska-math/TropicalGT-I`.
+- [ ] Section 12 5K gate remains open until the trainer produces the required step-5000 validation and audit artifacts; do not restart from step 0 before those artifacts exist unless the user explicitly changes the policy.
