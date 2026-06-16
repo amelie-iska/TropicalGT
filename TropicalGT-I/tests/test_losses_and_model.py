@@ -203,6 +203,10 @@ def test_model_forward_fixture():
     assert out["near_wall_hit_rate"].item() >= out["strict_wall_hit_rate"].item()
     assert out["near_wall_margin_threshold"].item() >= out["wall_margin_threshold"].item()
     assert out["chart_bundle_transport_metadata"]["available"] is False
+    disabled_cert = out["chart_bundle_transport_metadata"]["toric_embedding_certificate"]
+    assert disabled_cert["available"] is False
+    assert disabled_cert["safe_to_render_as_toric_embedding"] is False
+    assert "not toric embeddings" in disabled_cert["no_proxy_policy"]
 
 
 def _fixture_batch(batch_size: int = 2, seq_len: int = 32):
@@ -251,6 +255,12 @@ def test_chart_bundle_auxiliary_zero_weights_do_not_change_logits_or_loss():
     assert metadata["chart_ids"] == ["chart_00", "chart_01", "chart_02"]
     assert {row["id"] for row in metadata["overlap_pairs"]} >= {"chart_00__to__chart_01", "chart_01__to__chart_02"}
     assert metadata["overlap_triples"][0]["pair_ids"]
+    toric_cert = metadata["toric_embedding_certificate"]
+    assert toric_cert["available"] is False
+    assert toric_cert["status"] == "uncertified_activation_chart"
+    assert toric_cert["safe_to_render_as_toric_embedding"] is False
+    assert toric_cert["metric_scope"] == "activation_margin_diagnostic_not_tool_backed_toric_embedding"
+    assert "Chart-bundle logits" in toric_cert["no_proxy_policy"]
     assert aux_out["chart_bpb_consistency_available"].item() == 1.0
     assert aux_out["chart_bpb_active_count"].item() == 3.0
     assert aux_out["chart_bpb_spread"].item() >= 0.0

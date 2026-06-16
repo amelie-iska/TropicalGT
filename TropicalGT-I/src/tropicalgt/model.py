@@ -47,6 +47,24 @@ class TropicalGTConfig:
     bundle_atom_stability_weight: float = 0.0
 
 
+def _uncertified_toric_embedding_metadata(source: str) -> dict[str, Any]:
+    return {
+        "available": False,
+        "status": "uncertified_activation_chart",
+        "source": source,
+        "toric_embedding_certified": False,
+        "toric_ideal_certified": False,
+        "safe_to_render_as_toric_embedding": False,
+        "safe_to_use_as_normal_fan_certificate": False,
+        "required_certificate": "tropicalgt.cas_toric.try_compute_toric_embedding_certificate on an explicit integer exponent matrix",
+        "metric_scope": "activation_margin_diagnostic_not_tool_backed_toric_embedding",
+        "no_proxy_policy": (
+            "Chart-bundle logits, toric active rows, GraphCG cells, support tokens, and embeddings are diagnostics only; "
+            "they are not toric embeddings or normal-fan certificates without a real CAS sidecar."
+        ),
+    }
+
+
 class ChartBundleToricHead(nn.Module):
     """Telemetry/loss head for zero-default tropical chart-bundle diagnostics.
 
@@ -98,6 +116,7 @@ class ChartBundleToricHead(nn.Module):
             "overlap_pair_count": len(pairs),
             "overlap_triple_count": len(triples),
             "directed_overlap_policy": "ordered chart pairs/triples matching transport T_ab and cocycle T_bc T_ab = T_ac",
+            "toric_embedding_certificate": _uncertified_toric_embedding_metadata("ChartBundleToricHead.activation_rows"),
         }
 
     def forward(
@@ -394,6 +413,7 @@ class TropicalGTModel(nn.Module):
                 "overlap_triples": [],
                 "overlap_pair_count": 0,
                 "overlap_triple_count": 0,
+                "toric_embedding_certificate": _uncertified_toric_embedding_metadata("chart_bundle_disabled"),
             }
         metrics: dict[str, Tensor] = {
             "support_entropy": support_entropy.detach(),

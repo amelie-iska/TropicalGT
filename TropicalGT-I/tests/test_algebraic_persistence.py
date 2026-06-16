@@ -5,6 +5,7 @@ import torch
 
 import tropicalgt.cas_free_resolution as cas_free_resolution
 import tropicalgt.cas_tropical as cas_tropical
+import tropicalgt.cas_toric as cas_toric
 from tropicalgt.algebra import (
     _bivariate_staircase_resolution_from_points,
     compute_level_radius_bifiltration_report,
@@ -736,6 +737,73 @@ def test_macaulay2_tropical_fan_diagnostic_invalid_input_unavailable():
     assert unsafe["available"] is False
     assert unsafe["status"] == "invalid_input"
     assert "unsupported Macaulay2 polynomial generator text" in unsafe["reason"]
+
+
+def test_macaulay2_toric_embedding_certificate_parser_and_script():
+    schema = cas_toric.canonicalize_toric_exponent_matrix(
+        {"exponent_matrix": [[1, 1, 1], [0, 1, 2]], "variable_names": ["z_0", "z_1", "z_2"]}
+    )
+    script = cas_toric.build_macaulay2_toric_embedding_script(schema)
+    assert 'needsPackage "Quasidegrees"' in script
+    assert "toricIdeal(A,R)" in script
+    tagged = "\n".join([
+        "backend=Macaulay2",
+        "quasidegrees_package_available=true",
+        "certificate_type=Macaulay2 Quasidegrees toricIdeal exponent-matrix embedding certificate",
+        "toric_embedding_certified=true",
+        "toric_ideal_certified=true",
+        "ring=QQ[z_0..z_2]",
+        "exponent_matrix=| 1 1 1 | || | 0 1 2 |",
+        "toric_ideal_text=ideal(z_1^2-z_0*z_2)",
+        "toric_ideal_generators={z_1^2-z_0*z_2}",
+        "generator_count=1",
+        "codimension=1",
+        "dimension=2",
+    ])
+    parsed = cas_free_resolution._parse_key_value_lines(tagged)
+    report = cas_toric._certified_toric_embedding_result(schema, parsed, tagged, attempts=[{"backend": "Macaulay2", "status": "ran"}])
+    assert report["available"] is True
+    assert report["schema_version"] == "tropicalgt.cas_toric_embedding.v1"
+    assert report["toric_embedding_certified"] is True
+    assert report["toric_ideal_certified"] is True
+    assert report["safe_to_render_as_toric_embedding"] is True
+    assert report["safe_to_use_as_normal_fan_certificate"] is False
+    assert report["monomial_map_summary"]["exponent_matrix"] == [[1, 1, 1], [0, 1, 2]]
+    assert report["toric_ideal_summary"]["generator_count"] == 1
+    assert "z_1^2-z_0*z_2" in report["toric_ideal_summary"]["ideal_text"]
+    contract = report["certificate_contract"]
+    assert "toricIdeal" in contract["required_macaulay2_methods"]
+    assert "No chart-bundle logits" in contract["no_proxy_policy"]
+
+
+def test_macaulay2_toric_embedding_certificate_live_or_unavailable():
+    report = cas_toric.try_compute_toric_embedding_certificate(
+        {"exponent_matrix": [[1, 1, 1], [0, 1, 2]], "source": "unit_test_rational_normal_curve"},
+        timeout_s=20,
+        use_cache=False,
+    )
+    assert report["schema_version"] == "tropicalgt.cas_toric_embedding.v1"
+    if report["available"]:
+        assert report["backend"] == "Macaulay2"
+        assert report["certificate_attached"] is True
+        assert report["toric_embedding_certified"] is True
+        assert report["toric_ideal_certified"] is True
+        assert report["safe_to_render_as_toric_embedding"] is True
+        assert report["safe_to_use_as_normal_fan_certificate"] is False
+        assert report["cas_artifacts"]["raw_tagged_output"]
+    else:
+        assert report["status"] in {"backend_not_installed", "timeout", "backend_error", "certificate_failed", "invalid_input", "parse_error"}
+        assert report["certificate_attached"] is False
+        assert report["safe_to_render_as_toric_embedding"] is False
+        assert "No chart-bundle logits" in report["certificate_contract"]["no_proxy_policy"]
+
+
+def test_macaulay2_toric_embedding_certificate_invalid_input_unavailable():
+    report = cas_toric.try_compute_toric_embedding_certificate({"exponent_matrix": [[1, 2, 3], [0, 1]]}, use_cache=False)
+    assert report["available"] is False
+    assert report["status"] == "invalid_input"
+    assert report["cas_artifacts"] == {}
+    assert report["safe_to_render_as_toric_embedding"] is False
 
 
 def test_cas_canonicalization_preserves_generator_id_boundaries():

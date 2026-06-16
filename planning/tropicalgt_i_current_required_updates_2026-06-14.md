@@ -542,10 +542,19 @@ git diff --check
 - b60 latest checked training state reached step `1947` with train loss/NLL `1.129/1.105`; trainer PID `378962` and watcher PID `379304` remain alive under the step-5000 gate.
 - Verification completed: py-compile for touched Python/test files, focused tropical-fan tests (`3 passed` + `2 passed`), `pytest TropicalGT-I/tests/test_algebraic_persistence.py -q` (`24 passed`), `pytest TropicalGT-I/tests/test_simplicial_visualization.py -q` (`36 passed`), `pytest TropicalGT-I/tests/test_interactive_artifact_validator.py -q` (`10 passed`), generated Plotly HTML smoke, and `git diff --check`.
 
+## 2026-06-16 Tool-Backed Toric Embedding Sidecar Addendum
+
+- Added `TropicalGT-I/src/tropicalgt/cas_toric.py` as the real-only finite toric embedding certificate boundary. It accepts explicit integer exponent matrices, validates coordinate variable names, builds a Macaulay2 script using `needsPackage "Quasidegrees"` and `toricIdeal(A,R)`, and returns a tagged certificate or an explicit unavailable state.
+- Certified toric reports are scoped to the affine toric ideal/kernel of the finite monomial map determined by the columns of the exponent matrix. They are safe as finite toric embedding sidecars but not as normal-fan, tropical-variety, sheaf, or global neural toric-variety certificates.
+- Chart-bundle toric telemetry now records an explicit unavailable/uncertified certificate object. The live metrics `toric_normal_fan_loss`, `toric_active_row_count`, and `graphcg_toric_cell_agreement` are activation diagnostics only until a real `cas_toric` or `cas_tropical` certificate is attached.
+- Live smoke on exponent matrix `[[1,1,1],[0,1,2]]` returned `ideal(z_1^2-z_0*z_2)` from Macaulay2 and kept `safe_to_use_as_normal_fan_certificate=false`.
+- Verification completed: py-compile for touched source/tests, focused toric embedding tests (`3 passed`), focused chart-bundle tests (`3 passed`), `pytest TropicalGT-I/tests/test_algebraic_persistence.py -q` (`27 passed`), and `pytest TropicalGT-I/tests/test_losses_and_model.py -q` (`10 passed`).
+- b60 latest checked training state remained at step `2000` with train loss/NLL `1.139/1.116`; trainer PID `378962` and watcher PID `379304` remain alive under the step-5000 gate.
+
 ## Real Implementations Only Policy
 
 No TropicalGT-I metric, loss, visualization, analogical map, persistence module, free resolution, derived comparison, tropical-cycle diagnostic, or CAS artifact should be presented as a mathematical object unless it is computed from the actual model outputs, graph states, embeddings, probabilities, simplex trees, bifiltrations, or certified CAS/backend output that define that object. Temporary placeholders, synthetic fallback objects, mock charts, fabricated simplices, and convenience stand-ins are not acceptable. When a requested object cannot yet be computed, the artifact must render an explicit unavailable/uncertified state and the training metric must either be disabled or logged under an audit-only unavailable flag. Finite chain-presentation diagnostics may be shown only as chain diagnostics, never as free resolutions. Total-graded or ungraded CAS output may be shown as real CAS output only under its actual grading; it must not be advertised as a multigraded `F2[x_level,x_radius]` free resolution unless the backend certifies that multigraded structure.
 
 Use "one dimensional cone" or "one dimensional cones" as the preferred fan-theoretic language whenever the intended object is a cone of a fan or a cone-indexed filtration datum. Use singular or plural according to ordinary grammar.
 
-_Last updated: 2026-06-16T07:48:00Z_
+_Last updated: 2026-06-16T07:51:03Z_

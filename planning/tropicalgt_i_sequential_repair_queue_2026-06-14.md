@@ -123,7 +123,7 @@
 ### 11. Tropical/Toric Embedding Research and Paper Updates
 
 - [x] Research Macaulay2 `Tropical` package, Sage tropical polynomial/variety APIs, Maclagan tropical schemes in toric varieties, and `references/1710.10651v2.pdf`.
-- [ ] Implement toric embeddings only where the embedding is mathematically correct and tool-backed.
+- [x] Implement toric embeddings only where the embedding is mathematically correct and tool-backed.
 - [ ] Use "one dimensional cone(s)" terminology in the paper/plans where rays/cone generators are meant.
 - [ ] Add scheme/sheaf-theoretic and vector-bundle material to `TropicalGT-I/assets/tropicalgt_neurips_research_paper.tex` as implementations mature.
 - [ ] Distinguish scoped monomial-ideal exponent-chart certificates from full tropical-variety embeddings into toric varieties.
@@ -443,4 +443,15 @@ The live item-by-item repair inventory is maintained in `planning/tropicalgt_i_c
 - [x] Verified the generated Plotly tropical fan diagnostic smoke artifact contains the certificate source, Sage scope, no-proxy policy, and one dimensional cone language without committing generated output.
 - [x] Verification completed: py-compile for touched Python/test files, focused tropical-fan tests (`3 passed` + `2 passed`), `pytest TropicalGT-I/tests/test_algebraic_persistence.py -q` (`24 passed`), `pytest TropicalGT-I/tests/test_simplicial_visualization.py -q` (`36 passed`), `pytest TropicalGT-I/tests/test_interactive_artifact_validator.py -q` (`10 passed`), generated HTML smoke, and `git diff --check`.
 - [x] b60 latest checked training state reached step `1947` with train loss/NLL `1.129/1.105`; trainer PID `378962` and watcher PID `379304` remain alive under the step-5000 gate.
-- [ ] Next Section 11 item: implement toric embeddings only where the embedding is mathematically correct and tool-backed.
+- [x] Next Section 11 item completed: finite exponent-matrix toric sidecars are now certified only by Macaulay2 `Quasidegrees` `toricIdeal(A,R)`, while neural chart-bundle toric metrics remain explicitly uncertified activation diagnostics.
+
+### Current Objective Update - Tool-Backed Toric Embedding Sidecar Pass
+
+- [x] Added `tropicalgt.cas_toric` as a real-only finite toric embedding sidecar: integer exponent matrices are canonicalized, hashed, cached, and sent to Macaulay2 `Quasidegrees` `toricIdeal(A,R)` with tagged certificate output.
+- [x] Certified reports expose the finite monomial-map kernel ideal, generator text/count, codimension/dimension when Macaulay2 emits them, command template, backend probe, and a no-proxy certificate contract.
+- [x] Unavailable reports remain unavailable with exact reason, backend attempts, and `safe_to_render_as_toric_embedding=false`; no Sage, chart-bundle, GraphCG, support-token, embedding, or visualization fallback is substituted.
+- [x] Chart-bundle toric telemetry now carries `toric_embedding_certificate.status=uncertified_activation_chart`, making `toric_normal_fan_loss`, toric active rows, and GraphCG-cell agreement diagnostics only unless a real CAS sidecar is attached.
+- [x] Live smoke certified the small exponent matrix `[[1,1,1],[0,1,2]]` as `ideal(z_1^2-z_0*z_2)` and explicitly kept `safe_to_use_as_normal_fan_certificate=false`.
+- [x] Verification completed: py-compile for touched source/tests, focused toric embedding tests (`3 passed`), focused chart-bundle tests (`3 passed`), `pytest TropicalGT-I/tests/test_algebraic_persistence.py -q` (`27 passed`), `pytest TropicalGT-I/tests/test_losses_and_model.py -q` (`10 passed`).
+- [x] b60 latest checked training state remained at step `2000` with train loss/NLL `1.139/1.116`; trainer PID `378962` and watcher PID `379304` remain alive under the step-5000 gate.
+- [ ] Next Section 11 item: use "one dimensional cone(s)" terminology in the paper/plans where rays/cone generators are meant.

@@ -36,3 +36,10 @@ This note completes the first Section 11 research checkpoint for TropicalGT-I. I
 ## Next Implementation Item
 
 Implement toric embeddings only where the embedding is mathematically correct and tool-backed. In practice this means starting with finite model-derived exponent matrices, toric ideals or Laurent-polynomial sidecars, certified fan/one dimensional cone data, and explicit unavailable states when Macaulay2/Sage/Polymake/Normaliz-level evidence is absent.
+
+## Implemented Tool-Backed Toric Sidecar
+
+- `TropicalGT-I/src/tropicalgt/cas_toric.py` now certifies finite exponent-matrix toric sidecars with Macaulay2 `Quasidegrees` `toricIdeal(A,R)`.
+- The certified object is the kernel ideal of the finite monomial map defined by the columns of the integer exponent matrix. This is mathematically a toric ideal sidecar and is safe to render as that object.
+- The same report explicitly sets `safe_to_use_as_normal_fan_certificate=false`; fan, normal-fan, tropical-cycle, sheaf, Cox-module, or global neural toric-variety claims still require separate certified data.
+- Neural chart-bundle toric metrics expose `uncertified_activation_chart` metadata until a real CAS sidecar is attached.
