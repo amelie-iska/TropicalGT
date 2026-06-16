@@ -571,3 +571,24 @@ PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pyt
 PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m py_compile TropicalGT-I/src/tropicalgt/visualization.py TropicalGT-I/tests/test_simplicial_visualization.py
 # passed
 ```
+
+## 2026-06-16 Persistence Landscape Evidence Contract Repair
+
+Sequential topology/analogical item started after the derived-similarity conservative-minimum repair:
+
+- Added `tropicalgt.persistence_landscape_evidence.v1` to persistence-landscape vector similarity reports.
+- The contract names the mathematical object as sampled GUDHI `Landscape` `lambda_k(t)` vectors by homology dimension and explicitly marks it distinct from GoT NLL/fitness/density fields.
+- Unavailable landscape comparisons now carry `unavailable_state_is_not_zero_vector=true` and `zero_vector_substitution_allowed=false`; they contribute zero score only because evidence is unavailable, not because a zero-valued landscape vector was fabricated.
+- Available landscape comparisons carry the same source contract while exposing vector-space cosine/L2/correlation over cached GUDHI vectors.
+- The analogical top-k prose now distinguishes unavailable landscape evidence from zero-valued vectors.
+
+Validation:
+
+```text
+PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_metrics_and_memory.py TropicalGT-I/tests/test_simplicial_visualization.py -q -p no:cacheprovider --basetemp=/tmp/tropicalgt-pytest-landscape-contract -k "persistence_landscape_vectors or analogical_memory_visualization_requires_probability_filtered_complex"
+# 1 passed, 53 deselected
+PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_metrics_and_memory.py TropicalGT-I/tests/test_simplicial_visualization.py -q -p no:cacheprovider --basetemp=/tmp/tropicalgt-pytest-landscape-full
+# 54 passed
+PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m py_compile TropicalGT-I/src/tropicalgt/memory.py TropicalGT-I/src/tropicalgt/visualization.py TropicalGT-I/tests/test_metrics_and_memory.py TropicalGT-I/tests/test_simplicial_visualization.py
+# passed
+```

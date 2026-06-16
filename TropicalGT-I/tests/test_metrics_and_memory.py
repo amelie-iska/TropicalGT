@@ -438,7 +438,23 @@ def test_analogical_memory_retrieval_uses_persistence_landscape_vectors(tmp_path
     mismatch = persistence_landscape_vector_similarity(query_topology, mismatched_topology)
     assert similarity["available"] is True
     assert similarity["source"] == "gudhi.representations.Landscape.vector"
+    contract = similarity["evidence_contract"]
+    assert contract["schema_version"] == "tropicalgt.persistence_landscape_evidence.v1"
+    assert contract["mathematical_object"].startswith("sampled persistence landscape lambda_k(t)")
+    assert contract["distinct_from_got_nll_density"] is True
+    assert contract["not_nll_fitness_or_density_field"] is True
+    assert contract["zero_vector_substitution_allowed"] is False
+    assert contract["unavailable_state_is_not_zero_vector"] is False
     assert similarity["l2_similarity"] > mismatch["l2_similarity"]
+
+    unavailable = persistence_landscape_vector_similarity({}, matching_topology)
+    assert unavailable["available"] is False
+    assert unavailable["reason"] == "missing_gudhi_landscape_vector"
+    assert "l2_similarity" not in unavailable
+    unavailable_contract = unavailable["evidence_contract"]
+    assert unavailable_contract["unavailable_state_is_not_zero_vector"] is True
+    assert unavailable_contract["zero_vector_substitution_allowed"] is False
+    assert "not because a zero-valued landscape vector was fabricated" in unavailable_contract["score_policy_when_unavailable"]
 
     bank = AnalogicalMemoryBank(tmp_path / "landscape_memory.jsonl", max_records=8)
     bank.extend([

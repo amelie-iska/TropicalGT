@@ -1552,25 +1552,44 @@ def persistence_vector_representation_similarity(
     }
 
 
+def _persistence_landscape_evidence_contract(*, available: bool, reason: str | None = None) -> dict[str, Any]:
+    return {
+        "schema_version": "tropicalgt.persistence_landscape_evidence.v1",
+        "source_object": "gudhi.representations.Landscape.vector",
+        "mathematical_object": "sampled persistence landscape lambda_k(t) vectors by homology dimension",
+        "distinct_from_got_nll_density": True,
+        "not_nll_fitness_or_density_field": True,
+        "zero_vector_substitution_allowed": False,
+        "unavailable_state_is_not_zero_vector": not available,
+        "comparison_requires_both_query_and_memory_vectors": True,
+        "score_policy_when_unavailable": "contribute zero score because evidence is unavailable, not because a zero-valued landscape vector was fabricated",
+        "reason": reason,
+    }
+
+
 def persistence_landscape_vector_similarity(query_topology: dict[str, Any], memory_topology: dict[str, Any]) -> dict[str, Any]:
     q_by_dim = persistence_landscape_vector(query_topology)
     m_by_dim = persistence_landscape_vector(memory_topology)
     if not q_by_dim or not m_by_dim:
+        reason = "missing_gudhi_landscape_vector"
         return {
             "available": False,
             "source": "gudhi.representations.Landscape.vector",
-            "reason": "missing_gudhi_landscape_vector",
+            "reason": reason,
             "query_dims": sorted(q_by_dim.keys()),
             "memory_dims": sorted(m_by_dim.keys()),
+            "evidence_contract": _persistence_landscape_evidence_contract(available=False, reason=reason),
         }
     q_vec, m_vec, dims = _concatenate_landscape_vectors(q_by_dim, m_by_dim)
     if q_vec.size == 0 or m_vec.size == 0:
+        reason = "empty_concatenated_landscape_vector"
         return {
             "available": False,
             "source": "gudhi.representations.Landscape.vector",
-            "reason": "empty_concatenated_landscape_vector",
+            "reason": reason,
             "query_dims": sorted(q_by_dim.keys()),
             "memory_dims": sorted(m_by_dim.keys()),
+            "evidence_contract": _persistence_landscape_evidence_contract(available=False, reason=reason),
         }
     q_norm = float(np.linalg.norm(q_vec))
     m_norm = float(np.linalg.norm(m_vec))
@@ -1586,6 +1605,7 @@ def persistence_landscape_vector_similarity(query_topology: dict[str, Any], memo
         "available": True,
         "source": "gudhi.representations.Landscape.vector",
         "comparison_space": "concatenated sampled persistence landscape lambda_k(t) vectors by homology dimension",
+        "evidence_contract": _persistence_landscape_evidence_contract(available=True),
         "differentiable_comparison_note": "cosine, L2, and correlation are differentiable vector comparisons; the current GUDHI vectorizer is a cached NumPy transform, not a torch-native differentiable layer",
         "dims": dims,
         "query_dims": sorted(q_by_dim.keys()),

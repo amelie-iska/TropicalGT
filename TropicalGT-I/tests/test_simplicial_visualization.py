@@ -1514,6 +1514,8 @@ def test_analogical_memory_visualization_renders_simplicial_maps(tmp_path: Path)
     assert "retrieval-side probability-map score contribution" in index_html
     assert "vectorized GUDHI family" in index_html
     assert "BettiCurve, Silhouette" in index_html
+    assert "Unavailable landscape vectors remain unavailable" in index_html
+    assert "zero-valued landscape evidence" in index_html
     assert "landscape contrib." in index_html
     assert "vector contrib." in index_html
     assert "rank 2" in rank2_html
