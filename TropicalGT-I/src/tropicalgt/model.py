@@ -95,6 +95,8 @@ class TropicalGTModel(nn.Module):
         soft_entropy = soft_tropical_support_entropy(trop.scores, graph_batch.attention_mask, graph_batch.attention_mask)
         certificate_loss, certificate_metrics = tropical_certificate_objective(trop.scores, trop.support, graph_batch)
         wall_hit_rate = tropical_wall_hit_rate(trop.margin, graph_batch.attention_mask, self.config.wall_margin_threshold)
+        near_wall_margin_threshold = max(float(self.config.wall_margin_threshold) * 10.0, float(self.config.wall_margin_threshold))
+        near_wall_hit_rate = tropical_wall_hit_rate(trop.margin, graph_batch.attention_mask, near_wall_margin_threshold)
         boundary_hit_rate = tropical_support_boundary_hit_rate(trop.support, graph_batch.attention_mask, graph_batch.graph_token_counts)
         node_edge_ratio = graph_batch.node_counts.float().sum() / graph_batch.edge_counts.float().sum().clamp_min(1.0)
         self_support_rate = tropical_self_support_rate(trop.support, graph_batch.attention_mask)
@@ -115,7 +117,10 @@ class TropicalGTModel(nn.Module):
             "edge_tokens_mean": graph_batch.edge_counts.float().mean().detach(),
             "node_edge_ratio": node_edge_ratio.detach(),
             "wall_hit_rate": wall_hit_rate.detach(),
+            "strict_wall_hit_rate": wall_hit_rate.detach(),
+            "near_wall_hit_rate": near_wall_hit_rate.detach(),
             "wall_margin_threshold": torch.tensor(self.config.wall_margin_threshold, device=input_ids.device),
+            "near_wall_margin_threshold": torch.tensor(near_wall_margin_threshold, device=input_ids.device),
             "support_boundary_hit_rate": boundary_hit_rate.detach(),
             "analogical_memory_query_norm": self.memory(graph_state).detach().norm(dim=-1).mean(),
             **sequence_tropical_metrics,

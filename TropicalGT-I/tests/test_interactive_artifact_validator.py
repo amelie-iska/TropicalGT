@@ -228,7 +228,13 @@ def _row(root: Path, name: str) -> Path:
                     "effective_supports": 1.0,
                     "support_entropy_bits": 0.0,
                     "top_support_collapse_rate": 1.0,
-                    "margin_summary": {"min": 0.1, "max": 0.4, "mean": 0.25, "std": 0.1, "p05": 0.1, "p50": 0.25, "p95": 0.4},
+                    "margin_summary": {"min": 0.0004, "max": 0.4, "mean": 0.13, "std": 0.1, "p05": 0.0004, "p50": 0.05, "p95": 0.4},
+                    "wall_margin_audit": {"wall_margin_threshold": 0.001, "near_wall_margin_threshold": 0.01, "strict_wall_hit_count": 1, "near_wall_hit_count": 2, "near_wall_only_count": 1, "strict_wall_hit_rate": 0.25, "near_wall_hit_rate": 0.5, "near_wall_only_rate": 0.25, "definition": "strict_wall_hit_rate counts margin <= wall_margin_threshold; near_wall_hit_rate counts margin <= near_wall_margin_threshold"},
+                    "strict_wall_hit_rate": 0.25,
+                    "near_wall_hit_rate": 0.5,
+                    "near_wall_only_rate": 0.25,
+                    "wall_margin_threshold": 0.001,
+                    "near_wall_margin_threshold": 0.01,
                     "active_support_probability_summary": {"available": True, "count": 4, "min": 0.7, "max": 0.9, "mean": 0.8, "p05": 0.7, "p50": 0.8, "p95": 0.9},
                     "support_probability_entropy_bits_summary": {"available": True, "count": 4, "min": 0.2, "max": 0.6, "mean": 0.4, "p05": 0.2, "p50": 0.4, "p95": 0.6},
                     "support_probability_source": "model_tropical_support_probabilities",
@@ -236,7 +242,7 @@ def _row(root: Path, name: str) -> Path:
                     "interpretation": "Uniform blocks indicate true active-support collapse or nearly constant margins.",
                 },
                 "support_flow_edges": [
-                    {"query_index": idx, "query_label": f"q{idx}", "support_index": 0, "support_label": "q0", "margin": 0.1 * (idx + 1), "active_support_probability": 0.8, "support_probability_entropy_bits": 0.4, "support_probability_source": "model_tropical_support_probabilities", "top_model_support_probabilities": [{"index": 0, "probability": 0.8}]}
+                    {"query_index": idx, "query_label": f"q{idx}", "support_index": 0, "support_label": "q0", "margin": [0.0004, 0.004, 0.1, 0.4][idx], "active_support_probability": 0.8, "support_probability_entropy_bits": 0.4, "support_probability_source": "model_tropical_support_probabilities", "top_model_support_probabilities": [{"index": 0, "probability": 0.8}], "strict_wall_hit": idx == 0, "near_wall_hit": idx in (0, 1), "wall_margin_bucket": ["strict_wall", "near_wall", "interior", "interior"][idx], "wall_margin_threshold": 0.001, "near_wall_margin_threshold": 0.01}
                     for idx in range(4)
                 ],
             }

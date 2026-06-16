@@ -635,8 +635,8 @@ def test_tropical_support_heatmap_layout_keeps_legend_out_of_margin(tmp_path: Pa
             "tokens": [
                 {"index": 0, "text": "graph", "kind": "graph", "node_type": "graph", "active_support_index": 0, "margin": 12.0, "active_support_probability": 0.91, "support_probability_entropy_bits": 0.3, "top_model_support_probabilities": [{"index": 0, "probability": 0.91}], "support_probability_source": "model_tropical_support_probabilities"},
                 {"index": 1, "text": "problem", "kind": "node", "node_type": "problem", "active_support_index": 0, "margin": 11.5, "active_support_probability": 0.82, "support_probability_entropy_bits": 0.5, "top_model_support_probabilities": [{"index": 0, "probability": 0.82}], "support_probability_source": "model_tropical_support_probabilities"},
-                {"index": 2, "text": "answer", "kind": "node", "node_type": "answer", "active_support_index": 2, "margin": 0.4, "active_support_probability": 0.63, "support_probability_entropy_bits": 1.1, "top_model_support_probabilities": [{"index": 2, "probability": 0.63}], "support_probability_source": "model_tropical_support_probabilities"},
-                {"index": 3, "text": "edge", "kind": "edge", "active_support_index": 3, "margin": 0.2, "active_support_probability": 0.57, "support_probability_entropy_bits": 1.3, "top_model_support_probabilities": [{"index": 3, "probability": 0.57}], "support_probability_source": "model_tropical_support_probabilities"},
+                {"index": 2, "text": "answer", "kind": "node", "node_type": "answer", "active_support_index": 2, "margin": 0.0004, "active_support_probability": 0.63, "support_probability_entropy_bits": 1.1, "top_model_support_probabilities": [{"index": 2, "probability": 0.63}], "support_probability_source": "model_tropical_support_probabilities"},
+                {"index": 3, "text": "edge", "kind": "edge", "active_support_index": 3, "margin": 0.004, "active_support_probability": 0.57, "support_probability_entropy_bits": 1.3, "top_model_support_probabilities": [{"index": 3, "probability": 0.57}], "support_probability_source": "model_tropical_support_probabilities"},
             ]
         }
     }
@@ -648,7 +648,15 @@ def test_tropical_support_heatmap_layout_keeps_legend_out_of_margin(tmp_path: Pa
     assert payload["metrics"]["support_probability_entropy_bits_summary"]["available"] is True
     assert payload["support_flow_edges"][0]["active_support_probability"] == 0.91
     assert payload["metrics"]["render_contract"].startswith("assignment_matrix is binary model argmax support")
+    audit = payload["metrics"]["wall_margin_audit"]
+    assert audit["strict_wall_hit_count"] == 1
+    assert audit["near_wall_hit_count"] == 2
+    assert audit["near_wall_only_count"] == 1
+    assert payload["support_flow_edges"][2]["wall_margin_bucket"] == "strict_wall"
+    assert payload["support_flow_edges"][3]["wall_margin_bucket"] == "near_wall"
     assert "active support probability" in html
+    assert "near-wall hit rate" in html
+    assert "strict wall threshold" in html
     assert "Tropical active-support audit" in html
     compact = html.replace(" ", "")
     assert '"showlegend":false' in compact

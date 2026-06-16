@@ -465,6 +465,11 @@ def validate_row(row_dir: Path, *, min_candidates: int = 8, min_depth: int = 2, 
     _assert(_finite_float(support_metrics.get("unique_support_count"), 0.0) >= 1, errors, "tropical support payload has no observed supports")
     _assert("interpretation" in support_metrics, errors, "tropical support payload is missing collapse interpretation")
     _assert(isinstance(support_metrics.get("margin_summary"), dict), errors, "tropical support payload is missing margin summary")
+    wall_audit = support_metrics.get("wall_margin_audit")
+    _assert(isinstance(wall_audit, dict), errors, "tropical support payload is missing wall margin audit")
+    if isinstance(wall_audit, dict):
+        _assert(_finite_float(wall_audit.get("near_wall_hit_rate"), -1.0) >= _finite_float(wall_audit.get("strict_wall_hit_rate"), 0.0), errors, "near-wall hit rate is below strict wall-hit rate")
+        _assert(_finite_float(wall_audit.get("near_wall_margin_threshold"), -1.0) >= _finite_float(wall_audit.get("wall_margin_threshold"), 0.0), errors, "near-wall threshold is below strict wall threshold")
     _assert(str(support_metrics.get("render_contract", "")).startswith("assignment_matrix is binary model argmax support"), errors, "tropical support payload is missing binary assignment render contract")
     _assert(support_metrics.get("support_probability_source") == "model_tropical_support_probabilities", errors, "tropical support payload is missing model support-probability provenance")
     _assert(isinstance(support_metrics.get("active_support_probability_summary"), dict), errors, "tropical support payload is missing active-support probability summary")
@@ -482,6 +487,8 @@ def validate_row(row_dir: Path, *, min_candidates: int = 8, min_depth: int = 2, 
         _assert(0 <= support_idx < token_count, errors, "tropical support flow has out-of-range support_index")
         _assert(_finite_float(edge.get("active_support_probability"), -1.0) >= 0.0, errors, "tropical support flow is missing active support probability")
         _assert(edge.get("support_probability_source") == "model_tropical_support_probabilities", errors, "tropical support flow is missing probability provenance")
+        _assert(edge.get("wall_margin_bucket") in {"strict_wall", "near_wall", "interior", "unavailable"}, errors, "tropical support flow is missing wall margin bucket")
+        _assert("strict_wall_hit" in edge and "near_wall_hit" in edge, errors, "tropical support flow is missing strict/near wall flags")
         _assert(isinstance(edge.get("top_model_support_probabilities"), list), errors, "tropical support flow is missing top model support probabilities")
 
     graphcg_available = graphcg_payload.get("available") is True

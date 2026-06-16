@@ -313,7 +313,15 @@ def score_records(
     gfn_logits = model.gfn(out["graph_state"]).detach().cpu()
     gfn_probs = torch.softmax(gfn_logits, dim=-1)
     graphcg_projection = _graphcg_projection(model, out["graph_state"])
-    traces = graph_token_trace(records, graph_batch_cpu, out_cpu["support"], out_cpu["margin"], tokenizer, max_tokens=trace_limit)
+    traces = graph_token_trace(
+        records,
+        graph_batch_cpu,
+        out_cpu["support"],
+        out_cpu["margin"],
+        tokenizer,
+        max_tokens=trace_limit,
+        support_probabilities=out_cpu.get("graph_token_support_probabilities"),
+    )
     rows = []
     for idx, record in enumerate(records):
         mask = graph_batch_cpu.attention_mask[idx]

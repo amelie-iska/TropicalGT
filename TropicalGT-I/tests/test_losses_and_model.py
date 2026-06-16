@@ -94,6 +94,10 @@ def test_model_forward_fixture():
         "certificate_edge_agreement",
         "certificate_coverage",
         "wall_hit_rate",
+        "strict_wall_hit_rate",
+        "near_wall_hit_rate",
+        "wall_margin_threshold",
+        "near_wall_margin_threshold",
         "support_boundary_hit_rate",
         "margin_min",
         "margin_p05",
@@ -122,6 +126,9 @@ def test_model_forward_fixture():
     assert torch.allclose(out["tropical_margin_reward"], -out["tropical_margin_signed_loss"])
     assert out["tropical_margin_shortfall_loss"].item() >= 0.0
     assert 0.0 <= out["tropical_margin_shortfall_rate"].item() <= 1.0
+    assert torch.allclose(out["wall_hit_rate"], out["strict_wall_hit_rate"])
+    assert out["near_wall_hit_rate"].item() >= out["strict_wall_hit_rate"].item()
+    assert out["near_wall_margin_threshold"].item() >= out["wall_margin_threshold"].item()
 
 
 def test_model_allows_explicit_full_embedding_graphcg_bank():

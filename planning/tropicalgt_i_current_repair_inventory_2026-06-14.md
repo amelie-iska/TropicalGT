@@ -98,7 +98,7 @@ Repair `trajectory_persistence/two_parameter_bifiltration.html` so it is mathema
 - Active training: fresh b59 step-0 run `tropicalgt_i_pg_bpb_step0_full24b_b59_20260616T001122Z_fresh_bpb112_5k_gate`, PID `73189`, W&B `itxgxj40`, config under `TropicalGT-I/outputs/launch_configs/`, output dir under `TropicalGT-I/outputs/`.
 - b59 is under the 5K evidence gate: do not restart before step `5000` unless it crashes, OOMs, or logs nonfinite/invalid losses. Galileo (`019ecdc9-a3b8-7761-b0e5-36e6adad8e15`) owns the post-5K analysis/visualization review and evidence-backed step-0 restart.
 - Focused tests currently pass for certified CAS/analogical memory/training metrics paths after commit `70c2e93`.
-- The next local repair item remains the visual/math queue: tropical support readability, NLL/fitness density polish, simplex-tree/browser inspection, and CAS-rendered algebra panels as real backend evidence becomes available.
+- Tropical support readability now includes strict/near-wall margin diagnostics, per-token wall buckets, and threshold guide traces after the 2026-06-16 pass; remaining visual/math items are NLL/fitness density polish, simplex-tree/browser inspection, and CAS-rendered algebra panels as real backend evidence becomes available.
 
 ## 2026-06-14 Bifiltration Figure Repair Pass
 
