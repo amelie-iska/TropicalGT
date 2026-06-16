@@ -1108,3 +1108,24 @@ CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/t
 CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_simplicial_visualization.py TropicalGT-I/tests/test_interactive_artifact_validator.py -q -p no:cacheprovider --basetemp=/tmp/tropicalgt-pytest-step-source-contract-full
 # 65 passed
 ```
+
+## 2026-06-16 Persistence Landscape Visual Contract
+
+Sequential persistence-landscape repair completed after the reasoning-step source contract:
+
+- Added `persistence_landscapes.json` beside `trajectory_persistence/persistence_landscapes.html` with schema `tropicalgt.persistence_landscape_visual_contract.v1`.
+- The sidecar proves the page renders actual `topology.persistence_representations.methods[*].landscape` rows, marks the artifact actual-data/no-proxy, distinguishes GUDHI `lambda_k(t)` vectors from the GoT NLL/fitness landscape, and rejects norm-only summaries as sufficient evidence.
+- The renderer now plots vector-only GUDHI Landscape outputs by splitting `landscape.vector` with `num_landscapes` and `resolution`; when no explicit filtration grid is exported, the contract labels the x-coordinate as a normalized landscape sample index rather than inventing a filtration grid.
+- Non-growth persistence pages now emit an explicit unavailable landscape sidecar instead of leaving the landscape JSON absent.
+- The interactive artifact validator now requires the trajectory persistence landscape sidecar and rejects missing, unavailable, proxy/fallback, NLL-confused, norm-only, or zero-curve landscape payloads.
+
+Validation:
+
+```text
+CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m py_compile TropicalGT-I/src/tropicalgt/visualization.py TropicalGT-I/scripts/validate_interactive_audit_artifacts.py TropicalGT-I/tests/test_simplicial_visualization.py TropicalGT-I/tests/test_interactive_artifact_validator.py
+# passed
+CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_simplicial_visualization.py::test_trajectory_persistence_uses_growth_and_chain_presentation_diagnostics TropicalGT-I/tests/test_simplicial_visualization.py::test_non_growth_persistence_landscape_is_explicitly_unavailable TropicalGT-I/tests/test_interactive_artifact_validator.py::test_validate_audit_root_accepts_three_interactive_rows TropicalGT-I/tests/test_interactive_artifact_validator.py::test_validate_audit_root_rejects_missing_persistence_landscape_payload TropicalGT-I/tests/test_interactive_artifact_validator.py::test_validate_audit_root_rejects_norm_only_persistence_landscape_payload -q -p no:cacheprovider --basetemp=/tmp/tropicalgt-pytest-landscape-contract
+# 5 passed
+CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_simplicial_visualization.py TropicalGT-I/tests/test_interactive_artifact_validator.py -q -p no:cacheprovider --basetemp=/tmp/tropicalgt-pytest-landscape-contract-full
+# 67 passed
+```

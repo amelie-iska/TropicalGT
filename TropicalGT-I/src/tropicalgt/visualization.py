@@ -4985,6 +4985,7 @@ def write_persistence_visualizations(
     module_path = output_dir / "persistence_module_betti.html"
     representations_path = output_dir / "persistence_representations.html"
     landscapes_path = output_dir / "persistence_landscapes.html"
+    landscapes_payload_path = landscapes_path.with_suffix(".json")
     if growth:
         _write_growth_persistence_barcode(barcode, topology, growth, title_prefix=title_prefix)
         _write_growth_persistence_module(module_path, topology, growth, title_prefix=title_prefix)
@@ -4995,6 +4996,7 @@ def write_persistence_visualizations(
             "persistence_module_betti": str(module_path),
             "persistence_representations": str(representations_path),
             "persistence_landscapes": str(landscapes_path),
+            "persistence_landscapes_payload": str(landscapes_payload_path),
         }
 
     intervals = topology.get("persistence", {}).get("intervals", []) if isinstance(topology.get("persistence"), dict) else []
@@ -5086,11 +5088,16 @@ def write_persistence_visualizations(
         "trajectory_persistence/persistence_landscapes.html",
         "Open trajectory_persistence/persistence_landscapes.html",
     )
+    landscapes_payload_path.write_text(
+        json.dumps(_persistence_landscape_unavailable_contract("standalone_non_growth_topology_has_no_trajectory_growth_rows"), indent=2),
+        encoding="utf-8",
+    )
     return {
         "persistence_barcode": str(barcode),
         "persistence_module_betti": str(module_path),
         "persistence_representations": str(representations_path),
         "persistence_landscapes": str(landscapes_path),
+        "persistence_landscapes_payload": str(landscapes_payload_path),
     }
 
 
@@ -7071,6 +7078,74 @@ def _write_growth_persistence_representations(path: Path, topology: dict[str, ob
     )
 
 
+def _landscape_grid_values(landscape: Mapping[str, object]) -> tuple[list[float], list[list[float]], str, dict[str, object]]:
+    grid = _as_float_list(landscape.get("grid", []))
+    raw_values = landscape.get("values", [])
+    values: list[list[float]] = []
+    if grid and isinstance(raw_values, list):
+        for layer in raw_values:
+            layer_values = _as_float_list(layer)
+            if len(layer_values) == len(grid):
+                values.append(layer_values)
+        if values:
+            return grid, values, "reported_landscape_grid_values", {
+                "grid_source": "reported_landscape_grid",
+                "values_source": "reported_landscape_values",
+                "vector_length": int(sum(len(layer) for layer in values)),
+            }
+    vector = _as_float_list(landscape.get("vector", []))
+    try:
+        resolution = int(landscape.get("resolution", 0) or 0)
+    except (TypeError, ValueError):
+        resolution = 0
+    try:
+        num_landscapes = int(landscape.get("num_landscapes", 0) or 0)
+    except (TypeError, ValueError):
+        num_landscapes = 0
+    if vector and resolution > 0:
+        full_layers = len(vector) // resolution
+        if num_landscapes <= 0 or num_landscapes > full_layers:
+            num_landscapes = full_layers
+        if num_landscapes > 0:
+            grid = [float(idx) / float(max(resolution - 1, 1)) for idx in range(resolution)]
+            values = [vector[idx * resolution : (idx + 1) * resolution] for idx in range(num_landscapes)]
+            return grid, values, "normalized_index_from_gudhi_landscape_vector", {
+                "grid_source": "normalized_index_from_gudhi_vector_resolution",
+                "values_source": "gudhi.representations.Landscape.vector",
+                "vector_length": int(len(vector)),
+                "reported_num_landscapes": int(num_landscapes),
+                "reported_resolution": int(resolution),
+            }
+    return [], [], "unavailable_no_landscape_grid_values_or_vector", {
+        "grid_source": "unavailable",
+        "values_source": "unavailable",
+        "vector_length": int(len(vector)),
+        "reported_resolution": int(resolution),
+        "reported_num_landscapes": int(num_landscapes),
+    }
+
+
+def _persistence_landscape_unavailable_contract(reason: str) -> dict[str, object]:
+    return {
+        "schema_version": "tropicalgt.persistence_landscape_visual_contract.v1",
+        "available": False,
+        "reason": reason,
+        "source": "topology.persistence_representations.methods[*].landscape",
+        "actual_data_only": True,
+        "no_proxy_or_fallback": True,
+        "not_nll_fitness_landscape": True,
+        "not_norm_only_summary": False,
+        "safe_to_render_actual_landscape_functions": False,
+        "curve_trace_count": 0,
+        "growth_row_count": 0,
+        "rendered_growth_level_count": 0,
+        "homology_dimensions": [],
+        "landscape_rows": [],
+        "unavailable_reasons": [reason],
+        "render_contract": "Persistence landscape pages render only actual GUDHI Landscape vectors/lambda_k rows from persistence_representations; unavailable states are explicit and are not replaced by NLL/fitness landscapes, zero vectors, norms, or proxy summaries.",
+    }
+
+
 def _write_growth_persistence_landscapes(path: Path, topology: dict[str, object], growth: list[object], title_prefix: str = "") -> None:
     rows = _trajectory_growth_rows(topology, growth)
     fig = make_subplots(
@@ -7096,6 +7171,8 @@ def _write_growth_persistence_landscapes(path: Path, topology: dict[str, object]
     heatmap_x: list[float] = []
     heatmap_dim: int | None = None
     trace_count = 0
+    landscape_contract_rows: list[dict[str, object]] = []
+    unavailable_reasons: list[str] = []
     for row_idx, row in enumerate(rows):
         level = int(row.get("level", row_idx))
         topo = row.get("topological_algebra", {}) if isinstance(row.get("topological_algebra"), dict) else {}
@@ -7110,10 +7187,32 @@ def _write_growth_persistence_landscapes(path: Path, topology: dict[str, object]
                 continue
             dim = int(dim_key)
             landscape = method.get("landscape", {}) if isinstance(method.get("landscape"), dict) else {}
-            grid = _as_float_list(landscape.get("grid", []))
-            values = landscape.get("values", [])
-            if not grid or not isinstance(values, list):
+            grid, values, grid_source, value_meta = _landscape_grid_values(landscape)
+            if not grid or not values:
+                unavailable_reasons.append(f"level_{level}_H{dim}_{grid_source}")
                 continue
+            finite_values = [value for layer in values for value in layer if math.isfinite(float(value))]
+            landscape_contract_rows.append(
+                {
+                    "level": level,
+                    "homology_dimension": dim,
+                    "source": "topology.persistence_representations.methods[*].landscape",
+                    "backend": str(reps.get("backend", "gudhi.representations")),
+                    "grid_source": value_meta.get("grid_source", grid_source),
+                    "values_source": value_meta.get("values_source", "reported_landscape_values"),
+                    "layer_count": int(len(values)),
+                    "grid_count": int(len(grid)),
+                    "vector_length": int(value_meta.get("vector_length", sum(len(layer) for layer in values)) or 0),
+                    "finite_value_count": int(len(finite_values)),
+                    "nonzero_value_count": int(sum(1 for value in finite_values if abs(float(value)) > 1e-12)),
+                    "min_value": float(min(finite_values)) if finite_values else 0.0,
+                    "max_value": float(max(finite_values)) if finite_values else 0.0,
+                    "actual_gudhi_landscape_values": True,
+                    "not_norm_only_summary": True,
+                    "not_nll_fitness_landscape": True,
+                    **{key: value for key, value in value_meta.items() if key not in {"grid_source", "values_source", "vector_length"}},
+                }
+            )
             if values and heatmap_dim is None:
                 heatmap_dim = dim
                 heatmap_x = grid
@@ -7186,7 +7285,7 @@ def _write_growth_persistence_landscapes(path: Path, topology: dict[str, object]
             "hover links each row to the filtered complex. This is distinct from the GoT NLL/fitness landscape.</sup>"
         ),
         scene=dict(
-            xaxis_title="filtration t",
+            xaxis_title="filtration or normalized landscape sample t",
             yaxis_title="trajectory growth level",
             zaxis_title="GUDHI persistence landscape value",
             aspectmode="manual",
@@ -7197,8 +7296,32 @@ def _write_growth_persistence_landscapes(path: Path, topology: dict[str, object]
         height=1260,
         margin=dict(t=150, l=82, r=118, b=96),
     )
-    fig.update_xaxes(title_text="filtration t", row=2, col=1)
+    fig.update_xaxes(title_text="filtration or normalized landscape sample t", row=2, col=1)
     fig.update_yaxes(title_text="growth level / homology dimension", row=2, col=1)
+    homology_dimensions = sorted({int(row["homology_dimension"]) for row in landscape_contract_rows})
+    rendered_levels = sorted({int(row["level"]) for row in landscape_contract_rows})
+    contract = {
+        "schema_version": "tropicalgt.persistence_landscape_visual_contract.v1",
+        "available": bool(trace_count > 0 and landscape_contract_rows),
+        "source": "topology.persistence_representations.methods[*].landscape",
+        "actual_data_only": True,
+        "no_proxy_or_fallback": True,
+        "not_nll_fitness_landscape": True,
+        "not_norm_only_summary": bool(trace_count > 0 and landscape_contract_rows),
+        "safe_to_render_actual_landscape_functions": bool(trace_count > 0 and landscape_contract_rows),
+        "curve_trace_count": int(trace_count),
+        "growth_row_count": int(len(rows)),
+        "rendered_growth_level_count": int(len(rendered_levels)),
+        "rendered_growth_levels": rendered_levels,
+        "homology_dimensions": homology_dimensions,
+        "heatmap_available": bool(heatmap_rows),
+        "heatmap_source": "first available lambda_1(t) rows from actual landscape values" if heatmap_rows else "unavailable_no_lambda1_rows",
+        "landscape_rows": landscape_contract_rows,
+        "unavailable_reasons": unavailable_reasons,
+        "render_contract": "Persistence landscape pages render only actual GUDHI Landscape vectors/lambda_k rows from persistence_representations; unavailable states are explicit and are not replaced by NLL/fitness landscapes, zero vectors, norms, or proxy summaries.",
+    }
+    path.with_suffix(".json").write_text(json.dumps(contract, indent=2), encoding="utf-8")
+    fig.update_layout(meta={"persistence_landscape_visual_contract": contract})
     _write_plotly_dark_html(
         path,
         fig,

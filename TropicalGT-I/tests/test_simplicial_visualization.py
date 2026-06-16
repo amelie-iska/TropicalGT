@@ -1216,6 +1216,7 @@ def test_trajectory_persistence_uses_growth_and_chain_presentation_diagnostics(t
     module_html = Path(paths["persistence_module_betti"]).read_text(encoding="utf-8")
     reps_html = Path(paths["persistence_representations"]).read_text(encoding="utf-8")
     landscapes_html = Path(paths["persistence_landscapes"]).read_text(encoding="utf-8")
+    landscapes_payload = json.loads(Path(paths["persistence_landscapes_payload"]).read_text(encoding="utf-8"))
     assert "persistent homology growth barcode" in barcode_html
     assert "trajectory growth level" in barcode_html
     assert "multiparameter persistence and chain-presentation diagnostics" in module_html
@@ -1227,6 +1228,20 @@ def test_trajectory_persistence_uses_growth_and_chain_presentation_diagnostics(t
     assert "Actual GUDHI persistence landscape functions" in landscapes_html
     assert "lambda_1(t)" in landscapes_html
     assert "not norm-only summaries" in landscapes_html
+    assert landscapes_payload["schema_version"] == "tropicalgt.persistence_landscape_visual_contract.v1"
+    assert landscapes_payload["available"] is True
+    assert landscapes_payload["actual_data_only"] is True
+    assert landscapes_payload["no_proxy_or_fallback"] is True
+    assert landscapes_payload["not_nll_fitness_landscape"] is True
+    assert landscapes_payload["not_norm_only_summary"] is True
+    assert landscapes_payload["safe_to_render_actual_landscape_functions"] is True
+    assert landscapes_payload["curve_trace_count"] > 0
+    assert landscapes_payload["rendered_growth_level_count"] == 2
+    assert landscapes_payload["homology_dimensions"] == [0, 1]
+    assert landscapes_payload["landscape_rows"]
+    assert all(row["actual_gudhi_landscape_values"] is True for row in landscapes_payload["landscape_rows"])
+    assert all(row["values_source"] == "gudhi.representations.Landscape.vector" for row in landscapes_payload["landscape_rows"])
+    assert all(row["grid_source"] == "normalized_index_from_gudhi_vector_resolution" for row in landscapes_payload["landscape_rows"])
     assert '<input id="filtration-slider"' not in barcode_html
     assert '<div class="filtration-controls"' not in barcode_html
     assert '<input id="filtration-slider"' not in module_html
@@ -1237,7 +1252,14 @@ def test_non_growth_persistence_landscape_is_explicitly_unavailable(tmp_path: Pa
     topo = _toy_topology(intervals=[{"dimension": 0, "birth": 0.0, "death": 0.5, "infinite": False}])
     paths = write_persistence_visualizations(topo, tmp_path)
     assert "persistence_landscapes" in paths
+    assert "persistence_landscapes_payload" in paths
     landscape_html = Path(paths["persistence_landscapes"]).read_text(encoding="utf-8")
+    landscape_payload = json.loads(Path(paths["persistence_landscapes_payload"]).read_text(encoding="utf-8"))
+    assert landscape_payload["schema_version"] == "tropicalgt.persistence_landscape_visual_contract.v1"
+    assert landscape_payload["available"] is False
+    assert landscape_payload["safe_to_render_actual_landscape_functions"] is False
+    assert landscape_payload["not_nll_fitness_landscape"] is True
+    assert "standalone_non_growth_topology" in landscape_payload["reason"]
     assert "redirect to trajectory-growth artifact" in landscape_html
     assert "Open trajectory growth persistence landscapes" in landscape_html
     assert "trajectory_persistence/persistence_landscapes.html" in landscape_html

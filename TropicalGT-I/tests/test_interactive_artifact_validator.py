@@ -933,6 +933,64 @@ def _row(root: Path, name: str) -> Path:
     }
     for rel, content in html_files.items():
         _write(row / rel, content)
+    landscape_payload = {
+        "schema_version": "tropicalgt.persistence_landscape_visual_contract.v1",
+        "available": True,
+        "source": "topology.persistence_representations.methods[*].landscape",
+        "actual_data_only": True,
+        "no_proxy_or_fallback": True,
+        "not_nll_fitness_landscape": True,
+        "not_norm_only_summary": True,
+        "safe_to_render_actual_landscape_functions": True,
+        "curve_trace_count": 2,
+        "growth_row_count": 2,
+        "rendered_growth_level_count": 2,
+        "rendered_growth_levels": [0, 1],
+        "homology_dimensions": [0, 1],
+        "heatmap_available": True,
+        "heatmap_source": "first available lambda_1(t) rows from actual landscape values",
+        "landscape_rows": [
+            {
+                "level": 0,
+                "homology_dimension": 0,
+                "source": "topology.persistence_representations.methods[*].landscape",
+                "backend": "gudhi.representations",
+                "grid_source": "normalized_index_from_gudhi_vector_resolution",
+                "values_source": "gudhi.representations.Landscape.vector",
+                "layer_count": 1,
+                "grid_count": 4,
+                "vector_length": 4,
+                "finite_value_count": 4,
+                "nonzero_value_count": 2,
+                "min_value": 0.0,
+                "max_value": 0.4,
+                "actual_gudhi_landscape_values": True,
+                "not_norm_only_summary": True,
+                "not_nll_fitness_landscape": True,
+            },
+            {
+                "level": 1,
+                "homology_dimension": 1,
+                "source": "topology.persistence_representations.methods[*].landscape",
+                "backend": "gudhi.representations",
+                "grid_source": "normalized_index_from_gudhi_vector_resolution",
+                "values_source": "gudhi.representations.Landscape.vector",
+                "layer_count": 1,
+                "grid_count": 4,
+                "vector_length": 4,
+                "finite_value_count": 4,
+                "nonzero_value_count": 2,
+                "min_value": 0.0,
+                "max_value": 0.3,
+                "actual_gudhi_landscape_values": True,
+                "not_norm_only_summary": True,
+                "not_nll_fitness_landscape": True,
+            },
+        ],
+        "unavailable_reasons": [],
+        "render_contract": "Persistence landscape pages render only actual GUDHI Landscape vectors/lambda_k rows from persistence_representations; unavailable states are explicit and are not replaced by NLL/fitness landscapes, zero vectors, norms, or proxy summaries.",
+    }
+    _write(row / "trajectory_persistence/persistence_landscapes.json", json.dumps(landscape_payload))
     _write(row / "got_full_trajectory_complex_slider_contract.json", json.dumps(_slider_contract("got_full_trajectory_complex.html")))
     _write(row / "got_full_trajectory_complex_jensen_shannon_slider_contract.json", json.dumps(_slider_contract("got_full_trajectory_complex_jensen_shannon.html")))
     for step in steps:
@@ -1007,6 +1065,33 @@ def test_validate_audit_root_accepts_three_interactive_rows(tmp_path: Path):
     assert report["rows_checked"] == 3
     assert report["validation_metrics"]["bpb"] == 1.5
     assert all(row["step_complex_maps"] == 4 for row in report["row_reports"])
+
+
+def test_validate_audit_root_rejects_missing_persistence_landscape_payload(tmp_path: Path):
+    validator = _load_validator()
+    audit = tmp_path / "step_00000001" / "got_audit"
+    row = _row(audit, ".")
+    (row / "trajectory_persistence" / "persistence_landscapes.json").unlink()
+    _write(audit / "codex_browser_index.html", _codex_browser_html(_browser_samples(audit, ["."])))
+    report = validator.validate_audit_root(audit, min_rows=1, min_candidates=4, min_depth=2)
+    assert not report["ok"]
+    assert any("persistence landscapes payload" in err for err in report["errors"])
+
+
+def test_validate_audit_root_rejects_norm_only_persistence_landscape_payload(tmp_path: Path):
+    validator = _load_validator()
+    audit = tmp_path / "step_00000001" / "got_audit"
+    row = _row(audit, ".")
+    payload_path = row / "trajectory_persistence" / "persistence_landscapes.json"
+    payload = json.loads(payload_path.read_text(encoding="utf-8"))
+    payload["not_norm_only_summary"] = False
+    payload["safe_to_render_actual_landscape_functions"] = False
+    payload["curve_trace_count"] = 0
+    payload_path.write_text(json.dumps(payload), encoding="utf-8")
+    _write(audit / "codex_browser_index.html", _codex_browser_html(_browser_samples(audit, ["."])))
+    report = validator.validate_audit_root(audit, min_rows=1, min_candidates=4, min_depth=2)
+    assert not report["ok"]
+    assert any("norm-only" in err or "no curve traces" in err for err in report["errors"])
 
 
 def test_validate_audit_root_rejects_missing_bifiltration_structure_map_summary(tmp_path: Path):
