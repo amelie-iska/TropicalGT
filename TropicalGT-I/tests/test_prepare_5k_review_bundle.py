@@ -67,5 +67,12 @@ def test_prepare_review_bundle_writes_prompt_contract_and_commands(tmp_path: Pat
     assert bundle["decision"]["triggered"] is True
     assert "eval_tropicalgt_i.py" in bundle["commands"]["eval_validation_visualizations"]
     assert "--render-visualizations" in bundle["commands"]["eval_validation_visualizations"]
+    assert "spawn_or_assign_codex_subagent_when_available" in bundle["review_requirements"]
+    assert "review_metrics_advanced_sidecars_topological_geometric_algebraic_visualizations" in bundle["review_requirements"]
+    prompt_text = (module.ROOT / artifacts["codex_prompt"]).read_text(encoding="utf-8")
+    assert "spawn or assign a fresh Codex subagent" in prompt_text
+    assert "topological, geometric, algebraic" in prompt_text
+    assert "Restart from step 0" in prompt_text
+    assert "No proxies or fallbacks" in prompt_text
     for key in ("contract_json", "contract_markdown", "codex_prompt", "bundle_json", "bundle_markdown"):
         assert (module.ROOT / artifacts[key]).exists()

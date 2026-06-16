@@ -183,6 +183,12 @@ def prepare_review_bundle(args: argparse.Namespace) -> dict[str, Any]:
             "triggered": bpb is None or bpb > args.target_bpb,
             "restart_policy": "beginning",
         },
+        "review_requirements": [
+            "spawn_or_assign_codex_subagent_when_available",
+            "review_metrics_advanced_sidecars_topological_geometric_algebraic_visualizations",
+            "restart_from_step_0_with_adjusted_hyperparameters_if_target_not_met",
+            "no_proxies_or_fallbacks_for_unavailable_evidence",
+        ],
         "artifacts": {
             "contract_json": _relative_project_path(contract_path),
             "contract_markdown": _relative_project_path(contract_md_path),

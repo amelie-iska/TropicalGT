@@ -496,3 +496,13 @@ The live item-by-item repair inventory is maintained in `planning/tropicalgt_i_c
 - [x] Confirmed the existing Codex heartbeat automation `check-tropicalgt-b59-5k-gate` is active on `FREQ=MINUTELY;INTERVAL=150`, i.e. every 2.5 hours, and targets this thread for post-5K follow-up.
 - [x] Latest checked training state during this Section 12 audit reached step `2252/5000` with train loss/NLL `1.126/1.103`; W&B run id remains `ld5u55p5` for `amelie-iska-math/TropicalGT-I`.
 - [ ] Section 12 5K gate remains open until the trainer produces the required step-5000 validation and audit artifacts; do not restart from step 0 before those artifacts exist unless the user explicitly changes the policy.
+
+### Current Objective Update - Post-5K Subagent Review Contract Pass
+
+- [x] Tightened `TropicalGT-I/scripts/parameter_golf_codex_review_loop.py` so the generated 5K review prompt instructs the main Codex coordinator to spawn or assign a fresh Codex subagent when subagent tools are available.
+- [x] The review prompt now explicitly requires inspection of metrics, advanced sidecars, validation reports, W&B summaries, and topological, geometric, algebraic, GraphCG, GFlowNet, memory, and decoding visualizations from the artifact inventory.
+- [x] The prompt now requires no proxies or fallbacks for unavailable CAS/topology/geometry/algebra/memory/visualization evidence and calls for a step-0 restart with adjusted hyperparameters/configs if BPB remains above target under the beginning restart policy.
+- [x] `prepare_5k_review_bundle.py` now writes machine-readable `review_requirements` covering subagent review, advanced sidecar/visualization review, step-0 restart, and no-proxy evidence handling.
+- [x] Verification completed: py-compile for the review-loop and bundle scripts/tests plus `pytest TropicalGT-I/tests/test_parameter_golf_review_loop.py TropicalGT-I/tests/test_prepare_5k_review_bundle.py -q` (`5 passed`).
+- [x] Latest checked training state reached step `2324/5000` with train loss/NLL `1.134/1.111`; trainer PID `378962` and watcher PID `379304` remain alive under the step-5000 gate.
+- [ ] Next Section 12 item remains gated on step-5000 artifacts: run post-5K analysis/visualizations, route the review to a Codex subagent, then restart from step 0 with evidence-backed hyperparameter/config updates if BPB is still above target.

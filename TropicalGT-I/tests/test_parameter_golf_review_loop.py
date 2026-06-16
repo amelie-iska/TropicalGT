@@ -79,3 +79,27 @@ def test_active_training_contract_inventories_latest_periodic_artifacts(tmp_path
     assert any(path.endswith("tropical_fan_diagnostics.json") for path in inventory["advanced_sidecars_tail"])
     assert inventory["interactive_audit_validator_commands"]
     assert inventory["inventory_policy"].startswith("bounded source paths only")
+
+def test_review_prompt_requires_subagent_evidence_review_and_step0_restart():
+    loop = _load_review_loop()
+    prompt = loop._review_prompt(
+        cfg={"model": {}, "output_dir": "TropicalGT-I/outputs/unit"},
+        report={"metrics": {}, "eval": {}},
+        checkpoint={"history_tail": []},
+        active_contract={"artifact_inventory": {"advanced_sidecars_tail": ["got_audit/tropical_fan_diagnostics.json"]}},
+        report_path=Path("report.json"),
+        checkpoint_path=Path("checkpoint.pt"),
+        previous_boundary_checkpoint=None,
+        boundary_step=5000,
+        metric="eval.bpb",
+        bpb=1.3,
+        graph_metric="eval.graph_bpb",
+        graph_bpb=2.0,
+        target_bpb=1.12,
+        restart_policy="beginning",
+    )
+    assert "spawn or assign a fresh Codex subagent" in prompt
+    assert "advanced sidecars" in prompt
+    assert "topological, geometric, algebraic" in prompt
+    assert "Restart from step 0" in prompt
+    assert "No proxies or fallbacks" in prompt
