@@ -45,11 +45,18 @@ def test_backfill_writes_unavailable_fan_and_bifiltration_visual_contract(tmp_pa
     report = module.backfill_audit_root(audit)
     kinds = {row["kind"] for row in report["actions"]}
     assert "tropical_fan_unavailable_backfill" in kinds
+    assert "toric_embedding_sidecar_unavailable_backfill" in kinds
     assert "two_parameter_bifiltration_visual_contract_backfill" in kinds
     fan = json.loads((audit / "tropical_fan_diagnostics.json").read_text(encoding="utf-8"))
     assert fan["available"] is False
     assert fan["safe_to_render_as_tropical_fan"] is False
+    toric = json.loads((audit / "toric_embedding_sidecar.json").read_text(encoding="utf-8"))
+    assert toric["available"] is False
+    assert toric["safe_to_render_as_finite_toric_ideal_sidecar"] is False
+    assert toric["safe_to_use_as_normal_fan_certificate"] is False
+    assert "chart-bundle" in toric["render_contract"]
     visual = json.loads((audit / "trajectory_persistence" / "two_parameter_bifiltration.json").read_text(encoding="utf-8"))
     assert visual["primary_view"] == "miller_sturmfels_bivariate_staircase"
     assert visual["rank_surface_primary"] is False
     assert "Backfills only explicit unavailable diagnostics" in report["policy"]
+    assert "toric ideals" in report["policy"]

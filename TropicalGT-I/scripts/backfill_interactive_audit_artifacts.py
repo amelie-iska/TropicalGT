@@ -11,7 +11,7 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT / "src") not in sys.path:
     sys.path.insert(0, str(ROOT / "src"))
 
-from tropicalgt.visualization import write_tropical_fan_diagnostics, write_two_parameter_bifiltration_visualization  # noqa: E402
+from tropicalgt.visualization import write_toric_embedding_sidecar, write_tropical_fan_diagnostics, write_two_parameter_bifiltration_visualization  # noqa: E402
 
 
 def _read_json(path: Path) -> dict[str, Any]:
@@ -41,6 +41,18 @@ def backfill_audit_root(audit_root: str | Path, *, overwrite: bool = False) -> d
             {
                 "kind": "tropical_fan_unavailable_backfill",
                 "reason": "No explicit model-derived tropical ideal was available in this legacy audit bundle; wrote explicit unavailable diagnostics rather than a proxy fan.",
+                "paths": paths,
+            }
+        )
+
+    toric_json = root / "toric_embedding_sidecar.json"
+    toric_html = root / "toric_embedding_sidecar.html"
+    if overwrite or not (toric_json.exists() and toric_html.exists()):
+        paths = write_toric_embedding_sidecar({}, root)
+        actions.append(
+            {
+                "kind": "toric_embedding_sidecar_unavailable_backfill",
+                "reason": "No explicit model-derived toric exponent matrix was available in this legacy audit bundle; wrote explicit unavailable finite toric-ideal sidecar diagnostics rather than a chart-bundle, support-token, GraphCG, embedding, or visualization proxy.",
                 "paths": paths,
             }
         )
@@ -82,7 +94,7 @@ def backfill_audit_root(audit_root: str | Path, *, overwrite: bool = False) -> d
         "step_dir": str(step_dir),
         "overwrite": bool(overwrite),
         "actions": actions,
-        "policy": "Backfills only explicit unavailable diagnostics or rerenders visual contracts from existing raw payloads; it does not fabricate CAS certificates, tropical fans, or persistence modules.",
+        "policy": "Backfills only explicit unavailable diagnostics or rerenders visual contracts from existing raw payloads; it does not fabricate CAS certificates, tropical fans, toric ideals, toric embeddings, normal fans, tropical-variety embeddings, or persistence modules.",
     }
     report_path = root / "backfill_report.json"
     report_path.write_text(json.dumps(report, indent=2), encoding="utf-8")

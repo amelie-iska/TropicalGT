@@ -385,3 +385,24 @@ CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/scripts:TropicalGT-I/src /home/i
 Operational note: b62 remained alive during verification and had advanced past step 750/5000 with train loss/NLL around 1.345/1.322 when checked.
 
 Next linear item: continue source-side audit hardening and browser validation while b62 trains to the 5K gate; newly generated bundles will include the toric sidecar, while pre-existing b62 artifacts may need backfill before strict sidecar review.
+
+## 2026-06-16 Legacy Toric Sidecar Backfill Pass
+
+Sequential source-side hardening item completed after the toric embedding sidecar audit surface pass:
+
+- Extended `backfill_interactive_audit_artifacts.py` so legacy audit bundles receive an explicit unavailable `toric_embedding_sidecar.html` / `toric_embedding_sidecar.json` when no model-derived toric exponent matrix exists.
+- The backfill uses the same no-proxy contract as the new writer: it does not fabricate CAS certificates, toric ideals, toric embeddings, normal fans, tropical-variety embeddings, or global toric-variety claims from chart-bundle logits, support-token traces, GraphCG cells, embeddings, or visual rows.
+- The existing 5K review flow already runs legacy backfill before strict validators when requested, so post-5K review can distinguish genuinely missing toric exponent evidence from a missing legacy artifact surface.
+
+Validation:
+
+```text
+/home/iska/miniconda3/envs/tokengt/bin/python -m py_compile TropicalGT-I/scripts/backfill_interactive_audit_artifacts.py TropicalGT-I/src/tropicalgt/visualization.py TropicalGT-I/tests/test_backfill_interactive_audit_artifacts.py TropicalGT-I/tests/test_simplicial_visualization.py
+# passed
+CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/scripts:TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_backfill_interactive_audit_artifacts.py -q
+# 1 passed
+CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/scripts:TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_simplicial_visualization.py TropicalGT-I/tests/test_interactive_artifact_validator.py -q
+# 52 passed
+```
+
+Next linear item: continue evidence hardening and browser/backfill paths while b62 trains toward the 5K gate.
