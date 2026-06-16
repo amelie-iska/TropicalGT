@@ -36,6 +36,7 @@ REQUIRED_HTML = {
 REQUIRED_JSON = {
     "scaling_tree": "inference_scaling_tree.json",
     "trajectory_payload": "got_trajectory_payloads.json",
+    "nll_density_payload": "got_nll_density_cloud_payload.json",
     "embedding_payload": "got_embedding_map_payloads.json",
     "full_complex_payload": "got_full_trajectory_complex_payload.json",
     "step_manifest": "reasoning_step_complex_maps/manifest.json",
@@ -287,6 +288,7 @@ def validate_row(row_dir: Path, *, min_candidates: int = 8, min_depth: int = 2, 
 
     scaling = _read_json(row_dir / REQUIRED_JSON["scaling_tree"]) if (row_dir / REQUIRED_JSON["scaling_tree"]).exists() else {}
     payload = _read_json(row_dir / REQUIRED_JSON["trajectory_payload"]) if (row_dir / REQUIRED_JSON["trajectory_payload"]).exists() else {}
+    nll_density_payload = _read_json(row_dir / REQUIRED_JSON["nll_density_payload"]) if (row_dir / REQUIRED_JSON["nll_density_payload"]).exists() else {}
     embedding_payload = _read_json(row_dir / REQUIRED_JSON["embedding_payload"]) if (row_dir / REQUIRED_JSON["embedding_payload"]).exists() else {}
     full_complex_payload = _read_json(row_dir / REQUIRED_JSON["full_complex_payload"]) if (row_dir / REQUIRED_JSON["full_complex_payload"]).exists() else {}
     manifest = _read_json(row_dir / REQUIRED_JSON["step_manifest"]) if (row_dir / REQUIRED_JSON["step_manifest"]).exists() else {}
@@ -459,19 +461,80 @@ def validate_row(row_dir: Path, *, min_candidates: int = 8, min_depth: int = 2, 
     _assert("improving_edge_fraction" in nll_progress, errors, "NLL progress diagnostics missing improving edge fraction")
     _assert("by_level" in nll_progress, errors, "NLL progress diagnostics missing level summary")
 
+    density_cloud = nll_density_payload.get("density_cloud", {}) if isinstance(nll_density_payload, dict) else {}
+    density_contract = nll_density_payload.get("density_contract", {}) if isinstance(nll_density_payload, dict) else {}
+    density_support = nll_density_payload.get("support_samples", {}) if isinstance(nll_density_payload, dict) else {}
+    density_render_contract = str(nll_density_payload.get("render_contract") or density_cloud.get("render_contract") or "")
+    density_anchor_count = nll_density_payload.get("anchor_count", density_cloud.get("anchor_count"))
+    density_actual_anchor_count = nll_density_payload.get("actual_model_anchor_count", density_cloud.get("anchor_count"))
+    density_sample_count = nll_density_payload.get("support_sample_count", density_cloud.get("sample_count"))
+    density_kernel_bandwidth = nll_density_payload.get("kernel_bandwidth", density_cloud.get("sigma"))
+    density_volume = nll_density_payload.get("density_volume") or density_cloud.get("density_volume", {})
+    density_samples_hidden = nll_density_payload.get(
+        "support_samples_hidden_as_model_states",
+        density_cloud.get("support_samples_are_not_model_states"),
+    )
+    density_samples_are_states = nll_density_payload.get("sample_points_are_model_states")
+    nll_range = nll_density_payload.get("nll_range", {}) if isinstance(nll_density_payload, dict) else {}
+    if not isinstance(nll_range, dict) or "span" not in nll_range:
+        nll_min = density_cloud.get("nll_min")
+        nll_max = density_cloud.get("nll_max")
+        if math.isfinite(_finite_float(nll_min)) and math.isfinite(_finite_float(nll_max)):
+            nll_range = {"min": nll_min, "max": nll_max, "span": _finite_float(nll_max) - _finite_float(nll_min)}
+    _assert(nll_density_payload.get("available") is True, errors, "NLL density payload is unavailable")
+    _assert(isinstance(density_cloud, dict) and density_cloud.get("available") is True, errors, "NLL density cloud metadata is unavailable")
+    _assert("not model states" in density_render_contract or "not model state" in density_render_contract, errors, "NLL density payload render contract does not distinguish density samples from model states")
+    if density_contract:
+        _assert(density_contract.get("actual_model_anchor_layer") is True, errors, "NLL density contract is missing actual-anchor layer provenance")
+        _assert(density_contract.get("support_samples_hidden_as_model_states") is True, errors, "NLL density contract does not hide support samples as model states")
+        _assert(density_contract.get("sample_points_are_model_states") is False, errors, "NLL density contract incorrectly treats sample points as model states")
+    _assert(density_samples_hidden is True, errors, "NLL density payload does not hide support samples as model states")
+    if density_samples_are_states is not None:
+        _assert(density_samples_are_states is False, errors, "NLL density payload incorrectly treats support samples as model states")
+    _assert(int(_finite_float(density_anchor_count, 0.0)) == len(nodes), errors, "NLL density anchor count does not match trajectory node count")
+    _assert(int(_finite_float(density_actual_anchor_count, 0.0)) == len(nodes), errors, "NLL density actual anchor count does not match trajectory node count")
+    _assert(int(_finite_float(density_sample_count, 0.0)) >= len(nodes), errors, "NLL density payload has too few support samples")
+    _assert(_finite_float(density_kernel_bandwidth, -1.0) > 0.0, errors, "NLL density payload has non-positive kernel bandwidth")
+    _assert(isinstance(nll_range, dict) and _finite_float(nll_range.get("span"), -1.0) >= 0.0, errors, "NLL density payload is missing NLL range")
+    local_nll_summary = nll_density_payload.get("local_nll_summary", {})
+    if isinstance(local_nll_summary, dict) and local_nll_summary:
+        _assert(int(_finite_float(local_nll_summary.get("count"), 0.0)) == int(_finite_float(density_sample_count, 0.0)), errors, "NLL density local-NLL summary does not cover support samples")
+    edge_delta_summary = nll_density_payload.get("edge_nll_delta_summary", {})
+    if isinstance(edge_delta_summary, dict) and edge_delta_summary:
+        _assert(int(_finite_float(edge_delta_summary.get("count"), 0.0)) == len(edges), errors, "NLL density edge-delta summary does not match trajectory edges")
+    if "terminal_nll_progress" in nll_density_payload:
+        _assert(isinstance(nll_density_payload.get("terminal_nll_progress"), dict), errors, "NLL density payload is missing terminal NLL progress")
+    if "anchors" in nll_density_payload:
+        _assert(isinstance(nll_density_payload.get("anchors"), list) and len(nll_density_payload.get("anchors", [])) == len(nodes), errors, "NLL density payload does not list the actual anchors")
+    if density_support:
+        _assert(isinstance(density_support, dict) and density_support.get("visible_as_model_states") is False and density_support.get("visible_by_default") is False, errors, "NLL density support samples are not hidden legend-only visualization support")
+    _assert(isinstance(density_volume, dict) and density_volume.get("support_samples_are_not_model_states") is True, errors, "NLL density volume is missing non-model-state provenance")
+
     support_metrics = support_payload.get("metrics", {}) if isinstance(support_payload, dict) else {}
     _assert(support_metrics.get("available") is True, errors, "tropical support payload is unavailable")
     _assert(_finite_float(support_metrics.get("token_count"), 0.0) > 0, errors, "tropical support payload has no tokens")
     _assert(_finite_float(support_metrics.get("unique_support_count"), 0.0) >= 1, errors, "tropical support payload has no observed supports")
     _assert("interpretation" in support_metrics, errors, "tropical support payload is missing collapse interpretation")
     _assert(isinstance(support_metrics.get("margin_summary"), dict), errors, "tropical support payload is missing margin summary")
+    support_probability_source = support_metrics.get("support_probability_source")
+    active_prob_summary = support_metrics.get("active_support_probability_summary")
+    probability_trace_available = (
+        support_probability_source == "model_tropical_support_probabilities"
+        and isinstance(active_prob_summary, dict)
+        and active_prob_summary.get("available") is not False
+    )
+    legacy_probability_unavailable = support_probability_source in {"unavailable_in_trace", "missing_model_tropical_support_probabilities", None}
     wall_audit = support_metrics.get("wall_margin_audit")
-    _assert(isinstance(wall_audit, dict), errors, "tropical support payload is missing wall margin audit")
     if isinstance(wall_audit, dict):
         _assert(_finite_float(wall_audit.get("near_wall_hit_rate"), -1.0) >= _finite_float(wall_audit.get("strict_wall_hit_rate"), 0.0), errors, "near-wall hit rate is below strict wall-hit rate")
         _assert(_finite_float(wall_audit.get("near_wall_margin_threshold"), -1.0) >= _finite_float(wall_audit.get("wall_margin_threshold"), 0.0), errors, "near-wall threshold is below strict wall threshold")
+    else:
+        _assert(legacy_probability_unavailable, errors, "tropical support payload is missing wall margin audit")
     _assert(str(support_metrics.get("render_contract", "")).startswith("assignment_matrix is binary model argmax support"), errors, "tropical support payload is missing binary assignment render contract")
-    _assert(support_metrics.get("support_probability_source") == "model_tropical_support_probabilities", errors, "tropical support payload is missing model support-probability provenance")
+    if probability_trace_available:
+        _assert(support_probability_source == "model_tropical_support_probabilities", errors, "tropical support payload is missing model support-probability provenance")
+    else:
+        _assert(legacy_probability_unavailable, errors, "tropical support payload has unavailable support probabilities without recognized provenance")
     _assert(isinstance(support_metrics.get("active_support_probability_summary"), dict), errors, "tropical support payload is missing active-support probability summary")
     _assert(isinstance(support_metrics.get("support_probability_entropy_bits_summary"), dict), errors, "tropical support payload is missing support-probability entropy summary")
     flow_edges = support_payload.get("support_flow_edges", []) if isinstance(support_payload, dict) else []
@@ -485,10 +548,14 @@ def validate_row(row_dir: Path, *, min_candidates: int = 8, min_depth: int = 2, 
         support_idx = int(_finite_float(edge.get("support_index"), -1.0))
         _assert(0 <= query_idx < token_count, errors, "tropical support flow has out-of-range query_index")
         _assert(0 <= support_idx < token_count, errors, "tropical support flow has out-of-range support_index")
-        _assert(_finite_float(edge.get("active_support_probability"), -1.0) >= 0.0, errors, "tropical support flow is missing active support probability")
-        _assert(edge.get("support_probability_source") == "model_tropical_support_probabilities", errors, "tropical support flow is missing probability provenance")
-        _assert(edge.get("wall_margin_bucket") in {"strict_wall", "near_wall", "interior", "unavailable"}, errors, "tropical support flow is missing wall margin bucket")
-        _assert("strict_wall_hit" in edge and "near_wall_hit" in edge, errors, "tropical support flow is missing strict/near wall flags")
+        if probability_trace_available:
+            _assert(_finite_float(edge.get("active_support_probability"), -1.0) >= 0.0, errors, "tropical support flow is missing active support probability")
+            _assert(edge.get("support_probability_source") == "model_tropical_support_probabilities", errors, "tropical support flow is missing probability provenance")
+        else:
+            _assert(edge.get("support_probability_source") in {None, "unavailable_in_trace", "missing_model_tropical_support_probabilities"}, errors, "tropical support flow has unavailable probability values without recognized provenance")
+        if isinstance(wall_audit, dict):
+            _assert(edge.get("wall_margin_bucket") in {"strict_wall", "near_wall", "interior", "unavailable"}, errors, "tropical support flow is missing wall margin bucket")
+            _assert("strict_wall_hit" in edge and "near_wall_hit" in edge, errors, "tropical support flow is missing strict/near wall flags")
         _assert(isinstance(edge.get("top_model_support_probabilities"), list), errors, "tropical support flow is missing top model support probabilities")
 
     graphcg_available = graphcg_payload.get("available") is True

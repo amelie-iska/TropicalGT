@@ -464,9 +464,27 @@ def test_got_trajectory_visualization_renders_simplicial_panel_and_nll_surface(t
     assert density_cloud["anchor_count"] == len(scaling["candidates"])
     assert density_cloud["local_nll_rule"].startswith("kernel-weighted mean")
     assert density_cloud["density_volume"]["support_samples_are_not_model_states"] is True
+    assert density_cloud_payload["render_contract"] == density_cloud["render_contract"]
+    assert density_cloud_payload["density_contract"]["actual_model_anchor_layer"] is True
+    assert density_cloud_payload["density_contract"]["sample_points_are_model_states"] is False
+    assert density_cloud_payload["support_samples_hidden_as_model_states"] is True
+    assert density_cloud_payload["sample_points_are_model_states"] is False
+    assert density_cloud_payload["anchor_count"] == len(scaling["candidates"])
+    assert density_cloud_payload["actual_model_anchor_count"] == len(scaling["candidates"])
+    assert density_cloud_payload["support_sample_count"] == density_cloud["sample_count"]
+    assert density_cloud_payload["kernel_bandwidth"] == density_cloud["sigma"]
+    assert density_cloud_payload["nll_range"]["span"] > 0.0
+    assert density_cloud_payload["local_nll_summary"]["count"] == density_cloud_payload["support_sample_count"]
+    assert density_cloud_payload["support_samples"]["visible_by_default"] is False
+    assert density_cloud_payload["support_samples"]["visible_as_model_states"] is False
+    assert density_cloud_payload["density_volume"]["support_samples_are_not_model_states"] is True
+    assert len(density_cloud_payload["anchors"]) == len(scaling["candidates"])
     assert len(density_cloud_payload["nodes"]) == len(scaling["candidates"])
     assert len(density_cloud_payload["edges"]) == 3
     assert all("nll_delta" in edge for edge in density_cloud_payload["edges"])
+    assert all("source_nll" in edge and "target_nll" in edge for edge in density_cloud_payload["edges"])
+    assert density_cloud_payload["edge_nll_delta_summary"]["count"] == 3
+    assert density_cloud_payload["terminal_nll_progress"]["best_terminal_improvement_from_root"] > 0.0
     assert payload["nll_progress"]["edge_count"] == 3
     assert payload["nll_progress"]["improving_edge_fraction"] > 0.0
     assert len(payload["edges"]) == 3

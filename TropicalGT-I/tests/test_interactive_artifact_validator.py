@@ -113,6 +113,63 @@ def _row(root: Path, name: str) -> Path:
     }
     _write(row / "inference_scaling_tree.json", json.dumps({"stochastic_actions": True, "sampling_temperature": 2.0, "sampling_exploration": 0.4, "candidates": candidates}))
     _write(row / "got_trajectory_payloads.json", json.dumps(payload))
+    density_edges = [
+        {"source": "root", "target": "a", "action": "expand", "source_nll": 1.0, "target_nll": 0.9, "nll_delta": -0.1, "improves": True},
+        {"source": "root", "target": "b", "action": "verify", "source_nll": 1.0, "target_nll": 1.1, "nll_delta": 0.1, "improves": False},
+        {"source": "a", "target": "c", "action": "refine", "source_nll": 0.9, "target_nll": 0.8, "nll_delta": -0.1, "improves": True},
+    ]
+    _write(
+        row / "got_nll_density_cloud_payload.json",
+        json.dumps(
+            {
+                "available": True,
+                "render_contract": "Gaussian cloud points are not model states; they visualize local NLL density around actual embedding vectors, while only large labeled markers are model states",
+                "density_contract": {
+                    "actual_model_anchor_layer": True,
+                    "support_samples_hidden_as_model_states": True,
+                    "sample_points_are_model_states": False,
+                    "support_sample_count": 440,
+                    "actual_model_anchor_count": 4,
+                    "kernel_bandwidth": 0.25,
+                    "edge_delta_rule": "target raw NLL minus source raw NLL over actual GoT tree edges",
+                },
+                "anchor_count": 4,
+                "actual_model_anchor_count": 4,
+                "support_sample_count": 440,
+                "support_samples_hidden_as_model_states": True,
+                "sample_points_are_model_states": False,
+                "kernel_bandwidth": 0.25,
+                "nll_range": {"min": 0.8, "max": 1.1, "span": 0.3},
+                "local_nll_summary": {"count": 440, "min": 0.8, "max": 1.1, "mean": 0.95, "std": 0.1},
+                "edge_nll_delta_summary": {"count": 3, "min": -0.1, "max": 0.1, "mean": -0.033333333, "std": 0.094},
+                "terminal_nll_progress": {"root_mean_nll": 1.0, "terminal_count": 2, "terminal_min_nll": 0.8, "best_terminal_improvement_from_root": 0.2, "improving_edge_fraction": 2 / 3},
+                "density_volume": {"available": True, "support_samples_are_not_model_states": True, "grid_size": 28},
+                "density_cloud": {
+                    "available": True,
+                    "source": "actual model-evaluated graph_state PCA anchors and measured raw NLL values",
+                    "support_samples_are_not_model_states": True,
+                    "exact_anchor_layer": True,
+                    "anchor_count": 4,
+                    "sample_count": 440,
+                    "sigma": 0.25,
+                    "nll_min": 0.8,
+                    "nll_max": 1.1,
+                    "render_contract": "Gaussian cloud points are not model states; they visualize local NLL density around actual embedding vectors, while only large labeled markers are model states",
+                    "density_volume": {"available": True, "support_samples_are_not_model_states": True},
+                },
+                "anchors": [
+                    {"record_id": candidate["record_id"], "level": candidate["level"], "nll": candidate["nll"], "density_cloud_role": "actual_model_evaluated_graph_state_anchor"}
+                    for candidate in candidates
+                ],
+                "support_samples": {"available": True, "count": 440, "visible_by_default": False, "visible_as_model_states": False, "rendered_trace_visibility": "legendonly"},
+                "nodes": [
+                    {"record_id": candidate["record_id"], "level": candidate["level"], "nll": candidate["nll"], "density_cloud_role": "actual_model_evaluated_graph_state_anchor"}
+                    for candidate in candidates
+                ],
+                "edges": density_edges,
+            }
+        ),
+    )
     _write(
         row / "got_embedding_map_payloads.json",
         json.dumps(
@@ -473,6 +530,59 @@ def test_validate_audit_root_rejects_missing_graphcg_basis_certificate(tmp_path:
     report = validator.validate_audit_root(audit, min_rows=1, min_candidates=4, min_depth=2)
     assert not report["ok"]
     assert any("projection-basis certificate" in err for err in report["errors"])
+
+
+def test_validate_audit_root_rejects_nll_density_state_provenance_gaps(tmp_path: Path):
+    validator = _load_validator()
+    cases = [
+        ("support_samples_claimed_as_states", lambda payload: payload.__setitem__("sample_points_are_model_states", True), "incorrectly treats support samples as model states"),
+        ("missing_anchor_layer", lambda payload: payload["density_contract"].pop("actual_model_anchor_layer"), "actual-anchor layer provenance"),
+        ("wrong_anchor_count", lambda payload: payload.__setitem__("anchor_count", 3), "anchor count does not match"),
+        ("missing_density_volume_provenance", lambda payload: payload.__setitem__("density_volume", {"available": True}), "density volume is missing non-model-state provenance"),
+    ]
+    for case_name, mutate, expected in cases:
+        audit = tmp_path / case_name / "got_audit"
+        row = _row(audit, ".")
+        payload_path = row / "got_nll_density_cloud_payload.json"
+        payload = json.loads(payload_path.read_text(encoding="utf-8"))
+        mutate(payload)
+        payload_path.write_text(json.dumps(payload), encoding="utf-8")
+        _write(audit / "codex_browser_index.html", _codex_browser_html(_browser_samples(audit, ["."])))
+        report = validator.validate_audit_root(audit, min_rows=1, min_candidates=4, min_depth=2)
+        assert not report["ok"], case_name
+        assert any(expected in err for err in report["errors"]), (case_name, report["errors"])
+
+
+def test_validate_audit_root_accepts_legacy_unavailable_tropical_support_probabilities(tmp_path: Path):
+    validator = _load_validator()
+    audit = tmp_path / "legacy_support" / "got_audit"
+    row = _row(audit, ".")
+    payload_path = row / "tropical_support_payload.json"
+    payload = json.loads(payload_path.read_text(encoding="utf-8"))
+    metrics = payload["metrics"]
+    metrics.pop("wall_margin_audit")
+    metrics.pop("strict_wall_hit_rate")
+    metrics.pop("near_wall_hit_rate")
+    metrics.pop("near_wall_only_rate")
+    metrics.pop("wall_margin_threshold")
+    metrics.pop("near_wall_margin_threshold")
+    metrics["support_probability_source"] = "unavailable_in_trace"
+    metrics["active_support_probability_summary"] = {"available": False, "count": 0, "min": None, "max": None, "mean": None, "p05": None, "p50": None, "p95": None}
+    metrics["support_probability_entropy_bits_summary"] = {"available": False, "count": 0, "min": None, "max": None, "mean": None, "p05": None, "p50": None, "p95": None}
+    for edge in payload["support_flow_edges"]:
+        edge.pop("strict_wall_hit")
+        edge.pop("near_wall_hit")
+        edge.pop("wall_margin_bucket")
+        edge.pop("wall_margin_threshold")
+        edge.pop("near_wall_margin_threshold")
+        edge["active_support_probability"] = None
+        edge["support_probability_entropy_bits"] = None
+        edge["support_probability_source"] = None
+        edge["top_model_support_probabilities"] = []
+    payload_path.write_text(json.dumps(payload), encoding="utf-8")
+    _write(audit / "codex_browser_index.html", _codex_browser_html(_browser_samples(audit, ["."])))
+    report = validator.validate_audit_root(audit, min_rows=1, min_candidates=4, min_depth=2)
+    assert report["ok"], report["errors"]
 
 
 def test_codex_browser_index_requires_artifact_button_for_each_payload_item(tmp_path: Path):

@@ -1344,25 +1344,100 @@ def _write_got_nll_density_cloud_map(
         borderwidth=1,
     )
     _write_plotly_dark_html(path, fig, "3D PCA NLL density cloud around actual GoT embeddings")
+    node_payload = [
+        {
+            "record_id": ids[idx],
+            "parent": candidates[idx].get("parent"),
+            "level": int(inferred_levels[idx]),
+            "path": candidates[idx].get("path", []),
+            "pca": {"pc1": float(pca[idx, 0]), "pc2": float(pca[idx, 1]), "pc3": float(pca[idx, 2])},
+            "nll": float(nll_values[idx]),
+            "density_cloud_role": "actual_model_evaluated_graph_state_anchor",
+        }
+        for idx in range(len(candidates))
+    ]
+    edge_payload = [
+        {
+            "source": row.get("parent"),
+            "target": ids[idx],
+            "action": _edge_action_label(row),
+            "source_nll": float(nll_values[id_to_idx[row.get("parent")]]),
+            "target_nll": float(nll_values[idx]),
+            "nll_delta": float(nll_values[idx] - nll_values[id_to_idx[row.get("parent")]]),
+            "improves": bool(float(nll_values[idx] - nll_values[id_to_idx[row.get("parent")]]) < 0.0),
+        }
+        for idx, row in enumerate(candidates)
+        if isinstance(row.get("parent"), str) and row.get("parent") in id_to_idx
+    ]
+    nll_progress = _trajectory_nll_progress_diagnostics(candidates, ids, id_to_idx, nll_values, inferred_levels)
+    support_sample_count = int(cloud_meta.get("sample_count", int(cloud_points.shape[0])) or int(cloud_points.shape[0]))
+    anchor_count = int(cloud_meta.get("anchor_count", len(node_payload)) or len(node_payload))
+    nll_min = float(np.nanmin(nll_values)) if len(nll_values) else None
+    nll_max = float(np.nanmax(nll_values)) if len(nll_values) else None
+    pca_diagnostics = {
+        key: float(value)
+        for key, value in pca_report.items()
+        if isinstance(value, (int, float, np.integer, np.floating)) and math.isfinite(float(value))
+    }
+    density_contract = {
+        "actual_model_anchor_layer": True,
+        "actual_model_anchor_layer_description": "large labeled markers are actual model-evaluated GoT states in graph_state PCA coordinates",
+        "support_sample_layer": "legendonly Gaussian density samples around actual anchors",
+        "support_samples_hidden_as_model_states": True,
+        "sample_points_are_model_states": False,
+        "support_sample_count": support_sample_count,
+        "actual_model_anchor_count": anchor_count,
+        "kernel": str(cloud_meta.get("kernel", "isotropic Gaussian in 3D PCA coordinates")),
+        "kernel_bandwidth": float(cloud_meta.get("sigma", 0.0) or 0.0),
+        "local_nll_rule": str(cloud_meta.get("local_nll_rule", "kernel-weighted mean of measured NLL at actual GoT states")),
+        "edge_delta_rule": "target raw NLL minus source raw NLL over actual GoT tree edges",
+    }
+    support_samples = {
+        "available": True,
+        "count": support_sample_count,
+        "visible_by_default": False,
+        "visible_as_model_states": False,
+        "rendered_trace_visibility": "legendonly",
+        "role": "continuous Gaussian support field around actual graph-state anchors",
+        "local_nll_summary": _numeric_summary([float(value) for value in cloud["local_nll"]]),
+        "density_weight_summary": _numeric_summary([float(value) for value in cloud["density"]]),
+        "nearest_anchor_distance_summary": _numeric_summary([float(value) for value in cloud["nearest_distance"]]),
+    }
     payload = {
         "available": True,
+        "render_contract": str(cloud_meta.get("render_contract", "")),
+        "density_contract": density_contract,
+        "anchor_count": anchor_count,
+        "actual_model_anchor_count": anchor_count,
+        "support_sample_count": support_sample_count,
+        "support_samples_hidden_as_model_states": True,
+        "sample_points_are_model_states": False,
+        "kernel_bandwidth": float(cloud_meta.get("sigma", 0.0) or 0.0),
+        "nll_range": {
+            "min": nll_min,
+            "max": nll_max,
+            "span": float(nll_max - nll_min) if nll_min is not None and nll_max is not None else None,
+        },
+        "local_nll_summary": support_samples["local_nll_summary"],
+        "density_weight_summary": support_samples["density_weight_summary"],
+        "nearest_anchor_distance_summary": support_samples["nearest_anchor_distance_summary"],
+        "edge_nll_delta_summary": _numeric_summary([float(edge["nll_delta"]) for edge in edge_payload]),
+        "terminal_nll_progress": {
+            "root_mean_nll": nll_progress.get("root_mean_nll"),
+            "terminal_count": nll_progress.get("terminal_count"),
+            "terminal_mean_nll": nll_progress.get("terminal_mean_nll"),
+            "terminal_min_nll": nll_progress.get("terminal_min_nll"),
+            "terminal_mean_improvement_from_root": nll_progress.get("terminal_mean_improvement_from_root"),
+            "best_terminal_improvement_from_root": nll_progress.get("best_terminal_improvement_from_root"),
+            "improving_edge_fraction": nll_progress.get("improving_edge_fraction"),
+        },
+        "pca_diagnostics": pca_diagnostics,
+        "density_volume": cloud_meta.get("density_volume", {}),
         "density_cloud": cloud_meta,
-        "nodes": [
-            {
-                "record_id": ids[idx],
-                "parent": candidates[idx].get("parent"),
-                "level": int(inferred_levels[idx]),
-                "path": candidates[idx].get("path", []),
-                "pca": {"pc1": float(pca[idx, 0]), "pc2": float(pca[idx, 1]), "pc3": float(pca[idx, 2])},
-                "nll": float(nll_values[idx]),
-            }
-            for idx in range(len(candidates))
-        ],
-        "edges": [
-            {"source": row.get("parent"), "target": ids[idx], "action": _edge_action_label(row), "nll_delta": float(nll_values[idx] - nll_values[id_to_idx[row.get("parent")]])}
-            for idx, row in enumerate(candidates)
-            if isinstance(row.get("parent"), str) and row.get("parent") in id_to_idx
-        ],
+        "anchors": node_payload,
+        "support_samples": support_samples,
+        "nodes": node_payload,
+        "edges": edge_payload,
     }
     payload_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
     return {"got_nll_density_cloud_pca_3d": str(path), "got_nll_density_cloud_payload": str(payload_path)}

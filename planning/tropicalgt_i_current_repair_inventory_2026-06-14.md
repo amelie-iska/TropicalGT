@@ -220,3 +220,20 @@ Verification:
 - `PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_simplicial_visualization.py TropicalGT-I/tests/test_interactive_artifact_validator.py -q` -> `33 passed`.
 
 Next sequential item: continue tropical-support heatmap and wall-crossing repairs.
+
+
+## 2026-06-16 NLL Density Sidecar Audit Contract Pass
+
+Status: implemented and focused-tested.
+
+Changes made:
+- `got_nll_density_cloud_payload.json` now has reviewer-friendly top-level fields for render contract, density contract, exact model-anchor counts, hidden Gaussian support-sample counts, kernel bandwidth, NLL range, local-NLL summaries, density summaries, edge delta summaries, terminal NLL progress, density-volume provenance, actual anchors, and support-sample visibility policy.
+- The validator now loads and validates the NLL density payload while retaining compatibility with b59's already-running older writer schema and its explicit legacy unavailable tropical support-probability trace.
+- Regression tests cover the enriched payload and reject provenance gaps that would treat density samples as model states or lose actual-anchor evidence.
+
+Verification:
+- `PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_simplicial_visualization.py TropicalGT-I/tests/test_interactive_artifact_validator.py -q` -> `35 passed`.
+- Generated fixture: `TropicalGT-I/outputs/visualization_nll_density_contract_fixture_20260616T/1781570302` with enriched JSON sidecar.
+- Local headless Chrome DOM check confirmed Plotly markers and density/anchor provenance strings. Screenshot rasterization remains blocked by headless Chrome WebGL support for this 3D Plotly page. The upgraded validator passes b59's complete step-250 and step-500 audits under the compatibility path; step-500 BPB is `2.011564489777277` with graph-conditioned BPB without side cost `1.7685317056430416`.
+
+Next sequential item: continue the remaining topological/geometric/algebraic audit repairs while b59 trains toward the 5K evidence gate.
