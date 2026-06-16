@@ -604,6 +604,7 @@ def validate_row(row_dir: Path, *, min_candidates: int = 8, min_depth: int = 2, 
 
     support_metrics = support_payload.get("metrics", {}) if isinstance(support_payload, dict) else {}
     support_render_contract = support_payload.get("tropical_support_render_contract", {}) if isinstance(support_payload, dict) else {}
+    support_readability_contract = support_payload.get("tropical_support_readability_contract", {}) if isinstance(support_payload, dict) else {}
     _assert(support_metrics.get("available") is True, errors, "tropical support payload is unavailable")
     _assert(_finite_float(support_metrics.get("token_count"), 0.0) > 0, errors, "tropical support payload has no tokens")
     _assert(_finite_float(support_metrics.get("unique_support_count"), 0.0) >= 1, errors, "tropical support payload has no observed supports")
@@ -617,6 +618,33 @@ def validate_row(row_dir: Path, *, min_candidates: int = 8, min_depth: int = 2, 
         _assert(str(support_render_contract.get("assignment_matrix_semantics", "")).startswith("binary argmax support-selection mask"), errors, "tropical support render contract is missing assignment-mask semantics")
         _assert(support_render_contract.get("normal_fan_wall_crossing_certified") is False, errors, "tropical support render contract incorrectly certifies normal-fan wall crossings")
         _assert(support_render_contract.get("wall_margin_metric_scope") == "margin_threshold_audit_not_certified_normal_fan_wall_crossing", errors, "tropical support render contract is missing wall-margin metric scope")
+    _assert(
+        isinstance(support_readability_contract, dict)
+        and support_readability_contract.get("schema_version") == "tropicalgt.tropical_support_readability.v1",
+        errors,
+        "tropical support payload is missing readability contract",
+    )
+    if isinstance(support_readability_contract, dict):
+        panel_roles = set(support_readability_contract.get("panel_roles", [])) if isinstance(support_readability_contract.get("panel_roles"), list) else set()
+        required_roles = set(support_readability_contract.get("required_panel_roles", [])) if isinstance(support_readability_contract.get("required_panel_roles"), list) else set()
+        layout_mode = str(support_readability_contract.get("layout_mode", support_metrics.get("layout_mode", "")))
+        _assert(support_readability_contract.get("no_proxy_or_fallback") is True, errors, "tropical support readability contract is missing no-proxy flag")
+        _assert(support_readability_contract.get("panels_are_separate") is True, errors, "tropical support readability contract does not separate panels")
+        _assert(bool(required_roles) and required_roles.issubset(panel_roles), errors, "tropical support readability contract lacks required panel roles")
+        _assert(support_readability_contract.get("assignment_and_margin_panels_separated") is True, errors, "tropical support readability contract merges assignment and margin evidence")
+        _assert(support_readability_contract.get("support_strip_split_from_margin_profile") is True, errors, "tropical support readability contract does not split support strip from margin profile")
+        _assert(support_readability_contract.get("model_probability_summaries_separate_from_assignment_matrix") is True, errors, "tropical support readability contract mixes support probabilities into assignment matrix")
+        _assert(support_readability_contract.get("compact_tick_labels") is True, errors, "tropical support readability contract is missing compact tick label guarantee")
+        _assert(support_readability_contract.get("full_token_text_preserved_in_hover_and_payload") is True, errors, "tropical support readability contract does not preserve full token text")
+        _assert(support_readability_contract.get("exact_token_indices_preserved_in_payload") is True, errors, "tropical support readability contract does not preserve exact token ids")
+        _assert(support_readability_contract.get("group_summaries_from_trace_fields") is True, errors, "tropical support readability contract does not use trace-backed group summaries")
+        _assert(support_readability_contract.get("invalid_active_support_indices_not_fabricated") is True, errors, "tropical support readability contract allows fabricated invalid support cells")
+        _assert(support_readability_contract.get("normal_fan_wall_crossing_certified") is False, errors, "tropical support readability contract incorrectly certifies normal-fan walls")
+        if layout_mode == "observed_support_matrix":
+            _assert("support_frequency_mean_margin" in panel_roles, errors, "tropical support observed-support layout is missing support-frequency panel")
+        if layout_mode == "collapse_diagnostic":
+            _assert({"margin_distribution", "collapse_metrics_table"}.issubset(panel_roles), errors, "tropical support collapse layout is missing diagnostic panels")
+            _assert(support_readability_contract.get("collapse_diagnostic_visible") is True, errors, "tropical support collapse layout hides collapse diagnostics")
     support_probability_source = support_metrics.get("support_probability_source")
     active_prob_summary = support_metrics.get("active_support_probability_summary")
     probability_trace_available = (

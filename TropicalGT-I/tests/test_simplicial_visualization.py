@@ -1179,7 +1179,18 @@ def test_tropical_support_heatmap_layout_keeps_legend_out_of_margin(tmp_path: Pa
     assert contract["assignment_matrix_binary"] is True
     assert contract["normal_fan_wall_crossing_certified"] is False
     assert contract["invalid_support_count"] == 0
+    readability = payload["tropical_support_readability_contract"]
+    assert readability["schema_version"] == "tropicalgt.tropical_support_readability.v1"
+    assert readability["panels_are_separate"] is True
+    assert readability["assignment_and_margin_panels_separated"] is True
+    assert readability["support_strip_split_from_margin_profile"] is True
+    assert readability["full_token_text_preserved_in_hover_and_payload"] is True
+    assert readability["invalid_active_support_indices_not_fabricated"] is True
+    assert set(readability["required_panel_roles"]).issubset(set(readability["panel_roles"]))
+    assert "support_frequency_mean_margin" in readability["panel_roles"]
     assert payload["metrics"]["render_contract_schema_version"] == contract["schema_version"]
+    assert payload["metrics"]["readability_contract_schema_version"] == readability["schema_version"]
+    assert payload["metrics"]["readability_panel_roles"] == readability["panel_roles"]
     assert payload["metrics"]["no_proxy_or_fallback"] is True
     audit = payload["metrics"]["wall_margin_audit"]
     assert audit["strict_wall_hit_count"] == 1
@@ -1198,6 +1209,7 @@ def test_tropical_support_heatmap_layout_keeps_legend_out_of_margin(tmp_path: Pa
     assert "Tropical active-support audit" in html
     assert "No support-token proxies" in html
     assert "tropical_support_render_contract" in html
+    assert "tropical_support_readability_contract" in html
     compact = html.replace(" ", "")
     assert '"showlegend":false' in compact
     assert '"r":190' in compact
@@ -1281,6 +1293,10 @@ def test_tropical_support_high_collapse_uses_compact_diagnostic(tmp_path: Path):
     html = Path(paths["tropical_support_heatmap"]).read_text(encoding="utf-8")
     payload = json.loads(Path(paths["tropical_support_payload"]).read_text(encoding="utf-8"))
     assert payload["metrics"]["layout_mode"] == "collapse_diagnostic"
+    readability = payload["tropical_support_readability_contract"]
+    assert readability["layout_mode"] == "collapse_diagnostic"
+    assert readability["collapse_diagnostic_visible"] is True
+    assert {"margin_distribution", "collapse_metrics_table"}.issubset(set(readability["panel_roles"]))
     assert payload["metrics"]["top_support_collapse_rate"] > 0.7
     assert payload["metrics"]["top_support_summary"]["selected_query_count"] == 5
     assert payload["metrics"]["raw_token_labels_truncated"] is True

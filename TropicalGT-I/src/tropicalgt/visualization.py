@@ -3671,6 +3671,42 @@ def write_tropical_support_heatmap(result: dict[str, object], output_dir: str | 
     support_entropy = float(-np.sum(support_probs * np.log2(np.maximum(support_probs, 1e-12)))) if counts.size else 0.0
     effective_supports = float(2.0 ** support_entropy) if counts.size else 0.0
     collapse_like_layout = bool(len(support_indices) == 1 or collapse_rate >= 0.70)
+    support_panel_roles = [
+        "observed_support_assignment_matrix",
+        "selected_margin_profile",
+        "wall_margin_threshold_overlays",
+        "token_group_summary",
+        "top_support_collapse_diagnostic",
+    ]
+    if collapse_like_layout:
+        support_panel_roles.extend(["margin_distribution", "collapse_metrics_table"])
+    else:
+        support_panel_roles.append("support_frequency_mean_margin")
+    support_readability_contract = {
+        "schema_version": "tropicalgt.tropical_support_readability.v1",
+        "source_trace": "graph_token_trace.tokens",
+        "layout_mode": "collapse_diagnostic" if collapse_like_layout else "observed_support_matrix",
+        "no_proxy_or_fallback": True,
+        "panels_are_separate": True,
+        "panel_roles": support_panel_roles,
+        "required_panel_roles": [
+            "observed_support_assignment_matrix",
+            "selected_margin_profile",
+            "wall_margin_threshold_overlays",
+            "token_group_summary",
+        ],
+        "assignment_and_margin_panels_separated": True,
+        "support_strip_split_from_margin_profile": True,
+        "model_probability_summaries_separate_from_assignment_matrix": True,
+        "compact_tick_labels": True,
+        "full_token_text_preserved_in_hover_and_payload": True,
+        "exact_token_indices_preserved_in_payload": True,
+        "group_summaries_from_trace_fields": True,
+        "collapse_diagnostic_visible": bool(collapse_like_layout),
+        "collapse_diagnostic_available": bool(collapse_like_layout),
+        "invalid_active_support_indices_not_fabricated": True,
+        "normal_fan_wall_crossing_certified": False,
+    }
     support_render_contract = {
         "schema_version": "tropicalgt.tropical_support_render.v1",
         "source_trace": "graph_token_trace.tokens",
@@ -3724,6 +3760,8 @@ def write_tropical_support_heatmap(result: dict[str, object], output_dir: str | 
         "layout_mode": "collapse_diagnostic" if collapse_like_layout else "observed_support_matrix",
         "raw_token_labels_truncated": True,
         "render_contract_schema_version": support_render_contract["schema_version"],
+        "readability_contract_schema_version": support_readability_contract["schema_version"],
+        "readability_panel_roles": support_panel_roles,
         "normal_fan_wall_crossing_certified": False,
         "no_proxy_or_fallback": True,
         "render_contract": "assignment_matrix is binary model argmax support; selected_margin_matrix is model tropical margin only on selected cells; probability summaries come from model_tropical_support_probabilities and are not fabricated scores",
@@ -3734,6 +3772,7 @@ def write_tropical_support_heatmap(result: dict[str, object], output_dir: str | 
             {
                 "metrics": support_metrics,
                 "tropical_support_render_contract": support_render_contract,
+                "tropical_support_readability_contract": support_readability_contract,
                 "query_labels": query_labels,
                 "support_labels": support_labels,
                 "assignment_matrix": assignment_z.tolist(),
@@ -3877,7 +3916,7 @@ def write_tropical_support_heatmap(result: dict[str, object], output_dir: str | 
                 "Tropical active-support collapse diagnostic: observed supports only"
                 f"<br><sup>top-support collapse rate={collapse_rate:.3f}; top support {html.escape(top_support_label)} captures {100.0 * collapse_rate:.1f}% of tokens. Strict wall-hit rate={wall_margin_audit['strict_wall_hit_rate']:.3f}; near-wall hit rate={wall_margin_audit['near_wall_hit_rate']:.3f}. Wall audit scope: {html.escape(str(wall_margin_audit.get('metric_scope', 'unavailable')))}; interpretation: {html.escape(str(wall_margin_audit.get('low_strict_wall_interpretation_status', 'unavailable')))}. Yellow cells are selected-support assignments; margins are plotted separately. No support-token proxies.</sup>"
             ),
-            meta={"tropical_support_render_contract": support_render_contract},
+            meta={"tropical_support_render_contract": support_render_contract, "tropical_support_readability_contract": support_readability_contract},
             margin=dict(t=126, l=88, r=48, b=96),
             height=max(960, min(1420, 620 + 10 * n)),
         )
@@ -3981,7 +4020,7 @@ def write_tropical_support_heatmap(result: dict[str, object], output_dir: str | 
             "Tropical active-support audit: observed supports only"
             f"<br><sup>observed supports={len(support_indices)}/{n}; top-support collapse rate={collapse_rate:.3f}; effective={effective_supports:.2f}; entropy={support_entropy:.3f} bits. Grouped token labels: {html.escape(grouped_label_summary or 'unavailable')}; top support group={html.escape(str(top_support_summary.get('support_group', 'unavailable')))}. Strict wall-hit rate={wall_margin_audit['strict_wall_hit_rate']:.3f}; near-wall hit rate={wall_margin_audit['near_wall_hit_rate']:.3f}. Wall audit scope: {html.escape(str(wall_margin_audit.get('metric_scope', 'unavailable')))}; interpretation: {html.escape(str(wall_margin_audit.get('low_strict_wall_interpretation_status', 'unavailable')))}. Yellow cells mark selected support assignments only. No support-token proxies.</sup>"
         ),
-        meta={"tropical_support_render_contract": support_render_contract},
+        meta={"tropical_support_render_contract": support_render_contract, "tropical_support_readability_contract": support_readability_contract},
         height=max(1040, min(1660, 700 + 12 * n)),
         margin=dict(t=150, l=112, r=190, b=124),
         showlegend=False,

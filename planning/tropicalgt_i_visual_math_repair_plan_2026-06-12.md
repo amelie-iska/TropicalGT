@@ -615,3 +615,24 @@ PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pyt
 PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m py_compile TropicalGT-I/src/tropicalgt/visualization.py TropicalGT-I/scripts/validate_interactive_audit_artifacts.py TropicalGT-I/tests/test_simplicial_visualization.py TropicalGT-I/tests/test_interactive_artifact_validator.py
 # passed
 ```
+
+## 2026-06-16 Tropical Support Readability Contract Repair
+
+Sequential visual/math item completed after the GraphCG direction-readability contract:
+
+- Added a machine-readable `tropicalgt.tropical_support_readability.v1` contract to `tropical_support_payload.json` and Plotly metadata.
+- The contract records split panel roles for observed support assignments, selected-margin profiles, wall-threshold overlays, token-group summaries, support-frequency summaries, and collapse diagnostics.
+- It explicitly states that assignment cells, model support probabilities, selected tropical margins, collapse summaries, and wall-margin audits are separate evidence channels; invalid `active_support_index` rows are not converted into fabricated support cells.
+- The interactive artifact validator now rejects tropical support payloads that lose the readability contract, merge assignment and margin evidence, omit panel roles, drop hover/payload preservation, or claim certified normal-fan wall crossings from margin-threshold telemetry.
+- Renderer and validator coverage prove the observed-support matrix and collapse-diagnostic layouts expose the required contract fields.
+
+Validation:
+
+```text
+CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_simplicial_visualization.py TropicalGT-I/tests/test_interactive_artifact_validator.py -q -p no:cacheprovider --basetemp=/tmp/tropicalgt-pytest-support-readability -k "tropical_support"
+# 7 passed, 48 deselected
+CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_interactive_artifact_validator.py -q -p no:cacheprovider --basetemp=/tmp/tropicalgt-pytest-support-validator-full
+# 12 passed
+CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_simplicial_visualization.py -q -p no:cacheprovider --basetemp=/tmp/tropicalgt-pytest-support-simplicial-full
+# 43 passed
+```

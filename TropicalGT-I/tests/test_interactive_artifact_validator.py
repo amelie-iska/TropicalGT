@@ -350,11 +350,45 @@ def _row(root: Path, name: str) -> Path:
         "assignment_matrix_shape": [4, 1],
         "no_proxy_or_fallback": True,
     }
+    support_readability_contract = {
+        "schema_version": "tropicalgt.tropical_support_readability.v1",
+        "source_trace": "graph_token_trace.tokens",
+        "layout_mode": "collapse_diagnostic",
+        "no_proxy_or_fallback": True,
+        "panels_are_separate": True,
+        "panel_roles": [
+            "observed_support_assignment_matrix",
+            "selected_margin_profile",
+            "wall_margin_threshold_overlays",
+            "token_group_summary",
+            "top_support_collapse_diagnostic",
+            "margin_distribution",
+            "collapse_metrics_table",
+        ],
+        "required_panel_roles": [
+            "observed_support_assignment_matrix",
+            "selected_margin_profile",
+            "wall_margin_threshold_overlays",
+            "token_group_summary",
+        ],
+        "assignment_and_margin_panels_separated": True,
+        "support_strip_split_from_margin_profile": True,
+        "model_probability_summaries_separate_from_assignment_matrix": True,
+        "compact_tick_labels": True,
+        "full_token_text_preserved_in_hover_and_payload": True,
+        "exact_token_indices_preserved_in_payload": True,
+        "group_summaries_from_trace_fields": True,
+        "collapse_diagnostic_visible": True,
+        "collapse_diagnostic_available": True,
+        "invalid_active_support_indices_not_fabricated": True,
+        "normal_fan_wall_crossing_certified": False,
+    }
     _write(
         row / "tropical_support_payload.json",
         json.dumps(
             {
                 "tropical_support_render_contract": support_render_contract,
+                "tropical_support_readability_contract": support_readability_contract,
                 "metrics": {
                     "available": True,
                     "token_count": 4,
@@ -377,6 +411,9 @@ def _row(root: Path, name: str) -> Path:
                     "invalid_support_rows": [],
                     "support_columns_policy": "observed_valid_active_support_indices_only",
                     "render_contract_schema_version": "tropicalgt.tropical_support_render.v1",
+                    "readability_contract_schema_version": "tropicalgt.tropical_support_readability.v1",
+                    "readability_panel_roles": support_readability_contract["panel_roles"],
+                    "layout_mode": "collapse_diagnostic",
                     "normal_fan_wall_crossing_certified": False,
                     "no_proxy_or_fallback": True,
                     "render_contract": "assignment_matrix is binary model argmax support; selected_margin_matrix is model tropical margin only on selected cells; probability summaries come from model_tropical_support_probabilities and are not fabricated scores",
@@ -528,7 +565,7 @@ def _row(root: Path, name: str) -> Path:
         "got_full_trajectory_complex_jensen_shannon.html": _html("Full graph-of-thought trajectory probability filtered simplicial complex", "Plotly.newPlot Jensen-Shannon probability filtered simplicial complex"),
         "got_full_trajectory_simplex_tree_3d_jensen_shannon.html": _html("Full graph-of-thought trajectory probability SimplexTree", "Plotly.newPlot Jensen-Shannon probability SimplexTree actual face-to-coface covers optional sorted-label trie prefix links not disconnected simplex columns"),
         "reasoning_step_complex_maps/index.html": _html("Reasoning step filtered simplicial complex maps", "table"),
-        "tropical_support_heatmap.html": _html("Tropical active support", "Plotly.newPlot observed supports only top-support collapse rate No support-token proxies tropical_support_render_contract"),
+        "tropical_support_heatmap.html": _html("Tropical active support", "Plotly.newPlot observed supports only top-support collapse rate No support-token proxies tropical_support_render_contract tropical_support_readability_contract Collapse metrics"),
         "tropical_fan_diagnostics.html": _html("Tropical fan diagnostics unavailable", "Plotly.newPlot Macaulay2 one dimensional cones not a multigraded free-resolution"),
         "graphcg_direction_cosines.html": _html("GraphCG full-rank direction audit", "Plotly.newPlot Readable top-direction heatmap"),
         "analogical_memory_topk_index.html": "<!doctype html><title>Analogical top-k probability correspondences</title><body>Analogical top-k probability correspondences <a href='analogical_memory_retrieval.html'>rank 1</a> <a href='analogical_memory_map_02.html'>rank 2</a></body>",
@@ -666,6 +703,20 @@ def test_validate_audit_root_rejects_analogical_probability_js_provenance_gaps(t
         report = validator.validate_audit_root(audit, min_rows=1, min_candidates=4, min_depth=2)
         assert not report["ok"], case_name
         assert any(expected in err for err in report["errors"]), (case_name, report["errors"])
+
+
+def test_validate_audit_root_rejects_missing_tropical_support_readability_contract(tmp_path: Path):
+    validator = _load_validator()
+    audit = tmp_path / "step_00000001" / "got_audit"
+    row = _row(audit, ".")
+    payload_path = row / "tropical_support_payload.json"
+    payload = json.loads(payload_path.read_text(encoding="utf-8"))
+    payload.pop("tropical_support_readability_contract")
+    payload_path.write_text(json.dumps(payload), encoding="utf-8")
+    _write(audit / "codex_browser_index.html", _codex_browser_html(_browser_samples(audit, ["."])))
+    report = validator.validate_audit_root(audit, min_rows=1, min_candidates=4, min_depth=2)
+    assert not report["ok"]
+    assert any("tropical support payload is missing readability contract" in err for err in report["errors"])
 
 
 def test_validate_audit_root_rejects_missing_graphcg_basis_certificate(tmp_path: Path):
