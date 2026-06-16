@@ -395,3 +395,11 @@
 - Verification: `python -m py_compile TropicalGT-I/scripts/backfill_interactive_audit_artifacts.py` passed; `PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_backfill_interactive_audit_artifacts.py TropicalGT-I/tests/test_interactive_artifact_validator.py -q` returned `11 passed`.
 - Live b59 smoke: running the helper on the already-generated step-500 audit directory and then running `validate_interactive_audit_artifacts.py` returned PASS with one row checked and preserved the original step-500 metrics (`bpb=2.011564489777277`, `graph_bpb=19.847021684446936`, `graph_conditioned_bpb_no_side_cost=1.7685317056430416`). Generated backfill artifacts remain untracked.
 - Live b59 status during this pass: PID `73189` and the 5K watcher PID `165804` remained alive; the watcher record last observed step `1500` with no fatal markers and is still waiting for step-5000 validation/audit artifacts.
+
+## Iteration 49: Periodic GoT Trace Retention Cap
+
+- Diagnosed the b59 pre-5K stop as disk exhaustion, not model divergence: the run reached step 2500 with BPB `1.542353032164675`, graph-BPB `19.43449932006042`, NLL `1.069077655673027`, invalid graph rate `0.0`, then failed while writing multi-gigabyte periodic `got_audit` JSON payloads.
+- Added `requested_trace_limit` and `effective_trace_limit` fields to the periodic GoT scaling budget, plus W&B/report metrics for both values.
+- Periodic in-training GoT audits now use the effective bounded trace limit from the training-safe budget instead of blindly reusing the global offline `viz_trace_limit`. With the existing `record_incomplete_without_fabrication` policy, `viz_trace_limit=2048` is bounded to `periodic_viz_got_max_trace_limit=256` unless explicitly changed.
+- This preserves the real-only/no-proxy audit contract while preventing every 250-step periodic validation from retaining enormous trace payloads. Offline/post-5K analysis can still request larger traces deliberately once disk has been pruned.
+- Verification: `python -m py_compile TropicalGT-I/src/tropicalgt/run.py` passed; `PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_training_metrics.py -q` returned `11 passed`; `git diff --check` passed.

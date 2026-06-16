@@ -903,6 +903,7 @@ def _periodic_got_scaling_budget(cfg: dict[str, Any]) -> dict[str, Any]:
     requested_depth = max(_cfg_int(cfg, ("periodic_viz_scale_depth", "viz_scale_depth"), 3), 0)
     requested_width = max(_cfg_int(cfg, ("periodic_viz_scale_width", "viz_scale_width"), 4), 1)
     requested_branch_factor = max(_cfg_int(cfg, ("periodic_viz_scale_branch_factor", "viz_scale_branch_factor"), 3), 1)
+    requested_trace_limit = max(_cfg_int(cfg, ("periodic_viz_trace_limit", "viz_trace_limit"), 24), 0)
     training_safe_bounds = _cfg_bool(
         cfg.get("periodic_viz_got_training_safe_bounds"),
         default=_periodic_got_failure_policy(cfg) == "record_incomplete_without_fabrication",
@@ -910,29 +911,34 @@ def _periodic_got_scaling_budget(cfg: dict[str, Any]) -> dict[str, Any]:
     max_depth = max(_cfg_int(cfg, ("periodic_viz_got_max_depth",), 3), 0)
     max_width = max(_cfg_int(cfg, ("periodic_viz_got_max_width",), 4), 1)
     max_branch_factor = max(_cfg_int(cfg, ("periodic_viz_got_max_branch_factor",), 3), 1)
+    max_trace_limit = max(_cfg_int(cfg, ("periodic_viz_got_max_trace_limit",), 256), 0)
     effective_depth = min(requested_depth, max_depth) if training_safe_bounds else requested_depth
     effective_width = min(requested_width, max_width) if training_safe_bounds else requested_width
     effective_branch_factor = min(requested_branch_factor, max_branch_factor) if training_safe_bounds else requested_branch_factor
+    effective_trace_limit = min(requested_trace_limit, max_trace_limit) if training_safe_bounds else requested_trace_limit
     return {
         "training_safe_bounds": bool(training_safe_bounds),
         "requested_depth": requested_depth,
         "requested_width": requested_width,
         "requested_branch_factor": requested_branch_factor,
+        "requested_trace_limit": requested_trace_limit,
         "effective_depth": effective_depth,
         "effective_width": effective_width,
         "effective_branch_factor": effective_branch_factor,
+        "effective_trace_limit": effective_trace_limit,
         "bounded_for_training_survivability": bool(
             training_safe_bounds
             and (
                 effective_depth != requested_depth
                 or effective_width != requested_width
                 or effective_branch_factor != requested_branch_factor
+                or effective_trace_limit != requested_trace_limit
             )
         ),
         "projected_requested_candidate_scores": int(1 + requested_depth * requested_width),
         "projected_effective_candidate_scores": int(1 + effective_depth * effective_width),
         "policy": _periodic_got_failure_policy(cfg),
-        "interpretation": "Periodic in-training GoT audits may downshift requested search breadth/depth; offline/final audits can still use the full requested budget.",
+        "interpretation": "Periodic in-training GoT audits may downshift requested search breadth/depth and trace retention; offline/final audits can still use the full requested budget.",
     }
 
 
@@ -944,6 +950,8 @@ def _periodic_got_budget_metrics(budget: dict[str, Any]) -> dict[str, float]:
         "periodic_got_scaling_effective_depth": float(budget.get("effective_depth", 0)),
         "periodic_got_scaling_effective_width": float(budget.get("effective_width", 0)),
         "periodic_got_scaling_effective_branch_factor": float(budget.get("effective_branch_factor", 0)),
+        "periodic_got_scaling_requested_trace_limit": float(budget.get("requested_trace_limit", 0)),
+        "periodic_got_scaling_effective_trace_limit": float(budget.get("effective_trace_limit", 0)),
         "periodic_got_scaling_bounded_for_training": float(bool(budget.get("bounded_for_training_survivability", False))),
     }
 
@@ -1067,7 +1075,7 @@ def _run_periodic_validation_round(
                         depth=int(got_budget["effective_depth"]),
                         width=int(got_budget["effective_width"]),
                         branch_factor=int(got_budget["effective_branch_factor"]),
-                        trace_limit=int(cfg.get("viz_trace_limit", 24)),
+                        trace_limit=int(got_budget["effective_trace_limit"]),
                         audit_level=audit_level,
                         ph_backend=ph_backend,
                         audit_max_simplices=audit_max_simplices,

@@ -294,6 +294,7 @@ def test_periodic_got_visualization_bounds_training_safe_failure_policy(tmp_path
             "periodic_viz_scale_depth": 12,
             "periodic_viz_scale_width": 18,
             "periodic_viz_scale_branch_factor": 6,
+            "viz_trace_limit": 2048,
         },
         history=[],
         step=10,
@@ -314,11 +315,16 @@ def test_periodic_got_visualization_bounds_training_safe_failure_policy(tmp_path
     assert captured["depth"] == 3
     assert captured["width"] == 4
     assert captured["branch_factor"] == 3
+    assert captured["trace_limit"] == 256
     budget = report["periodic_got_scaling_budgets"][0]
     assert budget["requested_depth"] == 12
     assert budget["requested_width"] == 18
     assert budget["requested_branch_factor"] == 6
+    assert budget["requested_trace_limit"] == 2048
+    assert budget["effective_trace_limit"] == 256
     assert budget["bounded_for_training_survivability"] is True
+    assert report["metrics"]["periodic_got_scaling_requested_trace_limit"] == 2048.0
+    assert report["metrics"]["periodic_got_scaling_effective_trace_limit"] == 256.0
     assert report["metrics"]["periodic_got_scaling_bounded_for_training"] == 1.0
     assert report["metrics"]["periodic_got_scaling_available"] == 1.0
 

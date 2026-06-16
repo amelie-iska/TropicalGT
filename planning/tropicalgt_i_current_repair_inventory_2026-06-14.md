@@ -432,3 +432,19 @@ Verification:
 - Live b59 step-500 audit backfill plus strict validator -> PASS, rows checked `1`, `bpb=2.011564489777277`, `graph_bpb=19.847021684446936`, and `graph_conditioned_bpb_no_side_cost=1.7685317056430416`.
 
 Next sequential item: post-5K review should run this helper on legacy b59 audit folders before strict validation, then proceed with metrics, advanced sidecars, topological/geometric/algebraic visual review, and evidence-backed restart planning.
+
+## 2026-06-16 Periodic GoT Trace Cap Pass
+
+Status: implemented and focused-tested after b59 stopped on disk exhaustion at step 2500.
+
+Changes made:
+- Root cause: b59 wrote very large periodic `got_audit` payloads every 250 steps and exhausted disk while writing the step-2500 audit bundle.
+- The validation curve through step 2500 remains intact and improving: step 2500 `bpb=1.542353032164675`, `graph_bpb=19.43449932006042`, `nll=1.069077655673027`, `invalid_graph_rate=0.0`.
+- Periodic GoT scaling budgets now include requested/effective trace limits, and the training loop uses the effective bounded trace limit for in-training audits.
+
+Verification:
+- `python -m py_compile TropicalGT-I/src/tropicalgt/run.py` passed.
+- `PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_training_metrics.py -q` -> `11 passed`.
+- `git diff --check` passed.
+
+Operational follow-up: prune bulky generated intermediate `got_audit` directories, preserve compact validation reports/checkpoints, resume b59 from the step-2500 checkpoint, and keep the 5K artifact gate active.
