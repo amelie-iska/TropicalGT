@@ -77,10 +77,14 @@ def test_training_history_contains_certificate_and_throughput_metrics(tmp_path: 
     row = report["history"][0]
     for key in [
         "certificate_loss",
+        "tropical_margin_loss",
         "tropical_margin_signed_loss",
+        "tropical_margin_signed_objective",
         "tropical_margin_reward",
         "tropical_margin_shortfall_loss",
         "tropical_margin_shortfall_rate",
+        "loss_tropical_margin_signed_weighted",
+        "loss_tropical_margin_shortfall_weighted",
         "certificate_agreement",
         "certificate_allowed_mass_mean",
         "certificate_disallowed_support_rate",
@@ -125,6 +129,9 @@ def test_wandb_metrics_are_namespaced_by_priority():
             "bpb": 1.3,
             "loss": 2.0,
             "gflownet_tb": 0.1,
+            "tropical_margin_signed_objective": -0.4,
+            "loss_tropical_margin_signed_weighted": -0.01,
+            "loss_tropical_margin_shortfall_weighted": 0.0,
             "graphcg_full_rank": 1.0,
             "sequence_tropical_margin_mean": 0.4,
             "certificate_allowed_mass_mean": 0.9,
@@ -136,6 +143,9 @@ def test_wandb_metrics_are_namespaced_by_priority():
     )
     assert list(payload)[:4] == ["step", "00_primary/eval_bpb", "00_primary/bpb", "00_primary/loss"]
     assert payload["01_losses/gflownet_tb"] == 0.1
+    assert payload["01_losses/tropical_margin_signed_objective"] == -0.4
+    assert payload["01_losses/loss_tropical_margin_signed_weighted"] == -0.01
+    assert payload["01_losses/loss_tropical_margin_shortfall_weighted"] == 0.0
     assert payload["03_tropical/sequence_tropical_margin_mean"] == 0.4
     assert payload["03_tropical/certificate_allowed_mass_mean"] == 0.9
     assert payload["03_tropical/support_transition_rate"] == 0.25

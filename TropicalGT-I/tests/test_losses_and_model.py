@@ -86,7 +86,9 @@ def test_model_forward_fixture():
     assert torch.isfinite(out["loss"])
     for key in [
         "certificate_loss",
+        "tropical_margin_loss",
         "tropical_margin_signed_loss",
+        "tropical_margin_signed_objective",
         "tropical_margin_reward",
         "tropical_margin_shortfall_loss",
         "tropical_margin_shortfall_rate",
@@ -138,6 +140,8 @@ def test_model_forward_fixture():
         "chart_bpb_max",
         "chart_bpb_spread",
         "chart_bpb_active_count",
+        "loss_tropical_margin_signed_weighted",
+        "loss_tropical_margin_shortfall_weighted",
         "loss_bundle_transport_weighted",
         "loss_bundle_cocycle_weighted",
         "loss_bundle_flat_rank_weighted",
@@ -151,9 +155,13 @@ def test_model_forward_fixture():
         assert torch.isfinite(out[key])
     assert out["graphcg_num_directions"].item() == 32.0
     assert out["graphcg_embedding_dim"].item() == 32.0
-    assert torch.allclose(out["tropical_margin_loss"], out["tropical_margin_signed_loss"])
-    assert torch.allclose(out["tropical_margin_reward"], -out["tropical_margin_signed_loss"])
+    assert torch.allclose(out["tropical_margin_loss"], out["tropical_margin_shortfall_loss"])
+    assert out["tropical_margin_loss"].item() >= 0.0
+    assert torch.allclose(out["tropical_margin_signed_objective"], out["tropical_margin_signed_loss"])
+    assert torch.allclose(out["tropical_margin_reward"], -out["tropical_margin_signed_objective"])
     assert out["tropical_margin_shortfall_loss"].item() >= 0.0
+    assert torch.allclose(out["loss_margin_weighted"], out["loss_tropical_margin_signed_weighted"])
+    assert out["loss_tropical_margin_shortfall_weighted"].item() >= 0.0
     assert 0.0 <= out["tropical_margin_shortfall_rate"].item() <= 1.0
     assert torch.allclose(out["wall_hit_rate"], out["strict_wall_hit_rate"])
     assert out["near_wall_hit_rate"].item() >= out["strict_wall_hit_rate"].item()

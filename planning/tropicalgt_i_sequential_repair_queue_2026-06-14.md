@@ -102,7 +102,7 @@
 
 - [x] Make support heatmaps interpretable with grouped token labels, top-support summaries, margin profiles, collapse diagnostics, and wall-hit context.
 - [x] Audit wall-hit rate definition and explain when low wall-crossing is mathematically expected versus a metric issue.
-- [ ] Fix/rename negative `tropical_margin_loss` so sign and objective direction are clear.
+- [x] Fix/rename negative `tropical_margin_loss` so sign and objective direction are clear.
 - [ ] Investigate rising `certificate_loss` and separate real certificate loss from diagnostic penalties.
 
 ### 9. GraphCG Full-Rank Visuals and Metrics
@@ -355,3 +355,11 @@ The live item-by-item repair inventory is maintained in `planning/tropicalgt_i_c
 - [x] Fixed threshold selection so an explicit `0.0` strict wall threshold is preserved instead of being replaced by the default threshold.
 - [x] Updated validator requirements so current interactive audit artifacts must include the no-proxy metric scope and low-strict interpretation whenever wall-margin audit data is present.
 - [x] Verification passed: focused tropical support wall tests `3 passed`; full simplicial visualization `35 passed`; artifact validator `10 passed`; compile checks passed for modified source/tests/validator.
+
+### Current Objective Update - Tropical Margin Loss Sign Pass
+
+- [x] Changed ambiguous `tropical_margin_loss` telemetry to the nonnegative margin shortfall loss, matching the ordinary expectation that a metric named loss is nonnegative.
+- [x] Kept the reward-maximizing training regularizer explicit as `tropical_margin_signed_loss` and `tropical_margin_signed_objective`, with `tropical_margin_reward = -tropical_margin_signed_objective`.
+- [x] Added separate weighted telemetry for `loss_tropical_margin_signed_weighted` and `loss_tropical_margin_shortfall_weighted`; `loss_margin_weighted` remains as the legacy signed-objective alias for continuity.
+- [x] Updated W&B priority grouping and tests so dashboards can distinguish the signed objective direction from the nonnegative shortfall diagnostic.
+- [x] Verification passed: model/loss tests `9 passed`; training-metrics tests `12 passed`; focused model and W&B checks passed; compile checks passed for modified source/tests.
