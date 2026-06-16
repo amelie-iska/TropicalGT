@@ -27,6 +27,7 @@ from tropicalgt.visualization import (
     _simplicial_object_svg,
     _simplicial_map_between_complexes,
     _simplicial_panel_items,
+    _topological_similarity_summary,
     write_analogical_memory_visualization,
     write_graphcg_trajectory_visualization,
     write_got_trajectory_visualization,
@@ -1820,6 +1821,26 @@ def test_derived_comparison_requires_matching_certified_cas_artifacts():
     assert "unavailable, not estimated" in real_unavailable["unavailable_explanation"]
     assert real_unavailable["unavailable_reasons"]["query"]
     assert real_unavailable["mismatch_explanations"] == []
+
+
+def test_topological_similarity_summary_separates_coarse_signature_from_derived_claim():
+    query = _toy_topology(intervals=[{"dimension": 0, "birth": 0.0, "death": None, "infinite": True}])
+    memory = json.loads(json.dumps(query))
+    memory["commutative_algebra"]["multiparameter_chain_presentation_diagnostics"]["free_chain_modules"] = []
+    summary = _topological_similarity_summary(query, memory, {})
+    assert summary["derived_signature_similarity"] > 0.99
+    assert summary["chain_presentation_similarity"] == 0.0
+    assert summary["free_resolution_similarity"] == 0.0
+    assert summary["derived_algebraic_similarity"] == 0.0
+    assert summary["derived_algebraic_components_available"] == 0.0
+    assert summary["derived_algebraic_clamped_by"] == "missing_required_component"
+    assert summary["derived_algebraic_components"]["signature_cosine"] > 0.99
+    assert summary["derived_algebraic_components"]["free_chain_or_resolution_similarity"] == 0.0
+    assert summary["derived_algebraic_component_availability"]["signature_cosine"] is True
+    assert summary["derived_algebraic_component_availability"]["free_chain_or_resolution_similarity"] is False
+    assert summary["coarse_signature_cosine_not_derived_similarity"] is True
+    assert summary["high_coarse_signature_low_resolution_warning"] is True
+    assert "otherwise 0.0" in summary["derived_algebraic_policy"]
 
 
 def test_analogical_memory_visualization_requires_retrieval_probability_map_certificate(tmp_path: Path):

@@ -8345,17 +8345,30 @@ def _topological_similarity_summary(query_topology: dict[str, object], memory_to
         memory_topology,
         include_landscape=include_landscape_in_vector,
     )
-    sig_sim = _cosine_similarity(q_sig, m_sig)
-    free_sim = _cosine_similarity(q_free, m_free)
-    ph_sim = _cosine_similarity(q_ph, m_ph)
-    ca_sim = _cosine_similarity(q_ca, m_ca)
-    required_components_available = bool(
-        all(
-            vec.size > 0 and float(np.linalg.norm(vec)) > 1e-12
-            for vec in (q_sig, m_sig, q_free, m_free, q_ph, m_ph, q_ca, m_ca)
-        )
-    )
-    derived_algebraic = min(sig_sim, free_sim, ph_sim, ca_sim) if required_components_available else 0.0
+    component_availability = {
+        "signature_cosine": bool(q_sig.size > 0 and m_sig.size > 0 and float(np.linalg.norm(q_sig)) > 1e-12 and float(np.linalg.norm(m_sig)) > 1e-12),
+        "free_chain_or_resolution_similarity": bool(q_free.size > 0 and m_free.size > 0 and float(np.linalg.norm(q_free)) > 1e-12 and float(np.linalg.norm(m_free)) > 1e-12),
+        "persistent_homology_similarity": bool(q_ph.size > 0 and m_ph.size > 0 and float(np.linalg.norm(q_ph)) > 1e-12 and float(np.linalg.norm(m_ph)) > 1e-12),
+        "commutative_algebra_similarity": bool(q_ca.size > 0 and m_ca.size > 0 and float(np.linalg.norm(q_ca)) > 1e-12 and float(np.linalg.norm(m_ca)) > 1e-12),
+    }
+    sig_sim = _cosine_similarity(q_sig, m_sig) if component_availability["signature_cosine"] else 0.0
+    free_sim = _cosine_similarity(q_free, m_free) if component_availability["free_chain_or_resolution_similarity"] else 0.0
+    ph_sim = _cosine_similarity(q_ph, m_ph) if component_availability["persistent_homology_similarity"] else 0.0
+    ca_sim = _cosine_similarity(q_ca, m_ca) if component_availability["commutative_algebra_similarity"] else 0.0
+    required_components_available = bool(all(component_availability.values()))
+    derived_components = {
+        "signature_cosine": float(sig_sim),
+        "free_chain_or_resolution_similarity": float(free_sim),
+        "persistent_homology_similarity": float(ph_sim),
+        "commutative_algebra_similarity": float(ca_sim),
+    }
+    if required_components_available:
+        derived_algebraic = min(derived_components.values())
+        derived_clamped_by = min(derived_components, key=derived_components.get)
+    else:
+        derived_algebraic = 0.0
+        derived_clamped_by = "missing_required_component"
+    high_coarse_low_resolution = bool(sig_sim >= 0.95 and free_sim <= 1e-12)
     return {
         "retrieval_score": float(row.get("retrieval_score", 0.0)),
         "base_retrieval_score": float(row.get("base_retrieval_score", 0.0)),
@@ -8380,6 +8393,7 @@ def _topological_similarity_summary(query_topology: dict[str, object], memory_to
         "signature_similarity": float(row.get("signature_similarity", 0.0)),
         "derived_signature_similarity": float(sig_sim),
         "chain_presentation_similarity": float(free_sim),
+        "free_resolution_similarity": float(free_sim),
         "persistent_homology_similarity": float(ph_sim),
         "commutative_algebra_similarity": float(ca_sim),
         "persistence_landscape_vector_available": float(1.0 if landscape_report.get("available") else 0.0),
@@ -8399,6 +8413,12 @@ def _topological_similarity_summary(query_topology: dict[str, object], memory_to
         "persistence_vector_component_summary": _persistence_vector_component_label(_persistence_vector_component_rows(vector_report)),
         "derived_algebraic_similarity": float(max(0.0, min(1.0, derived_algebraic))),
         "derived_algebraic_components_available": float(1.0 if required_components_available else 0.0),
+        "derived_algebraic_policy": "conservative_minimum(signature_cosine, free_chain_or_resolution_similarity, persistent_homology_similarity, commutative_algebra_similarity) when all components have nonzero evidence; otherwise 0.0",
+        "derived_algebraic_components": derived_components,
+        "derived_algebraic_component_availability": component_availability,
+        "derived_algebraic_clamped_by": derived_clamped_by,
+        "coarse_signature_cosine_not_derived_similarity": True,
+        "high_coarse_signature_low_resolution_warning": high_coarse_low_resolution,
     }
 
 

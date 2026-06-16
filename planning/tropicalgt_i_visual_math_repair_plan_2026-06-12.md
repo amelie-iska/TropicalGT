@@ -550,3 +550,24 @@ PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pyt
 PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m py_compile TropicalGT-I/src/tropicalgt/visualization.py TropicalGT-I/tests/test_algebraic_persistence.py
 # passed
 ```
+
+## 2026-06-16 Derived Similarity Conservative-Minimum Contract Repair
+
+Sequential analogical/derived item started after the two-parameter module visual contract repair:
+
+- Added explicit derived/algebraic similarity policy metadata to analogical topology summaries.
+- `derived_algebraic_similarity` is now documented as the conservative minimum of signature cosine, chain/free-resolution similarity, persistent-homology similarity, and commutative-algebra similarity only when all components have nonzero evidence; otherwise it is forced to `0.0`.
+- Added a `free_resolution_similarity` alias for the chain/free-resolution evidence component and a structured `derived_algebraic_components` object for reviewers and Herschel reports.
+- Added `coarse_signature_cosine_not_derived_similarity` plus `high_coarse_signature_low_resolution_warning` so high signature cosine with zero chain/free-resolution support is reported as an invariant collision, not a derived/algebraic match.
+- Regression coverage now constructs a high-signature/zero-free-chain case and requires derived/algebraic similarity to remain zero.
+
+Validation:
+
+```text
+PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_simplicial_visualization.py -q -p no:cacheprovider --basetemp=/tmp/tropicalgt-pytest-derived-contract -k "topological_similarity_summary_separates_coarse_signature_from_derived_claim or derived_comparison_requires_matching_certified_cas_artifacts"
+# 2 passed, 41 deselected
+PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_simplicial_visualization.py -q -p no:cacheprovider --basetemp=/tmp/tropicalgt-pytest-simplicial-derived-full
+# 43 passed
+PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m py_compile TropicalGT-I/src/tropicalgt/visualization.py TropicalGT-I/tests/test_simplicial_visualization.py
+# passed
+```
