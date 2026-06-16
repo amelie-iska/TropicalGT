@@ -36,6 +36,7 @@ from .memory import (
 )
 from .metrics import aggregate_bpb_metrics, batch_bpb_metrics, explicit_graph_json_bytes, graph_token_structural_bytes
 from .model import TropicalGTConfig, TropicalGTModel
+from .readiness_contracts import enforce_advanced_bpb_contract
 from .scaling import run_inference_scaling
 from .simplicial import build_embedding_radius_simplicial_object
 from .tokenizer import TokenGTTokenizer
@@ -457,6 +458,7 @@ def build_model(cfg: dict[str, Any]) -> TropicalGTModel:
 
 def train(config_path: str | Path, resume_from: str | Path | None = None, max_steps_override: int | None = None) -> dict[str, Any]:
     cfg = load_config(config_path)
+    advanced_bpb_contract, advanced_bpb_contract_gates = enforce_advanced_bpb_contract(cfg)
     seed = int(cfg.get("seed", 1729))
     _set_seed(seed)
     if resume_from is None:
@@ -893,6 +895,8 @@ def train(config_path: str | Path, resume_from: str | Path | None = None, max_st
         "seed": seed,
         "ablation_variant": cfg.get("ablation_variant"),
         "ablation_overrides": cfg.get("ablation_overrides", {}),
+        "advanced_bpb_contract": advanced_bpb_contract,
+        "advanced_bpb_contract_gates": advanced_bpb_contract_gates,
     }
     if memory_bank is not None:
         report["analogical_memory"] = {

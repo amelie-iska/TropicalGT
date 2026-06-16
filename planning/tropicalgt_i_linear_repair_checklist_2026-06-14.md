@@ -196,11 +196,12 @@
 - [x] Browser inspection confirmed `http://127.0.0.1:8991/` is serving the real b60 step-5000 `TropicalGT-I Inference Audit` index with generated topology/algebra/GraphCG/tropical/memory/GoT links.
 - [x] Focused verification passed: readiness/training-metrics/data-loader tests `36 passed`, with the same two SentencePiece/SWIG deprecation warnings.
 - [x] Pushed source/config/test/planning changes through commit `a5440e8`; no secrets, datasets, checkpoints, W&B folders, caches, or generated audit bundles were staged.
+- [x] Added source-level trainer enforcement so BPB-focused configs that fail the advanced readiness contract cannot start training or write a train report.
 
 ### Current Remaining Implementation List - 2026-06-16
 
 1. Keep actual BPB restart blocked until a nonempty loadable checkpoint or explicitly revised evidence policy exists.
-2. Continue source-side preflight and evidence hardening for future BPB runs, especially places where stale config fields, cross-run state, missing datasets, unavailable CAS, or missing memory evidence could otherwise look successful.
+2. Continue source-side preflight and evidence hardening for future BPB runs, especially places where stale config fields, cross-run state, missing datasets, unavailable CAS, missing memory evidence, or bypassed readiness checks could otherwise look successful.
 3. If the no-proxy checkpoint block is resolved, run checkpoint-backed post-5K evaluation/backfill/visual validation, then produce an evidence-backed step-0 restart config targeting BPB `< 1.12`.
 4. Keep browser QA attached to the real step-5000 audit or the next real audit bundle; do not copy generated artifacts into source control.
 5. Commit and push only safe source, config, planning, docs, and tests after each verified repair.

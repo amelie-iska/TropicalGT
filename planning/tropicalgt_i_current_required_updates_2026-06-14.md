@@ -706,4 +706,22 @@ PYTHONPATH=TropicalGT-I/scripts:TropicalGT-I/src /home/iska/miniconda3/envs/toke
 # 36 passed, 2 warnings in 1.56s
 ```
 
-_Last updated: 2026-06-16T20:38:00Z_
+
+## 2026-06-16 Sequential Training/Readiness Update: Trainer BPB Contract Enforcement
+
+Status: complete for source-side launch hardening; actual BPB restart remains blocked by the missing loadable b60 checkpoint evidence.
+
+- Moved the advanced BPB config contract into source module `tropicalgt.readiness_contracts`, so readiness audits and training launches share the same no-proxy/no-fallback gates.
+- `train()` now calls `enforce_advanced_bpb_contract(cfg)` immediately after config load. BPB-focused configs with missing or disabled advanced-method requirements fail before dataset loading, model construction, W&B initialization, checkpoint writes, or generated report output.
+- Successful non-BPB training reports now persist `advanced_bpb_contract` and `advanced_bpb_contract_gates`, making fixture/smoke runs explicitly report that the BPB contract was not required.
+- Added regression coverage proving an under-specified BPB 5K config raises `Advanced BPB training contract failed` and does not write `train_report.json`.
+
+Verification:
+
+```bash
+PYTHONPATH=TropicalGT-I/scripts:TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m py_compile TropicalGT-I/src/tropicalgt/readiness_contracts.py TropicalGT-I/src/tropicalgt/run.py TropicalGT-I/scripts/audit_tropicalgt_i_readiness.py TropicalGT-I/tests/test_training_resume.py TropicalGT-I/tests/test_readiness_audit.py
+PYTHONPATH=TropicalGT-I/scripts:TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_training_resume.py TropicalGT-I/tests/test_readiness_audit.py TropicalGT-I/tests/test_training_metrics.py TropicalGT-I/tests/test_data_loader.py -q
+# 40 passed, 2 warnings in 1.77s
+```
+
+_Last updated: 2026-06-16T21:05:00Z_

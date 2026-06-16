@@ -32,6 +32,8 @@ def test_training_checkpoint_resume(tmp_path: Path):
     config_path.write_text(json.dumps(cfg), encoding="utf-8")
     first = train(config_path)
     assert first["final_step"] == 1
+    assert first["advanced_bpb_contract"]["required"] is False
+    assert not [gate for gate in first["advanced_bpb_contract_gates"] if gate["status"] == "fail"]
     assert Path(first["checkpoint"]).exists()
     latest_checkpoint = Path(first["latest_checkpoint"])
     assert latest_checkpoint.exists()
@@ -79,6 +81,35 @@ def test_short_max_steps_override_does_not_fail_full_budget_gate(tmp_path: Path)
     assert report["final_step"] == 1
     assert report["data_budget"]["configured_training_token_slots"] == 64
     assert report["data_budget"]["effective_training_token_slots"] == 32
+
+
+def test_train_blocks_bpb_config_that_fails_advanced_contract(tmp_path: Path):
+    cfg = {
+        "run_name": "bad_bpb_5k_gate",
+        "parameter_golf_bpb_focus": True,
+        "target_bpb": 1.12,
+        "fixture_size": 2,
+        "train_limit": 2,
+        "val_limit": 1,
+        "seq_len": 32,
+        "batch_size": 1,
+        "max_steps": 1,
+        "device": "cpu",
+        "output_dir": str(tmp_path / "outputs"),
+        "checkpoint_dir": str(tmp_path / "checkpoints"),
+        "tokengt": {"feature_dim": 48},
+        "model": {"dim": 16, "hidden_dim": 16, "graph_feature_dim": 48},
+        "wandb": {"enabled": False},
+    }
+    config_path = tmp_path / "bad_bpb.json"
+    config_path.write_text(json.dumps(cfg), encoding="utf-8")
+
+    with pytest.raises(RuntimeError, match="Advanced BPB training contract failed") as exc:
+        train(config_path)
+
+    assert "advanced_bpb_real_data_required" in str(exc.value)
+    assert "advanced_bpb_wandb_online_project" in str(exc.value)
+    assert not (tmp_path / "outputs" / "train_report.json").exists()
 
 
 def test_checkpoint_save_does_not_replace_existing_target_with_empty_temp(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
