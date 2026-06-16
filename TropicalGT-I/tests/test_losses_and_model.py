@@ -33,6 +33,11 @@ def test_graphcg_loss_reports_full_rank_terms():
         "graphcg_effective_rank",
         "graphcg_numerical_rank",
         "graphcg_rank_target",
+        "graphcg_requested_num_directions",
+        "graphcg_effective_num_directions",
+        "graphcg_embedding_span_rank_target",
+        "graphcg_embedding_span_full_rank",
+        "graphcg_direction_bank_clamped_to_embedding_dim",
         "graphcg_min_singular_value",
         "graphcg_max_singular_value",
         "graphcg_direction_effective_rank",
@@ -49,6 +54,12 @@ def test_graphcg_loss_reports_full_rank_terms():
         assert key in metrics
         assert torch.isfinite(metrics[key])
     assert metrics["graphcg_direction_rank_target"].item() == 4.0
+    assert metrics["graphcg_requested_num_directions"].item() == 4.0
+    assert metrics["graphcg_effective_num_directions"].item() == 4.0
+    assert metrics["graphcg_embedding_dim"].item() == 16.0
+    assert metrics["graphcg_embedding_span_rank_target"].item() == 16.0
+    assert metrics["graphcg_embedding_span_full_rank"].item() == 0.0
+    assert metrics["graphcg_direction_bank_clamped_to_embedding_dim"].item() == 0.0
     assert metrics["graphcg_numerical_rank"].item() == metrics["graphcg_active_rank_target"].item()
     assert metrics["graphcg_full_rank"].item() == 1.0
     assert metrics["graphcg_active_full_rank"].item() == 1.0
@@ -122,7 +133,12 @@ def test_model_forward_fixture():
         "graphcg_direction_numerical_rank",
         "graphcg_direction_singular_min",
         "graphcg_num_directions",
+        "graphcg_requested_num_directions",
+        "graphcg_effective_num_directions",
         "graphcg_embedding_dim",
+        "graphcg_embedding_span_rank_target",
+        "graphcg_embedding_span_full_rank",
+        "graphcg_direction_bank_clamped_to_embedding_dim",
         "graphcg_active_directions",
         "sequence_tropical_tokens_mean",
         "sequence_tropical_margin_mean",
@@ -162,7 +178,12 @@ def test_model_forward_fixture():
         assert key in out
         assert torch.isfinite(out[key])
     assert out["graphcg_num_directions"].item() == 32.0
+    assert out["graphcg_requested_num_directions"].item() == 32.0
+    assert out["graphcg_effective_num_directions"].item() == 32.0
     assert out["graphcg_embedding_dim"].item() == 32.0
+    assert out["graphcg_embedding_span_rank_target"].item() == 32.0
+    assert out["graphcg_embedding_span_full_rank"].item() == 1.0
+    assert out["graphcg_direction_bank_clamped_to_embedding_dim"].item() == 0.0
     assert torch.allclose(out["certificate_loss"], out["certificate_objective_loss"])
     assert out["certificate_diagnostic_penalty"].item() == 0.0
     assert out["certificate_loss_reconstruction_error"].item() == 0.0
@@ -305,7 +326,35 @@ def test_model_allows_explicit_full_embedding_graphcg_bank():
         )
     )
     assert model.graphcg.directions.shape == (24, 24)
+    assert model.graphcg.requested_num_directions == 24
+    assert model.graphcg.effective_num_directions == 24
+    assert model.graphcg.direction_bank_clamped_to_embedding_dim is False
     assert model.graphcg.active_directions == 6
+
+
+def test_model_clamps_graphcg_direction_bank_to_embedding_dim():
+    input_ids, graph_batch, target_ids = _fixture_batch()
+    model = TropicalGTModel(
+        TropicalGTConfig(
+            dim=32,
+            hidden_dim=32,
+            graph_feature_dim=48,
+            graphcg_num_directions=8,
+            graphcg_active_directions=16,
+        )
+    )
+    assert model.graphcg.directions.shape == (32, 32)
+    assert model.graphcg.requested_num_directions == 8
+    assert model.graphcg.effective_num_directions == 32
+    assert model.graphcg.direction_bank_clamped_to_embedding_dim is True
+    out = model(input_ids, graph_batch, target_ids)
+    assert out["graphcg_requested_num_directions"].item() == 8.0
+    assert out["graphcg_num_directions"].item() == 32.0
+    assert out["graphcg_effective_num_directions"].item() == 32.0
+    assert out["graphcg_embedding_dim"].item() == 32.0
+    assert out["graphcg_embedding_span_rank_target"].item() == 32.0
+    assert out["graphcg_embedding_span_full_rank"].item() == 1.0
+    assert out["graphcg_direction_bank_clamped_to_embedding_dim"].item() == 1.0
 
 
 def test_tropical_certificate_targets_allow_edge_endpoints():

@@ -48,7 +48,7 @@ class GraphCGLoss(nn.Module):
         num_directions: int | None = None,
         full_rank_margin: float = 0.05,
         active_directions: int | None = None,
-        exact_rank_max_directions: int = 512,
+        exact_rank_max_directions: int = 4096,
     ) -> None:
         super().__init__()
         num_directions = dim if num_directions is None else int(num_directions)
@@ -61,6 +61,9 @@ class GraphCGLoss(nn.Module):
         self.full_rank_margin = full_rank_margin
         self.active_directions = int(active_directions or min(num_directions, 64))
         self.exact_rank_max_directions = int(exact_rank_max_directions)
+        self.requested_num_directions = int(num_directions)
+        self.effective_num_directions = int(num_directions)
+        self.direction_bank_clamped_to_embedding_dim = False
 
     def effective_directions(self, detach: bool = False) -> Tensor:
         """Return the full-rank steering basis used by GraphCG projections.
@@ -110,7 +113,12 @@ class GraphCGLoss(nn.Module):
                 "graphcg_raw_full_rank_penalty": zero,
                 "graphcg_rank_target": zero,
                 "graphcg_num_directions": zero,
+                "graphcg_requested_num_directions": zero,
+                "graphcg_effective_num_directions": zero,
                 "graphcg_embedding_dim": zero,
+                "graphcg_embedding_span_rank_target": zero,
+                "graphcg_embedding_span_full_rank": zero,
+                "graphcg_direction_bank_clamped_to_embedding_dim": zero,
                 "graphcg_active_directions": zero,
                 "graphcg_active_rank_target": zero,
                 "graphcg_raw_effective_rank": zero,
@@ -155,6 +163,10 @@ class GraphCGLoss(nn.Module):
         numerical_rank = active_singular_values.gt(self.full_rank_margin).float().sum()
         raw_numerical_rank = raw_active_singular_values.gt(self.full_rank_margin).float().sum()
         rank_target_tensor = torch.tensor(float(active_rank_target), device=z.device)
+        embedding_span_full_rank = torch.tensor(
+            float(dirs.shape[0] >= dirs.shape[1] and dirs.shape[0] <= self.exact_rank_max_directions),
+            device=z.device,
+        )
         active_full_rank = numerical_rank.ge(rank_target_tensor).to(z.dtype)
         raw_active_full_rank = raw_numerical_rank.ge(rank_target_tensor).to(z.dtype)
         active_rank_fraction = numerical_rank / rank_target_tensor.clamp_min(1.0)
@@ -177,7 +189,12 @@ class GraphCGLoss(nn.Module):
             "graphcg_direction_rank_target": torch.tensor(float(rank_target), device=z.device),
             "graphcg_rank_target": torch.tensor(float(rank_target), device=z.device),
             "graphcg_num_directions": torch.tensor(float(dirs.shape[0]), device=z.device),
+            "graphcg_requested_num_directions": torch.tensor(float(getattr(self, "requested_num_directions", dirs.shape[0])), device=z.device),
+            "graphcg_effective_num_directions": torch.tensor(float(getattr(self, "effective_num_directions", dirs.shape[0])), device=z.device),
             "graphcg_embedding_dim": torch.tensor(float(dirs.shape[1]), device=z.device),
+            "graphcg_embedding_span_rank_target": torch.tensor(float(dirs.shape[1]), device=z.device),
+            "graphcg_embedding_span_full_rank": embedding_span_full_rank,
+            "graphcg_direction_bank_clamped_to_embedding_dim": torch.tensor(float(bool(getattr(self, "direction_bank_clamped_to_embedding_dim", False))), device=z.device),
             "graphcg_active_directions": torch.tensor(float(active_dirs.shape[0]), device=z.device),
             "graphcg_active_rank_target": torch.tensor(float(active_rank_target), device=z.device),
             "graphcg_direction_effective_rank": effective_rank.detach(),

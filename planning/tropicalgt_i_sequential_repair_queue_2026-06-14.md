@@ -107,7 +107,7 @@
 
 ### 9. GraphCG Full-Rank Visuals and Metrics
 
-- [ ] Ensure GraphCG directions are full rank relative to embedding dimension.
+- [x] Ensure GraphCG directions are full rank relative to embedding dimension.
 - [ ] Improve direction heatmaps, spectra, candidate activity, and signed bias plots with readable layouts.
 - [ ] Log GraphCG metrics in priority order for W&B and browser audit.
 - [ ] Add tests that direction-rank configuration matches embedding dimension.
@@ -372,3 +372,11 @@ The live item-by-item repair inventory is maintained in `planning/tropicalgt_i_c
 - [x] Added weighted telemetry for `loss_certificate_objective_weighted` and `loss_certificate_diagnostic_penalty_weighted`; the legacy `loss_certificate_weighted` remains the objective-weight alias.
 - [x] Section 8 is complete: tropical support heatmaps, wall-hit scope, margin-loss sign, and certificate-loss decomposition are all implemented and tested.
 - [x] Verification passed: model/loss tests `9 passed`; training-metrics tests `12 passed`; focused certificate/W&B checks passed; compile checks passed for modified source/tests.
+
+### Current Objective Update - GraphCG Embedding-Rank Direction Bank Pass
+
+- [x] Model-level GraphCG now uses an effective direction bank with exactly `dim` directions, clamping undersized or oversized `graphcg_num_directions` requests to the embedding dimension while preserving the requested count in telemetry.
+- [x] Increased the exact Stiefel/QR projection cap so the live `1760 x 1760` direction bank is projected through the full-rank effective basis rather than normalized raw rows.
+- [x] Added GraphCG telemetry for requested directions, effective directions, embedding-span rank target, embedding-span full-rank flag, and whether the bank was clamped to the embedding dimension.
+- [x] Updated W&B priority grouping and regression tests so the embedding-rank invariant is visible in local history and dashboard metrics.
+- [x] Verification passed: focused GraphCG rank tests `4 passed`; training priority checks `2 passed`; full model/loss tests `10 passed`; training-metrics tests `12 passed`; compile checks passed for modified source/tests.

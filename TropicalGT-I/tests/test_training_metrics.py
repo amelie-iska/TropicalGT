@@ -122,6 +122,11 @@ def test_training_history_contains_certificate_and_throughput_metrics(tmp_path: 
         "graph_autoregressive_decoding_enabled",
         "sequence_tropical_tokens_mean",
         "sequence_tropical_margin_mean",
+        "graphcg_requested_num_directions",
+        "graphcg_effective_num_directions",
+        "graphcg_embedding_span_rank_target",
+        "graphcg_embedding_span_full_rank",
+        "graphcg_direction_bank_clamped_to_embedding_dim",
     ]:
         assert key in row
         assert row[key] == row[key]
@@ -141,6 +146,7 @@ def test_wandb_metrics_are_namespaced_by_priority():
             "loss_tropical_margin_signed_weighted": -0.01,
             "loss_tropical_margin_shortfall_weighted": 0.0,
             "graphcg_full_rank": 1.0,
+            "graphcg_embedding_span_full_rank": 1.0,
             "sequence_tropical_margin_mean": 0.4,
             "certificate_allowed_mass_mean": 0.9,
             "certificate_objective_loss": 0.2,
@@ -165,6 +171,7 @@ def test_wandb_metrics_are_namespaced_by_priority():
     assert payload["03_tropical/support_transition_rate"] == 0.25
     assert payload["08_memory/analogical_memory_rejected"] == 2.0
     assert payload["05_graphcg/graphcg_full_rank"] == 1.0
+    assert payload["05_graphcg/graphcg_embedding_span_full_rank"] == 1.0
     assert payload["06_graph_data/causal_dag_ar_rate"] == 0.75
     assert payload["00_primary/gpu_mem_mb"] == 21484.0
 

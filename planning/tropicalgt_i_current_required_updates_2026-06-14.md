@@ -462,10 +462,19 @@ git diff --check
 - Verification completed: `/home/iska/miniconda3/envs/tokengt/bin/python -m py_compile TropicalGT-I/src/tropicalgt/model.py TropicalGT-I/src/tropicalgt/run.py TropicalGT-I/tests/test_losses_and_model.py TropicalGT-I/tests/test_training_metrics.py`, focused certificate/W&B checks, `pytest TropicalGT-I/tests/test_losses_and_model.py -q` (`9 passed`), and `pytest TropicalGT-I/tests/test_training_metrics.py -q` (`12 passed`).
 
 
+## 2026-06-16 GraphCG Embedding-Rank Direction Bank Addendum
+
+- GraphCG model construction now enforces an effective direction bank of size `dim`, clamping any explicit `graphcg_num_directions` request to the embedding dimension while preserving the requested count as telemetry.
+- The exact QR/Stiefel projection cap now covers the active `1760 x 1760` bank, so downstream GraphCG projections use the full-rank effective basis instead of normalized raw rows.
+- New metrics include `graphcg_requested_num_directions`, `graphcg_effective_num_directions`, `graphcg_embedding_span_rank_target`, `graphcg_embedding_span_full_rank`, and `graphcg_direction_bank_clamped_to_embedding_dim`; W&B priority grouping includes these under GraphCG.
+- b60 latest checked training state reached step `1479` with train loss/NLL `1.246/1.223`; trainer PID `378962` and watcher PID `379304` remain alive under the step-5000 gate.
+- Verification completed: `/home/iska/miniconda3/envs/tokengt/bin/python -m py_compile TropicalGT-I/src/tropicalgt/losses.py TropicalGT-I/src/tropicalgt/model.py TropicalGT-I/src/tropicalgt/run.py TropicalGT-I/tests/test_losses_and_model.py TropicalGT-I/tests/test_training_metrics.py`, focused GraphCG rank tests (`4 passed`), focused training priority tests (`2 passed`), `pytest TropicalGT-I/tests/test_losses_and_model.py -q` (`10 passed`), and `pytest TropicalGT-I/tests/test_training_metrics.py -q` (`12 passed`).
+
+
 ## Real Implementations Only Policy
 
 No TropicalGT-I metric, loss, visualization, analogical map, persistence module, free resolution, derived comparison, tropical-cycle diagnostic, or CAS artifact should be presented as a mathematical object unless it is computed from the actual model outputs, graph states, embeddings, probabilities, simplex trees, bifiltrations, or certified CAS/backend output that define that object. Temporary placeholders, synthetic fallback objects, mock charts, fabricated simplices, and convenience stand-ins are not acceptable. When a requested object cannot yet be computed, the artifact must render an explicit unavailable/uncertified state and the training metric must either be disabled or logged under an audit-only unavailable flag. Finite chain-presentation diagnostics may be shown only as chain diagnostics, never as free resolutions. Total-graded or ungraded CAS output may be shown as real CAS output only under its actual grading; it must not be advertised as a multigraded `F2[x_level,x_radius]` free resolution unless the backend certifies that multigraded structure.
 
 Use "one dimensional cone" or "one dimensional cones" as the preferred fan-theoretic language whenever the intended object is a cone of a fan or a cone-indexed filtration datum. Use singular or plural according to ordinary grammar.
 
-_Last updated: 2026-06-16T07:08:51Z_
+_Last updated: 2026-06-16T07:12:21Z_

@@ -305,12 +305,16 @@ class TropicalGTModel(nn.Module):
         self.gru = nn.GRU(config.dim, config.hidden_dim, batch_first=True)
         self.out = nn.Linear(config.hidden_dim, config.vocab_size)
         self.gfn = GFlowNetPolicy(config.dim, config.num_actions)
-        graphcg_num_directions = config.graphcg_num_directions or config.dim
+        requested_graphcg_num_directions = int(config.graphcg_num_directions or config.dim)
+        graphcg_num_directions = int(config.dim)
         self.graphcg = GraphCGLoss(
             config.dim,
             num_directions=graphcg_num_directions,
             active_directions=config.graphcg_active_directions,
         )
+        self.graphcg.requested_num_directions = requested_graphcg_num_directions
+        self.graphcg.effective_num_directions = graphcg_num_directions
+        self.graphcg.direction_bank_clamped_to_embedding_dim = requested_graphcg_num_directions != graphcg_num_directions
         self.memory = AnalogicalMemoryHead(config.dim, config.memory_dim)
         self.chart_bundle = (
             ChartBundleToricHead(config.dim, config.bundle_num_charts, config.toric_num_active_rows)
