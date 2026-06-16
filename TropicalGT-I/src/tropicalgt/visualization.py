@@ -375,11 +375,15 @@ def write_inference_audit_artifacts(
             )
         level_radius = scaling.get("trajectory_level_radius_bifiltration") if isinstance(scaling, dict) else None
         if isinstance(level_radius, dict):
-            paths["trajectory_level_radius_bifiltration_3d"] = write_two_parameter_bifiltration_visualization(
+            bifiltration_html = Path(write_two_parameter_bifiltration_visualization(
                 output_dir / "trajectory_persistence" / "two_parameter_bifiltration.html",
                 level_radius,
                 title="Trajectory 2-parameter persistence over F2[x_level,x_radius]",
-            )
+            ))
+            paths["trajectory_level_radius_bifiltration"] = str(bifiltration_html)
+            sidecar = bifiltration_html.with_suffix(".json")
+            if sidecar.exists():
+                paths["trajectory_level_radius_bifiltration_visual_payload"] = str(sidecar)
         if isinstance(memory, dict):
             query_context = {}
             if isinstance(scaling, dict):
@@ -4828,7 +4832,7 @@ td {{ background:#07111f; color:#d7e8ff; }}
 <body>
 <main>
 <h1>Trajectory 2-parameter persistence over F2[x_level,x_radius]</h1>
-<p class='lede'>Actual 2-parameter module fibers and multigraded chain-generator bidegrees over F2[x_level,x_radius]. The first section is the Miller-Sturmfels staircase view of the bivariate module diagram: horizontal lattice coordinates are x_radius and vertical lattice coordinates are x_level; x_radius runs horizontally, x_level vertically, shaded upward-closed regions are generated submodules, and white lattice points are the displayed S/I_C basis complement.</p>
+<p class='lede'>Actual 2-parameter module fibers and multigraded chain-generator bidegrees over F2[x_level,x_radius]. The primary view is the Miller-Sturmfels staircase view of the bivariate module diagram: horizontal lattice coordinates are x_radius and vertical lattice coordinates are x_level; x_radius runs horizontally, x_level vertically, shaded upward-closed regions are generated submodules, and white lattice points are the displayed S/I_C basis complement.</p>
 <div class='callout'><b>Computed bifiltration:</b> {html.escape(rank_note)}<br>This section is an exponent-lattice module diagram in the sense of the two-variable monomial-ideal staircase picture: the coordinate axes are the x_radius and x_level one dimensional cone(s). The large gold/cyan/blue boundary points are minimal antichain generators; smaller dim-colored points are dominated observed bidegrees and are not treated as additional generators. White lattice points are displayed quotient-basis complements, colored cells/points are actual H1 fiber ranks. Adjacent structure maps persisted={len(bifiltration.get("structure_maps", [])) if isinstance(bifiltration, Mapping) else 0}. Staircase cards render exact two-variable monomial-ideal resolutions when the Miller-Sturmfels adjacent-LCM theorem applies. Lower CAS tables render only certified CAS output under its actual grading; diagnostic chain data is not substituted for a free resolution.</div>
 <section class='panel'><h2>Miller-Sturmfels bivariate module staircases from actual multidegree generators</h2><div class='staircase-grid'>{staircase_svgs}</div></section>
 <details class='secondary-disclosure'><summary>Secondary fiber-rank diagnostics</summary><section class='panel'><h2>F2[x_level,x_radius] support and homology fiber ranks</h2>{chart1}</section><section class='panel'><h2>Fiber-rank lattice with H0/H1 layer offsets</h2>{chart2}</section></details>
@@ -4837,6 +4841,48 @@ td {{ background:#07111f; color:#d7e8ff; }}
 </body>
 </html>
 """
+    visual_payload = {
+        "schema_version": "tropicalgt.two_parameter_bifiltration_visual.v1",
+        "coefficient_ring": "F2[x_level,x_radius]",
+        "primary_view": "miller_sturmfels_bivariate_staircase",
+        "primary_view_contract": "The primary view is an exponent-lattice staircase over F2[x_level,x_radius]: x_radius is horizontal, x_level is vertical, shaded regions are upward-closed generated submodules, and white lattice points are displayed quotient-basis complements from actual bifiltration chain-generator bidegrees.",
+        "secondary_views": ["fiber_rank_heatmap", "fiber_rank_lattice_3d", "certified_algebra_tables"],
+        "rank_surface_primary": False,
+        "rank_surface_policy": "3D fiber-rank displays are secondary diagnostics only and are not rendered as the primary module view.",
+        "axes": {
+            "horizontal": "x_radius",
+            "vertical": "x_level",
+            "coordinate_one_dimensional_cones": ["rho_x_radius", "rho_x_level"],
+        },
+        "actual_data_only": True,
+        "no_proxy_resolution_claim": True,
+        "grid": {
+            "x_level_grades": levels,
+            "x_radius_grades": radius_grades,
+            "fiber_row_count": len(rows),
+            "h0_min": float(np.nanmin(h0_grid)) if h0_grid.size else 0.0,
+            "h0_max": float(np.nanmax(h0_grid)) if h0_grid.size else 0.0,
+            "h1_min": float(np.nanmin(h1_grid)) if h1_grid.size else 0.0,
+            "h1_max": float(np.nanmax(h1_grid)) if h1_grid.size else 0.0,
+        },
+        "chain_generator_summary": {
+            "total_generator_count": int(sum(generator_counts.values())),
+            "homological_dimensions": sorted({int(dim) for _lvl, _rg, dim in generator_counts}),
+            "minimal_antichain": [[int(lvl), int(rg)] for lvl, rg in chain_minimal],
+        },
+        "staircase_cards": [
+            {
+                "homological_degree": int(dim),
+                "generator_bidegree_count": int(len(items)),
+                "minimal_antichain": [[int(lvl), int(rg)] for lvl, rg in _minimal_antichain([(int(lvl), int(rg)) for lvl, rg, _count, _ex in items])],
+            }
+            for dim, items in ordered_staircases
+        ],
+        "rendered_html": path.name,
+        "raw_bifiltration_payload": "../trajectory_level_radius_bifiltration.json",
+    }
+    payload_path = path.with_suffix(".json")
+    payload_path.write_text(json.dumps(visual_payload, indent=2), encoding="utf-8")
     path.write_text(page, encoding="utf-8")
     return str(path)
 
@@ -4856,531 +4902,6 @@ def write_two_parameter_bifiltration_visualization(
     path.parent.mkdir(parents=True, exist_ok=True)
     return _write_two_parameter_bifiltration_staircase_html(path, bifiltration, title=title)
 
-    rows = list((bifiltration.get("fiber_rows") or bifiltration.get("fiber_rank_profile") or []) if isinstance(bifiltration, Mapping) else [])
-    m2 = _m2_style_report_from_bifiltration(bifiltration)
-    fig = make_subplots(
-        rows=4,
-        cols=2,
-        specs=[
-            [{"type": "scene", "colspan": 2}, None],
-            [{"type": "xy", "colspan": 2}, None],
-            [{"type": "table"}, {"type": "table"}],
-            [{"type": "table"}, {"type": "table"}],
-        ],
-        subplot_titles=(
-            "2-parameter module fibers (H0/H1 fiber rank lattice over F2[x_level,x_radius])",
-            "Miller-Sturmfels staircase diagnostics in the coordinate exponent semigroup chart",
-            "Chain ranks (not a resolution)",
-            "Free chain modules over S",
-            "Differentials d_i",
-            "CAS certificates / Fitting / BE diagnostics",
-        ),
-        row_heights=[0.46, 0.34, 0.09, 0.11],
-        horizontal_spacing=0.08,
-        vertical_spacing=0.085,
-    )
-
-    rank_note = "no nonempty fiber rows"
-    surface_rank_layers: list[dict[str, Any]] = []
-    module_layer_offsets: dict[int, float] = {}
-    if rows:
-        def _fiber_grade(row: Mapping[str, Any]) -> tuple[int, int]:
-            grade = row.get("grade")
-            if isinstance(grade, Sequence) and not isinstance(grade, (str, bytes)) and len(grade) >= 2:
-                return int(grade[0] or 0), int(grade[1] or 0)
-            return int(row.get("level", 0) or 0), int(row.get("radius_grade", row.get("radius", 0)) or 0)
-
-        def _fiber_beta(row: Mapping[str, Any], dim: int) -> int:
-            beta = row.get("betti", row.get("beta", {}))
-            if isinstance(beta, Mapping):
-                return int(beta.get(str(dim), beta.get(dim, 0)) or 0)
-            return 0
-
-        levels = sorted({_fiber_grade(r)[0] for r in rows if isinstance(r, Mapping)})
-        radius_grades = sorted({_fiber_grade(r)[1] for r in rows if isinstance(r, Mapping)})
-        beta_lookups: dict[int, dict[tuple[int, int], int]] = {}
-        for dim in (0, 1):
-            lookup = {_fiber_grade(r): _fiber_beta(r, dim) for r in rows if isinstance(r, Mapping)}
-            if lookup:
-                beta_lookups[dim] = lookup
-        if levels and radius_grades and beta_lookups:
-            # Multiple homology modules live over the same (x_level,x_radius) lattice.
-            # We separate only the displayed y-coordinate by a tiny module-layer offset;
-            # the z-coordinate remains the actual fiber rank beta_i.
-            finite_radius = np.asarray(radius_grades, dtype=float)
-            rg_span = float(np.max(finite_radius) - np.min(finite_radius)) if finite_radius.size else 1.0
-            level_span = float(max(levels) - min(levels)) if len(levels) > 1 else 1.0
-            radius_axis_span = max(level_span, 1.0)
-            if len(radius_grades) > 1:
-                radius_display_values = np.linspace(0.0, radius_axis_span, len(radius_grades), dtype=float)
-            else:
-                radius_display_values = np.asarray([0.0], dtype=float)
-            display_steps = [b - a for a, b in zip(radius_display_values.tolist(), radius_display_values.tolist()[1:]) if b > a]
-            rg_step = min(display_steps or [max(radius_axis_span, 1.0)])
-            layer_delta = max(rg_step * 0.40, 0.025)
-            dims = sorted(beta_lookups)
-            center = (len(dims) - 1) / 2.0
-            module_layer_offsets = {dim: (idx - center) * layer_delta for idx, dim in enumerate(dims)}
-            radius_display_lookup = {rg: float(radius_display_values[idx]) for idx, rg in enumerate(radius_grades)}
-            level_grid, radius_grid = np.meshgrid(np.asarray(levels, dtype=float), radius_display_values, indexing="ij")
-            rank_ranges: list[str] = []
-            nonconstant_dims: list[int] = []
-            for dim, lookup in beta_lookups.items():
-                z = np.asarray([[float(lookup.get((lvl, rg), 0)) for rg in radius_grades] for lvl in levels], dtype=float)
-                if not z.size:
-                    continue
-                rank_ranges.append(f"H{dim} range {float(np.nanmin(z)):.0f}-{float(np.nanmax(z)):.0f}")
-                if float(np.nanmax(z) - np.nanmin(z)) > 0.0:
-                    nonconstant_dims.append(dim)
-                surface_rank_layers.append({"dim": dim, "z": z, "offset": module_layer_offsets.get(dim, 0.0)})
-            rank_note = (
-                f"grid={len(levels)} x-levels x {len(radius_grades)} radius grades; "
-                f"x_radius displayed on a normalized grid with exact radius grade in hover; module layer offsets are visual only; z is actual fiber rank; "
-                + "; ".join(rank_ranges)
-            )
-            for layer in surface_rank_layers:
-                dim = int(layer["dim"])
-                z = np.asarray(layer["z"], dtype=float)
-                offset = float(layer["offset"])
-                primary = (dim in nonconstant_dims) or (not nonconstant_dims and dim == min(beta_lookups))
-                y_display = radius_grid + offset
-                custom = np.empty(z.shape + (3,), dtype=object)
-                for i, lvl in enumerate(levels):
-                    for j, rg in enumerate(radius_grades):
-                        custom[i, j, 0] = dim
-                        custom[i, j, 1] = rg
-                        custom[i, j, 2] = offset
-                if dim == 0:
-                    colorscale = [[0.0, "#082f49"], [0.48, "#22d3ee"], [1.0, "#fef08a"]]
-                    colorbar = dict(title="actual beta_0", x=0.94, y=0.87, len=0.22, thickness=10)
-                else:
-                    colorscale = [[0.0, "#1e1b4b"], [0.58, "#818cf8"], [1.0, "#f9a8d4"]]
-                    colorbar = dict(title=f"actual beta_{dim}", x=0.94, y=0.87, len=0.22, thickness=10) if primary else None
-                fig.add_trace(
-                    go.Surface(
-                        x=level_grid,
-                        y=y_display,
-                        z=z,
-                        surfacecolor=z,
-                        colorscale=colorscale,
-                        opacity=0.80 if primary else 0.28,
-                        showscale=bool(primary),
-                        colorbar=colorbar,
-                        name=f"H{dim} actual fiber-rank surface",
-                        customdata=custom,
-                        hovertemplate=(
-                            "module=H%{customdata[0]}<br>"
-                            "x_level=%{x}<br>"
-                            "exact x_radius grade=%{customdata[1]}<br>"
-                            "display y = normalized radius + offset; offset=%{customdata[2]:+.4f}<br>"
-                            "actual beta_%{customdata[0]}=%{z}<extra></extra>"
-                        ),
-                    ),
-                    row=1,
-                    col=1,
-                )
-            for dim, lookup in beta_lookups.items():
-                xs: list[int] = []
-                ys: list[float] = []
-                zs: list[int] = []
-                hover: list[str] = []
-                offset = module_layer_offsets.get(dim, 0.0)
-                for lvl in levels:
-                    for rg in radius_grades:
-                        if (lvl, rg) not in lookup:
-                            continue
-                        xs.append(lvl)
-                        ys.append(radius_display_lookup.get(rg, float(rg)) + offset)
-                        zs.append(lookup[(lvl, rg)])
-                        hover.append(
-                            f"module=H{dim}<br>level={lvl}<br>radius grade={rg}<br>"
-                            f"actual beta_{dim}={lookup[(lvl, rg)]}<br>display y={radius_display_lookup.get(rg, float(rg)) + offset:.4f}<br>visual offset={offset:+.4f}"
-                        )
-                color = "#4fe3d3" if dim == 0 else "#78a7ff"
-                fig.add_trace(
-                    go.Scatter3d(
-                        x=xs,
-                        y=ys,
-                        z=zs,
-                        mode="markers",
-                        name=f"H{dim} fiber-rank lattice samples",
-                        marker=dict(size=4.0 if dim == 1 else 3.4, color=color, opacity=0.96, line=dict(color="#e8f2ff", width=0.35)),
-                        text=hover,
-                        hovertemplate="%{text}<extra></extra>",
-                    ),
-                    row=1,
-                    col=1,
-                )
-            for dim, lookup in beta_lookups.items():
-                edge_x: list[Any] = []
-                edge_y: list[Any] = []
-                edge_z: list[Any] = []
-                offset = module_layer_offsets.get(dim, 0.0)
-                for lvl in levels:
-                    for rg in radius_grades:
-                        z_here = lookup.get((lvl, rg))
-                        if z_here is None:
-                            continue
-                        for nxt in ((lvl + 1, rg), (lvl, rg + 1)):
-                            z_nxt = lookup.get(nxt)
-                            if z_nxt is None:
-                                continue
-                            edge_x.extend([lvl, nxt[0], None])
-                            edge_y.extend([radius_display_lookup.get(rg, float(rg)) + offset, radius_display_lookup.get(nxt[1], float(nxt[1])) + offset, None])
-                            edge_z.extend([z_here, z_nxt, None])
-                if edge_x:
-                    fig.add_trace(
-                        go.Scatter3d(
-                            x=edge_x,
-                            y=edge_y,
-                            z=edge_z,
-                            mode="lines",
-                            name=f"H{dim} module structure maps",
-                            line=dict(color="rgba(255,210,70,0.42)" if dim == 0 else "rgba(249,168,212,0.56)", width=2.2),
-                            hoverinfo="skip",
-                        ),
-                        row=1,
-                        col=1,
-                    )
-
-    staircase = _m2_staircase_trace_payload(m2)
-    raw_staircase = m2.get("staircase", {}) if isinstance(m2, Mapping) else {}
-    raw_staircase = raw_staircase if isinstance(raw_staircase, Mapping) else {}
-    selected_resolution = _m2_selected_staircase_resolution(m2)
-    selected_certified = bool(isinstance(selected_resolution, Mapping) and selected_resolution.get("available") and selected_resolution.get("certificate_attached"))
-
-    def _parse_bidegree_rows(raw_rows: object, *, label_prefix: str) -> list[tuple[int, int, str, float]]:
-        parsed: list[tuple[int, int, str, float]] = []
-        if not isinstance(raw_rows, list):
-            return parsed
-        for idx, row in enumerate(raw_rows):
-            mult = 1.0
-            label = f"{label_prefix} {idx}"
-            deg = None
-            if isinstance(row, Mapping):
-                deg = row.get("bidegree") or row.get("degree") or row.get("grade")
-                mult = float(row.get("multiplicity", row.get("rank", 1.0)) or 1.0)
-                label = str(row.get("label") or f"{label_prefix} {idx}")
-            elif isinstance(row, Sequence) and not isinstance(row, (str, bytes)):
-                deg = row
-            if isinstance(deg, Sequence) and not isinstance(deg, (str, bytes)) and len(deg) >= 2:
-                try:
-                    x = int(deg[0] or 0)
-                    y = int(deg[1] or 0)
-                except (TypeError, ValueError):
-                    continue
-                parsed.append((x, y, f"{label}: x_level^{x} x_radius^{y} mult={mult:g}", mult))
-        return parsed
-
-    selected_gen_pairs = [(int(x), int(y), str(label), 1.0) for x, y, label in zip(staircase["gen_x"], staircase["gen_y"], staircase["gen_label"])]
-    selected_anti_pairs = [(int(x), int(y), str(label), 1.0) for x, y, label in zip(staircase["anti_x"], staircase["anti_y"], staircase["anti_label"])]
-    syz_pairs = [(int(x), int(y), str(label), 1.0) for x, y, label in zip(staircase["syz_x"], staircase["syz_y"], staircase["syz_label"])]
-    all_generator_pairs = _parse_bidegree_rows(raw_staircase.get("generator_bidegrees") or raw_staircase.get("generators"), label_prefix="chain generator")
-    if all_generator_pairs:
-        gen_pairs4 = [p for p in all_generator_pairs if not (p[0] == 0 and p[1] == 0)] or all_generator_pairs
-        generator_label = "actual multigraded chain-generator bidegrees"
-    else:
-        gen_pairs4 = selected_gen_pairs
-        generator_label = "selected staircase generator bidegrees" if selected_certified else "available staircase generator bidegrees"
-
-    rank_change_pairs: list[tuple[int, int, str, float]] = []
-    fiber_rows = [r for r in rows if isinstance(r, Mapping)]
-    fiber_levels: list[int] = []
-    fiber_radius_grades: list[int] = []
-    h1_lookup: dict[tuple[int, int], int] = {}
-    h0_lookup: dict[tuple[int, int], int] = {}
-    staircase_radius_display: dict[int, float] = {}
-    staircase_radius_span = 1.0
-
-    def _staircase_y(radius_grade: int | float) -> float:
-        try:
-            rg_int = int(radius_grade)
-        except (TypeError, ValueError):
-            rg_int = 0
-        if rg_int in staircase_radius_display:
-            return float(staircase_radius_display[rg_int])
-        if fiber_radius_grades:
-            lo = float(min(fiber_radius_grades))
-            hi = float(max(fiber_radius_grades))
-            if hi > lo:
-                return float((rg_int - lo) / (hi - lo) * staircase_radius_span)
-        return float(rg_int)
-    if fiber_rows:
-        def _row_grade(row: Mapping[str, Any]) -> tuple[int, int]:
-            grade = row.get("grade")
-            if isinstance(grade, Sequence) and not isinstance(grade, (str, bytes)) and len(grade) >= 2:
-                return int(grade[0] or 0), int(grade[1] or 0)
-            return int(row.get("level", 0) or 0), int(row.get("radius_grade", 0) or 0)
-
-        def _row_beta(row: Mapping[str, Any], dim: int) -> int:
-            beta = row.get("betti", row.get("beta", {}))
-            if isinstance(beta, Mapping):
-                return int(beta.get(str(dim), beta.get(dim, 0)) or 0)
-            return 0
-
-        fiber_levels = sorted({_row_grade(r)[0] for r in fiber_rows})
-        fiber_radius_grades = sorted({_row_grade(r)[1] for r in fiber_rows})
-        staircase_radius_span = max(float(max(fiber_levels) - min(fiber_levels) + 1) if fiber_levels else 1.0, 4.0)
-        if len(fiber_radius_grades) > 1:
-            staircase_radius_values = np.linspace(0.0, staircase_radius_span, len(fiber_radius_grades), dtype=float)
-        else:
-            staircase_radius_values = np.asarray([0.0], dtype=float)
-        staircase_radius_display = {rg: float(staircase_radius_values[idx]) for idx, rg in enumerate(fiber_radius_grades)}
-        for r in fiber_rows:
-            key = _row_grade(r)
-            h0_lookup[key] = _row_beta(r, 0)
-            h1_lookup[key] = _row_beta(r, 1)
-        for lvl in fiber_levels:
-            previous = None
-            for rg in fiber_radius_grades:
-                value = h1_lookup.get((lvl, rg), 0)
-                if previous is None or value != previous:
-                    rank_change_pairs.append((lvl, rg, f"H1 rank-change: beta_1={value} at x_level={lvl}, x_radius grade={rg}", float(value)))
-                previous = value
-
-    if fiber_levels and fiber_radius_grades:
-        h1_grid = np.asarray([[float(h1_lookup.get((lvl, rg), 0)) for lvl in fiber_levels] for rg in fiber_radius_grades], dtype=float)
-        h0_grid = np.asarray([[float(h0_lookup.get((lvl, rg), 0)) for lvl in fiber_levels] for rg in fiber_radius_grades], dtype=float)
-        fig.add_trace(
-            go.Heatmap(
-                x=fiber_levels,
-                y=[_staircase_y(rg) for rg in fiber_radius_grades],
-                z=h1_grid,
-                customdata=np.asarray([[rg for _lvl in fiber_levels] for rg in fiber_radius_grades], dtype=object),
-                colorscale=[[0.0, "rgba(5,12,28,0.12)"], [0.18, "rgba(8,47,73,0.48)"], [0.72, "rgba(94,234,212,0.46)"], [1.0, "rgba(250,204,21,0.40)"]],
-                showscale=True,
-                colorbar=dict(title="beta_1", x=0.96, y=0.37, len=0.18, thickness=10),
-                name="H1 fiber-rank support region",
-                hovertemplate="x_level=%{x}<br>exact x_radius grade=%{customdata}<br>display y=normalized radius coordinate<br>actual beta_1=%{z}<extra></extra>",
-            ),
-            row=2,
-            col=1,
-        )
-        zero_x: list[int] = []
-        zero_y: list[int] = []
-        nonzero_x: list[int] = []
-        nonzero_y: list[int] = []
-        nonzero_rank: list[float] = []
-        nonzero_text: list[str] = []
-        for lvl in fiber_levels:
-            for rg in fiber_radius_grades:
-                b1 = float(h1_lookup.get((lvl, rg), 0))
-                if b1 > 0:
-                    nonzero_x.append(lvl)
-                    nonzero_y.append(_staircase_y(rg))
-                    nonzero_rank.append(b1)
-                    nonzero_text.append(f"fiber H1 nonzero: beta_1={b1:g}<br>x_level={lvl}<br>x_radius grade={rg}<br>H0 beta_0={h0_lookup.get((lvl, rg), 0)}")
-                else:
-                    zero_x.append(lvl)
-                    zero_y.append(_staircase_y(rg))
-        if zero_x:
-            fig.add_trace(
-                go.Scatter(
-                    x=zero_x,
-                    y=zero_y,
-                    mode="markers",
-                    name="zero H1 fibers / S-I lattice points",
-                    marker=dict(color="rgba(226,232,240,0.56)", size=4, symbol="circle"),
-                    text=[f"H1 zero fiber<br>x_level={x}<br>exact x_radius grade={rg}<br>display y={y:.4f}" for x, y, rg in zip(zero_x, zero_y, [fiber_radius_grades[i % len(fiber_radius_grades)] if fiber_radius_grades else 0 for i in range(len(zero_y))])],
-                    hovertemplate="%{text}<extra></extra>",
-                ),
-                row=2,
-                col=1,
-            )
-        if nonzero_x:
-            max_rank = max(nonzero_rank) if nonzero_rank else 1.0
-            fig.add_trace(
-                go.Scatter(
-                    x=nonzero_x,
-                    y=nonzero_y,
-                    mode="markers",
-                    name="nonzero H1 module fibers",
-                    marker=dict(
-                        color=nonzero_rank,
-                        colorscale="Viridis",
-                        size=[5.5 + 10.0 * (v / max(max_rank, 1.0)) for v in nonzero_rank],
-                        line=dict(color="#e8f2ff", width=0.45),
-                        opacity=0.86,
-                    ),
-                    text=nonzero_text,
-                    hovertemplate="%{text}<extra></extra>",
-                ),
-                row=2,
-                col=1,
-            )
-        for idx, lvl in enumerate(fiber_levels):
-            pts = [(x, y, label, value) for x, y, label, value in rank_change_pairs if x == lvl]
-            if not pts:
-                continue
-            pts = sorted(pts, key=lambda p: p[1])
-            fig.add_trace(
-                go.Scatter(
-                    x=[p[0] for p in pts],
-                    y=[_staircase_y(p[1]) for p in pts],
-                    mode="lines+markers",
-                    name="H1 rank-change staircase" if idx == 0 else "H1 rank-change staircase",
-                    showlegend=(idx == 0),
-                    line=dict(color="#ffd54a", width=2.4, shape="hv"),
-                    marker=dict(color="#ffd54a", size=8, symbol="diamond", line=dict(color="#e8f2ff", width=0.6)),
-                    text=[p[2] for p in pts],
-                    hovertemplate="%{text}<extra></extra>",
-                ),
-                row=2,
-                col=1,
-            )
-    else:
-        fig.add_annotation(
-            text="No nonempty F2[x_level,x_radius] fiber grid is available for this trajectory.",
-            x=0.5,
-            y=0.5,
-            showarrow=False,
-            font=dict(size=12, color="#facc15"),
-            row=2,
-            col=1,
-        )
-
-    if gen_pairs4:
-        gx = [p[0] for p in gen_pairs4]
-        gy = [_staircase_y(p[1]) for p in gen_pairs4]
-        gtxt = [p[2] for p in gen_pairs4]
-        gmult = [max(float(p[3]), 1.0) for p in gen_pairs4]
-        scale = max(gmult) if gmult else 1.0
-        fig.add_trace(
-            go.Scatter(
-                x=gx,
-                y=gy,
-                mode="markers",
-                name=generator_label,
-                marker=dict(
-                    color="#5eead4" if selected_certified else "#7dd3fc",
-                    size=[7.0 + 11.0 * math.sqrt(v / max(scale, 1.0)) for v in gmult],
-                    symbol="circle",
-                    line=dict(color="#e8f2ff", width=0.8),
-                    opacity=0.78,
-                ),
-                text=gtxt,
-                hovertemplate="%{text}<br>source=" + html.escape(generator_label) + "<extra></extra>",
-            ),
-            row=2,
-            col=1,
-        )
-    if selected_anti_pairs and selected_certified:
-        order = sorted(range(len(selected_anti_pairs)), key=lambda i: (selected_anti_pairs[i][0], -selected_anti_pairs[i][1]))
-        fig.add_trace(
-            go.Scatter(
-                x=[selected_anti_pairs[i][0] for i in order],
-                y=[_staircase_y(selected_anti_pairs[i][1]) for i in order],
-                mode="markers+lines",
-                name="certified minimal antichain / staircase boundary",
-                marker=dict(color="#ffd54a", size=12, symbol="diamond", line=dict(color="#e8f2ff", width=1)),
-                line=dict(color="#ffd54a", width=3, shape="hv"),
-                text=[selected_anti_pairs[i][2] for i in order],
-                hovertemplate="certified staircase corner %{text}<br>x-degree=%{x}<br>y-degree=%{y}<extra></extra>",
-            ),
-            row=2,
-            col=1,
-        )
-    if syz_pairs and selected_certified:
-        fig.add_trace(
-            go.Scatter(
-                x=[p[0] for p in syz_pairs],
-                y=[_staircase_y(p[1]) for p in syz_pairs],
-                mode="markers+text",
-                name="certified adjacent LCM first syzygies",
-                marker=dict(color="#ff6b8a", size=11, symbol="x"),
-                text=[p[2] for p in syz_pairs],
-                textposition="bottom right",
-                hovertemplate="certified first syzygy %{text}<br>lcm x-degree=%{x}<br>lcm y-degree=%{y}<extra></extra>",
-            ),
-            row=2,
-            col=1,
-        )
-    max_x = max([int(p[1]) for p in gen_pairs4 + rank_change_pairs] + fiber_radius_grades + [2]) + 1
-    max_y = max([int(p[0]) for p in gen_pairs4 + rank_change_pairs] + fiber_levels + [2]) + 0.75
-    fig.add_trace(
-        go.Scatter(
-            x=[0, max_x, None, 0, 0],
-            y=[0, 0, None, 0, max_y],
-            mode="lines+text",
-            name="coordinate one dimensional cone(s)",
-            line=dict(color="rgba(110,231,249,0.75)", width=2, dash="dot"),
-            text=["rho_level", "", "", "rho_radius", ""],
-            textposition="top right",
-            hovertemplate="coordinate one dimensional cone in the exponent semigroup chart<extra></extra>",
-        ),
-        row=2,
-        col=1,
-    )
-
-    fig.add_annotation(
-        text=(
-            f"<b>Computed bifiltration:</b> {html.escape(rank_note)}<br>"
-            "Lattice points are H_i(K_(level,radius)); gold edges are structure maps.<br>"
-            "Tables are diagnostics unless CAS marks a certified free resolution."
-        ),
-        xref="paper",
-        yref="paper",
-        x=0.015,
-        y=1.04,
-        showarrow=False,
-        align="left",
-        font=dict(size=12, color="#c9f7ff"),
-        bgcolor="rgba(5,9,20,0.88)",
-        bordercolor="rgba(94,234,212,0.38)",
-        borderwidth=1,
-    )
-
-    headers, columns = _m2_betti_columns(m2)
-    fig.add_trace(_table_trace(headers, columns), row=3, col=1)
-    headers, columns = _m2_free_module_columns(m2)
-    fig.add_trace(_table_trace(headers, columns), row=3, col=2)
-    headers, columns = _m2_differential_columns(m2)
-    fig.add_trace(_table_trace(headers, columns), row=4, col=1)
-    headers, columns = _m2_certificate_columns(m2, bifiltration)
-    fig.add_trace(_table_trace(headers, columns), row=4, col=2)
-
-    notes = bifiltration.get("notes", []) if isinstance(bifiltration, Mapping) else []
-    subtitle = " ".join(str(n) for n in notes[:2])
-    if subtitle:
-        subtitle = _json_clip(subtitle, 260)
-    fig.update_layout(
-        template="plotly_dark",
-        title=dict(
-            text="Trajectory 2-parameter persistence over F2[x_level,x_radius]<br><sup>2-parameter module fibers, Miller-Sturmfels staircase diagnostics, actual grid fibers, structure maps, and certificate-gated algebra diagnostics.</sup>",
-            x=0.02,
-            font=dict(size=20),
-        ),
-        height=2500,
-        margin=dict(l=92, r=132, t=230, b=96),
-        legend=dict(
-            orientation="v",
-            yanchor="top",
-            y=0.99,
-            xanchor="left",
-            x=1.01,
-            font=dict(size=10),
-            bgcolor="rgba(5,9,20,0.72)",
-            bordercolor="rgba(148,163,184,0.22)",
-            borderwidth=1,
-        ),
-    )
-    fig.update_annotations(font_size=12, align="left")
-    fig.update_scenes(
-        xaxis_title="x_level grade",
-        yaxis_title="normalized x_radius coordinate + module-layer offset",
-        zaxis_title="fiber rank beta_i",
-        bgcolor="#050914",
-        aspectmode="manual",
-        aspectratio=dict(x=1.08, y=1.0, z=0.74),
-        camera=dict(eye=dict(x=1.55, y=-1.72, z=1.08)),
-        xaxis=dict(gridcolor="#315c86", zerolinecolor="#6ee7f9"),
-        yaxis=dict(gridcolor="#315c86", zerolinecolor="#6ee7f9"),
-        zaxis=dict(gridcolor="#315c86", zerolinecolor="#6ee7f9"),
-    )
-    fig.update_xaxes(title_text="x_level exponent", row=2, col=1, gridcolor="#203d5e", range=[-0.35, max_x + 0.25])
-    fig.update_yaxes(title_text="normalized x_radius exponent coordinate (exact grade in hover)", row=2, col=1, gridcolor="#203d5e", range=[-0.35, max_y + 0.25])
-    _write_plotly_dark_html(path, fig, title)
-    return str(path)
 
 def _write_growth_persistence_barcode(path: Path, topology: dict[str, object], growth: list[object], title_prefix: str = "") -> None:
     rows = _trajectory_growth_rows(topology, growth)

@@ -387,6 +387,24 @@ def _row(root: Path, name: str) -> Path:
             }
         ),
     )
+    _write(
+        row / "trajectory_persistence" / "two_parameter_bifiltration.json",
+        json.dumps(
+            {
+                "schema_version": "tropicalgt.two_parameter_bifiltration_visual.v1",
+                "coefficient_ring": "F2[x_level,x_radius]",
+                "primary_view": "miller_sturmfels_bivariate_staircase",
+                "rank_surface_primary": False,
+                "axes": {
+                    "horizontal": "x_radius",
+                    "vertical": "x_level",
+                    "coordinate_one_dimensional_cones": ["rho_x_radius", "rho_x_level"],
+                },
+                "actual_data_only": True,
+                "no_proxy_resolution_claim": True,
+            }
+        ),
+    )
     _write(row / "inference_audit.json", "{}")
     html_files = {
         "got_embedding_map_3d.html": _html(

@@ -1,3 +1,4 @@
+import json
 import sys
 
 import torch
@@ -567,7 +568,15 @@ def test_level_radius_bifiltration_reports_scoped_real_staircase_resolution(tmp_
     html_path = tmp_path / "two_parameter_bifiltration.html"
     write_two_parameter_bifiltration_visualization(html_path, report, title="test bifiltration")
     html = html_path.read_text()
+    visual_payload = json.loads(html_path.with_suffix(".json").read_text(encoding="utf-8"))
+    assert visual_payload["schema_version"] == "tropicalgt.two_parameter_bifiltration_visual.v1"
+    assert visual_payload["primary_view"] == "miller_sturmfels_bivariate_staircase"
+    assert visual_payload["rank_surface_primary"] is False
+    assert visual_payload["axes"] == {"horizontal": "x_radius", "vertical": "x_level", "coordinate_one_dimensional_cones": ["rho_x_radius", "rho_x_level"]}
+    assert visual_payload["actual_data_only"] is True
+    assert visual_payload["no_proxy_resolution_claim"] is True
     assert "horizontal lattice coordinates are x_radius" in html
+    assert "The primary view is the Miller-Sturmfels staircase" in html
     assert "Columns are radius grades" in html
     assert "Adjacent structure maps persisted=" in html
     assert "diagnostic chain data is not substituted for a free resolution" in html

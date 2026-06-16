@@ -213,6 +213,13 @@ _Last updated: 2026-06-16T03:05:00+00:00_
 - Added `TropicalGT-I/scripts/prepare_5k_review_bundle.py` so the post-5K worker can turn the b59 config/report/checkpoint/stop-record into a bounded Codex review bundle, active training contract, prompt, eval/visualization command, and interactive-audit validator commands.
 - Use this helper after the step gate records target reached; do not stage its generated bundle outputs unless they are deliberately curated planning notes.
 
+
+## 2026-06-16 Bivariate Staircase Visual Contract Addendum
+
+- `write_two_parameter_bifiltration_visualization` now writes `two_parameter_bifiltration.html` plus `two_parameter_bifiltration.json`. The JSON sidecar records `primary_view=miller_sturmfels_bivariate_staircase`, x_radius horizontal, x_level vertical, coordinate one dimensional cone records, actual-data-only rendering, and no-proxy-resolution policy.
+- The old unreachable rank-surface-first implementation block and the retired `trajectory_level_radius_bifiltration_3d` source path key were removed. Keep 3D fiber-rank displays only as secondary diagnostics.
+- Already-running b59 periodic artifacts may lack this new sidecar and the tropical fan diagnostic pair; post-5K review must rerender or record unavailable states rather than inferring those missing artifacts.
+
 ## Real Implementations Only Policy
 
 No TropicalGT-I metric, loss, visualization, analogical map, persistence module, free resolution, derived comparison, tropical-cycle diagnostic, or CAS artifact should be presented as a mathematical object unless it is computed from the actual model outputs, graph states, embeddings, probabilities, simplex trees, bifiltrations, or certified CAS/backend output that define that object. Temporary placeholders, synthetic fallback objects, mock charts, fabricated simplices, and convenience stand-ins are not acceptable. When a requested object cannot yet be computed, the artifact must render an explicit unavailable/uncertified state and the training metric must either be disabled or logged under an audit-only unavailable flag. Finite chain-presentation diagnostics may be shown only as chain diagnostics, never as free resolutions. Total-graded or ungraded CAS output may be shown as real CAS output only under its actual grading; it must not be advertised as a multigraded `F2[x_level,x_radius]` free resolution unless the backend certifies that multigraded structure.

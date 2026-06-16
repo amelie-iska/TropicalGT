@@ -396,3 +396,22 @@ Verification:
 - `PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_prepare_5k_review_bundle.py TropicalGT-I/tests/test_parameter_golf_review_loop.py -q` -> `4 passed`.
 
 Next sequential item: when the b59 watcher writes a target-reached stop record, run the helper against the b59 config/report/checkpoint/stop-record and hand the resulting bundle to Galileo for the evidence-backed restart.
+
+## 2026-06-16 Bivariate Staircase Visual Contract Pass
+
+Status: implemented and focused-tested.
+
+Changes made:
+- The two-parameter trajectory persistence page now emits a dedicated visual sidecar proving the primary view is the Miller-Sturmfels bivariate staircase over `F2[x_level,x_radius]`.
+- Removed unreachable legacy code for the old rank-surface-first Plotly implementation and removed the retired `trajectory_level_radius_bifiltration_3d` path key from source/tests.
+- The validator checks the visual sidecar when present and remains compatible with b59 artifacts emitted before this sidecar existed.
+
+Verification:
+- `python -m py_compile TropicalGT-I/src/tropicalgt/visualization.py TropicalGT-I/scripts/validate_interactive_audit_artifacts.py` passed.
+- `PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_algebraic_persistence.py TropicalGT-I/tests/test_simplicial_visualization.py TropicalGT-I/tests/test_interactive_artifact_validator.py -q` -> `55 passed`.
+- `git diff --check` passed.
+
+Legacy b59 note:
+- The already-running b59 process predates tropical fan and bifiltration visual sidecar writers. Its old step-500 validation probe still fails on missing `tropical_fan_diagnostics.json/html`; the post-5K review should either rerender missing audits with current code or record explicit unavailable states rather than treating absent old sidecars as completed evidence.
+
+Next sequential item: continue the visual/math repair queue by adding a small post-hoc legacy audit repair/rerender path or move into the remaining CAS/free-resolution backend coverage, depending on the b59 5K timing.

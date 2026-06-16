@@ -313,6 +313,8 @@ def validate_row(row_dir: Path, *, min_candidates: int = 8, min_depth: int = 2, 
     support_payload = _read_json(row_dir / REQUIRED_JSON["tropical_support_payload"]) if (row_dir / REQUIRED_JSON["tropical_support_payload"]).exists() else {}
     graphcg_payload = _read_json(row_dir / REQUIRED_JSON["graphcg_payload"]) if (row_dir / REQUIRED_JSON["graphcg_payload"]).exists() else {}
     bifiltration_payload = _read_json(row_dir / REQUIRED_JSON["trajectory_bifiltration_payload"]) if (row_dir / REQUIRED_JSON["trajectory_bifiltration_payload"]).exists() else {}
+    bifiltration_visual_path = row_dir / "trajectory_persistence" / "two_parameter_bifiltration.json"
+    bifiltration_visual_payload = _read_json(bifiltration_visual_path) if bifiltration_visual_path.exists() else {}
 
     candidates = [row for row in scaling.get("candidates", []) if isinstance(row, dict)]
     nodes = [row for row in payload.get("nodes", []) if isinstance(row, dict)]
@@ -342,6 +344,15 @@ def validate_row(row_dir: Path, *, min_candidates: int = 8, min_depth: int = 2, 
     _assert(levels_axis == list(range(len(bif_levels))), errors, "trajectory bifiltration level grid axis does not match level grades")
     _assert(radius_axis == list(range(len(bif_radii))), errors, "trajectory bifiltration radius grid axis does not match radius grades")
     _assert(bifiltration_payload.get("radius_grade_policy") == "exact_sorted_radius_grid_index_no_bucket_collision", errors, "trajectory bifiltration radius grades are not exact sorted radius-grid indices")
+    if bifiltration_visual_payload:
+        _assert(bifiltration_visual_payload.get("schema_version") == "tropicalgt.two_parameter_bifiltration_visual.v1", errors, "trajectory bifiltration visual payload has wrong schema")
+        _assert(bifiltration_visual_payload.get("primary_view") == "miller_sturmfels_bivariate_staircase", errors, "trajectory bifiltration primary view is not the Miller-Sturmfels staircase")
+        _assert(bifiltration_visual_payload.get("rank_surface_primary") is False, errors, "trajectory bifiltration marks rank surfaces as primary")
+        axes = bifiltration_visual_payload.get("axes", {}) if isinstance(bifiltration_visual_payload.get("axes"), dict) else {}
+        _assert(axes.get("horizontal") == "x_radius" and axes.get("vertical") == "x_level", errors, "trajectory bifiltration visual axes are not x_radius horizontal / x_level vertical")
+        _assert("rho_x_radius" in axes.get("coordinate_one_dimensional_cones", []) and "rho_x_level" in axes.get("coordinate_one_dimensional_cones", []), errors, "trajectory bifiltration visual payload lacks coordinate one dimensional cone records")
+        _assert(bifiltration_visual_payload.get("actual_data_only") is True, errors, "trajectory bifiltration visual payload does not assert actual-data-only rendering")
+        _assert(bifiltration_visual_payload.get("no_proxy_resolution_claim") is True, errors, "trajectory bifiltration visual payload allows proxy resolution claims")
     _assert(all(_finite_float(radius, float("nan")) >= 0.0 for radius in bif_radii), errors, "trajectory bifiltration contains negative radius grades")
     _assert(all(_finite_float(bif_radii[i], float("nan")) <= _finite_float(bif_radii[i + 1], float("nan")) for i in range(max(0, len(bif_radii) - 1))), errors, "trajectory bifiltration radius grades are not sorted min-to-max")
     rank_samples = bifiltration_payload.get("rank_invariant_samples", [])
