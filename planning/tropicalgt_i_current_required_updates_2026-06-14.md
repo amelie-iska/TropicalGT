@@ -4,12 +4,12 @@ This checklist merges the browser/photo review, the current active training stat
 
 ## 1. Active Training and BPB Priority
 
-- Keep `tropicalgt_i_pg_bpb_step0_full24b_b59_20260616T001122Z_fresh_bpb112_5k_gate` alive until at least step 5K unless it crashes, OOMs, or produces nonfinite/invalid losses. Current detached launch PID at last check: `73189`; W&B run id: `itxgxj40`; run URL: `https://wandb.ai/amelie-iska-math/TropicalGT-I/runs/itxgxj40`; config: `TropicalGT-I/outputs/launch_configs/tropicalgt_i_pg_bpb_step0_full24b_b59_20260616T001122Z_fresh_bpb112_5k_gate.json`; output dir: `TropicalGT-I/outputs/tropicalgt_i_pg_bpb_step0_full24b_b59_20260616T001122Z_fresh_bpb112_5k_gate`; tested 5K monitor record target: `TropicalGT-I/outputs/training_stop_records/b59_step5000_gate.json`.
-- Do not restart before 5K merely because early metrics are noisy. A tested `monitor_training_step_gate.py` watcher should stop b59 at or after the parsed step `5000` after required step-5000 validation/audit artifacts are present after a one-poll settle window or a bounded grace window expires, write the stop record, and then Galileo should run the analysis/eval/visualization sidecars, inspect BPB, graph-BPB, NLL, advanced topology/geometric/algebraic diagnostics, and restart from step 0 only with evidence-backed hyperparameter/config adjustments.
+- Keep `tropicalgt_i_pg_bpb_step0_full24b_b60_20260616T053631Z_fresh_bpb112_casrows_5k_gate` alive until at least step 5K unless it crashes, OOMs, or produces nonfinite/invalid losses. Current detached launch PID at last check: `378962`; watcher PID: `379304`; W&B run id: `ld5u55p5`; run URL: `https://wandb.ai/amelie-iska-math/TropicalGT-I/runs/ld5u55p5`; config: `TropicalGT-I/outputs/launch_configs/tropicalgt_i_pg_bpb_step0_full24b_b60_20260616T053631Z_fresh_bpb112_casrows_5k_gate.json`; output dir: `TropicalGT-I/outputs/tropicalgt_i_pg_bpb_step0_full24b_b60_20260616T053631Z_fresh_bpb112_casrows_5k_gate`; tested 5K monitor record target: `TropicalGT-I/outputs/training_stop_records/b60_fresh_step0_casrows_step5000_gate.json`.
+- Do not restart before 5K merely because early metrics are noisy. The active `monitor_training_step_gate.py` watcher should stop b60 at or after the parsed step `5000` after required step-5000 validation/audit artifacts are present after a one-poll settle window or a bounded grace window expires, write the stop record, and then the 5K review worker should run the analysis/eval/visualization sidecars, inspect BPB, graph-BPB, NLL, advanced topology/geometric/algebraic diagnostics, and restart from step 0 only with evidence-backed hyperparameter/config adjustments.
 - Preserve BPB and graph-BPB as primary optimization and promotion gates.
 - Use advanced auxiliaries only when they are zero-default or BPB-gated and ablated: tropical support, GFlowNet GoT rewards, GraphCG, persistence/landscape diagnostics, chart-bundle transports, tropical toric active-cell agreement, and memory retrieval.
 - Track step, VRAM, wall time, train/eval NLL, BPB, graph-BPB, certificate loss, tropical wall-hit rate, support entropy, GraphCG rank, meet-in-the-middle agreement, ROAR/causal decoding path mix, and artifact-generation status.
-- After the b59 restart, the main implementation focus is the remaining visual/math repair queue while the 5K worker handles monitor/analyze/restart coordination.
+- While b60 trains to the 5K gate, the main implementation focus is the remaining visual/math repair queue. Historical b59 notes below are retained only for provenance and are not active run instructions.
 
 ## 2. Browser QA and Visual Evidence
 
@@ -232,7 +232,7 @@ git diff --check
 - CAS package survey: look for Sage, Macaulay2, Singular, RIVET/multipers, polymake, Normaliz, and related packages that compute real multigraded modules, minimal resolutions, Betti tables, Fitting ideals, minors, Buchsbaum-Eisenbud diagnostics, tropical fans, toric varieties, and stable intersections.
 - Maclagan-style toric embedding research direction: investigate whether the transformer graph-state and tropical-attention coordinate system can be embedded into a toric variety via model-derived monomial coordinates, Newton polytopes, fan data, and one dimensional cone data. Any resulting implementation must distinguish theorem-level certified constructions from diagnostic embeddings or visual probes.
 
-_Last updated: 2026-06-16T06:48:00Z_
+_Last updated: 2026-06-16T07:03:00Z_
 
 
 ## 2026-06-16 Fresh b59 5K Review Gate and Worker Handoff
@@ -322,4 +322,4 @@ No TropicalGT-I metric, loss, visualization, analogical map, persistence module,
 
 Use "one dimensional cone" or "one dimensional cones" as the preferred fan-theoretic language whenever the intended object is a cone of a fan or a cone-indexed filtration datum. Use singular or plural according to ordinary grammar.
 
-_Last updated: 2026-06-16T06:48:00Z_
+_Last updated: 2026-06-16T07:03:00Z_

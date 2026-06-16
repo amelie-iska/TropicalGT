@@ -35,7 +35,7 @@
 - [x] Render a proper 2D exponent lattice/staircase panel with horizontal `x_radius`, vertical `x_level`, actual lattice fibers, shifted chain-generator bidegrees, minimal antichain markers, and coordinate one dimensional cone(s); adjacent LCM syzygies remain certificate-gated rather than fabricated.
 - [x] Replace broad "affine toric exponent chart" wording with scoped "coordinate exponent semigroup chart `Spec F2[x_level,x_radius]`" wording.
 - [x] Regenerate the latest browser audit and visually inspect the repaired figure.
-- [ ] Run focused tests and push the repair.
+- [x] Run focused tests and push the repair.
 
 ## Full Remaining Implementation List
 
@@ -222,6 +222,15 @@ The live item-by-item repair inventory is maintained in `planning/tropicalgt_i_c
 - [x] Preserved the Jensen-Shannon probability SimplexTree unavailable state when model probability vectors are absent.
 - [x] Focused verification passed: visualization plus artifact validator `33 passed`.
 - [x] Pushed this simplex-tree contract repair on the non-main branch.
+
+
+### Current Objective Update - Certified CAS Diagnostic Table Pass
+
+- [x] Split the two-parameter bifiltration certified algebra disclosure into separate secondary tables for Betti-style rows, certified free modules, differentials, structured Fitting/minor diagnostics, Buchsbaum-Eisenbud rank/multiplier diagnostics, and CAS certificate summaries.
+- [x] Required explicit structured `ideal_diagnostics` before rendering Fitting or determinantal-minor rows; legacy raw `fitting_ideals` and `minors` keys no longer substitute for that certificate.
+- [x] Required explicit BE/certified-resolution evidence before rendering Buchsbaum-Eisenbud rows; missing evidence renders unavailable rather than defaulting to false exactness/minimality.
+- [x] Focused verification passed: new CAS table helper test `1 passed`; bifiltration artifact test `1 passed`; full simplicial visualization `32 passed`; algebraic persistence `19 passed`; artifact validator `10 passed`.
+- [x] Pushed this certified CAS diagnostic table repair on the non-main branch as commit `e70dbc8`.
 
 
 ### Current Objective Update - NLL Density Contract Pass
