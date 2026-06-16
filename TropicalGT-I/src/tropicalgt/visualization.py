@@ -2188,7 +2188,8 @@ def _write_simplex_tree_3d_map(path: Path, obj: dict[str, object], title: str, s
         title=(
             f"{title}<br><sup>{html.escape(subtitle)} | backend={html.escape(str(tree.get('backend', 'json')))} "
             f"| displayed={len(node_keys)}/{int(tree.get('num_simplices', len(simplex_rows)) or len(simplex_rows))} "
-            f"| layout=model-embedding barycentric face/coface poset; {html.escape(layout_report)} "
+            f"| layout=model-embedding barycentric face/coface poset, not disconnected simplex columns; "
+            f"actual cover edges are primary and optional sorted-label trie links are legend-only; {html.escape(layout_report)} "
             f"| V={summary.get('num_vertices', 0)}, E={summary.get('num_edges', 0)}, T={summary.get('num_two_simplices', 0)}"
             + (" | truncated for browser performance" if truncated else "")
             + "</sup>"

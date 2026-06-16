@@ -190,3 +190,18 @@ Verification:
 - `PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_algebraic_persistence.py -q` -> `15 passed`.
 
 Next sequential item: continue simplex-tree/NLL/tropical-support repairs.
+
+
+## 2026-06-16 SimplexTree Face/Coface Contract Pass
+
+Status: implemented and focused-tested.
+
+Changes made:
+- The full graph-of-thought SimplexTree page now visibly states that it is a model-embedding barycentric face/coface poset and not disconnected simplex columns.
+- Actual face-to-coface cover edges are the primary SimplexTree structure; optional sorted-label trie-prefix links are present but legend-only.
+- Tests now enforce the face/coface cover strings, trie-prefix strings, empty-simplex root, and probability-SimplexTree unavailable state when model probability vectors are absent.
+
+Verification:
+- `PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_simplicial_visualization.py TropicalGT-I/tests/test_interactive_artifact_validator.py -q` -> `33 passed`.
+
+Next sequential item: continue NLL density and tropical-support repairs.

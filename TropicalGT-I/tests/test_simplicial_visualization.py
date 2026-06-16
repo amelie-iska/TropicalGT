@@ -409,6 +409,8 @@ def test_got_trajectory_visualization_renders_simplicial_panel_and_nll_surface(t
     html = Path(paths["got_trajectory_3d"]).read_text(encoding="utf-8")
     embedding_map_html = Path(paths["got_embedding_map_3d"]).read_text(encoding="utf-8")
     full_complex_html = Path(paths["got_full_trajectory_complex"]).read_text(encoding="utf-8")
+    full_tree_html = Path(paths["got_full_trajectory_simplex_tree_3d"]).read_text(encoding="utf-8")
+    probability_tree_html = Path(paths["got_full_trajectory_simplex_tree_3d_jensen_shannon"]).read_text(encoding="utf-8")
     step_index_html = Path(paths["got_reasoning_step_complex_index"]).read_text(encoding="utf-8")
     step_manifest = json.loads(Path(paths["got_reasoning_step_complex_manifest"]).read_text(encoding="utf-8"))
     payload = json.loads(Path(paths["got_payloads"]).read_text(encoding="utf-8"))
@@ -496,6 +498,15 @@ def test_got_trajectory_visualization_renders_simplicial_panel_and_nll_surface(t
     assert "got_parent_child_decoding_order" in full_complex_html
     assert "radius/simplicial edges induced from the same embeddings" in full_complex_html
     assert "Full graph-of-thought trajectory filtered simplicial complex" in full_complex_html
+    assert "actual face-to-coface covers" in full_tree_html
+    assert "optional sorted-label trie prefix links" in full_tree_html
+    assert "not disconnected simplex columns" in full_tree_html
+    assert "empty simplex" in full_tree_html
+    if "no Jensen-Shannon radius complex or simplex tree was rendered" in probability_tree_html:
+        assert "probability vectors were not present" in probability_tree_html
+    else:
+        assert "Jensen-Shannon probability SimplexTree" in probability_tree_html
+        assert "actual face-to-coface covers" in probability_tree_html
     assert "Filtration radius" in full_complex_html
     assert "play filtration" in full_complex_html
     assert "Reasoning step filtered simplicial complex maps" in step_index_html

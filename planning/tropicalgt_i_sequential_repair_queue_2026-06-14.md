@@ -83,7 +83,7 @@
 
 ### 6. Simplex Trees and Simplicial Complexes
 
-- [ ] Render actual GUDHI simplex-tree/trie or face-coface poset structure, not disconnected columns.
+- [x] Render actual GUDHI simplex-tree/trie or face-coface poset structure, not disconnected columns.
 - [ ] Include every reasoning step's filtered complex and simplex tree.
 - [ ] Add dotted directed edges for causal structure, decoding order, or both when they align.
 - [ ] Use solid edges/faces filled in by radius slider for simplicial objects.
@@ -212,3 +212,13 @@ The live item-by-item repair inventory is maintained in `planning/tropicalgt_i_c
 - [x] Added memory regression coverage for matching certified CAS evidence, mismatched certified CAS evidence, and unavailable query evidence.
 - [x] Focused verification passed: metrics and memory `9 passed`; visualization plus artifact validator `33 passed`; algebraic persistence `15 passed`.
 - [x] Pushed this certified CAS retrieval-scoring repair on the non-main branch.
+
+
+### Current Objective Update - SimplexTree Face/Coface Contract Pass
+
+- [x] Confirmed the graph-of-thought SimplexTree page renders actual face-to-coface Hasse covers plus optional sorted-label trie-prefix links instead of disconnected simplex columns.
+- [x] Updated the Plotly title contract to state that actual cover edges are primary and trie links are legend-only.
+- [x] Added regression checks requiring `actual face-to-coface covers`, `optional sorted-label trie prefix links`, `not disconnected simplex columns`, and the empty-simplex root on the full trajectory SimplexTree page.
+- [x] Preserved the Jensen-Shannon probability SimplexTree unavailable state when model probability vectors are absent.
+- [x] Focused verification passed: visualization plus artifact validator `33 passed`.
+- [x] Pushed this simplex-tree contract repair on the non-main branch.

@@ -259,3 +259,11 @@
 - Retrieval output explicitly marks the signal as retrieval evidence only and sets no derived-category claim from the scorer.
 - Regression coverage now proves matching certified CAS artifacts score positively, mismatched certified artifacts score zero while remaining auditable, and missing query CAS evidence stays unavailable.
 - Verification: metrics and memory `9 passed`; visualization plus artifact validator `33 passed`; algebraic persistence `15 passed`.
+
+
+## Iteration 35: SimplexTree Face/Coface Contract
+
+- Tightened the graph-of-thought SimplexTree visualization contract so the page explicitly describes a model-embedding barycentric face/coface poset, not disconnected simplex columns.
+- The primary edges are actual face-to-coface covers; optional sorted-label trie-prefix links remain available as legend-only reference edges.
+- Regression coverage now requires the full trajectory SimplexTree page to contain actual face/coface cover text, optional trie-prefix link text, the not-disconnected-columns warning, and the empty-simplex root. The probability SimplexTree test preserves the explicit unavailable state when model probability vectors are absent.
+- Verification: visualization plus artifact validator `33 passed`.
