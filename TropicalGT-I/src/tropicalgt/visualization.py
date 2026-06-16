@@ -3992,7 +3992,9 @@ def _cas_real_resolution_display(real: Mapping[str, Any]) -> Dict[str, Any]:
         differentials.append({"map": f"d_{hd}", "name": f"d_{hd}", "shape": shape, "rank": "CAS", "matrix_preview": [str(preview)], "source_degrees": row.get("source_degrees"), "target_degrees": row.get("target_degrees")})
     fitting = artifacts.get("fitting_ideals") if isinstance(artifacts.get("fitting_ideals"), Mapping) else summary.get("fitting_ideals", {})
     minors = artifacts.get("minors") if isinstance(artifacts.get("minors"), Mapping) else summary.get("minors", {})
+    ideal_diagnostics = artifacts.get("ideal_diagnostics") if isinstance(artifacts.get("ideal_diagnostics"), Mapping) else summary.get("ideal_diagnostics", {})
     be_artifacts = artifacts.get("buchsbaum_eisenbud_diagnostics") if isinstance(artifacts.get("buchsbaum_eisenbud_diagnostics"), Mapping) else {}
+    be_rank_conditions = artifacts.get("buchsbaum_eisenbud_rank_conditions") if isinstance(artifacts.get("buchsbaum_eisenbud_rank_conditions"), Mapping) else summary.get("buchsbaum_eisenbud_rank_conditions", {})
     return {
         "available": bool(modules),
         "ring": real.get("coefficient_ring", "F2[x_level,x_radius]"),
@@ -4004,6 +4006,8 @@ def _cas_real_resolution_display(real: Mapping[str, Any]) -> Dict[str, Any]:
         "differentials": differentials,
         "fitting_ideals": dict(fitting) if isinstance(fitting, Mapping) else {},
         "minors": dict(minors) if isinstance(minors, Mapping) else {},
+        "ideal_diagnostics": dict(ideal_diagnostics) if isinstance(ideal_diagnostics, Mapping) else {},
+        "buchsbaum_eisenbud_rank_conditions": dict(be_rank_conditions) if isinstance(be_rank_conditions, Mapping) else {},
         "buchsbaum_eisenbud_diagnostics": {
             "minimality_certified": bool(real.get("minimality_certified")),
             "exactness_certified": bool(real.get("exactness_certified")),
@@ -4139,6 +4143,8 @@ def _m2_certificate_columns(m2: Mapping[str, Any], bifiltration: Mapping[str, An
     rank_inv = rank_inv if isinstance(rank_inv, Mapping) else {}
     resolution = _m2_selected_staircase_resolution(m2)
     res_be = resolution.get("buchsbaum_eisenbud_diagnostics", {}) if isinstance(resolution.get("buchsbaum_eisenbud_diagnostics"), Mapping) else {}
+    ideal_diag = resolution.get("ideal_diagnostics", {}) if isinstance(resolution.get("ideal_diagnostics"), Mapping) else {}
+    be_rank = resolution.get("buchsbaum_eisenbud_rank_conditions", {}) if isinstance(resolution.get("buchsbaum_eisenbud_rank_conditions"), Mapping) else {}
     items = [
         ("ring", resolution.get("ring", m2.get("ring", bifiltration.get("module_ring", "F2[x_level,x_radius]")))),
         ("field", m2.get("field", "F2")),
@@ -4151,6 +4157,8 @@ def _m2_certificate_columns(m2: Mapping[str, Any], bifiltration: Mapping[str, An
         ("BEMultiplier output available", res_be.get("multiplier_output_available", False)),
         ("BEMultipliers status", res_be.get("bemultipliers_status", "unreported")),
         ("aMultiplier(1) shape", res_be.get("a_multiplier_1_shape", "")),
+        ("BE rank conditions", _json_clip(be_rank, 260)),
+        ("ideal diagnostics", _json_clip(ideal_diag, 260)),
         ("not full persistence-module resolution", resolution.get("not_full_persistence_module_resolution", True)),
         ("derived equivalence certified", cert.get("derived_equivalence_certified", False)),
         ("Buchsbaum-Eisenbud exactness", be.get("passes_exactness_necessary_checks", False)),

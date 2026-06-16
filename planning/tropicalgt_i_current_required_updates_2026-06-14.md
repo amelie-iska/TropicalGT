@@ -193,6 +193,28 @@ git diff --check
 ```
 
 
+## 2026-06-16 Sequential CAS Update: Structured Fitting/Minor And BE Rank Diagnostics
+
+Status: complete for the structured diagnostic checkpoint; still incomplete for full grade/depth/regular-element certification beyond what the CAS backend explicitly emits.
+
+- Added structured `ideal_diagnostics` for real CAS Fitting ideals and determinantal minor ideals. Rows record fitting index, inferred determinantal order for the displayed presentation matrix, ideal text, source backend, and the method note `Fitt_j(coker(PM)) = I_{rows-j}(PM)`.
+- Added `buchsbaum_eisenbud_rank_conditions` computed from certified free-module ranks and differential shapes. These rows expose BE-style nonnegative rank-condition sanity checks while explicitly marking `is_independent_certificate=false`; exactness/minimality still come only from the CAS certificate.
+- The visualization CAS certificate table now includes ideal diagnostics and BE rank-condition summaries alongside Fitting ideals, minors, BEMultipliers status, and aMultiplier output.
+- Method scan from `references/2210.11433v1.pdf` reinforced the guardrail: rank strata are determinantal, Fitting invariants are minors of presentation maps, and Buchsbaum-Eisenbud multiplier/exactness claims require explicit CAS-backed evidence, not inferred chain diagnostics.
+
+Verification:
+
+```bash
+PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m py_compile TropicalGT-I/src/tropicalgt/cas_free_resolution.py TropicalGT-I/src/tropicalgt/visualization.py TropicalGT-I/tests/test_algebraic_persistence.py
+PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_algebraic_persistence.py -q
+# 19 passed in 6.01s
+PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_simplicial_visualization.py TropicalGT-I/tests/test_interactive_artifact_validator.py -q
+# 37 passed in 3.54s
+git diff --check
+# clean
+```
+
+
 ## 2026-06-14 Sequential CAS Update: BEMultipliers Repository Inspection
 
 - Active replacement run snapshot after detached relaunch: `tropicalgt_i_pg_bpb_step0_full24b_b54_v10_bpb_5k_gate`, PID `2195134`, W&B id `e3qevo1u`, URL `https://wandb.ai/amelie-iska-math/TropicalGT-I/runs/e3qevo1u`. The run reached step 250 after relaunch and remained alive at the previous check; continue the 5K gate unless it crashes or emits nonfinite/invalid losses.
