@@ -594,4 +594,11 @@ Use "one dimensional cone" or "one dimensional cones" as the preferred fan-theor
 - Preserved b60 5K evidence, generated review bundles, stop records, launch configs, checkpoint paths, and old b55-b59 provenance. Large generated cleanup candidates were recorded in the sequential queue but not deleted without explicit approval.
 - Disk remains tight, with about `32G` available on `/`, dominated by the b60 generated evidence directory and older generated run outputs.
 
-_Last updated: 2026-06-16T19:18:00Z_
+
+## 2026-06-16 BEMultipliers Diagnostic Contract Result
+
+- Macaulay2 BEMultipliers output now carries explicit non-resolution contract fields in generated CAS scripts and parsed certificate summaries. A computed `aMultiplier(1,C,ComputeRanks=>true)` matrix may render only after a certified Macaulay2 ChainComplex exists, and it is never a substitute for a free-resolution backend.
+- Parsed Buchsbaum-Eisenbud diagnostics now expose `safe_to_render_multiplier_output`, `is_resolution_backend=false`, `safe_to_substitute_for_resolution=false`, and a no-proxy diagnostic contract.
+- Focused verification passed: `pytest TropicalGT-I/tests/test_algebraic_persistence.py -q` (`28 passed`).
+
+_Last updated: 2026-06-16T19:38:00Z_

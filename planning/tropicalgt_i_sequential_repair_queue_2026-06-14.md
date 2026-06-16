@@ -672,4 +672,13 @@ The live item-by-item repair inventory is maintained in `planning/tropicalgt_i_c
 - [x] Preserved all b60 step-5000 evidence, review bundles, stop records, launch configs, and the zero-byte checkpoint path; no generated evidence was repaired, replaced, or fabricated.
 - [x] Preserved old b55-b59 output/checkpoint/W&B provenance rather than deleting it silently. Largest cleanup candidates remain generated output dirs: b57 about `6.2G`, `multi_sample_browser` about `3.1G`, b59 fresh about `2.1G`, b58 about `1.1G`, plus older checkpoint files around `0.48G` each.
 - [x] Verification: `git status --short` remained clean after cache deletion; no source-controlled files, datasets, checkpoints, W&B directories, or generated audit bundles were staged.
-- [ ] Next Section 12 item: leave BPB restart blocked until real checkpoint-dependent evidence exists or the user explicitly changes the no-proxy evidence requirement; continue with the next source-side implementation/repair item that does not require a restart.
+- [x] Left BPB restart blocked until real checkpoint-dependent evidence exists or the user explicitly changes the no-proxy evidence requirement; continued with the next source-side implementation/repair item that does not require a restart.
+
+### Current Objective Update - BEMultipliers Diagnostic Contract Pass
+
+- [x] Confirmed live CAS probes see Macaulay2 `/usr/bin/M2`, Singular, Sage, and local `external/BEMultipliers/BuchsbaumEisenbudMultipliers.m2` as available/loadable diagnostic backends.
+- [x] Hardened Macaulay2 BEMultipliers script output with explicit contract fields: `bemultipliers_is_resolution_backend=false`, `requires_certified_macaulay2_chain_complex=true`, and `safe_to_substitute_for_resolution=false`.
+- [x] Extended parsed Buchsbaum-Eisenbud diagnostics and certificate summaries with `safe_to_render_multiplier_output`, `is_resolution_backend=false`, `safe_to_substitute_for_resolution=false`, and a no-proxy diagnostic contract.
+- [x] Added regression coverage proving computed `aMultiplier(1,C,ComputeRanks=>true)` output is renderable only as explicit post-resolution CAS diagnostic output and never as a free-resolution substitute.
+- [x] Verification passed: py-compile for `cas_free_resolution.py` and `test_algebraic_persistence.py`; `pytest TropicalGT-I/tests/test_algebraic_persistence.py -q` (`28 passed`); `git diff --check` clean.
+- [ ] Next source-side repair item: inspect remaining CAS/visualization surfaces for whether these new BEMultipliers diagnostic-contract fields are rendered in browser tables without implying a resolution certificate.

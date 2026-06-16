@@ -556,8 +556,15 @@ def test_certified_cas_result_surfaces_buchsbaum_eisenbud_diagnostics():
     assert be["exactness_certified"] is True
     assert be["minimality_certified"] is True
     assert be["multiplier_output_available"] is False
+    assert be["safe_to_render_multiplier_output"] is False
+    assert be["is_resolution_backend"] is False
+    assert be["safe_to_substitute_for_resolution"] is False
+    assert be["diagnostic_contract"]["requires_certified_macaulay2_chain_complex"] is True
     assert be["bemultipliers_status"] == "unavailable_no_package_path"
     assert "not substituted" in be["interpretation"]
+    assert cert["bemultipliers_status"] == "unavailable_no_package_path"
+    assert cert["bemultipliers_safe_to_render_multiplier_output"] is False
+    assert cert["bemultipliers_is_resolution_backend"] is False
     assert real["cas_artifacts"]["fitting_ideals"]["Fitt0"] == "ideal(x_level,x_radius)"
     assert real["cas_artifacts"]["minors"]["minors_1"] == "ideal(x_level,x_radius)"
     ideal_diag = real["cas_artifacts"]["ideal_diagnostics"]
@@ -629,8 +636,75 @@ def test_certified_cas_result_surfaces_buchsbaum_eisenbud_diagnostics():
     assert "buchsbaum_eisenbud_diagnostics_begin" in m2_script
     assert "BEMultipliers" in m2_script
     assert "aMultiplier(1,C,ComputeRanks=>true)" in m2_script
+    assert "bemultipliers_is_resolution_backend=false" in m2_script
+    assert "requires_certified_macaulay2_chain_complex=true" in m2_script
+    assert "safe_to_substitute_for_resolution=false" in m2_script
     assert "buchsbaum_eisenbud_diagnostics_begin" in singular_script
     assert "buchsbaum_eisenbud_diagnostics_begin" in sage_script
+
+
+def test_bemultipliers_computed_output_is_post_resolution_diagnostic_only():
+    tagged = "\n".join([
+        "TROPICALGT_RESOLUTION_BEGIN",
+        "backend=Macaulay2",
+        "exactness_certified=true",
+        "minimality_certified=true",
+        "homogeneous_presentation=true",
+        "certificate_type=Macaulay2 res coker presentation over multigraded F2 polynomial ring",
+        "presentation_shape=1x1",
+        "betti_table_begin",
+        "total: 1 1",
+        "betti_table_end",
+        "macaulay2_free_modules_begin",
+        "F0_degrees={{0,0}}",
+        "F1_degrees={{1,0}}",
+        "macaulay2_free_modules_end",
+        "macaulay2_differentials_begin",
+        "d1_shape=1x1",
+        "d1_source_degrees={{1,0}}",
+        "d1_target_degrees={{0,0}}",
+        "d1_matrix=| x_level |",
+        "macaulay2_differentials_end",
+        "buchsbaum_eisenbud_diagnostics_begin",
+        "backend_diagnostics_available=true",
+        "exactness_certified=true",
+        "minimality_certified=true",
+        "be_exactness_source=Macaulay2 res/HH exactness certificate",
+        "multiplier_output_available=true",
+        "bemultipliers_status=computed_aMultiplier_1",
+        "aMultiplier_1_shape=1x1",
+        "aMultiplier_1_matrix=matrix {{1}}",
+        "bemultipliers_is_resolution_backend=false",
+        "requires_certified_macaulay2_chain_complex=true",
+        "safe_to_substitute_for_resolution=false",
+        "buchsbaum_eisenbud_diagnostics_end",
+        "TROPICALGT_RESOLUTION_END",
+    ])
+    schema = canonicalize_module(_small_free_resolution_module())
+    parsed = cas_free_resolution._parse_tagged_output(tagged)
+    assert parsed is not None
+    real = cas_free_resolution._certified_result(
+        schema,
+        {
+            "available": True,
+            "backend": "M2",
+            "parsed": parsed,
+            "tagged_output": parsed["_raw"],
+            "certificate_attached": True,
+        },
+        attempts=[{"backend": "M2", "status": "ran"}],
+    )
+    be = real["cas_artifacts"]["buchsbaum_eisenbud_diagnostics"]
+    assert be["multiplier_output_available"] is True
+    assert be["safe_to_render_multiplier_output"] is True
+    assert be["is_resolution_backend"] is False
+    assert be["safe_to_substitute_for_resolution"] is False
+    assert be["diagnostic_contract"]["safe_to_use_as_resolution_certificate"] is False
+    cert = real["cas_artifacts"]["certificate_summary"]
+    assert cert["buchsbaum_eisenbud_multiplier_output_available"] is True
+    assert cert["bemultipliers_status"] == "computed_aMultiplier_1"
+    assert cert["bemultipliers_safe_to_render_multiplier_output"] is True
+    assert cert["bemultipliers_is_resolution_backend"] is False
 
 
 def test_macaulay2_tropical_fan_diagnostic_parser_and_script():

@@ -676,6 +676,9 @@ def _macaulay2_be_diagnostics_lines(
         [
             f"print \"bemultipliers_package_path={safe_path}\"",
             "print \"bemultipliers_repository=https://github.com/amelie-iska/BEMultipliers.git\"",
+            "print \"bemultipliers_is_resolution_backend=false\"",
+            "print \"requires_certified_macaulay2_chain_complex=true\"",
+            "print \"safe_to_substitute_for_resolution=false\"",
             "print \"reason=Buchsbaum-Eisenbud multiplier output is rendered only after an explicit BEMultipliers run on a CAS-certified Macaulay2 ChainComplex; no multiplier data is substituted from rank tables or chain diagnostics\"",
             "print \"buchsbaum_eisenbud_diagnostics_end\"",
         ]
@@ -1073,6 +1076,10 @@ def _certified_result(module_schema: dict[str, Any], backend_result: dict[str, A
         "safe_to_render_as_multigraded_free_resolution": safe_multigraded,
         "raw_tagged_output_attached": bool(backend_result.get("tagged_output")),
         "backend_attempt_count": len(attempts),
+        "buchsbaum_eisenbud_multiplier_output_available": bool(be_diagnostics.get("multiplier_output_available")),
+        "bemultipliers_status": str(be_diagnostics.get("bemultipliers_status", "unreported")),
+        "bemultipliers_safe_to_render_multiplier_output": bool(be_diagnostics.get("safe_to_render_multiplier_output")),
+        "bemultipliers_is_resolution_backend": False,
         "no_proxy_policy": "Only exact CAS certificates with parsed free-resolution summaries are rendered as resolutions; diagnostics alone are not substituted.",
     }
     return {
@@ -1348,9 +1355,29 @@ def _parse_buchsbaum_eisenbud_diagnostics(parsed: dict[str, Any], *, backend: st
             "available": False,
             "backend": backend,
             "multiplier_output_available": False,
+            "safe_to_render_multiplier_output": False,
+            "is_resolution_backend": False,
+            "safe_to_substitute_for_resolution": False,
             "reason": "CAS output did not include a Buchsbaum-Eisenbud diagnostic block; no multiplier or grade/depth evidence is inferred.",
         }
     multiplier_available = _parse_bool(values.get("multiplier_output_available"))
+    status = values.get("bemultipliers_status", "unreported")
+    matrix = values.get("aMultiplier_1_matrix", "")
+    safe_multiplier_output = bool(
+        backend == "Macaulay2"
+        and multiplier_available
+        and str(status).startswith("computed_")
+        and matrix
+    )
+    contract = {
+        "is_resolution_backend": False,
+        "requires_certified_macaulay2_chain_complex": True,
+        "safe_to_render_multiplier_output": safe_multiplier_output,
+        "safe_to_use_as_resolution_certificate": False,
+        "safe_to_substitute_for_resolution": False,
+        "multiplier_output_is_explicit_cas_output": bool(multiplier_available),
+        "no_proxy_policy": "BEMultipliers output may annotate a certified Macaulay2 ChainComplex, but never replaces a certified free-resolution backend.",
+    }
     return {
         "available": True,
         "backend": backend,
@@ -1358,17 +1385,22 @@ def _parse_buchsbaum_eisenbud_diagnostics(parsed: dict[str, Any], *, backend: st
         "minimality_certified": _parse_bool(values.get("minimality_certified")),
         "backend_diagnostics_available": _parse_bool(values.get("backend_diagnostics_available"), default=True),
         "multiplier_output_available": multiplier_available,
-        "bemultipliers_status": values.get("bemultipliers_status", "unreported"),
+        "safe_to_render_multiplier_output": safe_multiplier_output,
+        "is_resolution_backend": False,
+        "requires_certified_macaulay2_chain_complex": True,
+        "safe_to_substitute_for_resolution": False,
+        "diagnostic_contract": contract,
+        "bemultipliers_status": status,
         "bemultipliers_repository": values.get("bemultipliers_repository", "https://github.com/amelie-iska/BEMultipliers.git"),
         "bemultipliers_package_path": values.get("bemultipliers_package_path", ""),
         "be_exactness_source": values.get("be_exactness_source", ""),
         "a_multiplier_1_shape": values.get("aMultiplier_1_shape", ""),
-        "a_multiplier_1_matrix": values.get("aMultiplier_1_matrix", ""),
+        "a_multiplier_1_matrix": matrix,
         "raw_key_values": values,
         "interpretation": (
-            "Buchsbaum-Eisenbud multiplier output is present as explicit CAS output."
-            if multiplier_available
-            else "No Buchsbaum-Eisenbud multiplier output is present; exactness/Fitting/minor data is not substituted for multiplier evidence."
+            "Buchsbaum-Eisenbud multiplier output is present as explicit post-resolution CAS diagnostic output."
+            if safe_multiplier_output
+            else "No safe Buchsbaum-Eisenbud multiplier output is present; exactness/Fitting/minor data is not substituted for multiplier evidence."
         ),
     }
 
