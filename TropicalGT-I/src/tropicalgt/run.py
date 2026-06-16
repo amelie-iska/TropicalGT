@@ -203,6 +203,8 @@ WANDB_PRIORITY_GROUPS: tuple[tuple[str, tuple[str, ...]], ...] = (
             "node_edge_ratio",
             "graph_token_node_edge_ratio",
             "graph_json_fallback_rate",
+            "graph_json_derived_text_graph_rate",
+            "graph_json_parse_unavailable_rate",
             "graph_json_sequentialized_rate",
             "causal_dag_ar_rate",
             "random_graph_ar_rate",
@@ -622,6 +624,12 @@ def train(config_path: str | Path, resume_from: str | Path | None = None, max_st
             example_count = len(_records)
             graph_token_count = int(graph_batch.graph_token_counts.sum().item())
             fallback_count = sum(1 for record in _records if (record.metadata or {}).get("graph_json_fallback", False))
+            derived_text_graph_count = sum(
+                1 for record in _records if (record.metadata or {}).get("graph_json_derived_from_text", False)
+            )
+            parse_unavailable_count = sum(
+                1 for record in _records if (record.metadata or {}).get("graph_json_parse_unavailable", False)
+            )
             examples_seen += example_count
             tokens_seen_total += token_count
             graph_tokens_seen_total += graph_token_count
@@ -641,6 +649,8 @@ def train(config_path: str | Path, resume_from: str | Path | None = None, max_st
             metrics_last["sampler_chunks"] = float(sampler_report.get("chunks", 0))
             metrics_last["shuffle_rows_within_chunk"] = 1.0 if sampler_report.get("shuffle_rows_within_chunk") else 0.0
             metrics_last["graph_json_fallback_rate"] = fallback_count / max(example_count, 1)
+            metrics_last["graph_json_derived_text_graph_rate"] = derived_text_graph_count / max(example_count, 1)
+            metrics_last["graph_json_parse_unavailable_rate"] = parse_unavailable_count / max(example_count, 1)
             metrics_last["graph_json_sequentialized_rate"] = sum(
                 1 for record in _records if (record.metadata or {}).get("graph_json_sequentialized", False)
             ) / max(example_count, 1)
@@ -1514,6 +1524,8 @@ def evaluate_model(
     node_token_total = 0
     edge_token_total = 0
     graph_json_fallback_total = 0
+    graph_json_derived_text_graph_total = 0
+    graph_json_parse_unavailable_total = 0
     causal_dag_total = 0
     random_graph_total = 0
     parameter_golf_total = 0
@@ -1554,6 +1566,12 @@ def evaluate_model(
             node_token_total += int(graph_batch.node_counts.sum().item())
             edge_token_total += int(graph_batch.edge_counts.sum().item())
             graph_json_fallback_total += sum(1 for record in records if (record.metadata or {}).get("graph_json_fallback", False))
+            graph_json_derived_text_graph_total += sum(
+                1 for record in records if (record.metadata or {}).get("graph_json_derived_from_text", False)
+            )
+            graph_json_parse_unavailable_total += sum(
+                1 for record in records if (record.metadata or {}).get("graph_json_parse_unavailable", False)
+            )
             causal_dag_total += sum(1 for record in records if (record.metadata or {}).get("decoding_order_kind") == "causal_dag")
             random_graph_total += sum(1 for record in records if (record.metadata or {}).get("decoding_order_kind") == "random_autoregressive")
             parameter_golf_total += sum(
@@ -1593,7 +1611,11 @@ def evaluate_model(
         "node_tokens": node_token_total,
         "edge_tokens": edge_token_total,
         "graph_json_fallback_records": graph_json_fallback_total,
+        "graph_json_derived_text_graph_records": graph_json_derived_text_graph_total,
+        "graph_json_parse_unavailable_records": graph_json_parse_unavailable_total,
         "invalid_graph_rate": graph_json_fallback_total / max(len(dataset), 1),
+        "graph_json_derived_text_graph_rate": graph_json_derived_text_graph_total / max(len(dataset), 1),
+        "graph_json_parse_unavailable_rate": graph_json_parse_unavailable_total / max(len(dataset), 1),
         "causal_dag_ar_rate": causal_dag_total / max(len(dataset), 1),
         "random_graph_ar_rate": random_graph_total / max(len(dataset), 1),
         "parameter_golf_source_rate": parameter_golf_total / max(len(dataset), 1),

@@ -193,9 +193,9 @@ PROVENANCE_REGISTRY: tuple[ProvenanceEntry, ...] = (
         kind="data_fallback",
         surface="data/tokenization metric",
         optimize_directly=False,
-        description="Fallback graph construction when graph_json is missing or invalid.",
-        replacement_or_guardrail="Track graph_json_fallback_rate and invalid_graph_rate; investigate if nonzero.",
-        match_terms=("graph_json_fallback", "graph json fallback", "fallback_graph", "conservative fallback graphs"),
+        description="Legacy audit label for prohibited graph fallback traces; text-only rows must be marked as derived text graphs, and invalid explicit graph_json must expose parse-unavailable metadata.",
+        replacement_or_guardrail="Track graph_json_fallback_rate as a legacy must-remain-zero counter, graph_json_derived_text_graph_rate for required text-derived graph tokenization, and graph_json_parse_unavailable_rate for invalid explicit graph_json evidence.",
+        match_terms=("graph_json_fallback", "graph json fallback", "fallback_graph", "conservative fallback graphs", "graph_json_derived_from_text", "graph_json_parse_unavailable"),
     ),
     ProvenanceEntry(
         name="parameter_golf_token_id_fallback",

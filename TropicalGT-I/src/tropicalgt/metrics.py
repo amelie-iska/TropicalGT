@@ -100,14 +100,14 @@ def graph_token_structural_bytes(graph_batch: GraphTokenBatch) -> int:
 def explicit_graph_json_bytes(record: GraphRecord) -> int:
     """Bytes of non-derived graph side information.
 
-    Sequential text graphs and conservative fallback graphs are deterministic
-    from the byte stream, so they should not be charged as external side
-    information.  Parsed graph JSON is charged after stripping the derived
-    sequence path that ``GraphRecord.from_mapping`` appends for text training.
+    Sequential text graphs and text-derived graph tokenizations are deterministic
+    from the byte stream, so they are not charged as external side information.
+    Parsed graph JSON is charged after stripping the derived sequence path that
+    ``GraphRecord.from_mapping`` appends for text training.
     """
 
     metadata = record.metadata or {}
-    if metadata.get("graph_json_fallback", False):
+    if metadata.get("graph_json_fallback", False) or metadata.get("graph_json_derived_from_text", False):
         return 0
     graph = strip_derived_sequence_graph(record.graph_json or {})
     if not graph.get("nodes") and not graph.get("edges"):

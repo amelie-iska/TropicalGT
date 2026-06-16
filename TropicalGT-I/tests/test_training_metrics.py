@@ -37,9 +37,11 @@ def test_bpb_and_graph_bpb_formulas_are_exact():
     assert aggregate["graph_sideinfo_bpb"] == metrics["graph_sideinfo_bpb"]
 
 
-def test_derived_fallback_graph_is_not_charged_as_side_information():
+def test_derived_text_graph_is_not_marked_fallback_or_charged_as_side_information():
     record = GraphRecord.from_mapping({"record_id": "derived", "text": "abc", "question": "abc"})
-    assert record.metadata["graph_json_fallback"] is True
+    assert record.metadata["graph_json_fallback"] is False
+    assert record.metadata["graph_json_source"] == "derived_text_graph"
+    assert record.metadata["graph_json_derived_from_text"] is True
     assert explicit_graph_json_bytes(record) == 0
 
 
@@ -116,6 +118,10 @@ def test_training_history_contains_certificate_and_throughput_metrics(tmp_path: 
         "graph_conditioned_bpb_no_side_cost",
         "graph_token_structural_bytes",
         "explicit_graph_json_bytes",
+        "graph_json_fallback_rate",
+        "graph_json_derived_text_graph_rate",
+        "graph_json_parse_unavailable_rate",
+        "graph_json_sequentialized_rate",
         "analogical_memory_query_norm",
         "causal_dag_ar_rate",
         "random_graph_ar_rate",

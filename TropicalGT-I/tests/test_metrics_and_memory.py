@@ -35,10 +35,10 @@ def test_bpb_metrics_account_for_text_and_graph_bytes():
     assert metrics["graph_bpb"] == metrics["graph_bpb"]
 
 
-def test_explicit_graph_bytes_ignore_derived_sequence_for_fallbacks():
+def test_explicit_graph_bytes_ignore_derived_text_graph_tokenization():
     record = FixtureGraphDataset(1)[0]
     assert explicit_graph_json_bytes(record) > 0
-    record.metadata = {"graph_json_fallback": True, "graph_json_sequentialized": True}
+    record.metadata = {"graph_json_fallback": False, "graph_json_derived_from_text": True, "graph_json_sequentialized": True}
     assert explicit_graph_json_bytes(record) == 0
 
 

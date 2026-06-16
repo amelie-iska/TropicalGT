@@ -47,8 +47,22 @@ def test_record_gfn_graphcg_diagnostics():
     assert graphcg["direction_norms"]
 
 
-def test_graph_record_marks_fallback_metadata():
-    real = GraphRecord.from_mapping({"record_id": "ok", "text": "x", "graph_json": '{"nodes":[],"edges":[]}'})
-    fallback = GraphRecord.from_mapping({"record_id": "bad", "text": "x", "graph_json": "{not-json}"})
+def test_graph_record_marks_derived_text_and_parse_unavailable_metadata():
+    source_metadata = {
+        "graph_json_parse_unavailable": True,
+        "graph_json_parse_unavailable_reason": "stale",
+    }
+    real = GraphRecord.from_mapping(
+        {"record_id": "ok", "text": "x", "graph_json": '{"nodes":[],"edges":[]}', "metadata": source_metadata}
+    )
+    malformed = GraphRecord.from_mapping({"record_id": "bad", "text": "x", "graph_json": "{not-json}"})
+    assert source_metadata["graph_json_parse_unavailable"] is True
     assert real.metadata["graph_json_fallback"] is False
-    assert fallback.metadata["graph_json_fallback"] is True
+    assert real.metadata["graph_json_source"] == "explicit_graph_json"
+    assert real.metadata["graph_json_parse_unavailable"] is False
+    assert "graph_json_parse_unavailable_reason" not in real.metadata
+    assert malformed.metadata["graph_json_fallback"] is False
+    assert malformed.metadata["graph_json_source"] == "derived_text_graph"
+    assert malformed.metadata["graph_json_derived_from_text"] is True
+    assert malformed.metadata["graph_json_parse_unavailable"] is True
+    assert malformed.metadata["graph_json_parse_unavailable_reason"] == "invalid_graph_json_payload"

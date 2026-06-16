@@ -8846,6 +8846,8 @@ def write_metric_visualizations(history: list[dict[str, float]], output_dir: str
         "tokens_per_sec",
         "graph_tokens_per_sec",
         "graph_json_fallback_rate",
+        "graph_json_derived_text_graph_rate",
+        "graph_json_parse_unavailable_rate",
         "gpu_mem_mb",
     ]
     fig = go.Figure()

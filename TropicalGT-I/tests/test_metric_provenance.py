@@ -63,6 +63,7 @@ def test_metric_provenance_audit_classifies_aliases_and_excludes_self(tmp_path: 
     self_file = tmp_path / "provenance.py"
     source.write_text(
         "metadata['graph_json_fallback'] = True\n"
+        "metadata['graph_json_parse_unavailable'] = True\n"
         "coords, fallback_stats = _feature_pca3_with_jitter(features, labels)\n"
         "autograd_note = 'GUDHI vectorizers are NumPy/scikit-learn transforms unless replaced by a torch-native differentiable surrogate'\n",
         encoding="utf-8",

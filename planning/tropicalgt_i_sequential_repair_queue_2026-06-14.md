@@ -715,3 +715,12 @@ The live item-by-item repair inventory is maintained in `planning/tropicalgt_i_c
 - [x] Rendered grade/depth and regular-element availability in the Macaulay2-style browser diagnostic and certificate tables.
 - [x] Preserved no-proxy behavior for Singular/Sage or older certificates that do not emit the block: grade/depth diagnostics are explicit unavailable states, not inferred from ranks.
 - [x] Focused verification passed: algebraic persistence plus visualization tests `64 passed`.
+
+### Current Objective Update - Text-Derived Graph No-Fallback Metadata Pass
+
+- [x] Reclassified missing `graph_json` rows as required text-derived graph tokenizations with `graph_json_source=derived_text_graph` and `graph_json_derived_from_text=true`, while keeping the legacy `graph_json_fallback` counter false.
+- [x] Reclassified malformed explicit `graph_json` payloads as text-derived graph tokenizations plus explicit parse-unavailable evidence: `graph_json_parse_unavailable=true` and `graph_json_parse_unavailable_reason=invalid_graph_json_payload`.
+- [x] Kept side-information accounting exact under the no-proxy/no-fallback rule: explicit graph JSON bytes are charged only for explicit graph JSON, never for text-derived graph tokenization.
+- [x] Added train/eval/browser metrics for `graph_json_derived_text_graph_rate` and `graph_json_parse_unavailable_rate`; retained `graph_json_fallback_rate` only as a legacy must-remain-zero guardrail.
+- [x] Updated per-record diagnostics and provenance audit coverage so browser-visible records distinguish explicit graph JSON, derived text graphs, and parse-unavailable explicit graph JSON without substituting proxy objects.
+- [x] Focused verification passed: py-compile for touched source/tests, `git diff --check`, and `pytest TropicalGT-I/tests/test_training_metrics.py TropicalGT-I/tests/test_diagnostics.py TropicalGT-I/tests/test_metrics_and_memory.py TropicalGT-I/tests/test_metric_provenance.py TropicalGT-I/tests/test_readiness_audit.py -q` (`37 passed`).

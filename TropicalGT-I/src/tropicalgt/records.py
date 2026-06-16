@@ -26,13 +26,26 @@ class GraphRecord:
         answer = _string(row.get("answer"))
         reasoning = _string(row.get("reasoning") or row.get("solution"))
         text = _string(row.get("text")) or _join_nonempty([question, reasoning, answer])
-        metadata = row.get("metadata") if isinstance(row.get("metadata"), dict) else {}
-        graph_obj = _parse_graph(row.get("graph_json"))
+        metadata = dict(row.get("metadata")) if isinstance(row.get("metadata"), dict) else {}
+        raw_graph_json = row.get("graph_json")
+        graph_obj = _parse_graph(raw_graph_json)
         if graph_obj is None:
             graph_obj = conservative_graph(question=question, reasoning=reasoning, answer=answer, text=text)
-            metadata["graph_json_fallback"] = True
-        else:
+            metadata["graph_json_source"] = "derived_text_graph"
+            metadata["graph_json_derived_from_text"] = True
             metadata["graph_json_fallback"] = False
+            if raw_graph_json not in (None, ""):
+                metadata["graph_json_parse_unavailable"] = True
+                metadata["graph_json_parse_unavailable_reason"] = "invalid_graph_json_payload"
+            else:
+                metadata["graph_json_parse_unavailable"] = False
+                metadata.pop("graph_json_parse_unavailable_reason", None)
+        else:
+            metadata["graph_json_source"] = "explicit_graph_json"
+            metadata["graph_json_derived_from_text"] = False
+            metadata["graph_json_fallback"] = False
+            metadata["graph_json_parse_unavailable"] = False
+            metadata.pop("graph_json_parse_unavailable_reason", None)
         graph_obj, sequence_added = attach_sequential_text_graph(graph_obj, text=text, question=question, answer=answer)
         graph_obj, causal_report = normalize_graph_causal_structure(graph_obj)
         metadata["graph_json_sequentialized"] = sequence_added
