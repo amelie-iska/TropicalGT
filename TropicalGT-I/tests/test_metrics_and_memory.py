@@ -489,6 +489,17 @@ def test_probability_simplicial_map_diagnostics_certifies_filtered_chain_map():
     report = probability_simplicial_map_diagnostics(query_complex, memory_complex)
     assert report["available"] is True
     assert report["map_source"] == "model_probability_jensen_shannon_assignment"
+    assert report["assignment_metric"] == "jensen_shannon_distance_on_model_probability_vectors"
+    assert report["assignment_solver"] in {"scipy_linear_sum_assignment", "greedy_fallback"}
+    evidence = report["probability_vector_evidence"]
+    assert evidence["schema_version"] == "tropicalgt.probability_vector_assignment_evidence.v1"
+    assert evidence["assignment_metric"] == "jensen_shannon_distance_on_model_probability_vectors"
+    assert evidence["assignment_solver"] == report["assignment_solver"]
+    assert evidence["all_displayed_query_vertices_have_probability_vectors"] is True
+    assert evidence["all_displayed_memory_vertices_have_probability_vectors"] is True
+    assert evidence["embedding_only_assignment_used"] is False
+    assert evidence["no_proxy_or_fallback"] is True
+    assert all(row["assignment_solver"] == report["assignment_solver"] for row in report["vertex_map"])
     assert report["simplex_tree_map_checked"] == 7
     assert report["simplex_tree_map_preserved"] == 7
     assert math.isclose(report["simplex_tree_map_preservation_rate"], 1.0)
@@ -534,6 +545,9 @@ def test_analogical_memory_retrieval_uses_probability_simplicial_map_weight(tmp_
     assert [row["record_id"] for row in hits] == ["match", "uniform"]
     assert hits[0]["probability_simplicial_map_available"] is True
     assert hits[0]["probability_simplicial_map_source"] == "model_probability_jensen_shannon_assignment"
+    assert hits[0]["probability_simplicial_map_assignment_metric"] == "jensen_shannon_distance_on_model_probability_vectors"
+    assert hits[0]["probability_simplicial_map_assignment_solver"] in {"scipy_linear_sum_assignment", "greedy_fallback"}
+    assert hits[0]["probability_simplicial_map_probability_vector_evidence"]["embedding_only_assignment_used"] is False
     assert hits[0]["retrieval_weights"]["probability_simplicial_map_weight"] == 1.0
     assert hits[0]["retrieval_score_components"]["probability_simplicial_map"] > hits[1]["retrieval_score_components"]["probability_simplicial_map"]
     assert hits[0]["probability_simplicial_map_similarity"] > hits[1]["probability_simplicial_map_similarity"]

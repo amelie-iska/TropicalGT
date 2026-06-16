@@ -371,6 +371,8 @@ def probability_simplicial_map_diagnostics(query_obj: dict[str, Any] | None, mem
     if not any(vec is not None for vec in q_probs) or not any(vec is not None for vec in m_probs):
         return _empty_probability_map(query_vertices, memory_vertices, "unavailable_no_model_probability_vectors")
     vertex_map = _probability_induced_vertex_assignment(query_vertices, memory_vertices, q_probs, m_probs)
+    assignment_solver = str(vertex_map[0].get("assignment_solver", "unavailable")) if vertex_map else "unavailable"
+    probability_vector_evidence = _probability_vector_assignment_evidence(query_vertices, memory_vertices, q_probs, m_probs, assignment_solver)
     mapping = {str(row["query_vertex"]): str(row["memory_vertex"]) for row in vertex_map}
     q_filtration = _simplex_filtration_lookup(query_obj or {})
     m_filtration = _simplex_filtration_lookup(memory_obj or {})
@@ -388,9 +390,12 @@ def probability_simplicial_map_diagnostics(query_obj: dict[str, Any] | None, mem
     return {
         "available": available,
         "map_source": "model_probability_jensen_shannon_assignment",
+        "assignment_metric": "jensen_shannon_distance_on_model_probability_vectors",
+        "assignment_solver": assignment_solver,
         "field": "F2",
         "ring": "F2[x_level,x_radius]",
         "probability_alignment": "zero_pad_to_common_token_index_feature_space_then_renormalize",
+        "probability_vector_evidence": probability_vector_evidence,
         "displayed_domain_vertices": len(query_vertices),
         "displayed_codomain_vertices": len(memory_vertices),
         "vertex_map": vertex_map,
@@ -478,6 +483,8 @@ def _probability_simplicial_map_retrieval_fields(
         "probability_simplicial_map_scoring_policy": "positive score only when model-probability Jensen-Shannon assignment extends to a filtration-preserving simplex-tree map",
         "probability_simplicial_map_available": available,
         "probability_simplicial_map_source": source,
+        "probability_simplicial_map_assignment_metric": str(report.get("assignment_metric", "unavailable")),
+        "probability_simplicial_map_assignment_solver": str(report.get("assignment_solver", "unavailable")),
         "probability_simplicial_map_vertex_assignment_count": int(len(report.get("vertex_map", [])) if isinstance(report.get("vertex_map"), list) else 0),
         "probability_simplicial_map_checked_simplices": int(report.get("simplex_tree_map_checked", 0) or 0),
         "probability_simplicial_map_preserved_simplices": int(report.get("simplex_tree_map_preserved", 0) or 0),
@@ -502,6 +509,7 @@ def _probability_simplicial_map_retrieval_fields(
         "probability_simplicial_map_safe_to_render_as_simplicial_map": bool(report.get("safe_to_render_as_simplicial_map", available)),
         "probability_simplicial_map_safe_to_render_as_chain_map": bool(report.get("safe_to_render_as_chain_map", chain.get("safe_to_use_as_persistence_module_morphism"))),
         "probability_simplicial_map_safe_to_render_as_persistence_module_morphism": bool(report.get("safe_to_render_as_persistence_module_morphism", morphism.get("available"))),
+        "probability_simplicial_map_probability_vector_evidence": report.get("probability_vector_evidence", {}) if isinstance(report.get("probability_vector_evidence"), dict) else {},
         "probability_simplicial_map_render_claim": render_claim,
         "probability_simplicial_map_claim_status": render_claim,
         "probability_simplicial_map_claim_failure_reason": claim_reason,
@@ -594,11 +602,13 @@ def _probability_induced_vertex_assignment(
                 level_penalty = 0.01 * abs(float(q.get("level", 0.0) or 0.0) - float(m.get("level", 0.0) or 0.0))
             costs[qi, mi] = float(dist + type_penalty + level_penalty)
     pairs: list[tuple[int, int]] = []
+    assignment_solver = "greedy_fallback"
     try:
         from scipy.optimize import linear_sum_assignment  # type: ignore
 
         row_ind, col_ind = linear_sum_assignment(costs)
         pairs = [(int(r), int(c)) for r, c in zip(row_ind, col_ind) if math.isfinite(float(costs[int(r), int(c)])) and costs[int(r), int(c)] < 1e5]
+        assignment_solver = "scipy_linear_sum_assignment"
     except Exception:
         used: set[int] = set()
         for qi in range(len(query_vertices)):
@@ -619,12 +629,41 @@ def _probability_induced_vertex_assignment(
                 "score": float(1.0 / (1.0 + cost)),
                 "assignment_cost": cost,
                 "jensen_shannon_distance": js_distance,
+                "assignment_metric": "jensen_shannon_distance_on_model_probability_vectors",
+                "assignment_solver": assignment_solver,
                 "map_source": "model_probability_jensen_shannon_assignment",
                 "query_probability_source": query_vertices[qi].get("probability_source"),
                 "memory_probability_source": memory_vertices[mi].get("probability_source"),
             }
         )
     return rows
+
+
+def _probability_vector_assignment_evidence(
+    query_vertices: list[dict[str, Any]],
+    memory_vertices: list[dict[str, Any]],
+    q_probs: list[list[float] | None],
+    m_probs: list[list[float] | None],
+    assignment_solver: str,
+) -> dict[str, Any]:
+    query_count = sum(vec is not None for vec in q_probs)
+    memory_count = sum(vec is not None for vec in m_probs)
+    return {
+        "schema_version": "tropicalgt.probability_vector_assignment_evidence.v1",
+        "source": "probability_filtered_complex_vertices",
+        "probability_vector_source": "model_probability_vectors_on_vertices",
+        "assignment_metric": "jensen_shannon_distance_on_model_probability_vectors",
+        "assignment_solver": assignment_solver,
+        "probability_alignment": "zero_pad_to_common_token_index_feature_space_then_renormalize",
+        "displayed_query_vertices": int(len(query_vertices)),
+        "displayed_memory_vertices": int(len(memory_vertices)),
+        "query_probability_vertex_count": int(query_count),
+        "memory_probability_vertex_count": int(memory_count),
+        "all_displayed_query_vertices_have_probability_vectors": bool(query_vertices and query_count == len(query_vertices)),
+        "all_displayed_memory_vertices_have_probability_vectors": bool(memory_vertices and memory_count == len(memory_vertices)),
+        "embedding_only_assignment_used": False,
+        "no_proxy_or_fallback": True,
+    }
 
 
 def _padded_jensen_shannon(a: list[float] | None, b: list[float] | None) -> float | None:

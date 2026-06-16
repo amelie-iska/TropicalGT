@@ -1047,3 +1047,23 @@ CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/t
 CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_algebraic_persistence.py -q -p no:cacheprovider --basetemp=/tmp/tropicalgt-pytest-cas-execution-manifest-full
 # 31 passed
 ```
+
+
+## 2026-06-16 Analogical Probability Assignment Evidence
+
+Sequential analogical memory/map repair completed after the CAS execution manifest:
+
+- Added `tropicalgt.probability_vector_assignment_evidence.v1` to probability simplicial map diagnostics so each analogical map report explicitly records model probability-vector source, Jensen-Shannon assignment metric, assignment solver, displayed query/memory probability-vector counts, and `embedding_only_assignment_used=false`.
+- Added assignment metric/solver fields to vertex-map rows and retrieval metrics, making the probability-vector assignment path auditable from both the detailed map and the scalar training/readout rows.
+- Added regressions proving certified probability simplicial maps and retrieval hits expose the probability-vector evidence contract and preserve the no-proxy/no-fallback policy.
+
+Validation:
+
+```text
+CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m py_compile TropicalGT-I/src/tropicalgt/memory.py TropicalGT-I/tests/test_metrics_and_memory.py
+# passed
+CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_metrics_and_memory.py::test_probability_simplicial_map_diagnostics_certifies_filtered_chain_map TropicalGT-I/tests/test_metrics_and_memory.py::test_analogical_memory_retrieval_uses_probability_simplicial_map_weight TropicalGT-I/tests/test_metrics_and_memory.py::test_analogical_memory_probability_map_must_preserve_simplex_tree_to_score -q -p no:cacheprovider --basetemp=/tmp/tropicalgt-pytest-analogical-probability-evidence
+# 3 passed
+CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_metrics_and_memory.py -q -p no:cacheprovider --basetemp=/tmp/tropicalgt-pytest-analogical-probability-evidence-full-rerun
+# 11 passed
+```
