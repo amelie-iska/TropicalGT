@@ -190,6 +190,15 @@ def test_real_cas_free_resolution_caches_deterministic_unavailable_probe(tmp_pat
     assert second["cache"]["enabled"] is True
     assert second["cache"]["hit"] is True
     assert second["cache"]["key"] == first["cache"]["key"]
+    unavailable = first["unavailable_diagnostic"]
+    assert unavailable["status"] == "backend_not_installed"
+    assert unavailable["safe_to_render_only_as_unavailable"] is True
+    assert unavailable["available_backends"] == []
+    assert unavailable["attempt_statuses"] == []
+    assert unavailable["bemultipliers_is_resolution_backend"] is False
+    assert "Install or activate Macaulay2" in unavailable["action"]
+    assert first["unavailable_dependency_action"] == unavailable["action"]
+    assert "Do not substitute chain diagnostics" in unavailable["no_proxy_policy"]
 
 
 def test_real_cas_free_resolution_complexity_guard_caches_deterministic_skip(tmp_path, monkeypatch):

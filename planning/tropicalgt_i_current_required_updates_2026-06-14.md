@@ -385,10 +385,20 @@ git diff --check
 - Verification completed: `python -m py_compile TropicalGT-I/src/tropicalgt/cas_free_resolution.py TropicalGT-I/src/tropicalgt/visualization.py TropicalGT-I/tests/test_algebraic_persistence.py TropicalGT-I/tests/test_simplicial_visualization.py`, `pytest TropicalGT-I/tests/test_algebraic_persistence.py::test_certified_cas_result_surfaces_buchsbaum_eisenbud_diagnostics TropicalGT-I/tests/test_algebraic_persistence.py::test_real_cas_free_resolution_smoke_when_backend_available -q` (`2 passed`), `pytest TropicalGT-I/tests/test_simplicial_visualization.py::test_certified_cas_diagnostic_tables_require_explicit_structured_certificates -q` (`1 passed`), `pytest TropicalGT-I/tests/test_algebraic_persistence.py -q` (`24 passed`), `pytest TropicalGT-I/tests/test_simplicial_visualization.py -q` (`33 passed`), `pytest TropicalGT-I/tests/test_interactive_artifact_validator.py -q` (`10 passed`), and `git diff --check`.
 
 
+## 2026-06-16 Explicit CAS Unavailable Rendering Addendum
+
+- Uncertified real-free-resolution reports now include `unavailable_diagnostic` and `unavailable_dependency_action`. These fields give a status-specific action for missing backend executables, disabled CAS execution, complexity guards, timeouts, invalid grading, unsupported rings, and failed certificates.
+- The unavailable diagnostic also records available backend names, backend attempt statuses, BEMultipliers' non-backend role, a safe-unavailable-render flag, and the no-proxy policy: chain diagnostics, rank samples, Fitting ideals, minors, and BEMultipliers output must not substitute for a certified free resolution.
+- The deterministic no-backend regression monkeypatches all CAS executable probes unavailable and verifies that `backend_not_installed` renders only as an unavailable diagnostic with an install/activation action and empty `cas_artifacts`.
+- Section 4 CAS integration is now complete in the sequential queue. The next open implementation section is derived/analogical maps using probability-vector assignments and certified algebra evidence.
+- b60 latest checked training state reached step `996` with train loss/NLL `1.251/1.229`; trainer PID `378962` and watcher PID `379304` remain alive under the step-5000 gate, with GPU allocation `22381/24564` MiB during the pulse.
+- Verification completed: `python -m py_compile TropicalGT-I/src/tropicalgt/cas_free_resolution.py TropicalGT-I/tests/test_algebraic_persistence.py`, `pytest TropicalGT-I/tests/test_algebraic_persistence.py::test_real_cas_free_resolution_caches_deterministic_unavailable_probe -q` (`1 passed`), `pytest TropicalGT-I/tests/test_algebraic_persistence.py -q` (`24 passed`), `pytest TropicalGT-I/tests/test_simplicial_visualization.py -q` (`33 passed`), `pytest TropicalGT-I/tests/test_interactive_artifact_validator.py -q` (`10 passed`), and `git diff --check`.
+
+
 ## Real Implementations Only Policy
 
 No TropicalGT-I metric, loss, visualization, analogical map, persistence module, free resolution, derived comparison, tropical-cycle diagnostic, or CAS artifact should be presented as a mathematical object unless it is computed from the actual model outputs, graph states, embeddings, probabilities, simplex trees, bifiltrations, or certified CAS/backend output that define that object. Temporary placeholders, synthetic fallback objects, mock charts, fabricated simplices, and convenience stand-ins are not acceptable. When a requested object cannot yet be computed, the artifact must render an explicit unavailable/uncertified state and the training metric must either be disabled or logged under an audit-only unavailable flag. Finite chain-presentation diagnostics may be shown only as chain diagnostics, never as free resolutions. Total-graded or ungraded CAS output may be shown as real CAS output only under its actual grading; it must not be advertised as a multigraded `F2[x_level,x_radius]` free resolution unless the backend certifies that multigraded structure.
 
 Use "one dimensional cone" or "one dimensional cones" as the preferred fan-theoretic language whenever the intended object is a cone of a fan or a cone-indexed filtration datum. Use singular or plural according to ordinary grammar.
 
-_Last updated: 2026-06-16T08:00:00Z_
+_Last updated: 2026-06-16T08:05:00Z_

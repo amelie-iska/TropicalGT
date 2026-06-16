@@ -217,6 +217,9 @@ def unavailable_real_resolution(
         input_hash = None
         templates = {}
         error = error or str(exc)
+    backend_probe = probe_cas_backends()
+    bemultipliers_probe = probe_bemultipliers()
+    unavailable_diagnostic = _unavailable_resolution_diagnostic(status, reason or error, attempts or [], backend_probe, bemultipliers_probe)
     return {
         "schema_version": SCHEMA_VERSION,
         "available": False,
@@ -227,8 +230,8 @@ def unavailable_real_resolution(
         "input_sha256": input_hash,
         "module_summary": module_summary,
         "backend_attempts": attempts or [],
-        "backend_probe": probe_cas_backends(),
-        "bemultipliers_probe": probe_bemultipliers(),
+        "backend_probe": backend_probe,
+        "bemultipliers_probe": bemultipliers_probe,
         "cas_artifacts": {},
         "command_templates": templates,
         "certificate_attached": False,
@@ -241,7 +244,47 @@ def unavailable_real_resolution(
         "safe_to_render_as_real_free_resolution": False,
         "safe_to_render_as_total_graded_resolution": False,
         "safe_to_render_as_multigraded_free_resolution": False,
+        "safe_unavailable_render": True,
+        "unavailable_diagnostic": unavailable_diagnostic,
+        "unavailable_dependency_action": unavailable_diagnostic["action"],
         "render_warning": "No certified CAS free resolution is available for this module.",
+    }
+
+
+def _unavailable_resolution_diagnostic(
+    status: str,
+    reason: str | None,
+    attempts: list[dict[str, Any]],
+    backend_probe: dict[str, Any],
+    bemultipliers_probe: dict[str, Any],
+) -> dict[str, Any]:
+    available = [row.get("name") for row in backend_probe.get("backends", []) if isinstance(row, dict) and row.get("available")]
+    if status == "backend_not_installed":
+        action = "Install or activate Macaulay2, Singular, or Sage, or set TROPICALGT_M2_BIN, TROPICALGT_SINGULAR_BIN, or TROPICALGT_SAGE_BIN to an executable backend. BEMultipliers is optional and only runs after a Macaulay2 certificate."
+    elif status == "disabled_by_environment":
+        action = "Unset TROPICALGT_DISABLE_CAS_FREE_RESOLUTION or set it to a truthy execution mode before requesting a certified CAS resolution."
+    elif status == "complexity_guard":
+        action = "Reduce the module presentation size or raise TROPICALGT_CAS_MAX_PRESENTATION_CELLS / TROPICALGT_CAS_MAX_DETERMINANT_ORDER after confirming the CAS run is safe."
+    elif status == "timeout":
+        action = "Increase the CAS timeout or reduce presentation complexity; do not render a resolution until a backend returns an exact certificate."
+    elif status == "invalid_grading":
+        action = "Fix the coefficient ring, generator multidegrees, and boundary monomial exponents so the presentation is a valid nonnegative multigraded module."
+    elif status == "unsupported_ring":
+        action = "Use one of the supported F2 polynomial rings or add an explicit certified backend adapter for the requested coefficient ring."
+    elif status == "certificate_failed":
+        action = "Inspect backend_attempts and command_templates; no free-resolution artifact may render until a CAS backend returns exactness/minimality evidence for the displayed module."
+    else:
+        action = "Inspect backend_attempts, backend_probe, and command_templates; render only this unavailable diagnostic until a real CAS certificate exists."
+    return {
+        "available": True,
+        "status": status,
+        "reason": reason or "No certified CAS backend output is available for this module.",
+        "action": action,
+        "available_backends": [str(name) for name in available],
+        "attempt_statuses": [str(attempt.get("status", "")) for attempt in attempts if attempt],
+        "bemultipliers_is_resolution_backend": bool(bemultipliers_probe.get("is_resolution_backend")),
+        "safe_to_render_only_as_unavailable": True,
+        "no_proxy_policy": "Do not substitute chain diagnostics, rank samples, Fitting ideals, minors, or BEMultipliers output for a certified free resolution.",
     }
 
 

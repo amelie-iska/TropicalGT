@@ -69,7 +69,7 @@
 - [x] Implement a CAS bridge module with strict provenance and no fabricated algebra.
 - [x] Compute minimal multigraded free resolutions over `F2[x_level,x_radius]` when CAS is available.
 - [x] Compute Betti tables, differential matrices, multidegree shifts, Fitting ideals, minors, Buchsbaum-Eisenbud diagnostics, and exactness/minimality certificates.
-- [ ] Render unavailable only when the real CAS computation cannot run, and make the missing dependency/action explicit.
+- [x] Render unavailable only when the real CAS computation cannot run, and make the missing dependency/action explicit.
 - [x] Add tests with known monomial ideals: singleton generator, two-generator staircase, three-generator staircase, and a nontrivial adjacent-LCM syzygy case.
 
 ### 5. Derived and Analogical Maps
@@ -263,6 +263,14 @@ The live item-by-item repair inventory is maintained in `planning/tropicalgt_i_c
 - [x] Kept Betti rows, free modules, differential matrices, multidegree shifts, Fitting ideals, determinantal minors, Buchsbaum-Eisenbud rank diagnostics, and BEMultipliers diagnostics as structured CAS artifacts rather than raw-text-only evidence.
 - [x] Passed `certificate_summary` through the two-parameter visualization adapter and certificate table so browser/audit payloads can disclose exactness/minimality evidence directly.
 - [x] Focused verification passed: CAS parser/smoke `2 passed`; certified visualization table `1 passed`; full algebraic persistence `24 passed`; full simplicial visualization `33 passed`; artifact validator `10 passed`.
+
+
+### Current Objective Update - Explicit CAS Unavailable Rendering Pass
+
+- [x] Added structured `unavailable_diagnostic` and `unavailable_dependency_action` fields to uncertified CAS reports, with status-specific actions for missing backends, disabled execution, complexity guards, timeouts, invalid gradings, unsupported rings, and failed certificates.
+- [x] The unavailable diagnostic states available backend names, backend attempt statuses, whether BEMultipliers is a resolution backend, safe unavailable rendering, and the no-proxy policy forbidding chain/rank/Fitting/minor/BEMultipliers substitution for a free resolution.
+- [x] Added a deterministic no-backend regression proving `backend_not_installed` reports an install/activation action and remains renderable only as an unavailable diagnostic.
+- [x] Focused verification passed: no-backend unavailable diagnostic `1 passed`; full algebraic persistence `24 passed`; full simplicial visualization `33 passed`; artifact validator `10 passed`.
 
 
 ### Current Objective Update - Rank-Invariant Table And 2-Parameter Persistence Pass
