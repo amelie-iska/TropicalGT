@@ -103,3 +103,34 @@ def test_review_prompt_requires_subagent_evidence_review_and_step0_restart():
     assert "topological, geometric, algebraic" in prompt
     assert "Restart from step 0" in prompt
     assert "No proxies or fallbacks" in prompt
+
+def test_review_loop_reads_periodic_and_validation_report_metrics():
+    loop = _load_review_loop()
+    periodic_report = {"metrics": {"eval_bpb": 1.29, "eval_graph_bpb": 2.4}}
+    validation_report = {"bpb": 1.31, "bpb_exact": 1.31, "graph_bpb": 2.6, "nll": 0.91}
+    assert loop._metric_value(periodic_report, {}, "eval.bpb") == 1.29
+    assert loop._metric_value(periodic_report, {}, "eval.graph_bpb") == 2.4
+    assert loop._metric_value(validation_report, {}, "eval.bpb") == 1.31
+    assert loop._metric_value(validation_report, {}, "eval.graph_bpb") == 2.6
+
+
+def test_active_training_contract_reads_top_level_validation_metrics():
+    loop = _load_review_loop()
+    report = {
+        "bpb": 1.27,
+        "graph_bpb": 2.1,
+        "graph_sideinfo_bpb": 2.3,
+        "ppl": 2.4,
+        "nll": 0.88,
+        "parameter_golf_source_rate": 0.5,
+        "causal_dag_ar_rate": 1.0,
+    }
+    contract = loop._active_training_contract({"model": {}, "batch_size": 4, "seq_len": 32}, report, {}, 5000)
+    compression = contract["compression_metrics"]
+    assert compression["eval_bpb"] == 1.27
+    assert compression["eval_graph_bpb"] == 2.1
+    assert compression["eval_graph_sideinfo_bpb"] == 2.3
+    assert compression["eval_ppl"] == 2.4
+    assert contract["active_losses"]["nll"] == 0.88
+    assert contract["data_metrics"]["parameter_golf_source_rate"] == 0.5
+    assert contract["data_metrics"]["causal_dag_ar_rate"] == 1.0

@@ -221,15 +221,43 @@ def _load_checkpoint_summary(path: Path) -> dict[str, Any]:
 
 
 def _metric_value(report: dict[str, Any], checkpoint: dict[str, Any], dotted: str) -> float | None:
-    for root in (report, checkpoint):
-        value = _nested_get(root, dotted)
-        if isinstance(value, (int, float)):
-            return float(value)
-    if dotted.startswith("eval."):
-        value = _nested_get(report, dotted.replace("eval.", "metrics.eval_", 1))
-        if isinstance(value, (int, float)):
-            return float(value)
+    for candidate in _metric_schema_paths(dotted):
+        for root in (report, checkpoint):
+            value = _nested_get(root, candidate)
+            if isinstance(value, (int, float)):
+                return float(value)
     return None
+
+
+def _metric_schema_paths(dotted: str) -> list[str]:
+    paths = [dotted]
+    if dotted.startswith("eval."):
+        key = dotted.split(".", 1)[1]
+        paths.extend([f"metrics.eval_{key}", f"eval_{key}", key])
+        if key == "bpb":
+            paths.append("bpb_exact")
+    elif dotted.startswith("metrics."):
+        paths.append(dotted.split(".", 1)[1])
+    return list(dict.fromkeys(paths))
+
+
+def _numeric_report_metrics(report: dict[str, Any], checkpoint: dict[str, Any]) -> dict[str, Any]:
+    metrics: dict[str, Any] = {}
+    checkpoint_metrics = checkpoint.get("metrics")
+    if isinstance(checkpoint_metrics, dict):
+        metrics.update(checkpoint_metrics)
+    report_metrics = report.get("metrics")
+    if isinstance(report_metrics, dict):
+        metrics.update(report_metrics)
+    eval_metrics = report.get("eval")
+    if isinstance(eval_metrics, dict):
+        for key, value in eval_metrics.items():
+            if isinstance(value, (int, float)):
+                metrics.setdefault(f"eval_{key}", value)
+    for key, value in report.items():
+        if isinstance(value, (int, float)):
+            metrics.setdefault(key, value)
+    return metrics
 
 
 def _nested_get(data: dict[str, Any], dotted: str) -> Any:
@@ -411,7 +439,7 @@ def _review_artifact_inventory(cfg: dict[str, Any], report: dict[str, Any], repo
 
 
 def _active_training_contract(cfg: dict[str, Any], report: dict[str, Any], checkpoint: dict[str, Any], boundary_step: int, report_path: Path | None = None, target_bpb: float | None = None) -> dict[str, Any]:
-    metrics = dict(report.get("metrics") or checkpoint.get("metrics") or {})
+    metrics = _numeric_report_metrics(report, checkpoint)
     eval_metrics = dict(report.get("eval") or {})
     history_tail = checkpoint.get("history_tail") or report.get("history", [])[-20:]
     model_cfg = dict(cfg.get("model", {}))
@@ -453,10 +481,10 @@ def _active_training_contract(cfg: dict[str, Any], report: dict[str, Any], check
             "train_text_bpb": metrics.get("text_bpb"),
             "train_graph_bpb": metrics.get("graph_bpb"),
             "train_graph_sideinfo_bpb": metrics.get("graph_sideinfo_bpb"),
-            "eval_bpb": eval_metrics.get("bpb", metrics.get("eval_bpb")),
-            "eval_graph_bpb": eval_metrics.get("graph_bpb", metrics.get("eval_graph_bpb")),
-            "eval_graph_sideinfo_bpb": eval_metrics.get("graph_sideinfo_bpb", metrics.get("eval_graph_sideinfo_bpb")),
-            "eval_ppl": eval_metrics.get("ppl", metrics.get("eval_ppl")),
+            "eval_bpb": _metric_value(report, checkpoint, "eval.bpb"),
+            "eval_graph_bpb": _metric_value(report, checkpoint, "eval.graph_bpb"),
+            "eval_graph_sideinfo_bpb": _metric_value(report, checkpoint, "eval.graph_sideinfo_bpb"),
+            "eval_ppl": eval_metrics.get("ppl", metrics.get("eval_ppl", metrics.get("ppl"))),
         },
         "tropical_metrics": _select_prefixed(metrics, ("support_", "margin_", "wall_", "certificate_", "sequence_tropical_", "tropical_")),
         "gflownet_metrics": _select_prefixed(metrics, ("gflownet_",)),

@@ -76,3 +76,62 @@ def test_prepare_review_bundle_writes_prompt_contract_and_commands(tmp_path: Pat
     assert "No proxies or fallbacks" in prompt_text
     for key in ("contract_json", "contract_markdown", "codex_prompt", "bundle_json", "bundle_markdown"):
         assert (module.ROOT / artifacts[key]).exists()
+
+def test_prepare_review_bundle_defaults_to_periodic_validation_artifacts(tmp_path: Path):
+    module = _load_bundle_module()
+    output_dir = tmp_path / "run"
+    checkpoint_dir = tmp_path / "ckpts"
+    periodic_dir = output_dir / "periodic" / "step_00005000"
+    periodic_dir.mkdir(parents=True)
+    checkpoint_dir.mkdir()
+    periodic_report = {
+        "step": 5000,
+        "validation": str(periodic_dir / "validation_report.json"),
+        "metrics": {
+            "eval_nll": 0.93,
+            "eval_bpb": 1.25,
+            "eval_graph_bpb": 2.05,
+            "eval_parameter_golf_source_rate": 0.5,
+        },
+        "visualizations": {"got_audit": str(periodic_dir / "got_audit" / "inference_audit.html")},
+    }
+    (periodic_dir / "periodic_validation_artifacts.json").write_text(json.dumps(periodic_report), encoding="utf-8")
+    cfg_path = tmp_path / "config.json"
+    cfg_path.write_text(
+        json.dumps(
+            {
+                "output_dir": str(output_dir),
+                "checkpoint_dir": str(checkpoint_dir),
+                "run_name": "unit_run",
+                "batch_size": 2,
+                "seq_len": 16,
+                "model": {"dim": 32},
+            }
+        ),
+        encoding="utf-8",
+    )
+    args = argparse.Namespace(
+        config=cfg_path,
+        report=None,
+        checkpoint=None,
+        stop_record=None,
+        output_dir=tmp_path / "bundle",
+        boundary_step=5000,
+        target_bpb=1.12,
+        metric="eval.bpb",
+        graph_metric="eval.graph_bpb",
+        python="python",
+        split="validation",
+        details_limit=2,
+        viz_limit=3,
+        audit_level="full",
+        audit_ph_backend="gudhi",
+        audit_max_simplices=128,
+    )
+    bundle = module.prepare_review_bundle(args)
+    assert bundle["report"].endswith("periodic/step_00005000/periodic_validation_artifacts.json")
+    assert bundle["decision"]["bpb"] == 1.25
+    assert bundle["decision"]["graph_bpb"] == 2.05
+    contract = json.loads((module.ROOT / bundle["artifacts"]["contract_json"]).read_text(encoding="utf-8"))
+    assert contract["compression_metrics"]["eval_bpb"] == 1.25
+    assert contract["compression_metrics"]["eval_graph_bpb"] == 2.05

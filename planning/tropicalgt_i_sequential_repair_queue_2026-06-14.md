@@ -506,3 +506,13 @@ The live item-by-item repair inventory is maintained in `planning/tropicalgt_i_c
 - [x] Verification completed: py-compile for the review-loop and bundle scripts/tests plus `pytest TropicalGT-I/tests/test_parameter_golf_review_loop.py TropicalGT-I/tests/test_prepare_5k_review_bundle.py -q` (`5 passed`).
 - [x] Latest checked training state reached step `2324/5000` with train loss/NLL `1.134/1.111`; trainer PID `378962` and watcher PID `379304` remain alive under the step-5000 gate.
 - [ ] Next Section 12 item remains gated on step-5000 artifacts: run post-5K analysis/visualizations, route the review to a Codex subagent, then restart from step 0 with evidence-backed hyperparameter/config updates if BPB is still above target.
+
+### Current Objective Update - Post-5K Report Schema Compatibility Pass
+
+- [x] Added exact schema-aware metric lookup for post-5K review decisions so `eval.bpb` is read from real training reports, periodic validation manifests, or raw validation reports when those files use their documented field names (`eval.bpb`, `metrics.eval_bpb`, `bpb`, or `bpb_exact`).
+- [x] Added the same schema handling for graph BPB and active-training-contract compression metrics, so the Codex review prompt and bundle cannot silently omit the observed BPB when step-5000 artifacts come from periodic validation.
+- [x] Updated `prepare_5k_review_bundle.py` to prefer `periodic/step_00005000/periodic_validation_artifacts.json` and then `validation_report.json` when `train_report.json` is absent, while preserving explicit `--report` paths.
+- [x] Added focused tests for periodic artifact manifests, top-level validation reports, active-contract metrics, and default step-5000 report discovery.
+- [x] Verified with `python -m py_compile` on the touched scripts/tests and `python -m pytest TropicalGT-I/tests/test_parameter_golf_review_loop.py TropicalGT-I/tests/test_prepare_5k_review_bundle.py -q` (`8 passed`).
+- [x] Latest live pulse during this pass: trainer PID `378962` and watcher PID `379304` are alive; progress reached step `2434/5000` with train loss/NLL `1.142/1.119`; step-5000 validation/audit artifacts are not present yet.
+- [ ] Section 12 5K gate remains open: keep the run alive, wait for required step-5000 artifacts, then run analyses/visualizations and route the evidence review through a Codex subagent before any step-0 restart.

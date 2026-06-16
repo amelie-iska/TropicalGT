@@ -39,6 +39,17 @@ def _default_checkpoint(cfg: dict[str, Any]) -> Path:
     return latest_path
 
 
+def _default_report(output_dir: Path, boundary_step: int) -> Path:
+    train_report = output_dir / "train_report.json"
+    if train_report.exists():
+        return train_report
+    step_dir = output_dir / "periodic" / f"step_{int(boundary_step):08d}"
+    for candidate in (step_dir / "periodic_validation_artifacts.json", step_dir / "validation_report.json"):
+        if candidate.exists():
+            return candidate
+    return train_report
+
+
 def _read_json(path: Path | None) -> dict[str, Any]:
     if path is None or not path.exists():
         return {}
@@ -117,7 +128,7 @@ def _bundle_markdown(bundle: dict[str, Any]) -> str:
 def prepare_review_bundle(args: argparse.Namespace) -> dict[str, Any]:
     cfg = load_config(args.config)
     output_dir = _project_path(cfg.get("output_dir"), ROOT / "TropicalGT-I" / "outputs" / "train")
-    report_path = _project_path(args.report, output_dir / "train_report.json")
+    report_path = _project_path(args.report, _default_report(output_dir, int(args.boundary_step or 5000)))
     checkpoint_path = _project_path(args.checkpoint, _default_checkpoint(cfg))
     bundle_dir = _project_path(args.output_dir, output_dir / "post_5k_review_bundle")
     bundle_dir.mkdir(parents=True, exist_ok=True)
