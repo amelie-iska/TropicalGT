@@ -471,10 +471,19 @@ git diff --check
 - Verification completed: `/home/iska/miniconda3/envs/tokengt/bin/python -m py_compile TropicalGT-I/src/tropicalgt/losses.py TropicalGT-I/src/tropicalgt/model.py TropicalGT-I/src/tropicalgt/run.py TropicalGT-I/tests/test_losses_and_model.py TropicalGT-I/tests/test_training_metrics.py`, focused GraphCG rank tests (`4 passed`), focused training priority tests (`2 passed`), `pytest TropicalGT-I/tests/test_losses_and_model.py -q` (`10 passed`), and `pytest TropicalGT-I/tests/test_training_metrics.py -q` (`12 passed`).
 
 
+## 2026-06-16 GraphCG Readability Contract Addendum
+
+- The GraphCG trajectory browser payload now certifies the readable four-panel layout: all-direction heatmap, full-rank activity spectrum, candidate activity by observed GoT state, and direction signed-bias scatter.
+- The payload records panel names/count, panel availability flags, and `directions_sampled_for_heatmap=false`, keeping the no-sampling all-direction heatmap contract explicit while hover/payload retain exact ids.
+- Regression tests now require the four panel titles and the candidate effective-direction plus signed-mean arrays.
+- b60 latest checked training state reached step `1500` with train loss/NLL `1.214/1.191`; trainer PID `378962` and watcher PID `379304` remain alive under the step-5000 gate.
+- Verification completed: `/home/iska/miniconda3/envs/tokengt/bin/python -m py_compile TropicalGT-I/src/tropicalgt/visualization.py TropicalGT-I/tests/test_simplicial_visualization.py`, focused GraphCG visualization test (`1 passed`), `pytest TropicalGT-I/tests/test_simplicial_visualization.py -q` (`35 passed`), and `pytest TropicalGT-I/tests/test_interactive_artifact_validator.py -q` (`10 passed`).
+
+
 ## Real Implementations Only Policy
 
 No TropicalGT-I metric, loss, visualization, analogical map, persistence module, free resolution, derived comparison, tropical-cycle diagnostic, or CAS artifact should be presented as a mathematical object unless it is computed from the actual model outputs, graph states, embeddings, probabilities, simplex trees, bifiltrations, or certified CAS/backend output that define that object. Temporary placeholders, synthetic fallback objects, mock charts, fabricated simplices, and convenience stand-ins are not acceptable. When a requested object cannot yet be computed, the artifact must render an explicit unavailable/uncertified state and the training metric must either be disabled or logged under an audit-only unavailable flag. Finite chain-presentation diagnostics may be shown only as chain diagnostics, never as free resolutions. Total-graded or ungraded CAS output may be shown as real CAS output only under its actual grading; it must not be advertised as a multigraded `F2[x_level,x_radius]` free resolution unless the backend certifies that multigraded structure.
 
 Use "one dimensional cone" or "one dimensional cones" as the preferred fan-theoretic language whenever the intended object is a cone of a fan or a cone-indexed filtration datum. Use singular or plural according to ordinary grammar.
 
-_Last updated: 2026-06-16T07:12:21Z_
+_Last updated: 2026-06-16T07:14:08Z_

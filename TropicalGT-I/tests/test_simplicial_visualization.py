@@ -1044,9 +1044,27 @@ def test_graphcg_visualization_preserves_projection_basis_certificate(tmp_path: 
     assert cert["max_abs_offdiag_cosine_max"] > 0.0
     assert payload["visible_direction_tick_label_limit"] == 8
     assert payload["exact_direction_labels_available_in_hover_and_payload"] is True
+    assert payload["readability_contract"].startswith("four coordinated panels render all model GraphCG directions")
+    assert payload["panel_names"] == [
+        "all_direction_heatmap",
+        "full_rank_activity_spectrum",
+        "candidate_activity_by_observed_got_state",
+        "direction_signed_bias",
+    ]
+    assert payload["panel_count"] == 4
+    assert payload["directions_sampled_for_heatmap"] is False
+    assert payload["all_direction_heatmap_available"] is True
+    assert payload["direction_spectrum_panel_available"] is True
+    assert payload["candidate_activity_panel_available"] is True
+    assert payload["direction_signed_bias_panel_available"] is True
+    assert len(payload["candidate_effective_direction_count"]) == 3
+    assert len(payload["direction_signed_mean_sorted"]) == 4
     assert "basis=effective_full_rank_qr" in html
     assert "heatmap shows all" in html
     assert "Readable full-rank heatmap" in html
+    assert "Full-rank activity spectrum" in html
+    assert "Candidate activity by observed GoT state" in html
+    assert "Signed bias for every direction" in html
     assert "direction rank by activity" in html
 
 

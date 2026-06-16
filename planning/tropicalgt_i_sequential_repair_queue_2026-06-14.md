@@ -108,7 +108,7 @@
 ### 9. GraphCG Full-Rank Visuals and Metrics
 
 - [x] Ensure GraphCG directions are full rank relative to embedding dimension.
-- [ ] Improve direction heatmaps, spectra, candidate activity, and signed bias plots with readable layouts.
+- [x] Improve direction heatmaps, spectra, candidate activity, and signed bias plots with readable layouts.
 - [ ] Log GraphCG metrics in priority order for W&B and browser audit.
 - [ ] Add tests that direction-rank configuration matches embedding dimension.
 
@@ -380,3 +380,10 @@ The live item-by-item repair inventory is maintained in `planning/tropicalgt_i_c
 - [x] Added GraphCG telemetry for requested directions, effective directions, embedding-span rank target, embedding-span full-rank flag, and whether the bank was clamped to the embedding dimension.
 - [x] Updated W&B priority grouping and regression tests so the embedding-rank invariant is visible in local history and dashboard metrics.
 - [x] Verification passed: focused GraphCG rank tests `4 passed`; training priority checks `2 passed`; full model/loss tests `10 passed`; training-metrics tests `12 passed`; compile checks passed for modified source/tests.
+
+### Current Objective Update - GraphCG Readability Contract Pass
+
+- [x] Added a machine-readable readability contract to the GraphCG trajectory payload proving the page contains four coordinated panels: all-direction heatmap, full-rank activity spectrum, candidate activity by observed GoT state, and direction signed-bias scatter.
+- [x] The payload now records panel names/count, per-panel availability flags, and `directions_sampled_for_heatmap=false`; exact direction ids remain available in hover text and JSON.
+- [x] Strengthened visualization regression coverage for all four visible panel titles plus candidate effective-direction and signed-mean arrays.
+- [x] Verification passed: focused GraphCG visualization test `1 passed`; full simplicial visualization `35 passed`; artifact validator `10 passed`; compile checks passed for modified visualization source/test.
