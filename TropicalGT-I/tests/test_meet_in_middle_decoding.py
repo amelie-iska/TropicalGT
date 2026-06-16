@@ -1,6 +1,6 @@
 import torch
 
-from tropicalgt.data import FixtureGraphDataset, encode_bytes
+from tropicalgt.data import FixtureGraphDataset, encode_bytes, encode_record_bytes
 from tropicalgt.decoding import (
     encode_record_bytes_reverse,
     meet_in_middle_batch,
@@ -175,6 +175,56 @@ def test_meet_in_middle_batch_reports_shared_weight_reverse_pass():
     assert len(report["records"]) == 2
     assert {"context_mode", "reverse_context_mode", "meet_points"} <= set(report["records"][0])
     assert {"meet_index", "forward_position", "reverse_position", "true_token", "reverse_true_token", "same_true_token_alignment"} <= set(report["records"][0]["meet_points"][0])
+
+
+def test_meet_in_middle_batch_uses_forward_and_reverse_causal_contexts():
+    record = GraphRecord.from_mapping(
+        {
+            "record_id": "causal-mim",
+            "text": "one two three",
+            "graph_json": {
+                "nodes": [
+                    {"id": "a", "type": "problem", "text": "one"},
+                    {"id": "b", "type": "reasoning_step", "text": "two"},
+                    {"id": "c", "type": "answer", "text": "three"},
+                ],
+                "edges": [
+                    {"source": "a", "target": "b", "type": "depends_on"},
+                    {"source": "b", "target": "c", "type": "supports_answer"},
+                ],
+            },
+        }
+    )
+    tokenizer = TokenGTTokenizer(feature_dim=48)
+    x, y = encode_record_bytes(record, 64, graph_autoregressive=True, seed=0)
+    graph_batch = tokenizer.batch_encode([record])
+    model = TropicalGTModel(
+        TropicalGTConfig(
+            dim=32,
+            hidden_dim=32,
+            graph_feature_dim=48,
+            use_sequence_tropical=False,
+        )
+    )
+    out = model(x.unsqueeze(0), graph_batch, y.unsqueeze(0))
+    report = meet_in_middle_batch(
+        model,
+        [record],
+        tokenizer,
+        seq_len=64,
+        device=torch.device("cpu"),
+        graph_autoregressive=True,
+        seed=0,
+        config={"enabled": True, "split_ratio": 0.5, "max_meet_points": 4},
+        forward_logits=out["logits"],
+        forward_nll=out["nll"],
+    )
+
+    assert report["enabled"] is True
+    assert report["records"][0]["context_mode"] == "causal_dag"
+    assert report["records"][0]["reverse_context_mode"] == "reverse_causal_dag"
+    assert report["records"][0]["graph_autoregressive"] is True
+    assert report["records"][0]["selected_meet_points"] >= 1
 
 
 def test_causal_graph_records_have_forward_and_reverse_causal_orders():
