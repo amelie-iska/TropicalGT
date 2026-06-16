@@ -81,12 +81,14 @@ def test_parquet_manifest_counts_rows_without_loading_records(tmp_path: Path):
     assert manifest["splits"]["test"]["files"] == 0
 
 
-def test_required_data_does_not_fall_back_to_fixture(tmp_path: Path):
+def test_configured_missing_data_root_does_not_fall_back_to_fixture(tmp_path: Path):
     missing = tmp_path / "missing"
     with pytest.raises(FileNotFoundError):
         make_dataset(missing, "train", require_data=True)
-    fallback = make_dataset(missing, "train", require_data=False, fixture_size=3)
-    assert len(fallback) == 3
+    with pytest.raises(FileNotFoundError):
+        make_dataset(missing, "train", require_data=False, fixture_size=3)
+    fixture = make_dataset(None, "train", require_data=False, fixture_size=3)
+    assert len(fixture) == 3
 
 
 def test_parameter_golf_bin_loader_emits_graph_structured_dag_records(tmp_path: Path):

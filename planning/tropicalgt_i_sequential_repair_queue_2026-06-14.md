@@ -732,3 +732,9 @@ The live item-by-item repair inventory is maintained in `planning/tropicalgt_i_c
 - [x] Verified tracked training configs already provide explicit tokenizer paths and keep legacy fallback flags false, so the stricter loader contract does not require config edits.
 - [x] Updated data-loader tests and provenance text to treat these paths as prohibited fallback surfaces, not tolerable compatibility behavior.
 - [x] Focused verification passed: py-compile for touched source/tests, `git diff --check`, tracked-config no-fallback audit, and `pytest TropicalGT-I/tests/test_data_loader.py TropicalGT-I/tests/test_metric_provenance.py TropicalGT-I/tests/test_readiness_audit.py TropicalGT-I/tests/test_training_metrics.py -q` (`38 passed`, two SentencePiece import deprecation warnings from the corrupt-model failure test).
+
+### Current Objective Update - Explicit Fixture Mode No-Fallback Pass
+
+- [x] Removed silent fixture substitution when a configured `data_root` is missing or unreadable; configured roots now fail closed even when `require_data=false`.
+- [x] Preserved fixture datasets only as explicit no-root unit-test/dev mode, so training configs cannot accidentally substitute fixture data for missing real data.
+- [x] Focused verification passed: py-compile for `data.py` and `test_data_loader.py`, `git diff --check`, and `pytest TropicalGT-I/tests/test_data_loader.py TropicalGT-I/tests/test_readiness_audit.py TropicalGT-I/tests/test_training_metrics.py TropicalGT-I/tests/test_training_resume.py -q` (`34 passed`, two SentencePiece import deprecation warnings from the corrupt-model failure test).

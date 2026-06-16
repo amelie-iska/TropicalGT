@@ -719,12 +719,9 @@ def make_dataset(
     cache_shards: int = 2,
 ) -> Dataset:
     if root:
-        try:
-            return ParquetGraphDataset(root, split=split, limit=limit, cache_shards=cache_shards)
-        except Exception as exc:
-            if require_data or split != "train":
-                raise
-            print(f"Warning: falling back to fixture data for split={split}: {exc}")
+        return ParquetGraphDataset(root, split=split, limit=limit, cache_shards=cache_shards)
+    if require_data:
+        raise FileNotFoundError("No data_root configured and require_data=true")
     return FixtureGraphDataset(size=fixture_size if limit is None else min(limit, fixture_size))
 
 
