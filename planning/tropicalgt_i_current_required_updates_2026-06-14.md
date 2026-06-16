@@ -207,6 +207,12 @@ _Last updated: 2026-06-16T03:05:00+00:00_
 - The b59 operational plan is now: keep training alive, run the detached watcher against PID `73189` and the b59 log, terminate only when the parsed step reaches `5000` and required step-5000 artifacts are present or the bounded grace window expires, then hand the resulting stop record and artifact inventory to Galileo for post-5K review and evidence-backed restart.
 - The monitor writes generated records under `TropicalGT-I/outputs/training_stop_records/`; those records are operational artifacts and should remain untracked.
 
+
+## 2026-06-16 Post-5K Review Bundle Helper Addendum
+
+- Added `TropicalGT-I/scripts/prepare_5k_review_bundle.py` so the post-5K worker can turn the b59 config/report/checkpoint/stop-record into a bounded Codex review bundle, active training contract, prompt, eval/visualization command, and interactive-audit validator commands.
+- Use this helper after the step gate records target reached; do not stage its generated bundle outputs unless they are deliberately curated planning notes.
+
 ## Real Implementations Only Policy
 
 No TropicalGT-I metric, loss, visualization, analogical map, persistence module, free resolution, derived comparison, tropical-cycle diagnostic, or CAS artifact should be presented as a mathematical object unless it is computed from the actual model outputs, graph states, embeddings, probabilities, simplex trees, bifiltrations, or certified CAS/backend output that define that object. Temporary placeholders, synthetic fallback objects, mock charts, fabricated simplices, and convenience stand-ins are not acceptable. When a requested object cannot yet be computed, the artifact must render an explicit unavailable/uncertified state and the training metric must either be disabled or logged under an audit-only unavailable flag. Finite chain-presentation diagnostics may be shown only as chain diagnostics, never as free resolutions. Total-graded or ungraded CAS output may be shown as real CAS output only under its actual grading; it must not be advertised as a multigraded `F2[x_level,x_radius]` free resolution unless the backend certifies that multigraded structure.

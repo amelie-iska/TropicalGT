@@ -381,3 +381,18 @@ Verification:
 - `PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_training_step_gate_monitor.py -q` -> `7 passed`.
 
 Next sequential item: relaunch the 5K watcher for b59 with required step-5000 artifact paths, notify Galileo of the new source commit, then keep hardening non-interfering audit paths while b59 trains.
+
+## 2026-06-16 Post-5K Review Bundle Helper Pass
+
+Status: implemented and focused-tested.
+
+Changes made:
+- Added a post-5K review-bundle helper that prepares the Codex/Galileo handoff from an already-trained run without launching training.
+- The bundle includes the active training contract, Codex review prompt, stop-record payload, bounded artifact inventory, eval/visualization command, and interactive-audit validator commands.
+- The bundle is path-only and keeps generated artifacts/checkpoints out of git.
+
+Verification:
+- `python -m py_compile TropicalGT-I/scripts/prepare_5k_review_bundle.py` passed.
+- `PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_prepare_5k_review_bundle.py TropicalGT-I/tests/test_parameter_golf_review_loop.py -q` -> `4 passed`.
+
+Next sequential item: when the b59 watcher writes a target-reached stop record, run the helper against the b59 config/report/checkpoint/stop-record and hand the resulting bundle to Galileo for the evidence-backed restart.

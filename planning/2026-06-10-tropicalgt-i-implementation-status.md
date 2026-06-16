@@ -371,3 +371,10 @@
 - Added focused tests for TQDM step parsing, fatal marker detection, once-mode status recording, dry-run target handling, required-artifact waiting, required-artifact success, and grace-expired termination.
 - Verification: `python -m py_compile TropicalGT-I/scripts/monitor_training_step_gate.py` passed; `PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_training_step_gate_monitor.py -q` returned `7 passed`.
 - Live b59 status during this pass: PID `73189` remained alive around step `1194`, latest train loss/NLL around `1.229/1.206`, with no fatal marker observed. The 5K stop record will be written under `TropicalGT-I/outputs/training_stop_records/` and left untracked.
+
+## Iteration 46: Post-5K Review Bundle Helper
+
+- Added `TropicalGT-I/scripts/prepare_5k_review_bundle.py`, a path-only handoff helper for already-stopped 5K runs. It loads the active config/report/checkpoint/stop-record, reuses the Parameter-Golf review-loop contract and prompt builders, and writes a bounded review bundle with contract JSON/Markdown, Codex review prompt, stop-record payload, artifact inventory, and concrete eval/visualization plus interactive-audit validation commands.
+- The helper deliberately records paths and commands only; it does not copy checkpoints, generated artifacts, datasets, W&B data, caches, or secrets into source control.
+- Added a focused unit test that builds a fixture run, writes a review bundle, verifies the BPB restart decision, and checks that contract, prompt, bundle JSON, bundle Markdown, and eval visualization commands are produced.
+- Verification: `python -m py_compile TropicalGT-I/scripts/prepare_5k_review_bundle.py` passed; `PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_prepare_5k_review_bundle.py TropicalGT-I/tests/test_parameter_golf_review_loop.py -q` returned `4 passed`.
