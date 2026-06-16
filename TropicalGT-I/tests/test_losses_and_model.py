@@ -123,6 +123,8 @@ def test_model_forward_fixture():
         "bundle_monomial_projection_one_hotness",
         "bundle_chart_confidence_mean",
         "bundle_chart_count",
+        "bundle_overlap_pair_count",
+        "bundle_overlap_triple_count",
         "bundle_atom_stability_gap",
         "bundle_atom_stability_available",
         "toric_normal_fan_loss",
@@ -156,6 +158,7 @@ def test_model_forward_fixture():
     assert torch.allclose(out["wall_hit_rate"], out["strict_wall_hit_rate"])
     assert out["near_wall_hit_rate"].item() >= out["strict_wall_hit_rate"].item()
     assert out["near_wall_margin_threshold"].item() >= out["wall_margin_threshold"].item()
+    assert out["chart_bundle_transport_metadata"]["available"] is False
 
 
 def _fixture_batch(batch_size: int = 2, seq_len: int = 32):
@@ -196,7 +199,14 @@ def test_chart_bundle_auxiliary_zero_weights_do_not_change_logits_or_loss():
     assert aux_out["loss_bundle_toric_regularizer_total"].item() == 0.0
     assert aux_out["bundle_monomial_projection_one_hotness"].item() == 1.0
     assert aux_out["bundle_chart_count"].item() == 3.0
+    assert aux_out["bundle_overlap_pair_count"].item() == 6.0
+    assert aux_out["bundle_overlap_triple_count"].item() == 6.0
     assert aux_out["toric_active_row_count"].item() == 5.0
+    metadata = aux_out["chart_bundle_transport_metadata"]
+    assert metadata["available"] is True
+    assert metadata["chart_ids"] == ["chart_00", "chart_01", "chart_02"]
+    assert {row["id"] for row in metadata["overlap_pairs"]} >= {"chart_00__to__chart_01", "chart_01__to__chart_02"}
+    assert metadata["overlap_triples"][0]["pair_ids"]
     assert aux_out["chart_bpb_consistency_available"].item() == 1.0
     assert aux_out["chart_bpb_active_count"].item() == 3.0
     assert aux_out["chart_bpb_spread"].item() >= 0.0

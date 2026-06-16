@@ -262,6 +262,8 @@ WANDB_PRIORITY_GROUPS: tuple[tuple[str, tuple[str, ...]], ...] = (
             "bundle_monomial_projection_one_hotness",
             "bundle_chart_confidence_mean",
             "bundle_chart_count",
+            "bundle_overlap_pair_count",
+            "bundle_overlap_triple_count",
             "bundle_atom_stability_gap",
             "bundle_atom_stability_available",
             "toric_normal_fan_loss",

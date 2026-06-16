@@ -286,3 +286,18 @@ Verification:
 - `PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_metrics_and_memory.py -q` -> `10 passed`.
 
 Next sequential item: add explicit overlap-pair/triple transport identifiers in the chart-bundle head and visual/audit payloads, then use matched ablations after the b59 5K review before any nonzero transport coefficient is promoted.
+
+## 2026-06-16 Explicit Chart Overlap Transport Id Pass
+
+Status: implemented and focused-tested.
+
+Changes made:
+- Enabled chart-bundle model outputs now carry exact chart ids, directed overlap pair ids, directed overlap triple ids, pair-id references for cocycle checks, and transport-logit indices.
+- W&B scalar telemetry includes overlap pair/triple counts, while the full metadata remains nested under `chart_bundle_transport_metadata` for audit consumers.
+- Disabled chart-bundle mode reports unavailable metadata and zero overlap counts.
+
+Verification:
+- `python -m py_compile TropicalGT-I/src/tropicalgt/model.py TropicalGT-I/src/tropicalgt/run.py` passed.
+- `PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_losses_and_model.py -q` -> `9 passed`.
+
+Next sequential item: run matched BPB/graph-BPB ablations after the b59 5K evidence review before promoting nonzero bundle/toric coefficients.

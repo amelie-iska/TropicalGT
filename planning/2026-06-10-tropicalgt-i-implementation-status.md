@@ -328,3 +328,10 @@
 - Retrieval rows now expose `transported_landscape`, `transported_landscape_available`, `transported_landscape_l2`, `transported_landscape_l2_similarity`, `transported_landscape_cosine`, and an unavailable reason when probability transport or landscape vectors are missing.
 - Periodic training aggregation now logs transported-landscape availability, mean L2 distance, and mean cosine under the memory W&B group. These are audit metrics only; retrieval scoring is unchanged in this pass.
 - Verification: `python -m py_compile` passed for memory/run; `PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_metrics_and_memory.py -q` returned `10 passed`.
+
+## Iteration 40: Explicit Chart Overlap Transport Identifiers
+
+- Added exact chart-bundle transport metadata to enabled model outputs: `chart_ids`, directed `overlap_pairs`, directed `overlap_triples`, transport-logit indices, and cocycle pair-id references.
+- Added scalar `bundle_overlap_pair_count` and `bundle_overlap_triple_count` metrics for W&B/audit traces. Disabled chart-bundle mode emits unavailable metadata and zero counts.
+- The metadata is static per chart count and does not CPU-sync learned transport tensors during training; later audit visualizations can attach transport L1/cocycle values to these exact ids.
+- Verification: `python -m py_compile TropicalGT-I/src/tropicalgt/model.py TropicalGT-I/src/tropicalgt/run.py` passed; `PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_losses_and_model.py -q` returned `9 passed`.

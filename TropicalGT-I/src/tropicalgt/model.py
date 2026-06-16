@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Any
 
 import torch
 from torch import nn, Tensor
@@ -61,6 +62,43 @@ class ChartBundleToricHead(nn.Module):
         self.chart_head = nn.Sequential(nn.LayerNorm(dim), nn.Linear(dim, self.num_charts))
         self.transport_head = nn.Sequential(nn.LayerNorm(dim), nn.Linear(dim, self.num_charts * self.num_charts))
         self.toric_head = nn.Sequential(nn.LayerNorm(dim), nn.Linear(dim, self.toric_rows))
+
+    def transport_metadata(self) -> dict[str, Any]:
+        chart_ids = [f"chart_{idx:02d}" for idx in range(self.num_charts)]
+        pairs = [
+            {
+                "id": f"{chart_ids[i]}__to__{chart_ids[j]}",
+                "source_chart": chart_ids[i],
+                "target_chart": chart_ids[j],
+                "transport_logit_index": [i, j],
+            }
+            for i in range(self.num_charts)
+            for j in range(self.num_charts)
+            if i != j
+        ]
+        triples = [
+            {
+                "id": f"{chart_ids[i]}__to__{chart_ids[j]}__to__{chart_ids[k]}",
+                "source_chart": chart_ids[i],
+                "middle_chart": chart_ids[j],
+                "target_chart": chart_ids[k],
+                "pair_ids": [f"{chart_ids[i]}__to__{chart_ids[j]}", f"{chart_ids[j]}__to__{chart_ids[k]}", f"{chart_ids[i]}__to__{chart_ids[k]}"],
+            }
+            for i in range(self.num_charts)
+            for j in range(self.num_charts)
+            for k in range(self.num_charts)
+            if i != j and j != k and i != k
+        ]
+        return {
+            "available": True,
+            "source": "ChartBundleToricHead.transport_metadata",
+            "chart_ids": chart_ids,
+            "overlap_pairs": pairs,
+            "overlap_triples": triples,
+            "overlap_pair_count": len(pairs),
+            "overlap_triple_count": len(triples),
+            "directed_overlap_policy": "ordered chart pairs/triples matching transport T_ab and cocycle T_bc T_ab = T_ac",
+        }
 
     def forward(
         self,
@@ -171,6 +209,8 @@ class ChartBundleToricHead(nn.Module):
             "bundle_monomial_projection_one_hotness": monomial_one_hotness,
             "bundle_chart_confidence_mean": chart_confidence.mean() if chart_confidence.numel() else zero,
             "bundle_chart_count": torch.tensor(float(self.num_charts), dtype=graph_state.dtype, device=graph_state.device),
+            "bundle_overlap_pair_count": torch.tensor(float(self.num_charts * max(self.num_charts - 1, 0)), dtype=graph_state.dtype, device=graph_state.device),
+            "bundle_overlap_triple_count": torch.tensor(float(self.num_charts * max(self.num_charts - 1, 0) * max(self.num_charts - 2, 0)), dtype=graph_state.dtype, device=graph_state.device),
             "toric_normal_fan_loss": toric_normal_fan_loss,
             "toric_active_row_count": torch.tensor(float(self.toric_rows), dtype=graph_state.dtype, device=graph_state.device),
             "graphcg_toric_cell_agreement": graphcg_toric_cell_agreement,
@@ -206,6 +246,8 @@ def _zero_chart_bundle_outputs(reference: Tensor) -> tuple[dict[str, Tensor], di
         "bundle_monomial_projection_one_hotness": zero.detach(),
         "bundle_chart_confidence_mean": zero.detach(),
         "bundle_chart_count": zero.detach(),
+        "bundle_overlap_pair_count": zero.detach(),
+        "bundle_overlap_triple_count": zero.detach(),
         "toric_normal_fan_loss": zero.detach(),
         "toric_active_row_count": zero.detach(),
         "graphcg_toric_cell_agreement": zero.detach(),
@@ -337,8 +379,18 @@ class TropicalGTModel(nn.Module):
                 per_record_bpb=per_record_bpb,
             )
             chart_bundle_metrics = {key: value.detach() for key, value in chart_bundle_metrics_raw.items()}
+            chart_bundle_transport_metadata = self.chart_bundle.transport_metadata()
         else:
             chart_bundle_metrics, chart_bundle_loss_terms = _zero_chart_bundle_outputs(graph_state)
+            chart_bundle_transport_metadata = {
+                "available": False,
+                "source": "chart_bundle_disabled",
+                "chart_ids": [],
+                "overlap_pairs": [],
+                "overlap_triples": [],
+                "overlap_pair_count": 0,
+                "overlap_triple_count": 0,
+            }
         metrics: dict[str, Tensor] = {
             "support_entropy": support_entropy.detach(),
             "support_soft_entropy": soft_entropy.detach(),
@@ -456,6 +508,7 @@ class TropicalGTModel(nn.Module):
             "graph_token_support_probabilities": graph_token_support_probabilities,
             "support": trop.support,
             "margin": trop.margin,
+            "chart_bundle_transport_metadata": chart_bundle_transport_metadata,
             **metrics,
         }
 
