@@ -27,6 +27,17 @@ def test_advanced_bpb_contract_passes_current_b54_gate_config():
     assert not [gate for gate in gates if gate["status"] == "fail"]
 
 
+def test_advanced_bpb_contract_blocks_mismatched_wandb_run_name():
+    config_path = Path(__file__).resolve().parents[1] / "configs" / "train_full_dataset_pg_bpb_step0_full24b_b54_v10_bpb_5k_gate.json"
+    cfg = json.loads(config_path.read_text(encoding="utf-8"))
+    cfg["wandb_run_name"] = "stale_or_wrong_wandb_name"
+
+    _, gates = advanced_bpb_contract_report(cfg)
+    failed = {gate["name"] for gate in gates if gate["status"] == "fail"}
+
+    assert "advanced_bpb_wandb_run_name_matches_config" in failed
+
+
 def test_advanced_bpb_contract_blocks_disabled_advanced_methods():
     config_path = Path(__file__).resolve().parents[1] / "configs" / "train_full_dataset_pg_bpb_step0_full24b_b54_v10_bpb_5k_gate.json"
     cfg = json.loads(config_path.read_text(encoding="utf-8"))
@@ -53,6 +64,7 @@ def test_advanced_bpb_contract_blocks_disabled_advanced_methods():
     assert "advanced_bpb_meet_in_middle_roar_random_order" in failed
     assert "advanced_bpb_memory_quality_probability_complex" in failed
     assert "advanced_bpb_wandb_online_project" in failed
+    assert "advanced_bpb_wandb_run_name_matches_config" in failed
 
 
 def test_readiness_audit_fixture_without_checkpoint(tmp_path):

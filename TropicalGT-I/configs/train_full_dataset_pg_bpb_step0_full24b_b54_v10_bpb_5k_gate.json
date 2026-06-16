@@ -213,7 +213,7 @@
   "wandb_html_artifact_limit": 0,
   "wandb_html_max_bytes": 5000000,
   "wandb_log_interactive_artifacts": false,
-  "wandb_name": "tropicalgt_i_pg_bpb_step0_full24b_b52_v4_bpb_restart",
-  "wandb_run_name": "tropicalgt_i_pg_bpb_step0_full24b_b54_v9_bpb_5k_gate",
+  "wandb_name": "tropicalgt_i_pg_bpb_step0_full24b_b54_v10_bpb_5k_gate",
+  "wandb_run_name": "tropicalgt_i_pg_bpb_step0_full24b_b54_v10_bpb_5k_gate",
   "weight_decay": 0.022
 }

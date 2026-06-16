@@ -689,4 +689,21 @@ PYTHONPATH=TropicalGT-I/scripts:TropicalGT-I/src /home/iska/miniconda3/envs/toke
 # 35 passed, 2 warnings in 1.53s
 ```
 
-_Last updated: 2026-06-16T20:20:00Z_
+
+## 2026-06-16 Sequential Training/Readiness Update: W&B Run-Name Alignment Gate
+
+Status: complete for source/config readiness hardening.
+
+- BPB-focused advanced readiness now requires the explicit W&B run-name field (`wandb_run_name` or `wandb_name`) to match the config `run_name`, preventing stale W&B names from passing preflight.
+- Fixed `train_full_dataset_pg_bpb_step0_full24b_b54_v10_bpb_5k_gate.json` so `wandb_name` and `wandb_run_name` both match `tropicalgt_i_pg_bpb_step0_full24b_b54_v10_bpb_5k_gate`.
+- Added regression coverage proving mismatched W&B run names fail with `advanced_bpb_wandb_run_name_matches_config`.
+
+Verification:
+
+```bash
+PYTHONPATH=TropicalGT-I/scripts:TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m py_compile TropicalGT-I/scripts/audit_tropicalgt_i_readiness.py TropicalGT-I/tests/test_readiness_audit.py
+PYTHONPATH=TropicalGT-I/scripts:TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_readiness_audit.py TropicalGT-I/tests/test_training_metrics.py TropicalGT-I/tests/test_data_loader.py -q
+# 36 passed, 2 warnings in 1.56s
+```
+
+_Last updated: 2026-06-16T20:38:00Z_

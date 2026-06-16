@@ -572,6 +572,7 @@ def advanced_bpb_contract_report(cfg: dict[str, Any]) -> tuple[dict[str, Any], l
     inference_top_k = int_cfg(cfg, "inference_memory_retrieve_top_k")
     wandb_run_name = str(cfg.get("wandb_run_name") or cfg.get("wandb_name") or "")
     wandb_run_name_configured = bool(wandb_run_name)
+    wandb_run_name_matches_config = bool(run_name) and wandb_run_name == run_name
     section = {
         "required": required,
         "policy": "BPB-focused 5K gate configs must explicitly enable the requested advanced methods; missing entries fail instead of inheriting defaults.",
@@ -618,6 +619,7 @@ def advanced_bpb_contract_report(cfg: dict[str, Any]) -> tuple[dict[str, Any], l
             "project": str(wandb_cfg.get("project", "")),
             "run_name": wandb_run_name,
             "run_name_configured": wandb_run_name_configured,
+            "run_name_matches_config": wandb_run_name_matches_config,
             "entity": str(wandb_cfg.get("entity", "")),
             "entity_configured": bool(wandb_cfg.get("entity")),
         },
@@ -690,6 +692,12 @@ def advanced_bpb_contract_report(cfg: dict[str, Any]) -> tuple[dict[str, Any], l
         and bool(section["wandb"]["project"])
         and section["wandb"]["run_name_configured"],
         json.dumps(section["wandb"], sort_keys=True),
+    )
+    add_gate(
+        gates,
+        "advanced_bpb_wandb_run_name_matches_config",
+        section["wandb"]["run_name_matches_config"],
+        json.dumps({"run_name": run_name, "wandb_run_name": section["wandb"]["run_name"]}, sort_keys=True),
     )
     return section, gates
 
