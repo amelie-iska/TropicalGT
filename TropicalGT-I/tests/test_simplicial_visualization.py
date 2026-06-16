@@ -902,6 +902,12 @@ def test_tropical_support_heatmap_layout_keeps_legend_out_of_margin(tmp_path: Pa
     assert payload["metrics"]["support_probability_source"] == "model_tropical_support_probabilities"
     assert payload["metrics"]["active_support_probability_summary"]["available"] is True
     assert payload["metrics"]["support_probability_entropy_bits_summary"]["available"] is True
+    assert {row["group"] for row in payload["metrics"]["query_token_group_summary"]} >= {"graph:graph", "node:problem", "node:answer", "edge:edge"}
+    assert {row["group"] for row in payload["metrics"]["support_token_group_summary"]} >= {"graph:graph", "node:answer", "edge:edge"}
+    assert payload["metrics"]["top_support_summary"]["support_index"] == 0
+    assert payload["metrics"]["top_support_summary"]["selected_query_count"] == 2
+    assert payload["metrics"]["top_support_summary"]["support_group"] == "graph:graph"
+    assert payload["metrics"]["grouped_token_label_policy"].startswith("query/support labels are grouped")
     assert payload["support_flow_edges"][0]["active_support_probability"] == 0.91
     assert payload["metrics"]["render_contract"].startswith("assignment_matrix is binary model argmax support")
     audit = payload["metrics"]["wall_margin_audit"]
@@ -911,6 +917,7 @@ def test_tropical_support_heatmap_layout_keeps_legend_out_of_margin(tmp_path: Pa
     assert payload["support_flow_edges"][2]["wall_margin_bucket"] == "strict_wall"
     assert payload["support_flow_edges"][3]["wall_margin_bucket"] == "near_wall"
     assert "active support probability" in html
+    assert "Grouped token labels" in html
     assert "near-wall hit rate" in html
     assert "strict wall threshold" in html
     assert "Tropical active-support audit" in html
@@ -938,8 +945,11 @@ def test_tropical_support_high_collapse_uses_compact_diagnostic(tmp_path: Path):
     payload = json.loads(Path(paths["tropical_support_payload"]).read_text(encoding="utf-8"))
     assert payload["metrics"]["layout_mode"] == "collapse_diagnostic"
     assert payload["metrics"]["top_support_collapse_rate"] > 0.7
+    assert payload["metrics"]["top_support_summary"]["selected_query_count"] == 5
     assert payload["metrics"]["raw_token_labels_truncated"] is True
     assert "Tropical active-support collapse diagnostic" in html
+    assert "Grouped token labels" in html
+    assert "token groups" in html
     assert "top support" in html
     assert "captures" in html
 

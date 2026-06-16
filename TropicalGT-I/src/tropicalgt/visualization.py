@@ -3158,6 +3158,62 @@ def write_tropical_support_heatmap(result: dict[str, object], output_dir: str | 
     for idx in support_indices:
         vals = [float(token.get("margin", 0.0) or 0.0) for token in tokens if isinstance(token, dict) and active_support_index(token) == idx]
         mean_margins.append(float(np.mean(vals)) if vals else 0.0)
+
+    def token_group_label(token: dict[str, object]) -> str:
+        kind = str(token.get("kind", "?") or "?")
+        semantic = str(
+            token.get("node_type")
+            or token.get("edge_type")
+            or token.get("active_support_kind")
+            or token.get("label")
+            or kind
+        )
+        return f"{kind}:{semantic}"
+
+    def grouped_token_summary(indices: Iterable[int]) -> list[dict[str, object]]:
+        groups: dict[str, dict[str, object]] = {}
+        for idx in indices:
+            if idx < 0 or idx >= n:
+                continue
+            token = tokens[idx]
+            if not isinstance(token, dict):
+                continue
+            group = token_group_label(token)
+            entry = groups.setdefault(
+                group,
+                {
+                    "group": group,
+                    "kind": str(token.get("kind", "?")),
+                    "semantic_type": group.split(":", 1)[1] if ":" in group else group,
+                    "count": 0,
+                    "indices": [],
+                    "labels": [],
+                },
+            )
+            entry["count"] = int(entry["count"]) + 1
+            entry["indices"].append(int(idx))  # type: ignore[union-attr]
+            entry["labels"].append(_support_token_label(idx, token))  # type: ignore[union-attr]
+        return sorted(groups.values(), key=lambda row: (-int(row["count"]), str(row["group"])))
+
+    query_token_group_summary = grouped_token_summary(range(n))
+    support_token_group_summary = grouped_token_summary(support_indices)
+    top_support_position = int(np.argmax(counts)) if counts.size else -1
+    top_support_index = int(support_indices[top_support_position]) if top_support_position >= 0 else -1
+    top_support_token = tokens[top_support_index] if 0 <= top_support_index < n and isinstance(tokens[top_support_index], dict) else {}
+    top_support_selected = [token for token in tokens if isinstance(token, dict) and active_support_index(token) == top_support_index]
+    top_support_probabilities = [finite_token_float(token, "active_support_probability") for token in top_support_selected]
+    top_support_probabilities = [value for value in top_support_probabilities if value is not None]
+    top_support_summary = {
+        "available": bool(top_support_position >= 0),
+        "support_index": int(top_support_index),
+        "support_label": _support_token_label(top_support_index, top_support_token) if top_support_position >= 0 else "unavailable",
+        "support_group": token_group_label(top_support_token) if top_support_position >= 0 and isinstance(top_support_token, dict) else "unavailable",
+        "selected_query_count": int(counts[top_support_position]) if top_support_position >= 0 else 0,
+        "capture_rate": float(counts[top_support_position] / max(float(n), 1.0)) if top_support_position >= 0 else 0.0,
+        "mean_selected_margin": float(mean_margins[top_support_position]) if top_support_position >= 0 else None,
+        "active_support_probability_mean": float(np.mean(top_support_probabilities)) if top_support_probabilities else None,
+    }
+    grouped_label_summary = ", ".join(f"{row['group']}={row['count']}" for row in query_token_group_summary[:8])
     margin_values = np.asarray([float(token.get("margin", 0.0) or 0.0) for token in tokens], dtype=float)
     finite_margins = margin_values[np.isfinite(margin_values)]
 
@@ -3258,6 +3314,10 @@ def write_tropical_support_heatmap(result: dict[str, object], output_dir: str | 
         "support_labels": support_labels,
         "support_counts": [int(c) for c in counts.tolist()],
         "mean_margins": [float(v) for v in mean_margins],
+        "query_token_group_summary": query_token_group_summary,
+        "support_token_group_summary": support_token_group_summary,
+        "top_support_summary": top_support_summary,
+        "grouped_token_label_policy": "query/support labels are grouped by model graph-token kind plus node_type/edge_type/semantic label; no labels are fabricated beyond graph_token_trace fields",
         "margin_summary": margin_summary,
         "wall_margin_audit": wall_margin_audit,
         "strict_wall_hit_rate": wall_margin_audit['strict_wall_hit_rate'],
@@ -3301,6 +3361,9 @@ def write_tropical_support_heatmap(result: dict[str, object], output_dir: str | 
             ("entropy", f"{support_entropy:.3f} bits"),
             ("collapse rate", f"{collapse_rate:.3f}"),
             ("top support", top_support_label),
+            ("top support group", str(top_support_summary.get("support_group", "unavailable"))),
+            ("Grouped token labels", grouped_label_summary or "unavailable"),
+            ("token groups", grouped_label_summary or "unavailable"),
             ("mean margin", f"{margin_summary['mean']:.4f}"),
             ("margin range", f"{margin_summary['min']:.4f} to {margin_summary['max']:.4f}"),
             ("margin std", f"{margin_summary['std']:.4f}"),
@@ -3515,7 +3578,7 @@ def write_tropical_support_heatmap(result: dict[str, object], output_dir: str | 
         template="plotly_dark",
         title=(
             "Tropical active-support audit: observed supports only"
-            f"<br><sup>observed supports={len(support_indices)}/{n}; top-support collapse rate={collapse_rate:.3f}; effective={effective_supports:.2f}; entropy={support_entropy:.3f} bits. Strict wall-hit rate={wall_margin_audit['strict_wall_hit_rate']:.3f}; near-wall hit rate={wall_margin_audit['near_wall_hit_rate']:.3f}. Yellow cells mark selected support assignments only.</sup>"
+            f"<br><sup>observed supports={len(support_indices)}/{n}; top-support collapse rate={collapse_rate:.3f}; effective={effective_supports:.2f}; entropy={support_entropy:.3f} bits. Grouped token labels: {html.escape(grouped_label_summary or 'unavailable')}; top support group={html.escape(str(top_support_summary.get('support_group', 'unavailable')))}. Strict wall-hit rate={wall_margin_audit['strict_wall_hit_rate']:.3f}; near-wall hit rate={wall_margin_audit['near_wall_hit_rate']:.3f}. Yellow cells mark selected support assignments only.</sup>"
         ),
         height=max(1040, min(1660, 700 + 12 * n)),
         margin=dict(t=150, l=112, r=190, b=124),

@@ -424,10 +424,19 @@ git diff --check
 - Verification completed: `/home/iska/miniconda3/envs/tokengt/bin/python -m py_compile TropicalGT-I/src/tropicalgt/visualization.py TropicalGT-I/tests/test_simplicial_visualization.py`, focused duplicate-panel tests (`3 passed`), `pytest TropicalGT-I/tests/test_simplicial_visualization.py -q` (`34 passed`), `pytest TropicalGT-I/tests/test_interactive_artifact_validator.py -q` (`10 passed`), and `git diff --check`.
 
 
+## 2026-06-16 Tropical Support Grouped Labels Addendum
+
+- Tropical support heatmaps now summarize model graph tokens by grouped trace labels (`kind:semantic_type`) from real `graph_token_trace` metadata only. The payload records query/support group summaries and a no-proxy grouping policy so downstream audits can verify labels are not fabricated.
+- The support payload now records a top-support summary with selected-query count, capture rate, mean selected margin, support group, and model support-probability mean when `model_tropical_support_probabilities` are present.
+- The observed-support matrix and high-collapse diagnostic views now display grouped token labels, top-support group, margin profiles, strict wall-hit counts, near-wall hit counts, and collapse metrics while keeping the matrix contract explicit: selected cells are assignment events, not confidence scores.
+- b60 latest checked training state reached step `1250` with train loss/NLL `1.234/1.211`; trainer PID `378962` and watcher PID `379304` remain alive under the step-5000 gate.
+- Verification completed: `/home/iska/miniconda3/envs/tokengt/bin/python -m py_compile TropicalGT-I/src/tropicalgt/visualization.py TropicalGT-I/tests/test_simplicial_visualization.py`, focused tropical support tests (`2 passed`), `pytest TropicalGT-I/tests/test_simplicial_visualization.py -q` (`34 passed`), `pytest TropicalGT-I/tests/test_interactive_artifact_validator.py -q` (`10 passed`).
+
+
 ## Real Implementations Only Policy
 
 No TropicalGT-I metric, loss, visualization, analogical map, persistence module, free resolution, derived comparison, tropical-cycle diagnostic, or CAS artifact should be presented as a mathematical object unless it is computed from the actual model outputs, graph states, embeddings, probabilities, simplex trees, bifiltrations, or certified CAS/backend output that define that object. Temporary placeholders, synthetic fallback objects, mock charts, fabricated simplices, and convenience stand-ins are not acceptable. When a requested object cannot yet be computed, the artifact must render an explicit unavailable/uncertified state and the training metric must either be disabled or logged under an audit-only unavailable flag. Finite chain-presentation diagnostics may be shown only as chain diagnostics, never as free resolutions. Total-graded or ungraded CAS output may be shown as real CAS output only under its actual grading; it must not be advertised as a multigraded `F2[x_level,x_radius]` free resolution unless the backend certifies that multigraded structure.
 
 Use "one dimensional cone" or "one dimensional cones" as the preferred fan-theoretic language whenever the intended object is a cone of a fan or a cone-indexed filtration datum. Use singular or plural according to ordinary grammar.
 
-_Last updated: 2026-06-16T08:25:00Z_
+_Last updated: 2026-06-16T06:59:36Z_

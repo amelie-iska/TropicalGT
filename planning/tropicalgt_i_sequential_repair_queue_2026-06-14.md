@@ -100,7 +100,7 @@
 
 ### 8. Tropical Support and Wall Crossing
 
-- [ ] Make support heatmaps interpretable with grouped token labels, top-support summaries, margin profiles, collapse diagnostics, and wall-hit context.
+- [x] Make support heatmaps interpretable with grouped token labels, top-support summaries, margin profiles, collapse diagnostics, and wall-hit context.
 - [ ] Audit wall-hit rate definition and explain when low wall-crossing is mathematically expected versus a metric issue.
 - [ ] Fix/rename negative `tropical_margin_loss` so sign and objective direction are clear.
 - [ ] Investigate rising `certificate_loss` and separate real certificate loss from diagnostic penalties.
@@ -339,3 +339,11 @@ The live item-by-item repair inventory is maintained in `planning/tropicalgt_i_c
 - [x] Regression now requires exact model anchors, kernel-weighted local NLL metadata, density-volume provenance, and edge-wise NLL deltas.
 - [x] Focused verification passed: visualization plus artifact validator `33 passed`.
 - [x] Pushed this NLL density contract repair on the non-main branch.
+
+### Current Objective Update - Tropical Support Grouped Labels Pass
+
+- [x] Added grouped token summaries to the tropical support payload using only model graph-token trace fields: token kind plus explicit node type, edge type, active-support kind, or label when present.
+- [x] Added a top-support summary with selected-query count, capture rate, mean selected margin, support group, and model support-probability mean when that probability was logged by the model.
+- [x] Exposed grouped token labels, top-support group, collapse diagnostics, margin profile, and strict/near wall-hit context in both the observed-support matrix view and high-collapse diagnostic view.
+- [x] Kept support heatmaps as observed assignment matrices only: yellow cells are selected model supports, confidence remains in model probability summaries and selected-margin profiles, and no proxy scores or fallback support objects are introduced.
+- [x] Verification passed: focused tropical support tests `2 passed`; full simplicial visualization `34 passed`; artifact validator `10 passed`; compile checks passed for modified source/tests.
