@@ -176,7 +176,15 @@ def _review_boundary(
     bpb = _metric_value(report, checkpoint, args.metric)
     graph_bpb = _metric_value(report, checkpoint, args.graph_metric)
     triggered = bpb is None or bpb > args.target_bpb
-    active_contract = _active_training_contract(cfg, report, checkpoint, boundary_step, report_path=report_path, target_bpb=args.target_bpb)
+    active_contract = _active_training_contract(
+        cfg,
+        report,
+        checkpoint,
+        boundary_step,
+        report_path=report_path,
+        checkpoint_path=checkpoint_path,
+        target_bpb=args.target_bpb,
+    )
     contract_json = output_dir / f"active_training_contract_step_{boundary_step:08d}.json"
     contract_md = output_dir / f"active_training_contract_step_{boundary_step:08d}.md"
     contract_json.write_text(json.dumps(active_contract, indent=2), encoding="utf-8")
@@ -334,6 +342,69 @@ def _numeric_report_metrics(report: dict[str, Any], checkpoint: dict[str, Any]) 
         if isinstance(value, (int, float)):
             metrics.setdefault(key, value)
     return metrics
+
+
+def _checkpoint_evidence_summary(
+    report: dict[str, Any],
+    checkpoint: dict[str, Any],
+    checkpoint_path: Path | None,
+    boundary_step: int,
+) -> dict[str, Any]:
+    report_checkpoint_integrity = report.get("checkpoint_integrity") if isinstance(report.get("checkpoint_integrity"), dict) else {}
+    report_latest_integrity = report.get("latest_checkpoint_integrity") if isinstance(report.get("latest_checkpoint_integrity"), dict) else {}
+    report_metrics = report.get("metrics") if isinstance(report.get("metrics"), dict) else {}
+    checkpoint_metrics = checkpoint.get("metrics") if isinstance(checkpoint.get("metrics"), dict) else {}
+    eval_metrics = report.get("eval") if isinstance(report.get("eval"), dict) else {}
+    path = str(checkpoint_path or checkpoint.get("path") or report.get("latest_checkpoint") or report.get("checkpoint") or "")
+    checkpoint_available = bool(checkpoint.get("available", False))
+    checkpoint_step = checkpoint.get("step") if isinstance(checkpoint.get("step"), int) else None
+    report_final_step = report.get("final_step") if isinstance(report.get("final_step"), int) else None
+    warnings: list[str] = []
+
+    unavailable_reason = str(checkpoint.get("unavailable_reason", "")) if not checkpoint_available else ""
+    if not checkpoint_available:
+        warnings.append("checkpoint_summary_unavailable:" + (unavailable_reason or "checkpoint_missing_or_not_loaded"))
+    if checkpoint_step is not None and checkpoint_step < int(boundary_step):
+        warnings.append(f"checkpoint_step_before_boundary:{checkpoint_step}<{int(boundary_step)}")
+    if checkpoint_step is not None and checkpoint_step != int(boundary_step):
+        warnings.append(f"checkpoint_step_mismatch_boundary:{checkpoint_step}!={int(boundary_step)}")
+    if report_final_step is not None and report_final_step != int(boundary_step):
+        warnings.append(f"report_final_step_mismatch_boundary:{report_final_step}!={int(boundary_step)}")
+
+    for label, integrity in (("checkpoint_integrity", report_checkpoint_integrity), ("latest_checkpoint_integrity", report_latest_integrity)):
+        if not integrity:
+            continue
+        integrity_path = str(integrity.get("path", ""))
+        if path and integrity_path and integrity_path != path and label == "latest_checkpoint_integrity":
+            warnings.append(f"{label}_path_mismatch:{integrity_path}!={path}")
+        if integrity.get("available") is False:
+            warnings.append(f"{label}_unavailable:" + str(integrity.get("unavailable_reason", "checkpoint_unavailable")))
+        observed = integrity.get("observed_step")
+        if isinstance(observed, int) and observed != int(boundary_step):
+            warnings.append(f"{label}_observed_step_mismatch_boundary:{observed}!={int(boundary_step)}")
+
+    for metric_key in ("eval_bpb", "eval_graph_bpb", "bpb", "graph_bpb"):
+        report_value = report_metrics.get(metric_key)
+        if report_value is None and metric_key.startswith("eval_"):
+            report_value = eval_metrics.get(metric_key.removeprefix("eval_"))
+        if report_value is not None and checkpoint_available and metric_key not in checkpoint_metrics:
+            warnings.append(f"checkpoint_missing_report_metric:{metric_key}")
+
+    return {
+        "schema_version": "tropicalgt.checkpoint_evidence.v1",
+        "boundary_step": int(boundary_step),
+        "checkpoint_path": path,
+        "checkpoint_available": checkpoint_available,
+        "checkpoint_unavailable_reason": unavailable_reason,
+        "checkpoint_step": checkpoint_step,
+        "report_final_step": report_final_step,
+        "report_checkpoint_integrity": report_checkpoint_integrity,
+        "report_latest_checkpoint_integrity": report_latest_integrity,
+        "checkpoint_metrics_present": sorted(checkpoint_metrics.keys()),
+        "warnings": warnings,
+        "safe_for_checkpoint_backed_restart": checkpoint_available and not warnings,
+        "policy": "Checkpoint-backed review/restart evidence requires a nonempty, loadable checkpoint whose step and metrics agree with the boundary report; unavailable states remain explicit and are not replaced by report metrics.",
+    }
 
 
 def _nested_get(data: dict[str, Any], dotted: str) -> Any:
@@ -600,12 +671,13 @@ def _review_artifact_inventory(cfg: dict[str, Any], report: dict[str, Any], repo
     }
 
 
-def _active_training_contract(cfg: dict[str, Any], report: dict[str, Any], checkpoint: dict[str, Any], boundary_step: int, report_path: Path | None = None, target_bpb: float | None = None) -> dict[str, Any]:
+def _active_training_contract(cfg: dict[str, Any], report: dict[str, Any], checkpoint: dict[str, Any], boundary_step: int, report_path: Path | None = None, checkpoint_path: Path | None = None, target_bpb: float | None = None) -> dict[str, Any]:
     metrics = _numeric_report_metrics(report, checkpoint)
     eval_metrics = dict(report.get("eval") or {})
     history_tail = checkpoint.get("history_tail") or report.get("history", [])[-20:]
     model_cfg = dict(cfg.get("model", {}))
     primary_target = float(target_bpb if target_bpb is not None else cfg.get("target_bpb", 1.12))
+    checkpoint_evidence = _checkpoint_evidence_summary(report, checkpoint, checkpoint_path, boundary_step)
     return {
         "boundary_step": int(boundary_step),
         "objective": {
@@ -687,6 +759,7 @@ def _active_training_contract(cfg: dict[str, Any], report: dict[str, Any], check
             "grad_norm": metrics.get("grad_norm"),
         },
         "history_tail": history_tail,
+        "checkpoint_evidence": checkpoint_evidence,
         "restart_decision_schema": _restart_decision_schema(primary_target),
         "artifact_inventory": _review_artifact_inventory(cfg, report, report_path, boundary_step),
         "report_visualizations": report.get("visualizations", {}),
@@ -703,6 +776,8 @@ def _active_training_contract_markdown(contract: dict[str, Any]) -> str:
         f"- Primary metric: `{objective.get('primary_metric')}` target `< {objective.get('primary_target')}`",
         f"- Eval BPB: `{compression.get('eval_bpb')}`",
         f"- Eval graph BPB: `{compression.get('eval_graph_bpb')}`",
+        f"- Checkpoint available: `{contract.get('checkpoint_evidence', {}).get('checkpoint_available')}`",
+        f"- Checkpoint restart-safe: `{contract.get('checkpoint_evidence', {}).get('safe_for_checkpoint_backed_restart')}`",
         f"- Graph decoding: {objective.get('graph_decoding')}",
         "",
         "## Active Losses",
@@ -713,6 +788,11 @@ def _active_training_contract_markdown(contract: dict[str, Any]) -> str:
         "## Regularizer Weights",
         "```json",
         json.dumps(contract.get("regularizer_weights", {}), indent=2),
+        "```",
+        "",
+        "## Checkpoint Evidence",
+        "```json",
+        json.dumps(contract.get("checkpoint_evidence", {}), indent=2),
         "```",
         "",
         "## Restart Decision Schema",
@@ -732,6 +812,7 @@ def _active_training_contract_markdown(contract: dict[str, Any]) -> str:
                 "data": contract.get("data_metrics", {}),
                 "throughput_and_vram": contract.get("throughput_and_vram", {}),
                 "artifact_inventory": contract.get("artifact_inventory", {}),
+                "checkpoint_evidence": contract.get("checkpoint_evidence", {}),
             },
             indent=2,
         ),

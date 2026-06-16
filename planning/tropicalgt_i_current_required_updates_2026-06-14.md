@@ -918,3 +918,13 @@ git diff --check
 ```
 
 _Last updated: 2026-06-16T15:31:09Z_
+
+
+## 2026-06-16 Always-On b61 Training And Checkpoint-Evidence Contract Update
+
+- Active training is restored under the new always-on rule. Fresh step-0 b61 run `tropicalgt_i_pg_bpb_step0_full24b_b61_20260616T155103Z_fresh_bpb112_alwayson_5k_gate` is running on trainer PID `927496`, with 5K monitor PID `931644`, W&B run id `mhxrmoxl`, and log `TropicalGT-I/outputs/tropicalgt_i_pg_bpb_step0_full24b_b61_20260616T155103Z_fresh_bpb112_alwayson_5k_gate/logs/train_nohup_20260616T155425Z.log`.
+- b61 was launched from step 0 because b60 checkpoint evidence is unavailable: the b60 latest checkpoint is an empty file. The b61 config cites real b60 validation/audit evidence and records that no checkpoint-derived evidence was used.
+- A dedicated subagent, Herschel (`019ed124-c3b0-7b00-81a9-1a39c76e5583`), owns only the 5K training-iteration loop. At each 5K boundary it must inspect all metrics, advanced readouts, algebraic/topological/geometric sidecars, newly implemented toric/tropical/vector-bundle/sheaf/derived/PH/memory diagnostics, and then restart from step 0 with evidence-backed changes.
+- Cleanup completed for old `/tmp/tropicalgt*` scratch files, repo `__pycache__` directories, and `.pytest_cache`; provenance/state directories were preserved.
+- Source-side hardening added a `tropicalgt.checkpoint_evidence.v1` block to active training contracts and markdown. Future reviewers now see checkpoint availability, integrity, step/metric mismatch warnings, and whether a checkpoint-backed restart is safe. The 5K monitor now treats zero-byte required files as unavailable, so empty checkpoints cannot satisfy required-path gates.
+- Remaining immediate updates: keep b61 alive to 5K, propagate checkpoint-evidence summaries into generated restart bundles, continue source-side preflight hardening, and then proceed through CAS, analogical-memory, simplex-tree, bifiltration, NLL, tropical-support, GraphCG, toric/vector-bundle, paper, docs, and browser-QA items sequentially.

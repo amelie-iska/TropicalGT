@@ -63,6 +63,61 @@ def test_active_training_contract_reports_losses_and_graph_order_metrics():
     assert "Active Losses" in markdown
 
 
+def test_active_training_contract_surfaces_checkpoint_evidence_for_unavailable_checkpoint():
+    loop = _load_review_loop()
+    report = {
+        "final_step": 5000,
+        "metrics": {"eval_bpb": 1.43, "eval_graph_bpb": 20.1},
+        "latest_checkpoint_integrity": {
+            "available": False,
+            "path": "bad.latest.pt",
+            "unavailable_reason": "checkpoint_file_empty:bad.latest.pt",
+            "expected_step": 5000,
+            "verified_load": True,
+        },
+    }
+    checkpoint = {"available": False, "path": "bad.latest.pt", "unavailable_reason": "checkpoint_file_is_empty"}
+
+    contract = loop._active_training_contract(
+        {"model": {}, "batch_size": 4, "seq_len": 32},
+        report,
+        checkpoint,
+        5000,
+        checkpoint_path=Path("bad.latest.pt"),
+    )
+
+    evidence = contract["checkpoint_evidence"]
+    assert evidence["schema_version"] == "tropicalgt.checkpoint_evidence.v1"
+    assert evidence["checkpoint_available"] is False
+    assert evidence["safe_for_checkpoint_backed_restart"] is False
+    assert "checkpoint_summary_unavailable:checkpoint_file_is_empty" in evidence["warnings"]
+    assert any(warning.startswith("latest_checkpoint_integrity_unavailable:checkpoint_file_empty") for warning in evidence["warnings"])
+    markdown = loop._active_training_contract_markdown(contract)
+    assert "Checkpoint Evidence" in markdown
+    assert "checkpoint_file_is_empty" in markdown
+
+
+def test_checkpoint_evidence_warns_on_stale_checkpoint_and_missing_eval_metrics():
+    loop = _load_review_loop()
+    report = {
+        "final_step": 5000,
+        "metrics": {"eval_bpb": 1.2, "eval_graph_bpb": 2.3},
+        "latest_checkpoint_integrity": {"available": True, "path": "fresh.latest.pt", "observed_step": 4750},
+    }
+    checkpoint = {"available": True, "path": "stale.latest.pt", "step": 4750, "metrics": {"loss": 1.0}}
+
+    evidence = loop._checkpoint_evidence_summary(report, checkpoint, Path("stale.latest.pt"), 5000)
+
+    assert evidence["checkpoint_available"] is True
+    assert evidence["safe_for_checkpoint_backed_restart"] is False
+    assert "checkpoint_step_before_boundary:4750<5000" in evidence["warnings"]
+    assert "checkpoint_step_mismatch_boundary:4750!=5000" in evidence["warnings"]
+    assert "latest_checkpoint_integrity_path_mismatch:fresh.latest.pt!=stale.latest.pt" in evidence["warnings"]
+    assert "latest_checkpoint_integrity_observed_step_mismatch_boundary:4750!=5000" in evidence["warnings"]
+    assert "checkpoint_missing_report_metric:eval_bpb" in evidence["warnings"]
+    assert "checkpoint_missing_report_metric:eval_graph_bpb" in evidence["warnings"]
+
+
 def test_active_training_contract_inventories_latest_periodic_artifacts(tmp_path: Path):
     loop = _load_review_loop()
     output_dir = tmp_path / "run"

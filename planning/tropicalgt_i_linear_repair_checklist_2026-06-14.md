@@ -215,3 +215,20 @@
 3. If the no-proxy checkpoint block is resolved, run checkpoint-backed post-5K evaluation/backfill/visual validation, then produce an evidence-backed reviewed step-0 restart config targeting BPB `< 1.12`.
 4. Keep browser QA attached to the real step-5000 audit or the next real audit bundle; do not copy generated artifacts into source control.
 5. Commit and push only safe source, config, planning, docs, and tests after each verified repair.
+
+
+### 2026-06-16 Always-On b61 Training And Checkpoint-Evidence Contract Pass
+
+Status: active training restored; source-side evidence hardening implemented and focused-tested.
+
+- User policy update: a 5K-step training run should always be active while implementation continues. The previous b60 run reached step 5000 but remained unusable for checkpoint-backed restart review because its latest checkpoint was a zero-byte file.
+- Cleaned old Codex/TropicalGT scratch files from `/tmp`, removed repo `__pycache__` directories, and removed `.pytest_cache`; preserved datasets, checkpoints, W&B folders, generated audit evidence, `external/`, and secrets.
+- Created and launched fresh step-0 b61 run `tropicalgt_i_pg_bpb_step0_full24b_b61_20260616T155103Z_fresh_bpb112_alwayson_5k_gate` from real b60 validation evidence only. The config records the unavailable b60 checkpoint and does not resume from it.
+- b61 readiness passed with CUDA dry-run and all advanced BPB gates green. Runtime fixes removed stale Parameter-Golf fallback path lists and corrected meet-in-the-middle/chart-bundle config keys to the current source schema.
+- b61 launch details at 2026-06-16T15:58:37Z: trainer PID `927496`, monitor PID `931644`, W&B id `mhxrmoxl`, W&B URL `https://wandb.ai/amelie-iska-math/TropicalGT-I/runs/mhxrmoxl`, log `TropicalGT-I/outputs/tropicalgt_i_pg_bpb_step0_full24b_b61_20260616T155103Z_fresh_bpb112_alwayson_5k_gate/logs/train_nohup_20260616T155425Z.log`, monitor record `TropicalGT-I/outputs/training_stop_records/b61_fresh_step0_alwayson_step5000_gate.json`.
+- The b61 monitor requires the step-5000 validation report, audit HTML, final checkpoint, and latest checkpoint, with a settle window after observing step 5000 so final checkpoint/eval writes are not cut off prematurely. Required files are now checked for nonzero file size, so a zero-byte checkpoint cannot satisfy the 5K gate.
+- Spawned subagent Herschel (`019ed124-c3b0-7b00-81a9-1a39c76e5583`) as the dedicated 5K training-iteration monitor. Its only role is to review exact 5K outcomes, ask/inspect what new metrics/losses/sidecars were implemented since the prior iteration, and launch the next evidence-backed step-0 config.
+- Implemented `checkpoint_evidence` in `parameter_golf_codex_review_loop.py` active contracts and markdown. The review loop now exposes checkpoint path, availability, unavailable reason, checkpoint/report steps, report checkpoint-integrity blocks, checkpoint metric keys, mismatch warnings, and `safe_for_checkpoint_backed_restart`.
+- Verification: `PYTHONPATH=TropicalGT-I/scripts:TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_parameter_golf_review_loop.py -q` -> `18 passed`; coupled post-5K/review/readiness/monitor suite -> `45 passed`.
+
+Next sequential implementation item remains Item 9 source-side evidence hardening while b61 trains: propagate checkpoint-evidence summaries into generated restart bundles and continue CAS/visual/math repairs item-by-item without interrupting the active 5K run.

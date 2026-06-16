@@ -49,8 +49,31 @@ def write_record(path: Path, payload: dict[str, Any]) -> None:
     path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
 
 
+def _required_path_statuses(required_paths: list[Path]) -> list[dict[str, Any]]:
+    statuses: list[dict[str, Any]] = []
+    for path in required_paths:
+        row: dict[str, Any] = {"path": str(path), "available": False, "reason": "missing"}
+        if not path.exists():
+            statuses.append(row)
+            continue
+        try:
+            if path.is_file():
+                size = path.stat().st_size
+                row["size_bytes"] = int(size)
+                if size <= 0:
+                    row["reason"] = "empty_file"
+                    statuses.append(row)
+                    continue
+            row["available"] = True
+            row["reason"] = "available"
+        except OSError as exc:
+            row["reason"] = f"stat_failed:{exc.__class__.__name__}"
+        statuses.append(row)
+    return statuses
+
+
 def _missing_required_paths(required_paths: list[Path]) -> list[str]:
-    return [str(path) for path in required_paths if not path.exists()]
+    return [row["path"] for row in _required_path_statuses(required_paths) if not row.get("available", False)]
 
 
 def monitor_step_gate(
@@ -72,7 +95,8 @@ def monitor_step_gate(
     while True:
         status = latest_training_status(log_path)
         alive = process_alive(pid)
-        missing_required_paths = _missing_required_paths(required_paths)
+        required_path_statuses = _required_path_statuses(required_paths)
+        missing_required_paths = [row["path"] for row in required_path_statuses if not row.get("available", False)]
         settle_polls = max(int(settle_polls_after_target), 0)
         required_wait_polls = max(target_seen_polls - settle_polls, 0)
         payload = {
@@ -86,6 +110,7 @@ def monitor_step_gate(
             "action": "monitoring",
             "dry_run": bool(dry_run),
             "required_paths": [str(path) for path in required_paths],
+            "required_path_statuses": required_path_statuses,
             "missing_required_paths": missing_required_paths,
             "target_seen_polls": target_seen_polls,
             "required_wait_polls": required_wait_polls,
