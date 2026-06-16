@@ -1643,6 +1643,63 @@ def load_checkpoint(path: str | Path, device: torch.device):
     return model, obj
 
 
+def _checkpoint_payload(
+    model: TropicalGTModel,
+    opt: torch.optim.Optimizer,
+    cfg: dict[str, Any],
+    metrics: dict[str, float],
+    history: list[dict[str, float]],
+    step: int,
+    run_name: str,
+) -> dict[str, Any]:
+    return {
+        "model": model.state_dict(),
+        "optimizer": opt.state_dict(),
+        "config": cfg,
+        "metrics": metrics,
+        "history": history,
+        "step": int(step),
+        "run_name": run_name,
+        "rng_state": torch.get_rng_state(),
+        "cuda_rng_state_all": torch.cuda.get_rng_state_all() if torch.cuda.is_available() else [],
+        "saved_at": time.time(),
+    }
+
+
+def _fsync_parent_dir(path: Path) -> None:
+    try:
+        fd = os.open(path.parent, os.O_RDONLY)
+    except OSError:
+        return
+    try:
+        os.fsync(fd)
+    finally:
+        os.close(fd)
+
+
+def _verify_checkpoint_file(path: Path, *, expected_step: int, verify_load: bool = True) -> int:
+    try:
+        size = path.stat().st_size
+    except OSError as exc:
+        raise RuntimeError(f"checkpoint_stat_failed:{path}:{exc.__class__.__name__}") from exc
+    if size <= 0:
+        raise RuntimeError(f"checkpoint_file_empty:{path}")
+    if verify_load:
+        try:
+            obj = torch.load(path, map_location="cpu")
+        except Exception as exc:
+            raise RuntimeError(f"checkpoint_load_failed:{path}:{exc.__class__.__name__}") from exc
+        if not isinstance(obj, dict):
+            raise RuntimeError(f"checkpoint_invalid_payload:{path}:not_dict")
+        missing = [key for key in ("model", "config", "step") if key not in obj]
+        if missing:
+            raise RuntimeError(f"checkpoint_invalid_payload:{path}:missing_{','.join(missing)}")
+        observed_step = int(obj.get("step", -1))
+        if observed_step != int(expected_step):
+            raise RuntimeError(f"checkpoint_step_mismatch:{path}:{observed_step}!={int(expected_step)}")
+    return int(size)
+
+
 def _save_training_checkpoint(
     path: Path,
     model: TropicalGTModel,
@@ -1654,21 +1711,23 @@ def _save_training_checkpoint(
     run_name: str,
 ) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    torch.save(
-        {
-            "model": model.state_dict(),
-            "optimizer": opt.state_dict(),
-            "config": cfg,
-            "metrics": metrics,
-            "history": history,
-            "step": int(step),
-            "run_name": run_name,
-            "rng_state": torch.get_rng_state(),
-            "cuda_rng_state_all": torch.cuda.get_rng_state_all() if torch.cuda.is_available() else [],
-            "saved_at": time.time(),
-        },
-        path,
-    )
+    tmp_path = path.with_name(f".{path.name}.tmp.{os.getpid()}.{time.time_ns()}")
+    verify_load = _cfg_bool(cfg.get("checkpoint_verify_load"), True)
+    payload = _checkpoint_payload(model, opt, cfg, metrics, history, step, run_name)
+    try:
+        torch.save(payload, tmp_path)
+        _verify_checkpoint_file(tmp_path, expected_step=step, verify_load=verify_load)
+        with tmp_path.open("rb") as handle:
+            os.fsync(handle.fileno())
+        os.replace(tmp_path, path)
+        _fsync_parent_dir(path)
+        _verify_checkpoint_file(path, expected_step=step, verify_load=verify_load)
+    finally:
+        if tmp_path.exists():
+            try:
+                tmp_path.unlink()
+            except OSError:
+                pass
 
 
 def _restore_rng_state(obj: dict[str, Any]) -> None:

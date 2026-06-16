@@ -655,4 +655,12 @@ The live item-by-item repair inventory is maintained in `planning/tropicalgt_i_c
 - [x] Recorded the restart-schema decision `blocked_missing_evidence_no_restart`: step-5000 BPB `1.4304583543547733` missed target `< 1.12`, but the required checkpoint `TropicalGT-I/checkpoints/tropicalgt_i_pg_bpb_step0_full24b_b60_20260616T053631Z_fresh_bpb112_casrows_5k_gate.latest.pt` is a zero-byte unavailable checkpoint and blocks checkpoint-dependent executable analysis/visualization evidence.
 - [x] Confirmed no hyperparameter/config changes were proposed, no training restart was launched, and no generated artifacts/checkpoints/W&B files were staged.
 - [x] Available review evidence includes the path-only bundle `TropicalGT-I/outputs/tropicalgt_i_pg_bpb_step0_full24b_b60_20260616T053631Z_fresh_bpb112_casrows_5k_gate/post_5k_review_bundle/review_bundle_step_00005000.json`, validation report, periodic artifact summary, step-5000 audit HTML/sidecars, topology/tropical/memory/GraphCG/tropical-support summaries where they exist, and explicit unavailable states for missing checkpoint/CAS/memory/W&B summary evidence.
-- [ ] Next Section 12 item: implement source-side checkpoint-write hardening so future 5K gates cannot leave a zero-byte `.latest.pt` as the only checkpoint evidence; keep this scoped to source/tests/docs and do not mutate generated checkpoints.
+- [x] Implemented source-side checkpoint-write hardening so future 5K gates cannot leave a zero-byte `.latest.pt` as the only checkpoint evidence; this was scoped to source/tests/docs and did not mutate generated checkpoints.
+
+### Current Objective Update - Atomic Checkpoint Write Hardening Pass
+
+- [x] Replaced direct `torch.save(path)` checkpoint writes with temp-file saves, nonempty/loadable verification, fsync, atomic `os.replace`, parent-directory fsync, and post-replace verification.
+- [x] Added `checkpoint_verify_load` with default verified loading; setting it false only skips load verification, not the nonempty atomic-write guard.
+- [x] Added regression coverage proving normal periodic `.latest.pt` checkpoints are nonempty/loadable and failed empty temp writes do not replace an existing checkpoint or leave temp files behind.
+- [x] Verification passed: py-compile for `run.py`, `test_training_resume.py`, and `test_training_metrics.py`; `pytest TropicalGT-I/tests/test_training_resume.py TropicalGT-I/tests/test_training_metrics.py -q` (`16 passed`); `git diff --check` clean.
+- [ ] Next Section 12 item: audit cleanup candidates for stale W&B/generated artifacts without deleting required b60 5K evidence, checkpoints, review docs, or source-controlled files.

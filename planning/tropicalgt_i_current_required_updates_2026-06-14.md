@@ -580,4 +580,11 @@ Use "one dimensional cone" or "one dimensional cones" as the preferred fan-theor
 - The restart-schema result is `blocked_missing_evidence_no_restart`: BPB `1.4304583543547733` missed target `< 1.12`, but checkpoint-dependent executable analyses remain unavailable because `TropicalGT-I/checkpoints/tropicalgt_i_pg_bpb_step0_full24b_b60_20260616T053631Z_fresh_bpb112_casrows_5k_gate.latest.pt` is zero bytes.
 - No restart was launched and no hyperparameter/config patch was proposed. Under the no-proxy/no-fallback rule, the next source-side task is checkpoint-write hardening for future gates, not a BPB restart based on incomplete checkpoint-sidecar evidence.
 
-_Last updated: 2026-06-16T18:45:00Z_
+
+## 2026-06-16 Atomic Checkpoint Write Hardening Result
+
+- Future trainer checkpoint writes now use a temporary file, nonempty/loadable verification by default, fsync, atomic replace, parent-directory fsync, and post-replace verification. This prevents a failed save from replacing a prior checkpoint with an empty `.latest.pt`.
+- The guard is source-side only and does not repair or mutate the already-empty b60 checkpoint; the b60 restart decision remains blocked on missing real checkpoint-dependent evidence.
+- Focused verification passed: `pytest TropicalGT-I/tests/test_training_resume.py TropicalGT-I/tests/test_training_metrics.py -q` (`16 passed`).
+
+_Last updated: 2026-06-16T19:05:00Z_

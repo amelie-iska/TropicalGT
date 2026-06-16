@@ -1,7 +1,11 @@
 import json
 from pathlib import Path
 
-from tropicalgt.run import train
+import pytest
+import torch
+
+import tropicalgt.run as run_module
+from tropicalgt.run import build_model, train, _save_training_checkpoint
 
 
 def test_training_checkpoint_resume(tmp_path: Path):
@@ -29,7 +33,12 @@ def test_training_checkpoint_resume(tmp_path: Path):
     first = train(config_path)
     assert first["final_step"] == 1
     assert Path(first["checkpoint"]).exists()
-    assert Path(first["latest_checkpoint"]).exists()
+    latest_checkpoint = Path(first["latest_checkpoint"])
+    assert latest_checkpoint.exists()
+    assert latest_checkpoint.stat().st_size > 0
+    latest_obj = torch.load(latest_checkpoint, map_location="cpu")
+    assert latest_obj["step"] == 1
+    assert latest_obj["run_name"] == "resume_test"
 
     cfg["max_steps"] = 2
     config_path.write_text(json.dumps(cfg), encoding="utf-8")
@@ -70,3 +79,26 @@ def test_short_max_steps_override_does_not_fail_full_budget_gate(tmp_path: Path)
     assert report["final_step"] == 1
     assert report["data_budget"]["configured_training_token_slots"] == 64
     assert report["data_budget"]["effective_training_token_slots"] == 32
+
+
+def test_checkpoint_save_does_not_replace_existing_target_with_empty_temp(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    cfg = {
+        "run_name": "atomic_save_test",
+        "device": "cpu",
+        "tokengt": {"max_nodes": 16, "max_edges": 32, "node_id_dim": 8, "feature_dim": 48, "graph_token": True},
+        "model": {"dim": 16, "hidden_dim": 16, "graph_feature_dim": 48, "num_actions": 8},
+    }
+    model = build_model(cfg)
+    opt = torch.optim.AdamW(model.parameters(), lr=0.001)
+    target = tmp_path / "atomic.latest.pt"
+    target.write_bytes(b"previous-checkpoint")
+
+    def write_empty_checkpoint(_payload, path):
+        Path(path).write_bytes(b"")
+
+    monkeypatch.setattr(run_module.torch, "save", write_empty_checkpoint)
+    with pytest.raises(RuntimeError, match="checkpoint_file_empty"):
+        _save_training_checkpoint(target, model, opt, cfg, {"step": 7.0}, [{"step": 7.0}], 7, "atomic_save_test")
+
+    assert target.read_bytes() == b"previous-checkpoint"
+    assert not list(tmp_path.glob(".atomic.latest.pt.tmp.*"))
