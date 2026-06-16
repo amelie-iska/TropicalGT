@@ -690,7 +690,7 @@ The live item-by-item repair inventory is maintained in `planning/tropicalgt_i_c
 - [x] Included the BEMultipliers contract flags in certified-CAS resolution signatures used by derived/analogical comparison, preventing a multiplier hash from acting like resolution evidence.
 - [x] Added visualization regression coverage for the browser table rows and normalized display payload fields.
 - [x] Verification passed: py-compile for visualization/CAS files and tests; `pytest TropicalGT-I/tests/test_simplicial_visualization.py TropicalGT-I/tests/test_algebraic_persistence.py -q` (`64 passed`); `git diff --check` clean.
-- [ ] Next source-side repair item: inspect derived/analogical memory comparison text for whether unavailable or diagnostic-only CAS components are explained clearly when similarity components mismatch.
+- [x] Next source-side repair item completed: derived/analogical memory comparison text now explains unavailable and diagnostic-only CAS components clearly when similarity components mismatch.
 
 ### Current Objective Update - Derived CAS No-Proxy Explanation Pass
 
@@ -699,3 +699,11 @@ The live item-by-item repair inventory is maintained in `planning/tropicalgt_i_c
 - [x] Added unavailable-state metadata for missing query or memory CAS evidence: unavailable reasons, no-proxy/no-fallback policy, and an explanation that missing certified resolutions are not estimated or replaced.
 - [x] Updated derived/free-resolution interpretation text so mismatched CAS artifacts and diagnostic-only BEMultipliers sidecars are explained directly in browser-visible payloads.
 - [x] Focused verification passed: visualization tests `36 passed`.
+
+### Current Objective Update - Advanced Auxiliary Promotion Gate Pass
+
+- [x] Added chart-bundle/toric ablation variants to `run_bpb_ablation_grid.py`, including telemetry-only zero-weight and nonzero `0p1x` variants.
+- [x] Persisted `ablation_variant` and `ablation_overrides` into `train_report.json` so analysis reports can cite exact coefficient changes.
+- [x] Added an `advanced_auxiliary_promotion_gate` to BPB ablation reports. It promotes no nonzero chart-bundle/toric coefficient unless matched-seed runs have the same final step and both held-out eval BPB and eval graph-BPB improve against baseline.
+- [x] Kept no-proxy/no-fallback semantics: missing deltas, unmatched seeds/steps, telemetry-only rows, or unrelated variants are blocked or unavailable, not interpreted as wins.
+- [x] Focused verification passed: ablation report/grid plus training resume tests `6 passed`.

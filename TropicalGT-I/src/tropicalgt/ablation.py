@@ -10,6 +10,16 @@ import numpy as np
 
 
 DEFAULT_TARGETS = ("bpb", "graph_bpb", "eval_bpb", "eval_graph_bpb")
+PROMOTION_REQUIRED_TARGETS = ("eval_bpb", "eval_graph_bpb")
+ADVANCED_AUXILIARY_COEFFICIENT_KEYS = (
+    "bundle_transport_weight",
+    "bundle_cocycle_weight",
+    "bundle_flat_rank_weight",
+    "toric_normal_fan_weight",
+    "graphcg_toric_cell_agreement_weight",
+    "chart_bpb_consistency_weight",
+    "bundle_atom_stability_weight",
+)
 
 
 @dataclass(frozen=True)
@@ -48,6 +58,7 @@ def build_bpb_ablation_report(
     aggregate = _aggregate_correlations(correlations, top_k=top_k)
     deltas = [_delta_row(baseline_bundle, bundle, target_names) for bundle in bundles]
     baseline_metrics = _flatten_report_metrics(baseline_bundle.report)
+    promotion_gate = _advanced_auxiliary_promotion_gate(baseline_bundle, bundles)
     return {
         "version": 1,
         "targets": list(target_names),
@@ -57,6 +68,7 @@ def build_bpb_ablation_report(
         "best_by_target": _best_by_target(runs, target_names, baseline_metrics),
         "history_correlations": correlations,
         "aggregate_metric_rankings": aggregate,
+        "advanced_auxiliary_promotion_gate": promotion_gate,
         "interpretation": {
             "primary_metric": "bpb",
             "graph_primary_metric": "graph_bpb",
@@ -93,8 +105,12 @@ def _run_row(bundle: ReportBundle, targets: tuple[str, ...]) -> dict[str, Any]:
     return {
         "name": bundle.name,
         "path": str(bundle.path),
+        "seed": bundle.report.get("seed"),
         "final_step": bundle.report.get("final_step"),
         "device": bundle.report.get("device"),
+        "ablation_variant": bundle.report.get("ablation_variant"),
+        "ablation_overrides": bundle.report.get("ablation_overrides", {}),
+        "advanced_auxiliary_coefficients": _nonzero_advanced_auxiliary_coefficients(bundle.report),
         "targets": {target: metrics.get(target) for target in targets},
         "metrics": {key: value for key, value in metrics.items() if _is_finite_number(value)},
         "sampler": bundle.report.get("sampler", {}),
@@ -117,6 +133,126 @@ def _delta_row(baseline: ReportBundle, bundle: ReportBundle, targets: tuple[str,
         "improves_bpb": bool(deltas.get("delta_bpb", 0.0) < 0.0) if "delta_bpb" in deltas else None,
         "improves_graph_bpb": bool(deltas.get("delta_graph_bpb", 0.0) < 0.0) if "delta_graph_bpb" in deltas else None,
     }
+
+
+def _advanced_auxiliary_promotion_gate(baseline: ReportBundle, bundles: list[ReportBundle]) -> dict[str, Any]:
+    baseline_metrics = _flatten_report_metrics(baseline.report)
+    baseline_seed = baseline.report.get("seed")
+    baseline_step = baseline.report.get("final_step")
+    baseline_manifest_hash = _stable_json_hash(baseline.report.get("dataset_manifest")) if baseline.report.get("dataset_manifest") else ""
+    rows = []
+    for bundle in bundles:
+        if bundle.path == baseline.path:
+            continue
+        coeffs = _nonzero_advanced_auxiliary_coefficients(bundle.report)
+        if not coeffs:
+            rows.append(
+                {
+                    "name": bundle.name,
+                    "path": str(bundle.path),
+                    "ablation_variant": bundle.report.get("ablation_variant"),
+                    "advanced_auxiliary_coefficients": {},
+                    "promotable": False,
+                    "status": "not_applicable_no_nonzero_advanced_auxiliary_coefficients",
+                    "matched_run": False,
+                    "match_issues": ["no nonzero chart-bundle/toric auxiliary coefficient in ablation_overrides"],
+                    "required_target_deltas": {},
+                    "policy": "telemetry-only or unrelated variants cannot promote advanced coefficients",
+                }
+            )
+            continue
+        current_metrics = _flatten_report_metrics(bundle.report)
+        target_deltas = _target_deltas(baseline_metrics, current_metrics, PROMOTION_REQUIRED_TARGETS)
+        match_issues = _matched_run_issues(baseline, bundle, baseline_seed, baseline_step, baseline_manifest_hash)
+        missing_targets = [target for target in PROMOTION_REQUIRED_TARGETS if target not in target_deltas]
+        improves_required = bool(not missing_targets and all(target_deltas[target] < 0.0 for target in PROMOTION_REQUIRED_TARGETS))
+        matched_run = not match_issues
+        promotable = bool(matched_run and improves_required)
+        if not matched_run:
+            status = "blocked_unmatched_ablation_run"
+        elif missing_targets:
+            status = "blocked_missing_required_eval_bpb_eval_graph_bpb_deltas"
+        elif promotable:
+            status = "promotable_matched_eval_bpb_eval_graph_bpb_improvement"
+        else:
+            status = "blocked_no_matched_eval_bpb_eval_graph_bpb_improvement"
+        rows.append(
+            {
+                "name": bundle.name,
+                "path": str(bundle.path),
+                "ablation_variant": bundle.report.get("ablation_variant"),
+                "advanced_auxiliary_coefficients": coeffs,
+                "promotable": promotable,
+                "status": status,
+                "matched_run": matched_run,
+                "match_issues": match_issues,
+                "required_target_deltas": target_deltas,
+                "missing_required_targets": missing_targets,
+                "policy": "promote nonzero chart-bundle/toric coefficients only after matched-seed held-out eval BPB and eval graph-BPB both improve; otherwise keep them zero/default or telemetry-only",
+            }
+        )
+    candidates = [row for row in rows if row.get("advanced_auxiliary_coefficients")]
+    promotable = [row for row in candidates if row.get("promotable")]
+    return {
+        "available": bool(candidates),
+        "policy": "no_proxy_no_fallback_matched_seed_eval_bpb_and_eval_graph_bpb_required_before_promoting_advanced_auxiliary_coefficients",
+        "baseline": str(baseline.path),
+        "baseline_seed": baseline_seed,
+        "baseline_final_step": baseline_step,
+        "required_targets": list(PROMOTION_REQUIRED_TARGETS),
+        "advanced_auxiliary_coefficient_keys": list(ADVANCED_AUXILIARY_COEFFICIENT_KEYS),
+        "candidate_count": len(candidates),
+        "promotable_count": len(promotable),
+        "promotable_variants": [str(row.get("ablation_variant") or row.get("name")) for row in promotable],
+        "rows": rows,
+        "unavailable_reason": None if candidates else "no matched reports with nonzero chart-bundle/toric auxiliary coefficients were provided",
+    }
+
+
+def _nonzero_advanced_auxiliary_coefficients(report: dict[str, Any]) -> dict[str, float]:
+    overrides = report.get("ablation_overrides") if isinstance(report.get("ablation_overrides"), dict) else {}
+    coeffs: dict[str, float] = {}
+    for raw_key, value in overrides.items():
+        key = str(raw_key)
+        normalized = key[6:] if key.startswith("model.") else key
+        if normalized not in ADVANCED_AUXILIARY_COEFFICIENT_KEYS:
+            continue
+        if _is_finite_number(value) and abs(float(value)) > 0.0:
+            coeffs[key] = float(value)
+    return coeffs
+
+
+def _target_deltas(base: dict[str, float], current: dict[str, float], targets: Iterable[str]) -> dict[str, float]:
+    out: dict[str, float] = {}
+    for target in targets:
+        if _is_finite_number(base.get(target)) and _is_finite_number(current.get(target)):
+            out[str(target)] = float(current[target]) - float(base[target])
+    return out
+
+
+def _matched_run_issues(
+    baseline: ReportBundle,
+    bundle: ReportBundle,
+    baseline_seed: object,
+    baseline_step: object,
+    baseline_manifest_hash: str,
+) -> list[str]:
+    issues: list[str] = []
+    if baseline_seed is None or bundle.report.get("seed") != baseline_seed:
+        issues.append(f"seed mismatch: baseline={baseline_seed} candidate={bundle.report.get('seed')}")
+    if baseline_step is None or bundle.report.get("final_step") != baseline_step:
+        issues.append(f"final_step mismatch: baseline={baseline_step} candidate={bundle.report.get('final_step')}")
+    candidate_manifest_hash = _stable_json_hash(bundle.report.get("dataset_manifest")) if bundle.report.get("dataset_manifest") else ""
+    if baseline_manifest_hash and candidate_manifest_hash and candidate_manifest_hash != baseline_manifest_hash:
+        issues.append("dataset_manifest mismatch")
+    return issues
+
+
+def _stable_json_hash(value: object) -> str:
+    payload = json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
+    import hashlib
+
+    return hashlib.sha256(payload.encode("utf-8", "ignore")).hexdigest()
 
 
 def _best_by_target(
@@ -364,6 +500,25 @@ def _markdown_report(report: dict[str, Any]) -> str:
         lines.append(
             f"| `{row['target']}` | `{row['metric']}` | {_fmt(row.get('mean_spearman'))} | {row.get('candidate_interpretation')} |"
         )
+    gate = report.get("advanced_auxiliary_promotion_gate") if isinstance(report.get("advanced_auxiliary_promotion_gate"), dict) else {}
+    lines.extend(["", "## Advanced Auxiliary Promotion Gate", ""])
+    lines.append(str(gate.get("policy", "no promotion gate available")))
+    lines.extend(["", "| variant | status | promotable | delta eval_bpb | delta eval_graph_bpb |", "|---|---|---:|---:|---:|"])
+    for row in gate.get("rows", []):
+        if not isinstance(row, dict) or not row.get("advanced_auxiliary_coefficients"):
+            continue
+        deltas = row.get("required_target_deltas", {}) if isinstance(row.get("required_target_deltas"), dict) else {}
+        lines.append(
+            "| {name} | `{status}` | {promotable} | {bpb} | {graph_bpb} |".format(
+                name=row.get("ablation_variant") or row.get("name"),
+                status=row.get("status"),
+                promotable=str(bool(row.get("promotable"))),
+                bpb=_fmt(deltas.get("eval_bpb")),
+                graph_bpb=_fmt(deltas.get("eval_graph_bpb")),
+            )
+        )
+    if not gate.get("candidate_count"):
+        lines.append("| no nonzero chart-bundle/toric variants | `unavailable` | False | NA | NA |")
     lines.extend(
         [
             "",

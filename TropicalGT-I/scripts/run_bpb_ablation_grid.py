@@ -69,6 +69,36 @@ VARIANTS: dict[str, dict[str, Any]] = {
         "model.certificate_weight": 0.0,
     },
     "no_memory_bank": {"memory_bank_path": ""},
+    "chart_bundle_telemetry": {
+        "model.enable_chart_bundle_auxiliary": True,
+        "model.bundle_transport_weight": 0.0,
+        "model.bundle_cocycle_weight": 0.0,
+        "model.bundle_flat_rank_weight": 0.0,
+        "model.toric_normal_fan_weight": 0.0,
+        "model.graphcg_toric_cell_agreement_weight": 0.0,
+        "model.chart_bpb_consistency_weight": 0.0,
+        "model.bundle_atom_stability_weight": 0.0,
+    },
+    "chart_bundle_toric_0p1x": {
+        "model.enable_chart_bundle_auxiliary": True,
+        "model.bundle_transport_weight": 0.0001,
+        "model.bundle_cocycle_weight": 0.0001,
+        "model.bundle_flat_rank_weight": 0.0001,
+        "model.toric_normal_fan_weight": 0.0001,
+        "model.graphcg_toric_cell_agreement_weight": 0.0001,
+        "model.chart_bpb_consistency_weight": 0.0001,
+        "model.bundle_atom_stability_weight": 0.0001,
+    },
+    "no_chart_bundle_toric": {
+        "model.enable_chart_bundle_auxiliary": False,
+        "model.bundle_transport_weight": 0.0,
+        "model.bundle_cocycle_weight": 0.0,
+        "model.bundle_flat_rank_weight": 0.0,
+        "model.toric_normal_fan_weight": 0.0,
+        "model.graphcg_toric_cell_agreement_weight": 0.0,
+        "model.chart_bpb_consistency_weight": 0.0,
+        "model.bundle_atom_stability_weight": 0.0,
+    },
 }
 
 
@@ -76,7 +106,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Generate and optionally run matched TropicalGT-I BPB ablations")
     parser.add_argument("--config", default=str(ROOT / "configs" / "gpu_smoke.json"))
     parser.add_argument("--output-dir", default=str(ROOT / "outputs" / "bpb_ablation_grid"))
-    parser.add_argument("--variants", default="baseline,no_graphcg,no_gflownet,no_certificate,no_tropical_regularizers,no_auxiliary")
+    parser.add_argument("--variants", default="baseline,chart_bundle_telemetry,chart_bundle_toric_0p1x,no_graphcg,no_gflownet,no_certificate,no_tropical_regularizers,no_auxiliary")
     parser.add_argument("--max-steps", type=int, default=None)
     parser.add_argument("--seed", type=int, default=None)
     parser.add_argument("--run", action="store_true", help="Actually train each generated variant")

@@ -109,7 +109,7 @@ This checklist merges the browser/photo review, the current active training stat
 Implementation checkpoint, 2026-06-16:
 - Zero-default config flags and model hooks are now implemented for chart-bundle/toric telemetry and losses: bundle transport L1, cocycle defect, flat-rank defect, toric normal-fan loss, GraphCG-toric cell agreement, chart-BPB consistency availability, and atom-stability gap.
 - The implementation is deliberately auxiliary and gated. Disabled defaults emit zero metrics; enabled zero-weight hooks preserve logits and loss; positive coefficients affect only the auxiliary regularizer.
-- Chart-local NLL/BPB partitions, explicit chart overlap pair/triple ids, and transport-gated memory persistence-landscape L2/cosine diagnostics are now implemented where their evidence exists. Remaining item in this section: matched BPB/graph-BPB ablations before promoting any nonzero bundle/toric coefficient.
+- Chart-local NLL/BPB partitions, explicit chart overlap pair/triple ids, and transport-gated memory persistence-landscape L2/cosine diagnostics are now implemented where their evidence exists. Source-side matched-ablation promotion gates are now implemented for chart-bundle/toric coefficients; runtime promotion still requires real matched-seed BPB and graph-BPB ablation reports before any nonzero coefficient is accepted.
 
 
 ### Paper Workstream Status: Vector Bundles and Tropical Toric Embeddings
@@ -625,6 +625,26 @@ Verification:
 PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m py_compile TropicalGT-I/src/tropicalgt/visualization.py TropicalGT-I/tests/test_simplicial_visualization.py
 PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_simplicial_visualization.py -q
 # 36 passed in 3.07s
+git diff --check
+# clean
+```
+
+## 2026-06-16 Sequential Training/Ablation Update: Advanced Auxiliary Promotion Gate
+
+Status: complete for source-side ablation gating; incomplete for actual runtime promotion because no matched chart-bundle/toric BPB ablation reports have been run under the no-proxy evidence policy.
+
+- `run_bpb_ablation_grid.py` now includes chart-bundle/toric variants for telemetry-only zero-weight checks and a small nonzero `chart_bundle_toric_0p1x` candidate.
+- Training reports now persist `ablation_variant` and `ablation_overrides`, allowing downstream analysis to identify exact coefficient changes from real runs.
+- `build_bpb_ablation_report` now emits `advanced_auxiliary_promotion_gate` with policy `no_proxy_no_fallback_matched_seed_eval_bpb_and_eval_graph_bpb_required_before_promoting_advanced_auxiliary_coefficients`.
+- The gate requires matched seed, matched final step, finite held-out eval BPB and eval graph-BPB deltas, and improvement on both held-out eval BPB and eval graph-BPB before any nonzero chart-bundle/toric coefficient is marked promotable.
+- Telemetry-only rows, unrelated variants, missing target deltas, unmatched seeds/steps, and dataset-manifest mismatches remain blocked/unavailable rather than treated as evidence.
+
+Verification:
+
+```bash
+PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m py_compile TropicalGT-I/src/tropicalgt/ablation.py TropicalGT-I/src/tropicalgt/run.py TropicalGT-I/scripts/run_bpb_ablation_grid.py TropicalGT-I/tests/test_bpb_ablation.py TropicalGT-I/tests/test_bpb_ablation_grid.py
+PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_bpb_ablation.py TropicalGT-I/tests/test_bpb_ablation_grid.py TropicalGT-I/tests/test_training_resume.py -q
+# 6 passed in 2.89s
 git diff --check
 # clean
 ```

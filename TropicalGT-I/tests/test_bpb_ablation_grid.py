@@ -40,7 +40,7 @@ def test_bpb_ablation_grid_dry_run_writes_isolated_configs(tmp_path: Path):
             "--output-dir",
             str(out_dir),
             "--variants",
-            "baseline,aux_0p25x,graphcg_0p25x,no_graphcg",
+            "baseline,chart_bundle_telemetry,chart_bundle_toric_0p1x,no_chart_bundle_toric",
             "--fixture",
             "--device",
             "cpu",
@@ -56,18 +56,23 @@ def test_bpb_ablation_grid_dry_run_writes_isolated_configs(tmp_path: Path):
     assert manifest["ran_training"] is False
     assert len(manifest["variants"]) == 4
     baseline_cfg = json.loads(Path(manifest["variants"][0]["config"]).read_text(encoding="utf-8"))
-    aux_cfg = json.loads(Path(manifest["variants"][1]["config"]).read_text(encoding="utf-8"))
-    graphcg_cfg = json.loads(Path(manifest["variants"][2]["config"]).read_text(encoding="utf-8"))
-    no_graphcg_cfg = json.loads(Path(manifest["variants"][3]["config"]).read_text(encoding="utf-8"))
+    telemetry_cfg = json.loads(Path(manifest["variants"][1]["config"]).read_text(encoding="utf-8"))
+    toric_cfg = json.loads(Path(manifest["variants"][2]["config"]).read_text(encoding="utf-8"))
+    no_chart_cfg = json.loads(Path(manifest["variants"][3]["config"]).read_text(encoding="utf-8"))
     assert baseline_cfg["data_root"] is None
     assert baseline_cfg["wandb"]["enabled"] is False
     assert baseline_cfg["memory_bank_path"].endswith("baseline/analogical_memory/reasoning_memory.jsonl")
-    assert aux_cfg["model"]["gflownet_weight"] == 0.005
-    assert aux_cfg["model"]["graphcg_weight"] == 0.005
-    assert aux_cfg["model"]["margin_weight"] == 0.0005
-    assert aux_cfg["model"]["entropy_weight"] == 0.00025
-    assert aux_cfg["model"]["certificate_weight"] == 0.00025
-    assert graphcg_cfg["model"]["gflownet_weight"] == 0.0
-    assert graphcg_cfg["model"]["graphcg_weight"] == 0.005
-    assert no_graphcg_cfg["model"]["graphcg_weight"] == 0.0
-    assert no_graphcg_cfg["seed"] == baseline_cfg["seed"] == 123
+    assert telemetry_cfg["model"]["enable_chart_bundle_auxiliary"] is True
+    assert telemetry_cfg["model"]["bundle_transport_weight"] == 0.0
+    assert telemetry_cfg["model"]["chart_bpb_consistency_weight"] == 0.0
+    assert toric_cfg["model"]["enable_chart_bundle_auxiliary"] is True
+    assert toric_cfg["model"]["bundle_transport_weight"] == 0.0001
+    assert toric_cfg["model"]["bundle_cocycle_weight"] == 0.0001
+    assert toric_cfg["model"]["bundle_flat_rank_weight"] == 0.0001
+    assert toric_cfg["model"]["toric_normal_fan_weight"] == 0.0001
+    assert toric_cfg["model"]["graphcg_toric_cell_agreement_weight"] == 0.0001
+    assert toric_cfg["model"]["chart_bpb_consistency_weight"] == 0.0001
+    assert toric_cfg["model"]["bundle_atom_stability_weight"] == 0.0001
+    assert no_chart_cfg["model"]["enable_chart_bundle_auxiliary"] is False
+    assert no_chart_cfg["model"]["bundle_transport_weight"] == 0.0
+    assert no_chart_cfg["seed"] == baseline_cfg["seed"] == 123

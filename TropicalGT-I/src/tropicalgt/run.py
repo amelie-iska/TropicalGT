@@ -881,6 +881,8 @@ def train(config_path: str | Path, resume_from: str | Path | None = None, max_st
         "sampler": sampler_report,
         "device": str(device),
         "seed": seed,
+        "ablation_variant": cfg.get("ablation_variant"),
+        "ablation_overrides": cfg.get("ablation_overrides", {}),
     }
     if memory_bank is not None:
         report["analogical_memory"] = {
