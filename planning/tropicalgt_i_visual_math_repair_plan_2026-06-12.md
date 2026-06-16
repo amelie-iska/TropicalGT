@@ -1026,3 +1026,24 @@ CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/t
 CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_algebraic_persistence.py TropicalGT-I/tests/test_interactive_artifact_validator.py -q -p no:cacheprovider --basetemp=/tmp/tropicalgt-pytest-primary-structure-overlay-full
 # 48 passed
 ```
+
+
+## 2026-06-16 CAS Execution Manifest
+
+Sequential CAS integration repair completed after the primary structure-map overlay:
+
+- Added `tropicalgt.cas_execution_manifest.v1` to real free-resolution reports so every unavailable or certified CAS state records backend order, template keys and SHA-256 hashes, executable availability, version probes, presentation shape, complexity-guard status, and certificate-before-render policy.
+- The manifest includes the BEMultipliers policy as an optional post-certificate diagnostic sidecar and keeps `no_proxy_or_fallback=true` so command templates cannot be mistaken for proof.
+- Cache hydration now supplies a conservative legacy manifest when an older cached result lacks the field, while new cache entries persist the full manifest.
+- Added regressions for disabled execution, cached unavailable probes, and complexity-guard skips.
+
+Validation:
+
+```text
+CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m py_compile TropicalGT-I/src/tropicalgt/cas_free_resolution.py TropicalGT-I/tests/test_algebraic_persistence.py
+# passed
+CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_algebraic_persistence.py::test_real_cas_free_resolution_disabled_by_environment TropicalGT-I/tests/test_algebraic_persistence.py::test_real_cas_free_resolution_caches_deterministic_unavailable_probe TropicalGT-I/tests/test_algebraic_persistence.py::test_real_cas_free_resolution_complexity_guard_caches_deterministic_skip -q -p no:cacheprovider --basetemp=/tmp/tropicalgt-pytest-cas-execution-manifest
+# 3 passed
+CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_algebraic_persistence.py -q -p no:cacheprovider --basetemp=/tmp/tropicalgt-pytest-cas-execution-manifest-full
+# 31 passed
+```

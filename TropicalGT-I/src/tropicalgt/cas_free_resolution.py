@@ -299,12 +299,20 @@ def unavailable_real_resolution(
         module_summary = _module_summary(module_schema)
         input_hash = module_schema["input_sha256"]
         templates = cas_command_templates(module_schema)
+        execution_manifest = cas_execution_manifest(module_schema, templates=templates)
     except Exception as exc:
         status = "invalid_grading" if status == "unavailable_no_certificate" else status
         module_schema = {}
         module_summary = {}
         input_hash = None
         templates = {}
+        execution_manifest = {
+            "schema_version": "tropicalgt.cas_execution_manifest.v1",
+            "available": False,
+            "status": "invalid_module_schema",
+            "reason": str(exc),
+            "no_proxy_or_fallback": True,
+        }
         error = error or str(exc)
     backend_probe = probe_cas_backends()
     bemultipliers_probe = probe_bemultipliers()
@@ -325,6 +333,7 @@ def unavailable_real_resolution(
         "paper_method_contract": be_fitting_paper_method_contract(),
         "cas_artifacts": {},
         "command_templates": templates,
+        "cas_execution_manifest": execution_manifest,
         "certificate_attached": False,
         "real_free_resolution_certified": False,
         "total_graded_resolution_certified": False,
@@ -519,6 +528,52 @@ def cas_command_templates(module_schema: dict[str, Any]) -> dict[str, str]:
         "macaulay2": build_macaulay2_script(module_schema),
         "singular": build_singular_script(module_schema),
         "sage": build_sage_python_script(module_schema),
+    }
+
+
+def cas_execution_manifest(module_schema: dict[str, Any], *, templates: dict[str, str] | None = None) -> dict[str, Any]:
+    templates = templates if templates is not None else cas_command_templates(module_schema)
+    backend_probe = probe_cas_backends()
+    backend_by_name = {
+        str(row.get("name")): row
+        for row in backend_probe.get("backends", [])
+        if isinstance(row, dict)
+    }
+    template_key_by_backend = {"M2": "macaulay2", "sage": "sage", "Singular": "singular"}
+    presentation = module_schema.get("presentation_matrix", {}) if isinstance(module_schema.get("presentation_matrix"), dict) else {}
+    backend_entries: list[dict[str, Any]] = []
+    for backend_name in backend_probe.get("preferred_order", ["M2", "sage", "Singular"]):
+        probe_row = backend_by_name.get(str(backend_name), {})
+        template_key = template_key_by_backend.get(str(backend_name), str(backend_name).lower())
+        template = templates.get(template_key, "")
+        guard = _cas_backend_complexity_guard(str(backend_name), module_schema) if module_schema else None
+        backend_entries.append(
+            {
+                "name": str(backend_name),
+                "template_key": template_key,
+                "template_sha256": sha256(template.encode("utf-8")).hexdigest() if template else None,
+                "template_available": bool(template),
+                "executable": probe_row.get("executable"),
+                "available": bool(probe_row.get("available")),
+                "version": probe_row.get("version"),
+                "complexity_guard_status": guard.get("status") if guard else "within_limits",
+                "complexity_guard_reason": guard.get("reason") if guard else "",
+                "safe_to_execute_under_current_limits": bool(probe_row.get("available") and template and guard is None),
+                "certificate_required_before_rendering": True,
+            }
+        )
+    return {
+        "schema_version": "tropicalgt.cas_execution_manifest.v1",
+        "module_schema_version": module_schema.get("schema_version"),
+        "coefficient_ring": module_schema.get("coefficient_ring"),
+        "variables": list(module_schema.get("variables", [])),
+        "input_sha256": module_schema.get("input_sha256"),
+        "presentation_shape": [int(presentation.get("rows", 0) or 0), int(presentation.get("cols", 0) or 0)],
+        "backend_order": [row["name"] for row in backend_entries],
+        "backend_entries": backend_entries,
+        "bemultipliers_policy": probe_bemultipliers(),
+        "no_proxy_or_fallback": True,
+        "render_rule": "A backend template is only an executable probe. Render a free resolution only after a returned certificate sets the safe_to_render flags.",
     }
 
 
@@ -1181,6 +1236,8 @@ def _certified_result(module_schema: dict[str, Any], backend_result: dict[str, A
             free_resolution_summary["buchsbaum_eisenbud_rank_conditions"] = be_rank_conditions
         if grade_depth_regular.get("available"):
             free_resolution_summary["grade_depth_regular_diagnostics"] = grade_depth_regular
+    templates = cas_command_templates(module_schema)
+    execution_manifest = cas_execution_manifest(module_schema, templates=templates)
     certificate_summary = {
         "available": True,
         "backend": backend,
@@ -1212,6 +1269,7 @@ def _certified_result(module_schema: dict[str, Any], backend_result: dict[str, A
         "no_proxy_policy": "Only exact CAS certificates with parsed free-resolution summaries are rendered as resolutions; diagnostics alone are not substituted.",
         "certificate_contract": free_resolution_certificate_contract(),
         "paper_method_contract": be_fitting_paper_method_contract(),
+        "cas_execution_manifest_schema": execution_manifest["schema_version"],
     }
     return {
         "schema_version": SCHEMA_VERSION,
@@ -1226,7 +1284,8 @@ def _certified_result(module_schema: dict[str, Any], backend_result: dict[str, A
         "bemultipliers_probe": probe_bemultipliers(),
         "certificate_contract": free_resolution_certificate_contract(),
         "paper_method_contract": be_fitting_paper_method_contract(),
-        "command_templates": cas_command_templates(module_schema),
+        "command_templates": templates,
+        "cas_execution_manifest": execution_manifest,
         "backend": backend,
         "presentation_shape": presentation_shape,
         "unit_entries": unit_entries,
@@ -1974,6 +2033,29 @@ def _hydrate_cached_result_contracts(result: dict[str, Any]) -> dict[str, Any]:
     else:
         result["certificate_contract"] = current_contract
     result["paper_method_contract"] = result["certificate_contract"]["paper_method_contract"]
+    if not isinstance(result.get("cas_execution_manifest"), dict):
+        command_templates = result.get("command_templates") if isinstance(result.get("command_templates"), dict) else {}
+        module_schema = {
+            "schema_version": result.get("module_schema_version"),
+            "coefficient_ring": result.get("coefficient_ring"),
+            "input_sha256": result.get("input_sha256"),
+            "presentation_matrix": {"rows": 0, "cols": 0},
+        }
+        result["cas_execution_manifest"] = {
+            "schema_version": "tropicalgt.cas_execution_manifest.v1",
+            "module_schema_version": module_schema.get("schema_version"),
+            "coefficient_ring": module_schema.get("coefficient_ring"),
+            "input_sha256": module_schema.get("input_sha256"),
+            "backend_order": ["M2", "sage", "Singular"],
+            "backend_entries": [
+                {"name": "M2", "template_key": "macaulay2", "template_available": bool(command_templates.get("macaulay2")), "certificate_required_before_rendering": True},
+                {"name": "sage", "template_key": "sage", "template_available": bool(command_templates.get("sage")), "certificate_required_before_rendering": True},
+                {"name": "Singular", "template_key": "singular", "template_available": bool(command_templates.get("singular")), "certificate_required_before_rendering": True},
+            ],
+            "bemultipliers_policy": probe_bemultipliers(),
+            "no_proxy_or_fallback": True,
+            "render_rule": "Hydrated legacy cache entry; rerun CAS probe for full execution manifest details. Do not render a free resolution unless returned safe_to_render flags are true.",
+        }
     artifacts = result.get("cas_artifacts") if isinstance(result.get("cas_artifacts"), dict) else None
     if artifacts is not None:
         artifacts = dict(artifacts)

@@ -64,6 +64,19 @@ def _assert_real_resolution_guard(real, expected_ring):
     assert paper["grade_depth_regular_conditions"]["regular_sequence_claim_requires_certificate"] is True
     assert paper["no_proxy_or_fallback"] is True
     assert real["paper_method_contract"] == paper
+    manifest = real["cas_execution_manifest"]
+    assert manifest["schema_version"] == "tropicalgt.cas_execution_manifest.v1"
+    assert manifest["coefficient_ring"] == expected_ring
+    assert manifest["backend_order"] == ["M2", "sage", "Singular"]
+    assert manifest["no_proxy_or_fallback"] is True
+    assert "safe_to_render" in manifest["render_rule"]
+    entries = {row["name"]: row for row in manifest["backend_entries"]}
+    assert set(entries) == {"M2", "sage", "Singular"}
+    assert entries["M2"]["template_key"] == "macaulay2"
+    assert entries["sage"]["template_key"] == "sage"
+    assert entries["Singular"]["template_key"] == "singular"
+    assert all(row["certificate_required_before_rendering"] is True for row in entries.values())
+    assert manifest["bemultipliers_policy"]["is_resolution_backend"] is False
     assert "unavailable" in contract["unavailable_render_rule"]
     for key in (
         "real_free_resolution_certified",
@@ -151,6 +164,9 @@ def test_real_cas_free_resolution_disabled_by_environment(monkeypatch):
     assert real["cache"]["hit"] is False
     assert "TROPICALGT_DISABLE_CAS_FREE_RESOLUTION" in real["reason"]
     assert real["command_templates"]["macaulay2"]
+    manifest = real["cas_execution_manifest"]
+    assert manifest["backend_entries"][0]["template_sha256"]
+    assert manifest["backend_entries"][0]["safe_to_execute_under_current_limits"] is (cas_free_resolution._candidate_executable("M2") is not None)
 
 
 def test_cas_backend_probe_reports_detected_executable_paths():
@@ -232,6 +248,8 @@ def test_real_cas_free_resolution_caches_deterministic_unavailable_probe(tmp_pat
     assert second["cache"]["hit"] is True
     assert second["cache"]["key"] == first["cache"]["key"]
     assert second["certificate_contract"] == first["certificate_contract"]
+    assert second["cas_execution_manifest"]["backend_order"] == first["cas_execution_manifest"]["backend_order"]
+    assert all(row["template_available"] for row in first["cas_execution_manifest"]["backend_entries"])
     unavailable = first["unavailable_diagnostic"]
     assert unavailable["status"] == "backend_not_installed"
     assert unavailable["safe_to_render_only_as_unavailable"] is True
@@ -277,6 +295,9 @@ def test_real_cas_free_resolution_complexity_guard_caches_deterministic_skip(tmp
     assert "complexity limits" in first["reason"]
     assert {attempt["status"] for attempt in first["backend_attempts"]} == {"skipped_complexity_guard"}
     assert all(attempt["presentation_shape"] == [3, 3] for attempt in first["backend_attempts"])
+    guarded_entries = first["cas_execution_manifest"]["backend_entries"]
+    assert {row["complexity_guard_status"] for row in guarded_entries} == {"skipped_complexity_guard"}
+    assert all(row["safe_to_execute_under_current_limits"] is False for row in guarded_entries)
     assert first["cache"]["written"] is True
     assert second["cache"]["hit"] is True
 
