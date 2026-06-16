@@ -308,7 +308,22 @@ TropicalGT-I/scripts/parameter_golf_codex_review_loop.py \
 --restart-policy beginning
 ```
 
-At every 5K boundary it writes a Codex prompt plus `active_training_contract_step_*.json/.md` containing active hyperparameters, losses, objective weights, BPB/graph-BPB metrics, tropical metrics, GFlowNet metrics, GraphCG full-rank metrics, algebra/topology metrics, memory metrics, data-source rates, throughput, VRAM, and visualization paths. If `eval.bpb` is missing or above `1.12`, the boundary is marked for review and restart according to the chosen policy. For an already-stopped 5K run, use `TropicalGT-I/scripts/prepare_5k_review_bundle.py` with the launch config, checkpoint, stop record, and step-5000 periodic report; it prefers `periodic_validation_artifacts.json`, falls back to `validation_report.json`, and writes a path-only review bundle without copying generated artifacts.
+At every 5K boundary it writes a Codex prompt plus `active_training_contract_step_*.json/.md` containing active hyperparameters, losses, objective weights, BPB/graph-BPB metrics, tropical metrics, GFlowNet metrics, GraphCG full-rank metrics, algebra/topology metrics, memory metrics, data-source rates, throughput, VRAM, and visualization paths. If `eval.bpb` is missing or above `1.12`, the boundary is marked for review and restart according to the chosen policy. For an already-stopped 5K run, use `TropicalGT-I/scripts/prepare_5k_review_bundle.py` with the launch config, checkpoint, stop record, and step-5000 periodic report; it prefers `periodic_validation_artifacts.json`, falls back to `validation_report.json`, and writes a path-only review bundle without copying generated artifacts. Add the explicit execution flags only after the 5K artifacts exist and the checkpoint path is ready:
+
+```bash
+PYTHONPATH=TropicalGT-I/src \
+python TropicalGT-I/scripts/prepare_5k_review_bundle.py \
+--config TropicalGT-I/outputs/launch_configs/tropicalgt_i_pg_bpb_step0_full24b_b60_20260616T053631Z_fresh_bpb112_casrows_5k_gate.json \
+--checkpoint TropicalGT-I/checkpoints/tropicalgt_i_pg_bpb_step0_full24b_b60_20260616T053631Z_fresh_bpb112_casrows_5k_gate.latest.pt \
+--stop-record TropicalGT-I/outputs/training_stop_records/b60_fresh_step0_casrows_step5000_gate.json \
+--boundary-step 5000 \
+--target-bpb 1.12 \
+--run-eval-visualizations \
+--run-interactive-audit-validators \
+--command-timeout-seconds 3600
+```
+
+Executed command stdout/stderr is recorded under the generated review bundle `command_logs/` directory and summarized in `command_results`; these logs are generated artifacts and must not be staged.
 
 ## Eval, inference, validation, visualization
 

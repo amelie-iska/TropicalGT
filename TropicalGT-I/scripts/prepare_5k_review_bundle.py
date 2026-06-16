@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 import json
 from pathlib import Path
+import subprocess
 import shlex
 import sys
 from typing import Any
@@ -87,6 +88,54 @@ def _eval_command(args: argparse.Namespace, checkpoint_path: Path, bundle_dir: P
     return "PYTHONPATH=TropicalGT-I/src " + _shell_join(cmd)
 
 
+def _run_shell_command(command: str, log_dir: Path, name: str, timeout_seconds: float = 0.0) -> dict[str, Any]:
+    log_dir.mkdir(parents=True, exist_ok=True)
+    safe_name = "".join(ch if ch.isalnum() or ch in "._-" else "_" for ch in name).strip("_") or "command"
+    stdout_path = log_dir / f"{safe_name}.stdout.log"
+    stderr_path = log_dir / f"{safe_name}.stderr.log"
+    timeout = float(timeout_seconds or 0.0)
+    result: dict[str, Any] = {
+        "name": name,
+        "command": command,
+        "stdout_log": _relative_project_path(stdout_path),
+        "stderr_log": _relative_project_path(stderr_path),
+        "returncode": None,
+        "timed_out": False,
+    }
+    try:
+        completed = subprocess.run(
+            command,
+            cwd=ROOT,
+            shell=True,
+            text=True,
+            capture_output=True,
+            timeout=timeout if timeout > 0 else None,
+        )
+        stdout_path.write_text(completed.stdout or "", encoding="utf-8")
+        stderr_path.write_text(completed.stderr or "", encoding="utf-8")
+        result["returncode"] = int(completed.returncode)
+    except subprocess.TimeoutExpired as exc:
+        stdout = exc.stdout.decode("utf-8", errors="replace") if isinstance(exc.stdout, bytes) else (exc.stdout or "")
+        stderr = exc.stderr.decode("utf-8", errors="replace") if isinstance(exc.stderr, bytes) else (exc.stderr or "")
+        stdout_path.write_text(stdout, encoding="utf-8")
+        stderr_path.write_text(stderr, encoding="utf-8")
+        result["returncode"] = 124
+        result["timed_out"] = True
+    return result
+
+
+def _run_requested_commands(args: argparse.Namespace, commands: dict[str, Any], bundle_dir: Path) -> list[dict[str, Any]]:
+    results: list[dict[str, Any]] = []
+    log_dir = bundle_dir / "command_logs"
+    timeout = float(getattr(args, "command_timeout_seconds", 0.0) or 0.0)
+    if bool(getattr(args, "run_eval_visualizations", False)):
+        results.append(_run_shell_command(commands["eval_validation_visualizations"], log_dir, "eval_validation_visualizations", timeout))
+    if bool(getattr(args, "run_interactive_audit_validators", False)):
+        for index, command in enumerate(commands.get("interactive_audit_validators", []), start=1):
+            results.append(_run_shell_command(command, log_dir, f"interactive_audit_validator_{index:02d}", timeout))
+    return results
+
+
 def _bundle_markdown(bundle: dict[str, Any]) -> str:
     decision = bundle.get("decision", {})
     inventory = bundle.get("artifact_inventory", {})
@@ -107,10 +156,11 @@ def _bundle_markdown(bundle: dict[str, Any]) -> str:
         bundle.get("commands", {}).get("eval_validation_visualizations", ""),
     ]
     lines.extend(bundle.get("commands", {}).get("interactive_audit_validators", []))
+    lines.extend(["```", ""])
+    if bundle.get("command_results"):
+        lines.extend(["## Command Results", "```json", json.dumps(bundle.get("command_results", []), indent=2), "```", ""])
     lines.extend(
         [
-            "```",
-            "",
             "## Artifact Inventory",
             "```json",
             json.dumps(inventory, indent=2),
@@ -177,6 +227,7 @@ def prepare_review_bundle(args: argparse.Namespace) -> dict[str, Any]:
         "eval_validation_visualizations": _eval_command(args, checkpoint_path, bundle_dir),
         "interactive_audit_validators": inventory.get("interactive_audit_validator_commands", []),
     }
+    command_results = _run_requested_commands(args, commands, bundle_dir)
     bundle = {
         "schema_version": "tropicalgt.post_5k_review_bundle.v1",
         "boundary_step": boundary_step,
@@ -209,7 +260,8 @@ def prepare_review_bundle(args: argparse.Namespace) -> dict[str, Any]:
         },
         "artifact_inventory": inventory,
         "commands": commands,
-        "policy": "Path-only review bundle; do not stage generated run artifacts, checkpoints, datasets, caches, W&B data, or secrets.",
+        "command_results": command_results,
+        "policy": "Path-only review bundle by default; explicit command execution writes logs under the generated review bundle. Do not stage generated run artifacts, checkpoints, datasets, caches, W&B data, or secrets.",
     }
     bundle_path.write_text(json.dumps(bundle, indent=2), encoding="utf-8")
     markdown_path.write_text(_bundle_markdown(bundle), encoding="utf-8")
@@ -234,9 +286,12 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--audit-level", choices=["none", "basic", "topology", "algebra", "full"], default="full")
     parser.add_argument("--audit-ph-backend", choices=["auto", "gudhi", "ripser", "none"], default="gudhi")
     parser.add_argument("--audit-max-simplices", type=int, default=256)
+    parser.add_argument("--run-eval-visualizations", action="store_true", help="Execute the generated eval/visualization command and record stdout/stderr logs in the review bundle.")
+    parser.add_argument("--run-interactive-audit-validators", action="store_true", help="Execute generated interactive-audit validator commands and record stdout/stderr logs in the review bundle.")
+    parser.add_argument("--command-timeout-seconds", type=float, default=0.0, help="Optional timeout for each executed review command; 0 disables the timeout.")
     args = parser.parse_args(argv)
     bundle = prepare_review_bundle(args)
-    print(json.dumps({"bundle": bundle.get("artifacts", {}), "decision": bundle.get("decision", {})}, indent=2))
+    print(json.dumps({"bundle": bundle.get("artifacts", {}), "decision": bundle.get("decision", {}), "command_results": bundle.get("command_results", [])}, indent=2))
     return 0
 
 

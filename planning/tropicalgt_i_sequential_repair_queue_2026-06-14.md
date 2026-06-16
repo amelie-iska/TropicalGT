@@ -534,3 +534,11 @@ The live item-by-item repair inventory is maintained in `planning/tropicalgt_i_c
 - [x] Updated `README.md` to reflect the live b60 step-0 5K-gate run, BPB target `< 1.12`, W&B run id `ld5u55p5`, strict no-config-path-fallback data policy, post-5K review bundle behavior, CAS unavailable-state policy, and current browser-serving/tunnel commands.
 - [x] Removed stale README references to b44 as the current run, target BPB `1.18`, compatibility path fallbacks, and commutative-algebra proxy/fallback language.
 - [ ] Section 12 5K gate remains open: keep trainer PID `378962` and watcher PID `379304` alive until step 5000 artifacts exist, then run analyses/visualizations and route evidence review through a Codex subagent before any step-0 restart.
+
+### Current Objective Update - Executable Post-5K Review Bundle Pass
+
+- [x] Extended `prepare_5k_review_bundle.py` with explicit `--run-eval-visualizations` and `--run-interactive-audit-validators` flags so the post-5K handoff can run the generated analysis/visualization and validator commands only when requested.
+- [x] Added per-command stdout/stderr log capture under the generated review bundle `command_logs/` directory, return-code/timed-out summaries in `command_results`, and kept the default behavior path-only with no command execution.
+- [x] Updated `README.md` with the post-5K bundle command that runs eval visualizations and interactive audit validators after step-5000 artifacts and checkpoint paths exist; generated logs remain under ignored outputs and must not be staged.
+- [x] Added focused tests proving default bundles do not execute commands and `_run_shell_command` records stdout, stderr, return code, and timeout status.
+- [ ] Section 12 5K gate remains open: wait for step-5000 artifacts before running the executable review bundle and assigning the Codex subagent evidence review.

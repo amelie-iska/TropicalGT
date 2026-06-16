@@ -1,6 +1,7 @@
 import argparse
 import importlib.util
 import json
+import sys
 from pathlib import Path
 
 
@@ -67,6 +68,7 @@ def test_prepare_review_bundle_writes_prompt_contract_and_commands(tmp_path: Pat
     assert bundle["decision"]["triggered"] is True
     assert "eval_tropicalgt_i.py" in bundle["commands"]["eval_validation_visualizations"]
     assert "--render-visualizations" in bundle["commands"]["eval_validation_visualizations"]
+    assert bundle["command_results"] == []
     assert "spawn_or_assign_codex_subagent_when_available" in bundle["review_requirements"]
     assert "review_metrics_advanced_sidecars_topological_geometric_algebraic_visualizations" in bundle["review_requirements"]
     prompt_text = (module.ROOT / artifacts["codex_prompt"]).read_text(encoding="utf-8")
@@ -135,3 +137,12 @@ def test_prepare_review_bundle_defaults_to_periodic_validation_artifacts(tmp_pat
     contract = json.loads((module.ROOT / bundle["artifacts"]["contract_json"]).read_text(encoding="utf-8"))
     assert contract["compression_metrics"]["eval_bpb"] == 1.25
     assert contract["compression_metrics"]["eval_graph_bpb"] == 2.05
+
+def test_run_shell_command_records_logs_and_return_code(tmp_path: Path):
+    module = _load_bundle_module()
+    command = f"{sys.executable} -c \"import sys; print(\\\"ok\\\"); print(\\\"warn\\\", file=sys.stderr)\""
+    result = module._run_shell_command(command, tmp_path / "logs", "unit command", timeout_seconds=5)
+    assert result["returncode"] == 0
+    assert result["timed_out"] is False
+    assert Path(result["stdout_log"]).read_text(encoding="utf-8").strip() == "ok"
+    assert Path(result["stderr_log"]).read_text(encoding="utf-8").strip() == "warn"
