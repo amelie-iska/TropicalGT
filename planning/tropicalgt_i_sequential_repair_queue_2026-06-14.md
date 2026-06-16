@@ -116,7 +116,7 @@
 
 - [x] Keep meet-in-the-middle decoding behind a config toggle.
 - [x] For causal DAGs, decode using forward plus reverse causal directions.
-- [ ] For cyclic/noncausal graphs, use ROAR/random-order autoregressive decoding.
+- [x] For cyclic/noncausal graphs, use ROAR/random-order autoregressive decoding.
 - [ ] Annotate dataset graphs that should have causal structure; preserve noncausal/cyclic graphs correctly.
 - [ ] Add dotted decoding/causal edges to relevant visualizations.
 
@@ -411,3 +411,10 @@ The live item-by-item repair inventory is maintained in `planning/tropicalgt_i_c
 - [x] Added full-path meet-in-the-middle regression coverage for an explicit three-node causal DAG, proving the MIM report uses the forward causal context and reverse causal context under graph autoregressive decoding.
 - [x] b60 latest checked training state reached step `1750` with train loss/NLL `1.151/1.128`; trainer PID `378962` and watcher PID `379304` remain alive under the step-5000 gate.
 - [x] Verification passed: compile check for `test_meet_in_middle_decoding.py`; `pytest TropicalGT-I/tests/test_meet_in_middle_decoding.py -q` (`11 passed`).
+
+### Current Objective Update - ROAR Random-Order Decoding Pass
+
+- [x] Confirmed cyclic/noncausal graph records emit `decoding_order_kind=random_autoregressive` and `decoding_reverse_order_kind=reverse_random_autoregressive`, rather than pretending the graph is a causal DAG.
+- [x] Added full-path meet-in-the-middle regression coverage for a cyclic graph, proving the report uses ROAR/random-order forward and reverse contexts under graph autoregressive decoding.
+- [x] b60 latest checked training state remained at the latest parsed step `1750` with train loss/NLL `1.151/1.128`; trainer PID `378962` and watcher PID `379304` remain alive under the step-5000 gate.
+- [x] Verification passed: compile check for `test_meet_in_middle_decoding.py`; `pytest TropicalGT-I/tests/test_meet_in_middle_decoding.py -q` (`12 passed`).

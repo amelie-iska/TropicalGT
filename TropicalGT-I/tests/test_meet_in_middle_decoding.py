@@ -291,6 +291,56 @@ def test_explicit_noncausal_edge_overrides_directed_flag_for_roar():
     assert overlay_report["noncausal_edge_count"] >= 1
 
 
+def test_meet_in_middle_batch_uses_roar_for_cyclic_graph_contexts():
+    record = GraphRecord.from_mapping(
+        {
+            "record_id": "cycle-mim",
+            "text": "cycle",
+            "graph_json": {
+                "nodes": [
+                    {"id": "a", "type": "problem", "text": "alpha"},
+                    {"id": "b", "type": "reasoning_step", "text": "beta"},
+                    {"id": "c", "type": "answer", "text": "gamma"},
+                ],
+                "edges": [
+                    {"source": "a", "target": "b", "type": "depends_on"},
+                    {"source": "b", "target": "a", "type": "depends_on"},
+                ],
+            },
+        }
+    )
+    tokenizer = TokenGTTokenizer(feature_dim=48)
+    x, y = encode_record_bytes(record, 64, graph_autoregressive=True, seed=11)
+    graph_batch = tokenizer.batch_encode([record])
+    model = TropicalGTModel(
+        TropicalGTConfig(
+            dim=32,
+            hidden_dim=32,
+            graph_feature_dim=48,
+            use_sequence_tropical=False,
+        )
+    )
+    out = model(x.unsqueeze(0), graph_batch, y.unsqueeze(0))
+    report = meet_in_middle_batch(
+        model,
+        [record],
+        tokenizer,
+        seq_len=64,
+        device=torch.device("cpu"),
+        graph_autoregressive=True,
+        seed=11,
+        config={"enabled": True, "split_ratio": 0.5, "max_meet_points": 4},
+        forward_logits=out["logits"],
+        forward_nll=out["nll"],
+    )
+
+    assert report["enabled"] is True
+    assert report["records"][0]["context_mode"] == "random_autoregressive"
+    assert report["records"][0]["reverse_context_mode"] == "reverse_random_autoregressive"
+    assert report["records"][0]["graph_autoregressive"] is True
+    assert report["records"][0]["selected_meet_points"] >= 1
+
+
 def test_cyclic_or_noncausal_graph_records_use_roar_random_order():
     record = GraphRecord.from_mapping(
         {
