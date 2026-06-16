@@ -629,6 +629,7 @@ def _review_artifact_inventory(cfg: dict[str, Any], report: dict[str, Any], repo
         "validation_report",
         "periodic_validation_artifacts",
         "inference_audit",
+        "toric_embedding",
         "tropical_fan",
         "tropical_support",
         "graphcg",

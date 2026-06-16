@@ -125,6 +125,8 @@ def test_active_training_contract_inventories_latest_periodic_artifacts(tmp_path
     got_audit.mkdir(parents=True)
     (got_audit / "tropical_fan_diagnostics.json").write_text("{}", encoding="utf-8")
     (got_audit / "tropical_fan_diagnostics.html").write_text("<html></html>", encoding="utf-8")
+    (got_audit / "toric_embedding_sidecar.json").write_text("{}", encoding="utf-8")
+    (got_audit / "toric_embedding_sidecar.html").write_text("<html></html>", encoding="utf-8")
     (output_dir / "periodic" / "step_00002500").mkdir(parents=True)
     report_path = output_dir / "train_report.json"
     report_path.write_text("{}", encoding="utf-8")
@@ -139,6 +141,7 @@ def test_active_training_contract_inventories_latest_periodic_artifacts(tmp_path
     assert inventory["latest_periodic_dir"].endswith("step_00005000")
     assert inventory["latest_got_audit_dir"].endswith("got_audit")
     assert any(path.endswith("tropical_fan_diagnostics.json") for path in inventory["advanced_sidecars_tail"])
+    assert any(path.endswith("toric_embedding_sidecar.json") for path in inventory["advanced_sidecars_tail"])
     assert inventory["interactive_audit_backfill_commands"]
     assert inventory["interactive_audit_validator_commands"]
     assert "backfill_interactive_audit_artifacts.py" in inventory["interactive_audit_backfill_commands"][0]

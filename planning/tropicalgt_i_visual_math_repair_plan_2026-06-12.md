@@ -406,3 +406,27 @@ CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/scripts:TropicalGT-I/src /home/i
 ```
 
 Next linear item: continue evidence hardening and browser/backfill paths while b62 trains toward the 5K gate.
+
+
+## 2026-06-16 Toric Sidecar Navigation and Review Inventory Pass
+
+Sequential source-side hardening item completed after the legacy toric sidecar backfill pass:
+
+- Added `toric_embedding_sidecar.html` to the sample-first browser artifact list so generated sample browsers expose the finite toric-ideal sidecar beside tropical support, GraphCG, persistence, and analogical pages.
+- Extended the 5K parameter-golf review artifact inventory to treat toric embedding sidecars as advanced sidecars, ensuring Herschel's 5K review contract can discover `toric_embedding_sidecar.html/json` alongside tropical fan/support, GraphCG, NLL density, persistence, and analogical evidence.
+- Made legacy audit backfill rebuild `inference_audit.html` when explicit no-proxy sidecars already exist but stale dashboard markup does not link them. This repairs old bundles without rewriting sidecar evidence or fabricating CAS/tropical/toric data.
+- Refreshed the live b60 5K audit dashboard. The backfill report recorded `inference_audit_dashboard_rebuilt`, and browser inspection of `http://127.0.0.1:8991/?refresh=...` confirmed links to both `toric_embedding_sidecar.html` and `toric_embedding_sidecar.json` from the main audit page.
+- Ran safe cleanup only for temp/cache paths used by tests (`/tmp/pytest-of-iska`, dedicated pytest basetemps, `.pytest_cache`, `__pycache__`, `/home/iska/.cache/tropicalgt`, `/home/iska/.cache/ms-playwright`). Outputs, checkpoints, W&B folders, datasets, and generated training bundles were not deleted.
+
+Validation:
+
+```text
+PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_backfill_interactive_audit_artifacts.py TropicalGT-I/tests/test_sample_browser_index.py TropicalGT-I/tests/test_parameter_golf_review_loop.py -q -p no:cacheprovider --basetemp=/tmp/tropicalgt-pytest-focused
+# 22 passed
+PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_interactive_artifact_validator.py -q -p no:cacheprovider --basetemp=/tmp/tropicalgt-pytest-validator
+# 10 passed
+```
+
+Operational note: the first test attempt failed before code execution because the root filesystem had only about 2 MB free and pytest could not allocate `/tmp` directories. After safe cache cleanup, focused tests ran cleanly. The live b60 validator still reports known legacy audit failures for insufficient rows and older no-proxy contracts; the navigation repair itself is verified by source tests, live backfill action, and browser inspection.
+
+Next linear item: continue the no-proxy visual/math repair queue while b62 remains active toward the 5K gate; prioritize the next source-visible gap that Herschel's 5K report must inventory.

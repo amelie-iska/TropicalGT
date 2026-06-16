@@ -11,7 +11,12 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT / "src") not in sys.path:
     sys.path.insert(0, str(ROOT / "src"))
 
-from tropicalgt.visualization import write_toric_embedding_sidecar, write_tropical_fan_diagnostics, write_two_parameter_bifiltration_visualization  # noqa: E402
+from tropicalgt.visualization import (  # noqa: E402
+    _write_inference_dashboard,
+    write_toric_embedding_sidecar,
+    write_tropical_fan_diagnostics,
+    write_two_parameter_bifiltration_visualization,
+)
 
 
 def _read_json(path: Path) -> dict[str, Any]:
@@ -20,6 +25,32 @@ def _read_json(path: Path) -> dict[str, Any]:
     except Exception:
         return {}
     return data if isinstance(data, dict) else {}
+
+
+def _dashboard_artifact_paths(root: Path) -> dict[str, str]:
+    paths: dict[str, str] = {}
+    for path in sorted(root.rglob("*")):
+        if not path.is_file() or path.name == "inference_audit.html":
+            continue
+        if path.suffix.lower() not in {".html", ".json"}:
+            continue
+        key = path.relative_to(root).as_posix().replace("/", "_").replace(".", "_")
+        paths[key] = str(path)
+    return paths
+
+
+def _dashboard_missing_links(root: Path, required_names: tuple[str, ...]) -> bool:
+    dashboard = root / "inference_audit.html"
+    existing_required = [name for name in required_names if (root / name).exists()]
+    if not existing_required:
+        return False
+    if not dashboard.exists():
+        return True
+    try:
+        markup = dashboard.read_text(encoding="utf-8")
+    except Exception:
+        return True
+    return any(name not in markup for name in existing_required)
 
 
 def backfill_audit_root(audit_root: str | Path, *, overwrite: bool = False) -> dict[str, Any]:
@@ -85,6 +116,26 @@ def backfill_audit_root(audit_root: str | Path, *, overwrite: bool = False) -> d
                     "kind": "two_parameter_bifiltration_visual_contract_unavailable",
                     "reason": "Raw trajectory_level_radius_bifiltration.json was present but could not be parsed as an object; no sidecar was fabricated.",
                     "paths": {"raw_bifiltration": str(bif_raw)},
+                }
+            )
+
+    dashboard_needs_refresh = _dashboard_missing_links(
+        root,
+        (
+            "tropical_fan_diagnostics.html",
+            "toric_embedding_sidecar.html",
+            "trajectory_persistence/two_parameter_bifiltration.html",
+        ),
+    )
+    if actions or overwrite or dashboard_needs_refresh:
+        dashboard_paths = _dashboard_artifact_paths(root)
+        if dashboard_paths:
+            dashboard_path = _write_inference_dashboard(dashboard_paths, root)
+            actions.append(
+                {
+                    "kind": "inference_audit_dashboard_rebuilt",
+                    "reason": "Rebuilt the local audit dashboard so explicit no-proxy sidecars are reachable from inference_audit.html.",
+                    "paths": {"inference_audit": str(dashboard_path)},
                 }
             )
 

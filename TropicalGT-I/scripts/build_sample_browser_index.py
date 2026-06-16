@@ -3,8 +3,8 @@
 
 The periodic audit renderer writes one directory per model-evaluated row/input. This
 script keeps that structure visible in the browser: choose the sample first,
-then inspect that sample's GoT trajectory, topology, memory, GraphCG, and
-tropical support artifacts.
+then inspect that sample's GoT trajectory, topology, memory, GraphCG,
+tropical support, and toric sidecar artifacts.
 """
 
 from __future__ import annotations
@@ -47,6 +47,7 @@ PRIMARY_ARTIFACTS: tuple[ArtifactSpec, ...] = (
     ArtifactSpec("Persistence landscape lambda_k(t)", "trajectory_persistence/persistence_landscapes.html", "land"),
     ArtifactSpec("GraphCG directions", "graphcg_direction_cosines.html", "rank"),
     ArtifactSpec("Tropical support", "tropical_support_heatmap.html", "support"),
+    ArtifactSpec("Toric embedding sidecar", "toric_embedding_sidecar.html", "toric"),
     ArtifactSpec("Generated sample index", "browser_index.html", "raw"),
     ArtifactSpec("Generated audit dashboard", "inference_audit.html", "audit"),
 )
