@@ -404,6 +404,24 @@ def _row(root: Path, name: str) -> Path:
                 "active_rank_nonzero_mean_abs": 8,
                 "candidate_effective_direction_count": [4.0, 4.0, 4.0, 4.0],
                 "direction_activity_sorted": [0.2 for _ in range(8)],
+                "candidate_hover_rows": [f"candidate {idx} path action text" for idx in range(4)],
+                "graphcg_readability_contract": {
+                    "schema_version": "tropicalgt.graphcg_direction_readability.v1",
+                    "source": "candidate.graphcg_projection",
+                    "no_proxy_or_fallback": True,
+                    "all_model_directions_rendered": True,
+                    "directions_sampled_for_heatmap": False,
+                    "panels_are_separate": True,
+                    "required_panels": [
+                        "all_direction_heatmap",
+                        "full_rank_activity_spectrum",
+                        "candidate_activity_by_observed_got_state",
+                        "direction_signed_bias",
+                    ],
+                    "exact_direction_ids_preserved_in_hover_and_payload": True,
+                    "candidate_path_action_text_preserved_in_hover_and_payload": True,
+                    "hover_fields": ["path", "direction", "signed cosine"],
+                },
                 "projection_basis_certificate": {
                     "source": "candidate.graphcg_projection",
                     "available": True,
@@ -662,6 +680,20 @@ def test_validate_audit_root_rejects_missing_graphcg_basis_certificate(tmp_path:
     report = validator.validate_audit_root(audit, min_rows=1, min_candidates=4, min_depth=2)
     assert not report["ok"]
     assert any("projection-basis certificate" in err for err in report["errors"])
+
+
+def test_validate_audit_root_rejects_missing_graphcg_readability_contract(tmp_path: Path):
+    validator = _load_validator()
+    audit = tmp_path / "step_00000001" / "got_audit"
+    row = _row(audit, ".")
+    payload_path = row / "graphcg_direction_cosines_payload.json"
+    payload = json.loads(payload_path.read_text(encoding="utf-8"))
+    payload.pop("graphcg_readability_contract")
+    payload_path.write_text(json.dumps(payload), encoding="utf-8")
+    _write(audit / "codex_browser_index.html", _codex_browser_html(_browser_samples(audit, ["."])))
+    report = validator.validate_audit_root(audit, min_rows=1, min_candidates=4, min_depth=2)
+    assert not report["ok"]
+    assert any("structured readability contract" in err for err in report["errors"])
 
 
 def test_validate_audit_root_rejects_nll_density_state_provenance_gaps(tmp_path: Path):

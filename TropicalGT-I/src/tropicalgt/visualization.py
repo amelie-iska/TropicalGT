@@ -7086,6 +7086,27 @@ def write_graphcg_trajectory_visualization(scaling_report: dict[str, object], ou
         "mean_abs_offdiag_cosine_max": float(max(mean_abs_offdiag_cosines)) if mean_abs_offdiag_cosines else None,
         "max_abs_offdiag_cosine_max": float(max(max_abs_offdiag_cosines)) if max_abs_offdiag_cosines else None,
     }
+    graphcg_readability_contract = {
+        "schema_version": "tropicalgt.graphcg_direction_readability.v1",
+        "source": "candidate.graphcg_projection",
+        "no_proxy_or_fallback": True,
+        "all_model_directions_rendered": True,
+        "directions_sampled_for_heatmap": False,
+        "panels_are_separate": True,
+        "required_panels": [
+            "all_direction_heatmap",
+            "full_rank_activity_spectrum",
+            "candidate_activity_by_observed_got_state",
+            "direction_signed_bias",
+        ],
+        "full_rank_spectrum_source": "mean absolute cosine over every model-derived GraphCG direction",
+        "candidate_activity_source": "per-candidate absolute GraphCG projection cosines from observed GoT states",
+        "signed_bias_source": "signed mean GraphCG projection cosine per direction",
+        "visible_tick_labels_bounded": True,
+        "exact_direction_ids_preserved_in_hover_and_payload": True,
+        "candidate_path_action_text_preserved_in_hover_and_payload": True,
+        "hover_fields": ["candidate label", "level", "path", "NLL", "score", "direction", "signed cosine", "absolute cosine", "direction mean absolute cosine", "direction signed mean"],
+    }
     payload_path.write_text(
         json.dumps(
             {
@@ -7095,6 +7116,7 @@ def write_graphcg_trajectory_visualization(scaling_report: dict[str, object], ou
                 "displayed_direction_indices": [int(idx) for idx in top_idx.tolist()],
                 "display_policy": "all_model_graphcg_directions_no_sampling",
                 "readability_contract": "four coordinated panels render all model GraphCG directions: all-direction heatmap, full-rank activity spectrum, candidate activity by observed GoT state, and signed-bias scatter; visible tick labels are bounded while hover and payload preserve exact ids",
+                "graphcg_readability_contract": graphcg_readability_contract,
                 "panel_names": [
                     "all_direction_heatmap",
                     "full_rank_activity_spectrum",
@@ -7116,6 +7138,7 @@ def write_graphcg_trajectory_visualization(scaling_report: dict[str, object], ou
                 "signed_mean": [float(v) for v in signed_mean.tolist()],
                 "candidate_labels_compact": compact_labels,
                 "candidate_labels": labels,
+                "candidate_hover_rows": hover_rows,
                 "candidate_activity_mean_abs": [float(v) for v in candidate_mean_abs.tolist()],
                 "candidate_peak_abs": [float(v) for v in candidate_peak_abs.tolist()],
                 "candidate_effective_direction_count": [float(v) for v in candidate_effective_dirs.tolist()],

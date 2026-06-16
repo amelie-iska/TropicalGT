@@ -592,3 +592,26 @@ PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pyt
 PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m py_compile TropicalGT-I/src/tropicalgt/memory.py TropicalGT-I/src/tropicalgt/visualization.py TropicalGT-I/tests/test_metrics_and_memory.py TropicalGT-I/tests/test_simplicial_visualization.py
 # passed
 ```
+
+## 2026-06-16 GraphCG Direction Readability Contract Repair
+
+Sequential GraphCG visual item started after the persistence-landscape evidence contract repair:
+
+- Added `tropicalgt.graphcg_direction_readability.v1` to `graphcg_direction_cosines_payload.json`.
+- The structured contract requires four separate panels: all-direction heatmap, full-rank activity spectrum, candidate activity by observed GoT state, and signed-bias scatter.
+- The contract records that every model-derived GraphCG direction is rendered, the heatmap does not sample directions, visible tick labels are bounded for readability, and exact direction ids plus candidate path/action text are preserved in hover and payload fields.
+- Added `candidate_hover_rows` to the GraphCG payload so long path/action labels remain reviewable even when visible axis labels are compact.
+- The interactive audit validator now rejects GraphCG payloads missing the structured readability contract or candidate hover rows.
+
+Validation:
+
+```text
+PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_simplicial_visualization.py TropicalGT-I/tests/test_interactive_artifact_validator.py -q -p no:cacheprovider --basetemp=/tmp/tropicalgt-pytest-graphcg-contract -k "graphcg"
+# 3 passed, 51 deselected
+PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_interactive_artifact_validator.py -q -p no:cacheprovider --basetemp=/tmp/tropicalgt-pytest-validator-graphcg-full
+# 11 passed
+PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_simplicial_visualization.py TropicalGT-I/tests/test_interactive_artifact_validator.py -q -p no:cacheprovider --basetemp=/tmp/tropicalgt-pytest-graphcg-full
+# 54 passed
+PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m py_compile TropicalGT-I/src/tropicalgt/visualization.py TropicalGT-I/scripts/validate_interactive_audit_artifacts.py TropicalGT-I/tests/test_simplicial_visualization.py TropicalGT-I/tests/test_interactive_artifact_validator.py
+# passed
+```

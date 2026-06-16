@@ -687,6 +687,18 @@ def validate_row(row_dir: Path, *, min_candidates: int = 8, min_depth: int = 2, 
         _assert(len(graphcg_payload.get("candidate_effective_direction_count", [])) >= len(candidates), errors, "GraphCG payload is missing candidate effective-direction counts")
         _assert(len(graphcg_payload.get("direction_activity_sorted", [])) == matrix_width, errors, "GraphCG payload is missing full direction activity spectrum")
         _assert(graphcg_payload.get("interpretation"), errors, "GraphCG payload is missing heatmap interpretation")
+        readability = graphcg_payload.get("graphcg_readability_contract")
+        _assert(isinstance(readability, dict) and bool(readability), errors, "GraphCG payload is missing structured readability contract")
+        if isinstance(readability, dict) and readability:
+            _assert(readability.get("schema_version") == "tropicalgt.graphcg_direction_readability.v1", errors, "GraphCG readability contract has wrong schema")
+            _assert(readability.get("all_model_directions_rendered") is True, errors, "GraphCG readability contract does not render all directions")
+            _assert(readability.get("directions_sampled_for_heatmap") is False, errors, "GraphCG heatmap must not sample directions")
+            _assert(readability.get("panels_are_separate") is True, errors, "GraphCG readability contract must separate panels")
+            required = {"all_direction_heatmap", "full_rank_activity_spectrum", "candidate_activity_by_observed_got_state", "direction_signed_bias"}
+            _assert(required.issubset(set(readability.get("required_panels", []))), errors, "GraphCG readability contract is missing required panels")
+            _assert(readability.get("exact_direction_ids_preserved_in_hover_and_payload") is True, errors, "GraphCG readability contract does not preserve exact direction ids")
+            _assert(readability.get("candidate_path_action_text_preserved_in_hover_and_payload") is True, errors, "GraphCG readability contract does not preserve candidate path/action text")
+        _assert(len(graphcg_payload.get("candidate_hover_rows", [])) >= len(candidates), errors, "GraphCG payload is missing candidate hover rows")
         basis_certificate = graphcg_payload.get("projection_basis_certificate", {})
         _assert(isinstance(basis_certificate, dict), errors, "GraphCG payload is missing projection-basis certificate")
         if isinstance(basis_certificate, dict):

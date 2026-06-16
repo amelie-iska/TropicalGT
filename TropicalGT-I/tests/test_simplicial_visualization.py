@@ -1350,6 +1350,20 @@ def test_graphcg_visualization_preserves_projection_basis_certificate(tmp_path: 
     assert payload["visible_direction_tick_label_limit"] == 8
     assert payload["exact_direction_labels_available_in_hover_and_payload"] is True
     assert payload["readability_contract"].startswith("four coordinated panels render all model GraphCG directions")
+    contract = payload["graphcg_readability_contract"]
+    assert contract["schema_version"] == "tropicalgt.graphcg_direction_readability.v1"
+    assert contract["all_model_directions_rendered"] is True
+    assert contract["directions_sampled_for_heatmap"] is False
+    assert contract["panels_are_separate"] is True
+    assert contract["exact_direction_ids_preserved_in_hover_and_payload"] is True
+    assert contract["candidate_path_action_text_preserved_in_hover_and_payload"] is True
+    assert set(contract["required_panels"]) == {
+        "all_direction_heatmap",
+        "full_rank_activity_spectrum",
+        "candidate_activity_by_observed_got_state",
+        "direction_signed_bias",
+    }
+    assert "path" in " ".join(contract["hover_fields"])
     assert payload["panel_names"] == [
         "all_direction_heatmap",
         "full_rank_activity_spectrum",
@@ -1363,6 +1377,8 @@ def test_graphcg_visualization_preserves_projection_basis_certificate(tmp_path: 
     assert payload["candidate_activity_panel_available"] is True
     assert payload["direction_signed_bias_panel_available"] is True
     assert len(payload["candidate_effective_direction_count"]) == 3
+    assert len(payload["candidate_hover_rows"]) == 3
+    assert "path=[&quot;expand&quot;, &quot;0&quot;]" in payload["candidate_hover_rows"][0]
     assert len(payload["direction_signed_mean_sorted"]) == 4
     assert "basis=effective_full_rank_qr" in html
     assert "heatmap shows all" in html
