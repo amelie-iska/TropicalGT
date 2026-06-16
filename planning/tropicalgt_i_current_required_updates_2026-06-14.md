@@ -452,10 +452,20 @@ git diff --check
 - Verification completed: `/home/iska/miniconda3/envs/tokengt/bin/python -m py_compile TropicalGT-I/src/tropicalgt/model.py TropicalGT-I/src/tropicalgt/run.py TropicalGT-I/tests/test_losses_and_model.py TropicalGT-I/tests/test_training_metrics.py`, focused model/W&B checks, `pytest TropicalGT-I/tests/test_losses_and_model.py -q` (`9 passed`), and `pytest TropicalGT-I/tests/test_training_metrics.py -q` (`12 passed`).
 
 
+## 2026-06-16 Certificate Loss Decomposition Addendum
+
+- `certificate_loss` remains the real negative-log allowed-support objective. `certificate_objective_loss` records the same value explicitly, while `certificate_diagnostic_penalty` is a separate zero-valued channel and `certificate_loss_reconstruction_error` verifies no hidden diagnostic penalty is mixed into the objective.
+- Certificate telemetry now includes valid-token count and allowed-target count summaries, giving BPB reviewers direct context for rising certificate loss from real graph-token target structure.
+- Weighted telemetry now separates `loss_certificate_objective_weighted` from `loss_certificate_diagnostic_penalty_weighted`; `loss_certificate_weighted` remains the objective-weight alias for continuity.
+- Section 8 of the sequential repair queue is now complete: support heatmap readability, wall-hit metric scope, tropical margin sign, and certificate-loss decomposition are all covered by tests.
+- b60 latest checked training state reached step `1407` with train loss/NLL `1.178/1.156`; trainer PID `378962` and watcher PID `379304` remain alive under the step-5000 gate.
+- Verification completed: `/home/iska/miniconda3/envs/tokengt/bin/python -m py_compile TropicalGT-I/src/tropicalgt/model.py TropicalGT-I/src/tropicalgt/run.py TropicalGT-I/tests/test_losses_and_model.py TropicalGT-I/tests/test_training_metrics.py`, focused certificate/W&B checks, `pytest TropicalGT-I/tests/test_losses_and_model.py -q` (`9 passed`), and `pytest TropicalGT-I/tests/test_training_metrics.py -q` (`12 passed`).
+
+
 ## Real Implementations Only Policy
 
 No TropicalGT-I metric, loss, visualization, analogical map, persistence module, free resolution, derived comparison, tropical-cycle diagnostic, or CAS artifact should be presented as a mathematical object unless it is computed from the actual model outputs, graph states, embeddings, probabilities, simplex trees, bifiltrations, or certified CAS/backend output that define that object. Temporary placeholders, synthetic fallback objects, mock charts, fabricated simplices, and convenience stand-ins are not acceptable. When a requested object cannot yet be computed, the artifact must render an explicit unavailable/uncertified state and the training metric must either be disabled or logged under an audit-only unavailable flag. Finite chain-presentation diagnostics may be shown only as chain diagnostics, never as free resolutions. Total-graded or ungraded CAS output may be shown as real CAS output only under its actual grading; it must not be advertised as a multigraded `F2[x_level,x_radius]` free resolution unless the backend certifies that multigraded structure.
 
 Use "one dimensional cone" or "one dimensional cones" as the preferred fan-theoretic language whenever the intended object is a cone of a fan or a cone-indexed filtration datum. Use singular or plural according to ordinary grammar.
 
-_Last updated: 2026-06-16T07:06:27Z_
+_Last updated: 2026-06-16T07:08:51Z_

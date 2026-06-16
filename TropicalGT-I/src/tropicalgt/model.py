@@ -441,6 +441,7 @@ class TropicalGTModel(nn.Module):
             margin_shortfall_weighted = self.config.margin_weight * margin_shortfall
             entropy_weighted = self.config.entropy_weight * entropy_loss
             certificate_weighted = self.config.certificate_weight * certificate_loss
+            certificate_diagnostic_penalty_weighted = self.config.certificate_weight * certificate_metrics["certificate_diagnostic_penalty"].to(certificate_loss.device)
             bundle_transport_weighted = self.config.bundle_transport_weight * chart_bundle_loss_terms["bundle_transport_l1"]
             bundle_cocycle_weighted = self.config.bundle_cocycle_weight * chart_bundle_loss_terms["bundle_cocycle_defect"]
             bundle_flat_rank_weighted = self.config.bundle_flat_rank_weight * chart_bundle_loss_terms["bundle_flat_rank_defect"]
@@ -489,6 +490,8 @@ class TropicalGTModel(nn.Module):
                     "loss_tropical_margin_shortfall_weighted": margin_shortfall_weighted.detach(),
                     "loss_entropy_weighted": entropy_weighted.detach(),
                     "loss_certificate_weighted": certificate_weighted.detach(),
+                    "loss_certificate_objective_weighted": certificate_weighted.detach(),
+                    "loss_certificate_diagnostic_penalty_weighted": certificate_diagnostic_penalty_weighted.detach(),
                     "loss_bundle_transport_weighted": bundle_transport_weighted.detach(),
                     "loss_bundle_cocycle_weighted": bundle_cocycle_weighted.detach(),
                     "loss_bundle_flat_rank_weighted": bundle_flat_rank_weighted.detach(),
@@ -523,6 +526,12 @@ def tropical_certificate_objective(scores: Tensor, support: Tensor, graph_batch:
     if valid.sum() == 0:
         zero = scores.sum() * 0.0
         return zero, {
+            "certificate_objective_loss": zero.detach(),
+            "certificate_diagnostic_penalty": zero.detach(),
+            "certificate_loss_reconstruction_error": zero.detach(),
+            "certificate_valid_token_count": zero.detach(),
+            "certificate_allowed_target_count_mean": zero.detach(),
+            "certificate_allowed_target_count_min": zero.detach(),
             "certificate_agreement": zero.detach(),
             "certificate_coverage": zero.detach(),
             "certificate_allowed_mass_mean": zero.detach(),
@@ -544,6 +553,9 @@ def tropical_certificate_objective(scores: Tensor, support: Tensor, graph_batch:
     per_token_loss = -target_log_probs
     allowed_mass = torch.exp(target_log_probs).clamp_min(0.0).clamp_max(1.0)
     loss = per_token_loss.masked_select(valid).mean()
+    diagnostic_penalty = loss * 0.0
+    target_counts = targets.float().sum(dim=-1)
+    valid_target_counts = target_counts.masked_select(valid)
     support_allowed = targets.gather(-1, support.unsqueeze(-1)).squeeze(-1) & valid
     type_ids = graph_batch.token_type_ids
     edge_mask = valid & type_ids.eq(1)
@@ -555,6 +567,12 @@ def tropical_certificate_objective(scores: Tensor, support: Tensor, graph_batch:
     disallowed_support = valid & ~support_allowed
     valid_allowed_mass = allowed_mass.masked_select(valid)
     metrics = {
+        "certificate_objective_loss": loss.detach(),
+        "certificate_diagnostic_penalty": diagnostic_penalty.detach(),
+        "certificate_loss_reconstruction_error": (loss - loss - diagnostic_penalty).abs().detach(),
+        "certificate_valid_token_count": valid.float().sum().detach(),
+        "certificate_allowed_target_count_mean": _safe_mean(valid_target_counts).detach(),
+        "certificate_allowed_target_count_min": _safe_min(valid_target_counts).detach(),
         "certificate_agreement": _rate(support_allowed, valid).detach(),
         "certificate_coverage": _rate(targets.any(dim=-1) & valid, valid).detach(),
         "certificate_allowed_mass_mean": _safe_mean(valid_allowed_mass).detach(),

@@ -77,6 +77,12 @@ def test_training_history_contains_certificate_and_throughput_metrics(tmp_path: 
     row = report["history"][0]
     for key in [
         "certificate_loss",
+        "certificate_objective_loss",
+        "certificate_diagnostic_penalty",
+        "certificate_loss_reconstruction_error",
+        "certificate_valid_token_count",
+        "certificate_allowed_target_count_mean",
+        "certificate_allowed_target_count_min",
         "tropical_margin_loss",
         "tropical_margin_signed_loss",
         "tropical_margin_signed_objective",
@@ -89,6 +95,8 @@ def test_training_history_contains_certificate_and_throughput_metrics(tmp_path: 
         "certificate_allowed_mass_mean",
         "certificate_disallowed_support_rate",
         "certificate_node_graph_support_rate",
+        "loss_certificate_objective_weighted",
+        "loss_certificate_diagnostic_penalty_weighted",
         "support_transition_rate",
         "wall_hit_rate",
         "strict_wall_hit_rate",
@@ -135,6 +143,9 @@ def test_wandb_metrics_are_namespaced_by_priority():
             "graphcg_full_rank": 1.0,
             "sequence_tropical_margin_mean": 0.4,
             "certificate_allowed_mass_mean": 0.9,
+            "certificate_objective_loss": 0.2,
+            "certificate_diagnostic_penalty": 0.0,
+            "certificate_loss_reconstruction_error": 0.0,
             "support_transition_rate": 0.25,
             "analogical_memory_rejected": 2.0,
             "causal_dag_ar_rate": 0.75,
@@ -147,6 +158,9 @@ def test_wandb_metrics_are_namespaced_by_priority():
     assert payload["01_losses/loss_tropical_margin_signed_weighted"] == -0.01
     assert payload["01_losses/loss_tropical_margin_shortfall_weighted"] == 0.0
     assert payload["03_tropical/sequence_tropical_margin_mean"] == 0.4
+    assert payload["01_losses/certificate_objective_loss"] == 0.2
+    assert payload["01_losses/certificate_diagnostic_penalty"] == 0.0
+    assert payload["01_losses/certificate_loss_reconstruction_error"] == 0.0
     assert payload["03_tropical/certificate_allowed_mass_mean"] == 0.9
     assert payload["03_tropical/support_transition_rate"] == 0.25
     assert payload["08_memory/analogical_memory_rejected"] == 2.0

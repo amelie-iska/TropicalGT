@@ -103,7 +103,7 @@
 - [x] Make support heatmaps interpretable with grouped token labels, top-support summaries, margin profiles, collapse diagnostics, and wall-hit context.
 - [x] Audit wall-hit rate definition and explain when low wall-crossing is mathematically expected versus a metric issue.
 - [x] Fix/rename negative `tropical_margin_loss` so sign and objective direction are clear.
-- [ ] Investigate rising `certificate_loss` and separate real certificate loss from diagnostic penalties.
+- [x] Investigate rising `certificate_loss` and separate real certificate loss from diagnostic penalties.
 
 ### 9. GraphCG Full-Rank Visuals and Metrics
 
@@ -363,3 +363,12 @@ The live item-by-item repair inventory is maintained in `planning/tropicalgt_i_c
 - [x] Added separate weighted telemetry for `loss_tropical_margin_signed_weighted` and `loss_tropical_margin_shortfall_weighted`; `loss_margin_weighted` remains as the legacy signed-objective alias for continuity.
 - [x] Updated W&B priority grouping and tests so dashboards can distinguish the signed objective direction from the nonnegative shortfall diagnostic.
 - [x] Verification passed: model/loss tests `9 passed`; training-metrics tests `12 passed`; focused model and W&B checks passed; compile checks passed for modified source/tests.
+
+### Current Objective Update - Certificate Loss Decomposition Pass
+
+- [x] Kept `certificate_loss` as the real negative-log allowed-support objective, with `certificate_objective_loss` carrying the same value explicitly.
+- [x] Added `certificate_diagnostic_penalty` and `certificate_loss_reconstruction_error` so any future diagnostic penalty cannot be silently mixed into the certificate objective. Current diagnostic penalty is zero by construction.
+- [x] Added certificate valid-token count and allowed-target count summaries to explain rising certificate loss through real target-set structure rather than hidden penalties.
+- [x] Added weighted telemetry for `loss_certificate_objective_weighted` and `loss_certificate_diagnostic_penalty_weighted`; the legacy `loss_certificate_weighted` remains the objective-weight alias.
+- [x] Section 8 is complete: tropical support heatmaps, wall-hit scope, margin-loss sign, and certificate-loss decomposition are all implemented and tested.
+- [x] Verification passed: model/loss tests `9 passed`; training-metrics tests `12 passed`; focused certificate/W&B checks passed; compile checks passed for modified source/tests.

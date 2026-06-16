@@ -86,6 +86,12 @@ def test_model_forward_fixture():
     assert torch.isfinite(out["loss"])
     for key in [
         "certificate_loss",
+        "certificate_objective_loss",
+        "certificate_diagnostic_penalty",
+        "certificate_loss_reconstruction_error",
+        "certificate_valid_token_count",
+        "certificate_allowed_target_count_mean",
+        "certificate_allowed_target_count_min",
         "tropical_margin_loss",
         "tropical_margin_signed_loss",
         "tropical_margin_signed_objective",
@@ -107,6 +113,8 @@ def test_model_forward_fixture():
         "loss_regularizer_total",
         "loss_regularizer_ratio",
         "loss_certificate_weighted",
+        "loss_certificate_objective_weighted",
+        "loss_certificate_diagnostic_penalty_weighted",
         "gflownet_tb_residual_abs_mean",
         "gflownet_log_z",
         "graphcg_full_rank",
@@ -155,6 +163,13 @@ def test_model_forward_fixture():
         assert torch.isfinite(out[key])
     assert out["graphcg_num_directions"].item() == 32.0
     assert out["graphcg_embedding_dim"].item() == 32.0
+    assert torch.allclose(out["certificate_loss"], out["certificate_objective_loss"])
+    assert out["certificate_diagnostic_penalty"].item() == 0.0
+    assert out["certificate_loss_reconstruction_error"].item() == 0.0
+    assert torch.allclose(out["loss_certificate_weighted"], out["loss_certificate_objective_weighted"])
+    assert out["loss_certificate_diagnostic_penalty_weighted"].item() == 0.0
+    assert out["certificate_valid_token_count"].item() > 0.0
+    assert out["certificate_allowed_target_count_mean"].item() >= 1.0
     assert torch.allclose(out["tropical_margin_loss"], out["tropical_margin_shortfall_loss"])
     assert out["tropical_margin_loss"].item() >= 0.0
     assert torch.allclose(out["tropical_margin_signed_objective"], out["tropical_margin_signed_loss"])
