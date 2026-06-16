@@ -114,7 +114,7 @@
 
 ### 10. Decoding and Dataset Graph Causality
 
-- [ ] Keep meet-in-the-middle decoding behind a config toggle.
+- [x] Keep meet-in-the-middle decoding behind a config toggle.
 - [ ] For causal DAGs, decode using forward plus reverse causal directions.
 - [ ] For cyclic/noncausal graphs, use ROAR/random-order autoregressive decoding.
 - [ ] Annotate dataset graphs that should have causal structure; preserve noncausal/cyclic graphs correctly.
@@ -396,3 +396,11 @@ The live item-by-item repair inventory is maintained in `planning/tropicalgt_i_c
 - [x] Section 9 is complete: embedding-rank direction-bank enforcement, readable GraphCG trajectory panels, priority GraphCG metrics, and direction-rank configuration tests are all implemented.
 - [x] b60 latest checked training state reached step `1542` with train loss/NLL `1.225/1.202`; trainer PID `378962` and watcher PID `379304` remain alive under the step-5000 gate.
 - [x] Verification passed: compile checks for modified run/visualization/training-metrics files; focused GraphCG metric-order tests `2 passed`; full training-metrics tests `13 passed`; full simplicial visualization tests `35 passed`.
+
+### Current Objective Update - Meet-In-The-Middle Toggle Pass
+
+- [x] Hardened `meet_in_middle_config` so boolean config toggles are explicit: `true` enables zero-weight shared-parser defaults, `false` disables, and non-dict/non-bool values remain disabled.
+- [x] Disabled meet-in-the-middle paths now emit explicit no-proxy reasons (`disabled_by_config`) and do not call the reverse-pass model when the toggle is off.
+- [x] `evaluate_model`, `eval_tropicalgt_i.py`, and `infer_tropicalgt_i.py` now normalize meet-in-the-middle settings through the shared parser instead of silently treating boolean launch artifacts as empty configs.
+- [x] b60 latest checked training state reached step `1732` with train loss/NLL `1.239/1.215`; trainer PID `378962` and watcher PID `379304` remain alive under the step-5000 gate.
+- [x] Verification passed: compile checks for modified decoder/run/scripts/tests; `pytest TropicalGT-I/tests/test_meet_in_middle_decoding.py -q` (`10 passed`); `pytest TropicalGT-I/tests/test_training_metrics.py -q` (`13 passed`).

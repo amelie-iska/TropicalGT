@@ -22,6 +22,71 @@ def test_meet_in_middle_config_defaults_off():
     assert cfg.ngram_size == 4
 
 
+def test_meet_in_middle_boolean_toggle_is_explicit():
+    enabled_cfg = meet_in_middle_config(True)
+    disabled_cfg = meet_in_middle_config(False)
+
+    assert enabled_cfg.enabled is True
+    assert enabled_cfg.agreement_weight == 0.0
+    assert enabled_cfg.reverse_nll_weight == 0.0
+    assert disabled_cfg.enabled is False
+
+
+class _ExplodingReversePassModel:
+    def __call__(self, *args, **kwargs):
+        raise AssertionError("disabled meet-in-the-middle must not call the model")
+
+
+def test_disabled_meet_in_middle_batch_does_not_call_reverse_model():
+    report = meet_in_middle_batch(
+        _ExplodingReversePassModel(),
+        [FixtureGraphDataset(1)[0]],
+        TokenGTTokenizer(feature_dim=48),
+        seq_len=16,
+        device=torch.device("cpu"),
+        config=False,
+    )
+
+    assert report["enabled"] is False
+    assert report["config_toggle_enabled"] is False
+    assert report["reason"] == "disabled_by_config"
+    assert report["metrics"] == {"mim_enabled": 0.0}
+    assert report["records"] == []
+
+
+def test_evaluate_model_reports_disabled_meet_in_middle_state():
+    from tropicalgt.run import evaluate_model
+
+    dataset = FixtureGraphDataset(1)
+    tokenizer = TokenGTTokenizer(feature_dim=48)
+    model = TropicalGTModel(
+        TropicalGTConfig(
+            dim=32,
+            hidden_dim=32,
+            graph_feature_dim=48,
+            use_sequence_tropical=False,
+        )
+    )
+    report = evaluate_model(
+        model,
+        dataset,
+        tokenizer,
+        seq_len=32,
+        batch_size=1,
+        device=torch.device("cpu"),
+        graph_autoregressive=True,
+        meet_in_middle=False,
+    )
+
+    assert report["mim_enabled"] == 0.0
+    assert report["meet_in_middle"] == {
+        "enabled": False,
+        "config_toggle_enabled": False,
+        "reason": "disabled_by_config",
+        "records": [],
+    }
+
+
 def test_reverse_encoding_uses_same_shifted_byte_convention():
     record = FixtureGraphDataset(1)[0]
     _, forward_y = encode_bytes(record.text, 16)

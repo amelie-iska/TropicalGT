@@ -1616,6 +1616,12 @@ def evaluate_model(
         }
     else:
         report["mim_enabled"] = 0.0
+        report["meet_in_middle"] = {
+            "enabled": False,
+            "config_toggle_enabled": False,
+            "reason": "disabled_by_config",
+            "records": [],
+        }
     if details:
         report["records"] = details
     return report

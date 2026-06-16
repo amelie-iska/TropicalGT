@@ -35,8 +35,11 @@ class MeetInMiddleConfig:
     verification_window: int = 4
 
 
-def meet_in_middle_config(raw: dict[str, Any] | None) -> MeetInMiddleConfig:
-    raw = raw if isinstance(raw, dict) else {}
+def meet_in_middle_config(raw: dict[str, Any] | bool | None) -> MeetInMiddleConfig:
+    if isinstance(raw, bool):
+        raw = {"enabled": raw}
+    elif not isinstance(raw, dict):
+        raw = {}
     return MeetInMiddleConfig(
         enabled=bool(raw.get("enabled", False)),
         agreement_weight=max(float(raw.get("agreement_weight", 0.0)), 0.0),
@@ -95,7 +98,8 @@ def meet_in_middle_batch(
         return {
             "enabled": False,
             "mode": cfg.mode,
-            "reason": "disabled" if not cfg.enabled else "empty batch",
+            "reason": "disabled_by_config" if not cfg.enabled else "empty_batch",
+            "config_toggle_enabled": bool(cfg.enabled),
             "loss": torch.zeros((), device=device) if require_grad else None,
             "metrics": {"mim_enabled": 0.0},
             "records": [],

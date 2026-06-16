@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 import argparse, json, sys
+from dataclasses import asdict
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -8,6 +9,7 @@ sys.path.insert(0, str(ROOT / "src"))
 
 
 import torch
+from tropicalgt.decoding import meet_in_middle_config
 from tropicalgt.run import load_config, load_checkpoint, evaluate_model
 from tropicalgt.data import make_dataset_from_config
 from tropicalgt.tokenizer import TokenGTTokenizer
@@ -29,7 +31,7 @@ def main() -> None:
     parser.add_argument("--no-meet-in-middle", action="store_true", help="Disable meet-in-the-middle diagnostics even if enabled in config")
     args = parser.parse_args()
     cfg = load_config(args.config)
-    mim_cfg = dict(cfg.get("meet_in_middle", {}))
+    mim_cfg = asdict(meet_in_middle_config(cfg.get("meet_in_middle")))
     if args.meet_in_middle:
         mim_cfg["enabled"] = True
     if args.no_meet_in_middle:
