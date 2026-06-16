@@ -319,11 +319,12 @@ python TropicalGT-I/scripts/prepare_5k_review_bundle.py \
 --boundary-step 5000 \
 --target-bpb 1.12 \
 --run-eval-visualizations \
+--run-legacy-audit-backfill \
 --run-interactive-audit-validators \
 --command-timeout-seconds 3600
 ```
 
-Executed command stdout/stderr is recorded under the generated review bundle `command_logs/` directory and summarized in `command_results`; these logs are generated artifacts and must not be staged.
+Executed command stdout/stderr is recorded under the generated review bundle `command_logs/` directory and summarized in `command_results`; these logs are generated artifacts and must not be staged. The legacy audit backfill command runs before strict validators and may only write explicit unavailable diagnostics or rerender visual contracts from existing raw payloads.
 
 ## Eval, inference, validation, visualization
 

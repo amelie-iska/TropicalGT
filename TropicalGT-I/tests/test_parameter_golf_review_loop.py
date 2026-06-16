@@ -77,8 +77,11 @@ def test_active_training_contract_inventories_latest_periodic_artifacts(tmp_path
     assert inventory["latest_periodic_dir"].endswith("step_00005000")
     assert inventory["latest_got_audit_dir"].endswith("got_audit")
     assert any(path.endswith("tropical_fan_diagnostics.json") for path in inventory["advanced_sidecars_tail"])
+    assert inventory["interactive_audit_backfill_commands"]
     assert inventory["interactive_audit_validator_commands"]
-    assert inventory["inventory_policy"].startswith("bounded source paths only")
+    assert "backfill_interactive_audit_artifacts.py" in inventory["interactive_audit_backfill_commands"][0]
+    assert "validate_interactive_audit_artifacts.py" in inventory["interactive_audit_validator_commands"][0]
+    assert "generated artifacts are not staged or copied" in inventory["inventory_policy"]
 
 def test_review_prompt_requires_subagent_evidence_review_and_step0_restart():
     loop = _load_review_loop()

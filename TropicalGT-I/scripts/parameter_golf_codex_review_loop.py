@@ -414,8 +414,14 @@ def _review_artifact_inventory(cfg: dict[str, Any], report: dict[str, Any], repo
         "sidecar",
     )
     sidecars = [path for path in latest_files if any(term in path for term in sidecar_terms)]
+    backfill_commands: list[str] = []
     validator_commands: list[str] = []
     if latest_got_audit is not None and latest_got_audit.exists():
+        backfill_commands.append(
+            "PYTHONPATH=TropicalGT-I/src "
+            f"{shlex.quote(sys.executable)} TropicalGT-I/scripts/backfill_interactive_audit_artifacts.py "
+            f"--audit-root {shlex.quote(_relative_project_path(latest_got_audit))}"
+        )
         validator_commands.append(
             "PYTHONPATH=TropicalGT-I/src "
             f"{shlex.quote(sys.executable)} TropicalGT-I/scripts/validate_interactive_audit_artifacts.py "
@@ -433,8 +439,9 @@ def _review_artifact_inventory(cfg: dict[str, Any], report: dict[str, Any], repo
         "latest_artifacts_tail": latest_files,
         "advanced_sidecars_tail": sidecars[:120],
         "report_visualizations": report.get("visualizations", {}),
+        "interactive_audit_backfill_commands": backfill_commands,
         "interactive_audit_validator_commands": validator_commands,
-        "inventory_policy": "bounded source paths only; generated artifacts are not staged or copied",
+        "inventory_policy": "bounded source paths only; generated artifacts are not staged or copied; backfill commands may only write explicit unavailable diagnostics or rerender visual contracts from raw payloads",
     }
 
 

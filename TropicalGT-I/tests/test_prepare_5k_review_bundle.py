@@ -69,8 +69,10 @@ def test_prepare_review_bundle_writes_prompt_contract_and_commands(tmp_path: Pat
     assert "eval_tropicalgt_i.py" in bundle["commands"]["eval_validation_visualizations"]
     assert "--render-visualizations" in bundle["commands"]["eval_validation_visualizations"]
     assert bundle["command_results"] == []
+    assert bundle["commands"]["interactive_audit_backfills"] == []
     assert "spawn_or_assign_codex_subagent_when_available" in bundle["review_requirements"]
     assert "review_metrics_advanced_sidecars_topological_geometric_algebraic_visualizations" in bundle["review_requirements"]
+    assert "run_legacy_audit_backfill_before_strict_validation_when_available" in bundle["review_requirements"]
     prompt_text = (module.ROOT / artifacts["codex_prompt"]).read_text(encoding="utf-8")
     assert "spawn or assign a fresh Codex subagent" in prompt_text
     assert "topological, geometric, algebraic" in prompt_text
@@ -84,7 +86,7 @@ def test_prepare_review_bundle_defaults_to_periodic_validation_artifacts(tmp_pat
     output_dir = tmp_path / "run"
     checkpoint_dir = tmp_path / "ckpts"
     periodic_dir = output_dir / "periodic" / "step_00005000"
-    periodic_dir.mkdir(parents=True)
+    (periodic_dir / "got_audit").mkdir(parents=True)
     checkpoint_dir.mkdir()
     periodic_report = {
         "step": 5000,
@@ -137,6 +139,9 @@ def test_prepare_review_bundle_defaults_to_periodic_validation_artifacts(tmp_pat
     contract = json.loads((module.ROOT / bundle["artifacts"]["contract_json"]).read_text(encoding="utf-8"))
     assert contract["compression_metrics"]["eval_bpb"] == 1.25
     assert contract["compression_metrics"]["eval_graph_bpb"] == 2.05
+    assert bundle["commands"]["interactive_audit_backfills"]
+    assert "backfill_interactive_audit_artifacts.py" in bundle["commands"]["interactive_audit_backfills"][0]
+    assert bundle["commands"]["interactive_audit_validators"]
 
 def test_run_shell_command_records_logs_and_return_code(tmp_path: Path):
     module = _load_bundle_module()
@@ -146,3 +151,20 @@ def test_run_shell_command_records_logs_and_return_code(tmp_path: Path):
     assert result["timed_out"] is False
     assert Path(result["stdout_log"]).read_text(encoding="utf-8").strip() == "ok"
     assert Path(result["stderr_log"]).read_text(encoding="utf-8").strip() == "warn"
+
+
+def test_requested_commands_run_backfill_before_validators(tmp_path: Path):
+    module = _load_bundle_module()
+    args = argparse.Namespace(
+        run_eval_visualizations=False,
+        run_legacy_audit_backfill=True,
+        run_interactive_audit_validators=True,
+        command_timeout_seconds=5,
+    )
+    commands = {
+        "eval_validation_visualizations": f"{sys.executable} -c \"print('eval')\"",
+        "interactive_audit_backfills": [f"{sys.executable} -c \"print('backfill')\""],
+        "interactive_audit_validators": [f"{sys.executable} -c \"print('validator')\""],
+    }
+    results = module._run_requested_commands(args, commands, tmp_path / "bundle")
+    assert [row["name"] for row in results] == ["interactive_audit_backfill_01", "interactive_audit_validator_01"]

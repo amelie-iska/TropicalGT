@@ -130,6 +130,9 @@ def _run_requested_commands(args: argparse.Namespace, commands: dict[str, Any], 
     timeout = float(getattr(args, "command_timeout_seconds", 0.0) or 0.0)
     if bool(getattr(args, "run_eval_visualizations", False)):
         results.append(_run_shell_command(commands["eval_validation_visualizations"], log_dir, "eval_validation_visualizations", timeout))
+    if bool(getattr(args, "run_legacy_audit_backfill", False)):
+        for index, command in enumerate(commands.get("interactive_audit_backfills", []), start=1):
+            results.append(_run_shell_command(command, log_dir, f"interactive_audit_backfill_{index:02d}", timeout))
     if bool(getattr(args, "run_interactive_audit_validators", False)):
         for index, command in enumerate(commands.get("interactive_audit_validators", []), start=1):
             results.append(_run_shell_command(command, log_dir, f"interactive_audit_validator_{index:02d}", timeout))
@@ -155,6 +158,7 @@ def _bundle_markdown(bundle: dict[str, Any]) -> str:
         "```bash",
         bundle.get("commands", {}).get("eval_validation_visualizations", ""),
     ]
+    lines.extend(bundle.get("commands", {}).get("interactive_audit_backfills", []))
     lines.extend(bundle.get("commands", {}).get("interactive_audit_validators", []))
     lines.extend(["```", ""])
     if bundle.get("command_results"):
@@ -225,6 +229,7 @@ def prepare_review_bundle(args: argparse.Namespace) -> dict[str, Any]:
     inventory = contract.get("artifact_inventory", {})
     commands = {
         "eval_validation_visualizations": _eval_command(args, checkpoint_path, bundle_dir),
+        "interactive_audit_backfills": inventory.get("interactive_audit_backfill_commands", []),
         "interactive_audit_validators": inventory.get("interactive_audit_validator_commands", []),
     }
     command_results = _run_requested_commands(args, commands, bundle_dir)
@@ -248,6 +253,7 @@ def prepare_review_bundle(args: argparse.Namespace) -> dict[str, Any]:
         "review_requirements": [
             "spawn_or_assign_codex_subagent_when_available",
             "review_metrics_advanced_sidecars_topological_geometric_algebraic_visualizations",
+            "run_legacy_audit_backfill_before_strict_validation_when_available",
             "restart_from_step_0_with_adjusted_hyperparameters_if_target_not_met",
             "no_proxies_or_fallbacks_for_unavailable_evidence",
         ],
@@ -261,7 +267,7 @@ def prepare_review_bundle(args: argparse.Namespace) -> dict[str, Any]:
         "artifact_inventory": inventory,
         "commands": commands,
         "command_results": command_results,
-        "policy": "Path-only review bundle by default; explicit command execution writes logs under the generated review bundle. Do not stage generated run artifacts, checkpoints, datasets, caches, W&B data, or secrets.",
+        "policy": "Path-only review bundle by default; explicit command execution writes logs under the generated review bundle. Legacy audit backfill must run before strict validators when requested and may only write explicit unavailable diagnostics or rerender visual contracts from raw payloads. Do not stage generated run artifacts, checkpoints, datasets, caches, W&B data, or secrets.",
     }
     bundle_path.write_text(json.dumps(bundle, indent=2), encoding="utf-8")
     markdown_path.write_text(_bundle_markdown(bundle), encoding="utf-8")
@@ -287,6 +293,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--audit-ph-backend", choices=["auto", "gudhi", "ripser", "none"], default="gudhi")
     parser.add_argument("--audit-max-simplices", type=int, default=256)
     parser.add_argument("--run-eval-visualizations", action="store_true", help="Execute the generated eval/visualization command and record stdout/stderr logs in the review bundle.")
+    parser.add_argument("--run-legacy-audit-backfill", action="store_true", help="Execute generated legacy interactive-audit backfill commands before strict validators and record stdout/stderr logs in the review bundle.")
     parser.add_argument("--run-interactive-audit-validators", action="store_true", help="Execute generated interactive-audit validator commands and record stdout/stderr logs in the review bundle.")
     parser.add_argument("--command-timeout-seconds", type=float, default=0.0, help="Optional timeout for each executed review command; 0 disables the timeout.")
     args = parser.parse_args(argv)

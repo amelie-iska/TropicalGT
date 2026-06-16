@@ -542,3 +542,11 @@ The live item-by-item repair inventory is maintained in `planning/tropicalgt_i_c
 - [x] Updated `README.md` with the post-5K bundle command that runs eval visualizations and interactive audit validators after step-5000 artifacts and checkpoint paths exist; generated logs remain under ignored outputs and must not be staged.
 - [x] Added focused tests proving default bundles do not execute commands and `_run_shell_command` records stdout, stderr, return code, and timeout status.
 - [ ] Section 12 5K gate remains open: wait for step-5000 artifacts before running the executable review bundle and assigning the Codex subagent evidence review.
+
+### Current Objective Update - Post-5K Legacy Backfill Command Pass
+
+- [x] Added exact `interactive_audit_backfill_commands` to the active-training artifact inventory whenever a real latest `got_audit` directory exists.
+- [x] Extended `prepare_5k_review_bundle.py` with `--run-legacy-audit-backfill`, executed before strict interactive-audit validators and logged under the generated review bundle `command_logs/` directory.
+- [x] Kept the default review bundle path-only; command execution remains explicit and generated backfill reports/logs must not be staged.
+- [x] Documented that legacy audit backfill may only write explicit unavailable diagnostics or rerender visual contracts from existing raw payloads; no CAS, tropical-fan, persistence-module, or visualization proxy is allowed.
+- [ ] Section 12 5K gate remains open: wait for step-5000 artifacts before running eval visualizations, legacy backfill, strict validators, and Codex subagent evidence review.
