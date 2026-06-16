@@ -681,4 +681,13 @@ The live item-by-item repair inventory is maintained in `planning/tropicalgt_i_c
 - [x] Extended parsed Buchsbaum-Eisenbud diagnostics and certificate summaries with `safe_to_render_multiplier_output`, `is_resolution_backend=false`, `safe_to_substitute_for_resolution=false`, and a no-proxy diagnostic contract.
 - [x] Added regression coverage proving computed `aMultiplier(1,C,ComputeRanks=>true)` output is renderable only as explicit post-resolution CAS diagnostic output and never as a free-resolution substitute.
 - [x] Verification passed: py-compile for `cas_free_resolution.py` and `test_algebraic_persistence.py`; `pytest TropicalGT-I/tests/test_algebraic_persistence.py -q` (`28 passed`); `git diff --check` clean.
-- [ ] Next source-side repair item: inspect remaining CAS/visualization surfaces for whether these new BEMultipliers diagnostic-contract fields are rendered in browser tables without implying a resolution certificate.
+- [x] Inspected and patched remaining CAS/visualization surfaces so the new BEMultipliers diagnostic-contract fields render in browser tables without implying a resolution certificate.
+
+### Current Objective Update - BEMultipliers Browser Contract Rendering Pass
+
+- [x] Extended normalized CAS display payloads with `safe_to_render_multiplier_output`, `is_resolution_backend`, `requires_certified_macaulay2_chain_complex`, `safe_to_substitute_for_resolution`, and the structured diagnostic contract.
+- [x] Added BEMultipliers contract rows to the Buchsbaum-Eisenbud diagnostic table and certificate table so browser users see that multiplier output is post-resolution diagnostic-only.
+- [x] Included the BEMultipliers contract flags in certified-CAS resolution signatures used by derived/analogical comparison, preventing a multiplier hash from acting like resolution evidence.
+- [x] Added visualization regression coverage for the browser table rows and normalized display payload fields.
+- [x] Verification passed: py-compile for visualization/CAS files and tests; `pytest TropicalGT-I/tests/test_simplicial_visualization.py TropicalGT-I/tests/test_algebraic_persistence.py -q` (`64 passed`); `git diff --check` clean.
+- [ ] Next source-side repair item: inspect derived/analogical memory comparison text for whether unavailable or diagnostic-only CAS components are explained clearly when similarity components mismatch.

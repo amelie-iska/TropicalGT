@@ -4236,6 +4236,11 @@ def _cas_real_resolution_display(real: Mapping[str, Any]) -> Dict[str, Any]:
             "grading_scope": "multigraded" if is_multigraded else ("total-graded" if is_total_graded else "ungraded"),
             "backend_diagnostics_available": bool(be_artifacts.get("available")),
             "multiplier_output_available": bool(be_artifacts.get("multiplier_output_available")),
+            "safe_to_render_multiplier_output": bool(be_artifacts.get("safe_to_render_multiplier_output")),
+            "is_resolution_backend": bool(be_artifacts.get("is_resolution_backend", False)),
+            "requires_certified_macaulay2_chain_complex": bool(be_artifacts.get("requires_certified_macaulay2_chain_complex", True)),
+            "safe_to_substitute_for_resolution": bool(be_artifacts.get("safe_to_substitute_for_resolution", False)),
+            "diagnostic_contract": dict(be_artifacts.get("diagnostic_contract", {})) if isinstance(be_artifacts.get("diagnostic_contract"), Mapping) else {},
             "bemultipliers_status": str(be_artifacts.get("bemultipliers_status", "unreported")),
             "a_multiplier_1_shape": str(be_artifacts.get("a_multiplier_1_shape", "")),
             "a_multiplier_1_matrix": str(be_artifacts.get("a_multiplier_1_matrix", "")),
@@ -4425,6 +4430,12 @@ def _m2_be_diagnostic_columns(m2: Mapping[str, Any]) -> Tuple[List[str], List[Li
             rows.append(("CAS minimality", "resolution", str(res_be.get("minimality_certified")), str(res_be.get("grading_scope", ""))))
         if any(key in res_be for key in ("bemultipliers_status", "a_multiplier_1_shape", "a_multiplier_1_matrix")):
             rows.append(("BEMultipliers", str(res_be.get("bemultipliers_status", "unreported")), str(res_be.get("a_multiplier_1_shape", "")), _json_clip(res_be.get("a_multiplier_1_matrix", ""), 220)))
+            rows.append((
+                "BEMultipliers contract",
+                "post-resolution diagnostic only",
+                f"safe_render={bool(res_be.get('safe_to_render_multiplier_output'))}; substitute={bool(res_be.get('safe_to_substitute_for_resolution'))}",
+                f"resolution_backend={bool(res_be.get('is_resolution_backend'))}; requires_certified_macaulay2_chain_complex={bool(res_be.get('requires_certified_macaulay2_chain_complex', True))}",
+            ))
     image_ranks = be_rank.get("image_rank_estimates_by_differential", {}) if isinstance(be_rank.get("image_rank_estimates_by_differential"), Mapping) else {}
     shapes = be_rank.get("differential_shapes", {}) if isinstance(be_rank.get("differential_shapes"), Mapping) else {}
     shape_bounds = be_rank.get("shape_bounds_hold")
@@ -4467,6 +4478,10 @@ def _m2_certificate_columns(m2: Mapping[str, Any], bifiltration: Mapping[str, An
         ("CAS input sha256", cert_summary.get("input_sha256", "unavailable")),
         ("CAS no-proxy policy", cert_summary.get("no_proxy_policy", "unavailable")),
         ("BEMultiplier output available", res_be.get("multiplier_output_available", False)),
+        ("BEMultipliers safe render", res_be.get("safe_to_render_multiplier_output", False)),
+        ("BEMultipliers is resolution backend", res_be.get("is_resolution_backend", False)),
+        ("BEMultipliers substitute for resolution", res_be.get("safe_to_substitute_for_resolution", False)),
+        ("BEMultipliers requires certified M2 complex", res_be.get("requires_certified_macaulay2_chain_complex", True)),
         ("BEMultipliers status", res_be.get("bemultipliers_status", "unreported")),
         ("aMultiplier(1) shape", res_be.get("a_multiplier_1_shape", "")),
         ("BE rank conditions", _json_clip(be_rank, 260)),
@@ -7981,6 +7996,9 @@ def _real_free_resolution_claim_summary(topology: Mapping[str, object]) -> dict[
                 "minors": artifacts.get("minors", {}) if isinstance(artifacts.get("minors"), Mapping) else {},
                 "bemultipliers_status": be.get("bemultipliers_status", "unreported"),
                 "multiplier_output_available": bool(be.get("multiplier_output_available")),
+                "safe_to_render_multiplier_output": bool(be.get("safe_to_render_multiplier_output")),
+                "is_resolution_backend": bool(be.get("is_resolution_backend", False)),
+                "safe_to_substitute_for_resolution": bool(be.get("safe_to_substitute_for_resolution", False)),
                 "a_multiplier_1_shape": be.get("a_multiplier_1_shape", ""),
                 "a_multiplier_1_matrix_hash": _stable_artifact_hash(be.get("a_multiplier_1_matrix", "")),
             }
@@ -8025,6 +8043,9 @@ def _certified_cas_resolution_signature(report: Mapping[str, object]) -> dict[st
         "bemultipliers": {
             "available": bool(be.get("available")),
             "multiplier_output_available": bool(be.get("multiplier_output_available")),
+            "safe_to_render_multiplier_output": bool(be.get("safe_to_render_multiplier_output")),
+            "is_resolution_backend": bool(be.get("is_resolution_backend", False)),
+            "safe_to_substitute_for_resolution": bool(be.get("safe_to_substitute_for_resolution", False)),
             "bemultipliers_status": be.get("bemultipliers_status", "unreported"),
             "a_multiplier_1_shape": be.get("a_multiplier_1_shape", ""),
             "a_multiplier_1_matrix_hash": _stable_artifact_hash(be.get("a_multiplier_1_matrix", "")),

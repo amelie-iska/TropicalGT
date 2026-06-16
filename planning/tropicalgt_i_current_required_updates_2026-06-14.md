@@ -601,4 +601,11 @@ Use "one dimensional cone" or "one dimensional cones" as the preferred fan-theor
 - Parsed Buchsbaum-Eisenbud diagnostics now expose `safe_to_render_multiplier_output`, `is_resolution_backend=false`, `safe_to_substitute_for_resolution=false`, and a no-proxy diagnostic contract.
 - Focused verification passed: `pytest TropicalGT-I/tests/test_algebraic_persistence.py -q` (`28 passed`).
 
-_Last updated: 2026-06-16T19:38:00Z_
+
+## 2026-06-16 BEMultipliers Browser Contract Rendering Result
+
+- Browser-facing CAS payloads and tables now render BEMultipliers contract fields: multiplier output is post-resolution diagnostic-only, requires a certified Macaulay2 ChainComplex, is not a resolution backend, and cannot substitute for missing free-resolution evidence.
+- Certified-CAS signatures used for derived/analogical comparison include these flags, so BEMultipliers status/matrix hashes cannot masquerade as resolution evidence.
+- Focused verification passed: `pytest TropicalGT-I/tests/test_simplicial_visualization.py TropicalGT-I/tests/test_algebraic_persistence.py -q` (`64 passed`).
+
+_Last updated: 2026-06-16T19:55:00Z_

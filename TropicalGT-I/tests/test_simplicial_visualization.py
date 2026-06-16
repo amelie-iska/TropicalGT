@@ -1355,6 +1355,14 @@ def _topology_with_certified_real_resolution(*, input_hash: str = "hash-a", fitt
             "buchsbaum_eisenbud_diagnostics": {
                 "available": True,
                 "multiplier_output_available": True,
+                "safe_to_render_multiplier_output": True,
+                "is_resolution_backend": False,
+                "requires_certified_macaulay2_chain_complex": True,
+                "safe_to_substitute_for_resolution": False,
+                "diagnostic_contract": {
+                    "safe_to_use_as_resolution_certificate": False,
+                    "safe_to_substitute_for_resolution": False,
+                },
                 "bemultipliers_status": "computed_aMultiplier_1",
                 "a_multiplier_1_shape": "1x1",
                 "a_multiplier_1_matrix": multiplier_matrix,
@@ -1435,11 +1443,15 @@ def test_certified_cas_diagnostic_tables_require_explicit_structured_certificate
     be_rows = list(zip(*be_columns))
     assert any(row[0] == "CAS exactness" and row[2] == "True" for row in be_rows)
     assert any(row[0] == "BEMultipliers" and row[2] == "1x1" for row in be_rows)
+    assert any(row[0] == "BEMultipliers contract" and "substitute=False" in row[2] and "resolution_backend=False" in row[3] for row in be_rows)
     assert any(row[0] == "BE rank condition" and row[1] == "d1" and "rank=1" in row[2] for row in be_rows)
     assert any(row[0] == "method note" and row[1] == "Buchsbaum-Eisenbud" for row in be_rows)
 
     display = _cas_real_resolution_display(real_with_structured)
     assert display["certificate_summary"]["certificate_type"].startswith("Macaulay2 res")
+    assert display["buchsbaum_eisenbud_diagnostics"]["safe_to_render_multiplier_output"] is True
+    assert display["buchsbaum_eisenbud_diagnostics"]["is_resolution_backend"] is False
+    assert display["buchsbaum_eisenbud_diagnostics"]["safe_to_substitute_for_resolution"] is False
     cert_headers, cert_columns = _m2_certificate_columns({"real_free_resolution": real_with_structured}, {"module_ring": "F2[x_level,x_radius]"})
     assert cert_headers == ["diagnostic", "value"]
     cert_rows = dict(zip(cert_columns[0], cert_columns[1]))
@@ -1447,6 +1459,9 @@ def test_certified_cas_diagnostic_tables_require_explicit_structured_certificate
     assert cert_rows["CAS homogeneous presentation"] == "True"
     assert cert_rows["CAS input sha256"] == real_with_structured["input_sha256"]
     assert "Only exact CAS certificates" in cert_rows["CAS no-proxy policy"]
+    assert cert_rows["BEMultipliers safe render"] == "True"
+    assert cert_rows["BEMultipliers is resolution backend"] == "False"
+    assert cert_rows["BEMultipliers substitute for resolution"] == "False"
 
 
 def test_derived_comparison_requires_matching_certified_cas_artifacts():
