@@ -138,6 +138,42 @@ def test_bemultipliers_probe_reports_local_macaulay2_loader():
         assert probe["local_macaulay2_package"].endswith("BuchsbaumEisenbudMultipliers.m2")
 
 
+def test_failed_cas_certificate_preserves_module_provenance_without_artifacts():
+    schema = canonicalize_module(_small_free_resolution_module())
+    tagged = "\n".join([
+        "TROPICALGT_RESOLUTION_BEGIN",
+        "backend=Macaulay2",
+        "exactness_certified=false",
+        "minimality_certified=false",
+        "certificate_type=failed smoke certificate",
+        "presentation_shape=1x2",
+        "betti_table_begin",
+        "not a certified table",
+        "betti_table_end",
+        "TROPICALGT_RESOLUTION_END",
+    ])
+    parsed = cas_free_resolution._parse_tagged_output(tagged)
+    assert parsed is not None
+    real = cas_free_resolution._certified_result(
+        schema,
+        {
+            "available": True,
+            "backend": "Macaulay2",
+            "parsed": parsed,
+            "tagged_output": parsed["_raw"],
+            "certificate_attached": False,
+        },
+        attempts=[{"backend": "M2", "status": "ran", "returncode": 0}],
+    )
+    assert real["available"] is False
+    assert real["status"] == "certificate_failed"
+    assert real["input_sha256"] == schema["input_sha256"]
+    assert real["module_summary"]["generators"] == len(schema["generators"])
+    assert real["module_summary"]["boundary_monomials"] == len(schema["boundary_monomials"])
+    assert real["cas_artifacts"] == {}
+    assert real["certificate_attached"] is False
+
+
 def test_real_cas_free_resolution_caches_deterministic_unavailable_probe(tmp_path, monkeypatch):
     monkeypatch.setenv("TROPICALGT_CAS_FREE_RESOLUTION_CACHE_DIR", str(tmp_path / "cas-cache"))
     monkeypatch.setattr(cas_free_resolution, "_candidate_executable", lambda name: None)

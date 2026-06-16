@@ -203,7 +203,10 @@ def unavailable_real_resolution(
     if status not in UNAVAILABLE_STATUSES:
         raise ValueError(f"unsupported unavailable status: {status}")
     try:
-        module_schema = canonicalize_module(module)
+        if module.get("schema_version") == MODULE_SCHEMA_VERSION and module.get("input_sha256"):
+            module_schema = dict(module)
+        else:
+            module_schema = canonicalize_module(module)
         module_summary = _module_summary(module_schema)
         input_hash = module_schema["input_sha256"]
         templates = cas_command_templates(module_schema)

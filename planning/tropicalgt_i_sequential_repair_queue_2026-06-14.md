@@ -66,7 +66,7 @@
 ### 4. CAS Integration: Only Real Resolutions
 
 - [x] Detect Macaulay2, SageMath, Singular, and optional `amelie-iska/BEMultipliers` availability on `iska`.
-- [ ] Implement a CAS bridge module with strict provenance and no fabricated algebra.
+- [x] Implement a CAS bridge module with strict provenance and no fabricated algebra.
 - [ ] Compute minimal multigraded free resolutions over `F2[x_level,x_radius]` when CAS is available.
 - [ ] Compute Betti tables, differential matrices, multidegree shifts, Fitting ideals, minors, Buchsbaum-Eisenbud diagnostics, and exactness/minimality certificates.
 - [ ] Render unavailable only when the real CAS computation cannot run, and make the missing dependency/action explicit.
@@ -238,6 +238,14 @@ The live item-by-item repair inventory is maintained in `planning/tropicalgt_i_c
 - [x] Confirmed the BEMultipliers probe remains a diagnostic-layer report only: it is not treated as a resolution backend and its policy explicitly says never to substitute multiplier output for a free-resolution certificate.
 - [x] Marked the section-4 backend-detection item complete while keeping broader CAS bridge, multigraded-resolution, certificate-content, and unavailable-rendering hardening items open for their own tested passes.
 - [x] Focused verification passed: probe test `1 passed`; full algebraic persistence `22 passed`; full simplicial visualization `33 passed`; artifact validator `10 passed`.
+
+
+### Current Objective Update - Strict CAS Bridge Provenance Pass
+
+- [x] Fixed the failed-certificate path so unavailable CAS reports preserve the already-canonical module schema, original `input_sha256`, generator count, boundary count, and command templates instead of recanonicalizing an empty raw-module shell.
+- [x] Added a regression proving a backend run with missing/false exactness certification returns `certificate_failed`, attaches no CAS artifacts, leaves `certificate_attached=false`, and keeps the original module provenance intact.
+- [x] This completes the strict bridge/provenance checklist item: certified paths may expose CAS artifacts, while failed or unavailable paths expose only reasoned unavailable state, backend attempts, probes, templates, and module provenance.
+- [x] Focused verification passed: failed-certificate provenance test `1 passed`; full algebraic persistence `23 passed`; full simplicial visualization `33 passed`; artifact validator `10 passed`.
 
 
 ### Current Objective Update - Rank-Invariant Table And 2-Parameter Persistence Pass
