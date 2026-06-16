@@ -786,10 +786,10 @@ PYTHONPATH=TropicalGT-I/scripts:TropicalGT-I/src /home/iska/miniconda3/envs/toke
 Status: complete for source-side post-5K restart permission hardening; actual BPB restart remains blocked by the zero-byte b60 checkpoint.
 
 - `prepare_5k_review_bundle.py` now emits `restart_evidence_gate` in every review bundle, separating a missed BPB target from permission to restart.
-- The gate returns `blocked_missing_required_evidence_no_restart` and `step0_restart_allowed=false` when the checkpoint is missing, empty, unloadable, execution evidence is not ready, the primary BPB metric is missing, or the advanced BPB contract has failed gates.
+- The gate returns `blocked_missing_required_evidence_no_restart` and `step0_restart_allowed=false` when the checkpoint is missing, empty, unloadable, execution evidence is not ready, the primary BPB metric is missing, post-5K command results are absent or failed, or the advanced BPB contract has failed gates.
 - Bundle markdown now renders a `Restart Evidence Gate` section so Codex/subagent reviewers see the no-proxy block before proposing step-0 hyperparameter/config changes.
-- Regression tests cover missing checkpoint, empty checkpoint without command execution, and failed advanced BPB contract cases. The existing command-execution path still raises before running eval/backfill/validators when checkpoint evidence is missing or empty.
-- A real b60 path-only probe written to `/tmp/tropicalgt_b60_restart_gate_probe` records BPB `1.4304583543547733`, graph-BPB `20.122144813809587`, `restart_action=blocked_missing_required_evidence_no_restart`, `step0_restart_allowed=false`, the empty checkpoint blocker, and failed advanced BPB gates for the stale b60 launch config.
+- Regression tests cover missing checkpoint, empty checkpoint without command execution, loadable checkpoint plus missing post-5K command results, and failed advanced BPB contract cases. The existing command-execution path still raises before running eval/backfill/validators when checkpoint evidence is missing or empty.
+- A real b60 path-only probe written to `/tmp/tropicalgt_b60_restart_gate_probe` records BPB `1.4304583543547733`, graph-BPB `20.122144813809587`, `restart_action=blocked_missing_required_evidence_no_restart`, `step0_restart_allowed=false`, the empty checkpoint blocker, failed advanced BPB gates for the stale b60 launch config, and missing eval/backfill/validator command-result blockers.
 - No generated review bundles, checkpoints, datasets, W&B folders, caches, or secrets were staged.
 
 Verification:
@@ -797,11 +797,11 @@ Verification:
 ```bash
 PYTHONPATH=TropicalGT-I/scripts:TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m py_compile TropicalGT-I/scripts/prepare_5k_review_bundle.py TropicalGT-I/tests/test_prepare_5k_review_bundle.py
 PYTHONPATH=TropicalGT-I/scripts:TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_prepare_5k_review_bundle.py -q
-# 8 passed in 1.00s
+# 9 passed in 0.99s
 PYTHONPATH=TropicalGT-I/scripts:TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_prepare_5k_review_bundle.py TropicalGT-I/tests/test_parameter_golf_review_loop.py TropicalGT-I/tests/test_training_step_gate_monitor.py TropicalGT-I/tests/test_readiness_audit.py -q
-# 34 passed in 1.44s
+# 35 passed in 1.43s
 git diff --check
 # clean
 ```
 
-_Last updated: 2026-06-16T15:05:03Z_
+_Last updated: 2026-06-16T15:08:09Z_

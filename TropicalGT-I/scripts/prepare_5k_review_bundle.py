@@ -156,6 +156,8 @@ def _restart_evidence_gate(
     checkpoint: dict[str, Any],
     execution_readiness: dict[str, Any],
     advanced_bpb_contract: dict[str, Any],
+    commands: dict[str, Any],
+    command_results: list[dict[str, Any]],
 ) -> dict[str, Any]:
     blockers: list[str] = []
     bpb = decision.get("bpb")
@@ -174,6 +176,28 @@ def _restart_evidence_gate(
     failed_gates = [str(gate) for gate in advanced_bpb_contract.get("failed_gates", []) if str(gate)]
     if target_missed and failed_gates:
         blockers.append("advanced_bpb_contract_failed:" + ",".join(failed_gates))
+    if target_missed:
+        expected_command_names = ["eval_validation_visualizations"]
+        expected_command_names.extend(
+            f"interactive_audit_backfill_{index:02d}"
+            for index, _command in enumerate(commands.get("interactive_audit_backfills", []), start=1)
+        )
+        expected_command_names.extend(
+            f"interactive_audit_validator_{index:02d}"
+            for index, _command in enumerate(commands.get("interactive_audit_validators", []), start=1)
+        )
+        result_by_name = {str(result.get("name", "")): result for result in command_results}
+        missing_results = [name for name in expected_command_names if name not in result_by_name]
+        if missing_results:
+            blockers.append("post_5k_review_commands_missing_results:" + ",".join(missing_results))
+        failed_results = []
+        for name, result in result_by_name.items():
+            returncode = result.get("returncode")
+            timed_out = bool(result.get("timed_out", False))
+            if timed_out or returncode != 0:
+                failed_results.append(f"{name}:returncode={returncode}:timed_out={timed_out}")
+        if failed_results:
+            blockers.append("post_5k_review_commands_failed:" + ",".join(failed_results))
     blockers = sorted(dict.fromkeys(blockers))
     if not target_missed:
         action = "not_needed_target_met"
@@ -193,7 +217,7 @@ def _restart_evidence_gate(
         "advanced_bpb_contract_safe": bool(advanced_bpb_contract.get("safe_to_use_for_step0_bpb_restart", False)),
         "policy": (
             "A missed BPB target is not a restart authorization. A step-0 restart proposal is allowed only when "
-            "the checkpoint is nonempty and loadable, post-5K evidence is ready, and the advanced BPB contract passes. "
+            "the checkpoint is nonempty and loadable, post-5K command evidence has succeeded, and the advanced BPB contract passes. "
             "Missing evidence must remain blocked with explicit reasons; no proxies or fallbacks."
         ),
     }
@@ -392,6 +416,8 @@ def prepare_review_bundle(args: argparse.Namespace) -> dict[str, Any]:
         checkpoint=checkpoint,
         execution_readiness=execution_readiness,
         advanced_bpb_contract=advanced_bpb_contract,
+        commands=commands,
+        command_results=command_results,
     )
     bundle = {
         "schema_version": "tropicalgt.post_5k_review_bundle.v1",

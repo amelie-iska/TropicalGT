@@ -284,6 +284,50 @@ def test_prepare_review_bundle_records_empty_checkpoint_restart_gate_without_run
     assert any(blocker.startswith("execution_readiness:empty_checkpoint:") for blocker in gate["blockers"])
 
 
+def test_prepare_review_bundle_blocks_restart_without_post_5k_command_results(tmp_path: Path):
+    torch = pytest.importorskip("torch")
+    module = _load_bundle_module()
+    output_dir = tmp_path / "run"
+    checkpoint_dir = tmp_path / "ckpts"
+    output_dir.mkdir()
+    checkpoint_dir.mkdir()
+    report_path = output_dir / "train_report.json"
+    report_path.write_text(json.dumps({"final_step": 5000, "eval": {"bpb": 1.3, "graph_bpb": 2.0}}), encoding="utf-8")
+    torch.save({"step": 5000, "metrics": {"eval_bpb": 1.3, "eval_graph_bpb": 2.0}}, checkpoint_dir / "unit_run.latest.pt")
+    cfg_path = tmp_path / "config.json"
+    cfg_path.write_text(
+        json.dumps({"output_dir": str(output_dir), "checkpoint_dir": str(checkpoint_dir), "run_name": "unit_run", "model": {}}),
+        encoding="utf-8",
+    )
+    args = argparse.Namespace(
+        config=cfg_path,
+        report=report_path,
+        checkpoint=None,
+        stop_record=None,
+        output_dir=tmp_path / "bundle",
+        boundary_step=5000,
+        target_bpb=1.12,
+        metric="eval.bpb",
+        graph_metric="eval.graph_bpb",
+        python="python",
+        split="validation",
+        details_limit=2,
+        viz_limit=3,
+        audit_level="full",
+        audit_ph_backend="gudhi",
+        audit_max_simplices=128,
+    )
+
+    bundle = module.prepare_review_bundle(args)
+    gate = bundle["restart_evidence_gate"]
+    assert gate["checkpoint_available"] is True
+    assert gate["execution_evidence_ready"] is True
+    assert gate["advanced_bpb_contract_safe"] is True
+    assert gate["restart_action"] == "blocked_missing_required_evidence_no_restart"
+    assert gate["step0_restart_allowed"] is False
+    assert "post_5k_review_commands_missing_results:eval_validation_visualizations" in gate["blockers"]
+
+
 def test_prepare_review_bundle_records_failed_advanced_bpb_contract(tmp_path: Path):
     module = _load_bundle_module()
     output_dir = tmp_path / "run"

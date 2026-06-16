@@ -201,6 +201,7 @@
 - [x] Closed wrapper/preflight bypasses: the Codex review-loop wrapper enforces the BPB contract before subprocess launch, readiness dry-run/CUDA preflight short-circuits before dataset/model work on failed BPB contracts, and ablation grids audit in-memory variants before writing analysis-only configs.
 - [x] Added advanced BPB contract evidence to post-5K review bundles so restart reviewers see `safe_to_use_for_step0_bpb_restart` and named failed gates before proposing a new step-0 BPB config.
 - [x] Added a post-5K `restart_evidence_gate` so missed BPB targets are explicitly blocked from step-0 restart when checkpoint, execution evidence, or advanced BPB contract evidence is unavailable.
+- [x] Tightened `restart_evidence_gate` so a target miss also requires successful post-5K eval/visualization, legacy audit backfill, and interactive validator command-result evidence before any step-0 restart proposal is allowed.
 
 ### Current Remaining Implementation List - 2026-06-16
 
