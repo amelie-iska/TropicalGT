@@ -320,6 +320,27 @@ def test_reasoning_trajectory_radius_complex_starts_with_disjoint_vertex_simplex
     assert _has_real_probability_filtration(missing_probability) is False
 
 
+def test_gudhi_canonical_complex_marks_simplex_tree_available():
+    obj = {
+        "summary": {
+            "filtration_model": "embedding_vietoris_rips_2_skeleton",
+            "radius_filtration": True,
+        },
+        "simplices": [
+            {"simplex": ["a"], "dimension": 0, "filtration": 0.0},
+            {"simplex": ["b"], "dimension": 0, "filtration": 0.0},
+            {"simplex": ["a", "b"], "dimension": 1, "filtration": 0.25},
+        ],
+    }
+    canonical = _gudhi_canonical_complex(obj)
+    assert canonical["simplex_tree"]["backend"] == "gudhi.SimplexTree"
+    assert canonical["simplex_tree"]["available"] is True
+    assert canonical["summary"]["simplex_tree_backend"] == "gudhi.SimplexTree"
+    assert canonical["summary"]["simplex_tree_available"] is True
+    assert canonical["summary"]["num_vertices"] == 2
+    assert canonical["summary"]["num_edges"] == 1
+
+
 def test_simplicial_object_svg_uses_3d_pca_radius_filtration():
     obj = {
         "summary": {"num_vertices": 4, "num_edges": 4, "num_two_simplices": 1},

@@ -2352,6 +2352,8 @@ def _gudhi_canonical_complex(obj: dict[str, object]) -> dict[str, object]:
                 "num_edges": sum(1 for row in canonical if int(row.get("dimension", -1)) == 1),
                 "num_two_simplices": sum(1 for row in canonical if int(row.get("dimension", -1)) == 2),
                 "num_thresholds": len(thresholds),
+                "simplex_tree_backend": "gudhi.SimplexTree",
+                "simplex_tree_available": True,
             }
         )
         return {
@@ -2361,6 +2363,7 @@ def _gudhi_canonical_complex(obj: dict[str, object]) -> dict[str, object]:
             "simplices": canonical,
             "simplex_tree": {
                 "backend": "gudhi.SimplexTree",
+                "available": True,
                 "num_vertices": int(tree.num_vertices()),
                 "num_simplices": int(tree.num_simplices()),
                 "dimension": int(tree.dimension()),
