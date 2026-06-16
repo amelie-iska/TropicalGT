@@ -2023,6 +2023,43 @@ def _unavailable_complex(reason: str, *, source: str = "model_probability_jensen
     }
 
 
+def _reasoning_step_complex_fingerprint(obj_summary: dict[str, object]) -> tuple[str, dict[str, object]]:
+    simplices = [row for row in obj_summary.get("simplices", []) if isinstance(row, dict)] if isinstance(obj_summary, dict) else []
+    canonical_simplices = sorted(
+        [
+            {
+                "simplex": [str(value) for value in (row.get("simplex", []) if isinstance(row.get("simplex"), list) else [])],
+                "dimension": int(row.get("dimension", -1) or -1),
+                "filtration": float(row.get("filtration", 0.0) or 0.0),
+                "type": str(row.get("type", "")),
+                "probability_source": str(row.get("probability_source", row.get("model_probability_source", ""))),
+                "has_probability_vector": bool(_probability_feature_vector(row) is not None),
+                "has_embedding": bool(isinstance(row.get("embedding"), list) and len(row.get("embedding", [])) > 0),
+            }
+            for row in simplices
+        ],
+        key=lambda row: (row["dimension"], row["filtration"], row["simplex"], row["type"]),
+    )
+    tree = obj_summary.get("simplex_tree", {}) if isinstance(obj_summary.get("simplex_tree"), dict) else {}
+    basis = {
+        "schema_version": "tropicalgt.reasoning_step_complex_fingerprint_basis.v1",
+        "hash_algorithm": "sha256_canonical_json",
+        "source": "gudhi_canonical_complex(filtered_simplicial_object)",
+        "summary": obj_summary.get("summary", {}) if isinstance(obj_summary.get("summary"), dict) else {},
+        "thresholds": [float(value) for value in obj_summary.get("thresholds", []) if isinstance(value, (int, float)) and math.isfinite(float(value))],
+        "simplices": canonical_simplices,
+        "simplex_tree": {
+            "backend": tree.get("backend", "missing"),
+            "available": tree.get("available") is not False,
+            "dimension": tree.get("dimension"),
+            "num_simplices": tree.get("num_simplices"),
+            "num_vertices": tree.get("num_vertices"),
+        },
+        "no_record_id_or_path_in_hash": True,
+    }
+    return _stable_artifact_hash(basis), basis
+
+
 def _write_reasoning_step_complex_maps(candidates: list[dict[str, object]], output_dir: Path) -> dict[str, str]:
     directory = output_dir / "reasoning_step_complex_maps"
     directory.mkdir(parents=True, exist_ok=True)
@@ -2034,6 +2071,7 @@ def _write_reasoning_step_complex_maps(candidates: list[dict[str, object]], outp
         obj = _attach_graph_token_direction_overlay(obj, row)
         obj = _attach_decoding_causal_overlay(obj, row)
         obj_summary = _gudhi_canonical_complex(obj)
+        step_complex_fingerprint, fingerprint_basis = _reasoning_step_complex_fingerprint(obj_summary)
         record_id = str(row.get("record_id", f"step-{idx}"))
         file_name = f"reasoning_step_{idx:03d}.html"
         path = directory / file_name
@@ -2060,6 +2098,8 @@ def _write_reasoning_step_complex_maps(candidates: list[dict[str, object]], outp
                 "file": file_name,
                 "simplex_tree_file": tree_file_name,
                 "summary": obj_summary.get("summary", {}),
+                "step_complex_fingerprint": step_complex_fingerprint,
+                "step_complex_fingerprint_basis": fingerprint_basis,
                 "simplex_tree": obj_summary.get("simplex_tree", {}),
                 "simplex_tree_backend": (obj_summary.get("simplex_tree", {}) if isinstance(obj_summary.get("simplex_tree"), dict) else {}).get("backend", "missing"),
                 "simplex_tree_available": (obj_summary.get("simplex_tree", {}) if isinstance(obj_summary.get("simplex_tree"), dict) else {}).get("available") is not False,
@@ -3033,6 +3073,21 @@ def _display_thresholds(obj: dict[str, object], max_steps: int = 32) -> list[flo
 
 def _reasoning_step_complex_manifest_contract(rows: list[dict[str, object]]) -> dict[str, object]:
     simplex_tree_available = [row for row in rows if bool(row.get("simplex_tree_available"))]
+    fingerprint_groups: dict[str, list[dict[str, object]]] = defaultdict(list)
+    for row in rows:
+        fingerprint = str(row.get("step_complex_fingerprint", ""))
+        if fingerprint:
+            fingerprint_groups[fingerprint].append(row)
+    duplicate_fingerprint_groups = [
+        {
+            "fingerprint": fingerprint,
+            "step_indices": [int(row.get("index", 0) or 0) for row in group],
+            "record_ids": [str(row.get("record_id", "")) for row in group],
+            "allowed_only_if_canonical_filtered_complex_payload_identical": True,
+        }
+        for fingerprint, group in sorted(fingerprint_groups.items())
+        if len(group) > 1
+    ]
     unavailable = []
     for row in rows:
         if bool(row.get("simplex_tree_available")):
@@ -3059,6 +3114,11 @@ def _reasoning_step_complex_manifest_contract(rows: list[dict[str, object]]) -> 
         "step_count": int(len(rows)),
         "rendered_complex_pages": int(len([row for row in rows if row.get("file")])),
         "rendered_simplex_tree_pages": int(len([row for row in rows if row.get("simplex_tree_file")])),
+        "fingerprint_source": "sha256 canonical JSON over per-step gudhi_canonical_complex(filtered_simplicial_object); record id/path excluded",
+        "all_step_complex_fingerprints_present": bool(rows) and all(bool(row.get("step_complex_fingerprint")) for row in rows),
+        "unique_step_complex_fingerprint_count": int(len(fingerprint_groups)),
+        "all_step_complex_fingerprints_unique": bool(len(fingerprint_groups) == len(rows)),
+        "duplicate_step_complex_fingerprint_groups": duplicate_fingerprint_groups,
         "gudhi_simplex_tree_step_count": int(len(simplex_tree_available)),
         "simplex_tree_unavailable_count": int(len(unavailable)),
         "simplex_tree_unavailable_steps": unavailable,
@@ -3078,6 +3138,8 @@ def _reasoning_step_contract_panel(contract: Mapping[str, object] | None) -> str
         f"<p><strong>Contract:</strong> {html.escape(str(contract.get('claim', '')))} "
         f"GUDHI SimplexTree available for {int(contract.get('gudhi_simplex_tree_step_count', 0) or 0)} step(s); "
         f"explicitly unavailable for {int(contract.get('simplex_tree_unavailable_count', 0) or 0)}.</p>"
+        f"<p><strong>Per-step fingerprints:</strong> {int(contract.get('unique_step_complex_fingerprint_count', 0) or 0)} unique canonical complex payload hash(es); "
+        f"duplicates are listed only when the canonical filtered-complex payload is byte-identical after normalization.</p>"
         "</aside>"
     )
 
@@ -3091,7 +3153,7 @@ def _write_reasoning_step_complex_index(path: Path, rows: list[dict[str, object]
         f"<td><a href='{html.escape(str(row.get('simplex_tree_file', '')))}'>simplex tree</a></td>"
         f"<td>{int(row.get('level', 0))}</td>"
         f"<td>{html.escape(_json_clip(row.get('path', []), 96))}</td>"
-        f"<td>{html.escape(_json_clip(row.get('summary', {}), 140))}</td>"
+        f"<td>{html.escape(_json_clip(row.get('summary', {}), 140))}<br><small>fingerprint={html.escape(str(row.get('step_complex_fingerprint', 'missing'))[:16])}</small></td>"
         "</tr>"
         for row in rows
     ) or "<tr><td colspan='6'>No reasoning-step complexes were generated.</td></tr>"

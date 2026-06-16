@@ -848,6 +848,8 @@ def test_got_trajectory_visualization_renders_simplicial_panel_and_nll_surface(t
     assert "Reasoning step filtered simplicial complex maps" in step_index_html
     assert "no proxy" in step_index_html
     assert "not reconstructed from the global trajectory PCA surface" in step_index_html
+    assert "Per-step fingerprints" in step_index_html
+    assert "fingerprint=" in step_index_html
     assert step_manifest["contract"]["schema_version"] == "tropicalgt.reasoning_step_complex_maps.v1"
     assert step_manifest["contract"]["no_proxy_or_fallback"] is True
     assert step_manifest["contract"]["actual_data_only"] is True
@@ -856,9 +858,20 @@ def test_got_trajectory_visualization_renders_simplicial_panel_and_nll_surface(t
     assert step_manifest["contract"]["step_count"] == 4
     assert step_manifest["contract"]["rendered_complex_pages"] == 4
     assert step_manifest["contract"]["rendered_simplex_tree_pages"] == 4
+    assert step_manifest["contract"]["all_step_complex_fingerprints_present"] is True
+    assert step_manifest["contract"]["fingerprint_source"].startswith("sha256 canonical JSON")
+    assert step_manifest["contract"]["unique_step_complex_fingerprint_count"] == len({row["step_complex_fingerprint"] for row in step_manifest["steps"]})
+    assert step_manifest["contract"]["all_step_complex_fingerprints_unique"] == (
+        step_manifest["contract"]["unique_step_complex_fingerprint_count"] == step_manifest["contract"]["step_count"]
+    )
+    assert isinstance(step_manifest["contract"]["duplicate_step_complex_fingerprint_groups"], list)
     assert step_manifest["contract"]["gudhi_simplex_tree_step_count"] + step_manifest["contract"]["simplex_tree_unavailable_count"] == 4
     assert len(step_manifest["steps"]) == 4
     assert [row["record_id"] for row in step_manifest["steps"]] == [node["record_id"] for node in payload["nodes"]]
+    assert all(row.get("step_complex_fingerprint") for row in step_manifest["steps"])
+    assert all(row.get("step_complex_fingerprint_basis", {}).get("schema_version") == "tropicalgt.reasoning_step_complex_fingerprint_basis.v1" for row in step_manifest["steps"])
+    assert all(row.get("step_complex_fingerprint_basis", {}).get("no_record_id_or_path_in_hash") is True for row in step_manifest["steps"])
+    assert all(row.get("step_complex_fingerprint_basis", {}).get("simplices") for row in step_manifest["steps"])
     assert step_manifest["steps"][0]["complex_render_contract"].startswith("actual per-step radius-filtered complex")
     assert step_manifest["steps"][0]["simplex_tree_render_contract"].startswith("actual GUDHI SimplexTree")
     first_step = tmp_path / "reasoning_step_complex_maps" / "reasoning_step_000.html"

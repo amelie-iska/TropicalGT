@@ -678,3 +678,27 @@ CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/t
 CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_simplicial_visualization.py -q -p no:cacheprovider --basetemp=/tmp/tropicalgt-pytest-analogical-tree-simplicial-full
 # 43 passed
 ```
+
+## 2026-06-16 Reasoning-Step Complex Fingerprint Contract Repair
+
+Sequential simplicial/simplex-tree item completed after the analogical simplex-tree analogy view repair:
+
+- Added canonical per-reasoning-step filtered-complex fingerprints to every `reasoning_step_complex_maps` step row.
+- The fingerprint basis uses `gudhi_canonical_complex(filtered_simplicial_object)` evidence, including simplex rows, filtration values, probability-vector provenance, and SimplexTree backend metadata.
+- Record ids and output paths are explicitly excluded from the hash basis so a repeated fingerprint means an identical canonical filtered-complex payload, not a duplicated filename.
+- The manifest now reports fingerprint source, per-step fingerprint presence, unique fingerprint count, uniqueness status, and duplicate fingerprint groups with the required identical-payload caveat.
+- The HTML index and contract panel expose the fingerprint evidence so reviewers can see whether each reasoning step has its own actual radius-filtered complex.
+- The interactive artifact validator now rejects missing per-step fingerprints, missing fingerprint bases, bad duplicate accounting, bad fingerprint-basis schema/source, or duplicate-group claims without the identical-payload caveat.
+
+Validation:
+
+```text
+CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_simplicial_visualization.py TropicalGT-I/tests/test_interactive_artifact_validator.py -q -p no:cacheprovider --basetemp=/tmp/tropicalgt-pytest-step-fingerprints -k "reasoning_step or validate_audit_root_rejects_missing_reasoning_step"
+# 1 passed, 57 deselected
+CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_interactive_artifact_validator.py -q -p no:cacheprovider --basetemp=/tmp/tropicalgt-pytest-step-validator-full
+# 15 passed
+CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_simplicial_visualization.py -q -p no:cacheprovider --basetemp=/tmp/tropicalgt-pytest-step-simplicial-full
+# 43 passed
+CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m py_compile TropicalGT-I/src/tropicalgt/visualization.py TropicalGT-I/scripts/validate_interactive_audit_artifacts.py TropicalGT-I/tests/test_simplicial_visualization.py TropicalGT-I/tests/test_interactive_artifact_validator.py
+# passed
+```

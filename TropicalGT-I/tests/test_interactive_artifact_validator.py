@@ -250,17 +250,62 @@ def _row(root: Path, name: str) -> Path:
             }
         ),
     )
-    steps = [
-        {
-            "record_id": candidates[idx]["record_id"],
-            "file": f"reasoning_step_{idx:03d}.html",
-            "simplex_tree_file": f"reasoning_step_{idx:03d}_simplex_tree.html",
+    steps = []
+    for idx in range(4):
+        basis = {
+            "schema_version": "tropicalgt.reasoning_step_complex_fingerprint_basis.v1",
+            "hash_algorithm": "sha256_canonical_json",
+            "source": "gudhi_canonical_complex(filtered_simplicial_object)",
             "summary": {"num_vertices": 1},
-            "simplex_tree": {"backend": "gudhi.SimplexTree"},
+            "thresholds": [0.0],
+            "simplices": [
+                {
+                    "simplex": [candidates[idx]["record_id"]],
+                    "dimension": 0,
+                    "filtration": 0.0,
+                    "type": "reasoning_step_vertex",
+                    "probability_source": "",
+                    "has_probability_vector": False,
+                    "has_embedding": True,
+                }
+            ],
+            "simplex_tree": {"backend": "gudhi.SimplexTree", "available": True, "dimension": 0, "num_simplices": 1, "num_vertices": 1},
+            "no_record_id_or_path_in_hash": True,
         }
-        for idx in range(4)
-    ]
-    _write(row / "reasoning_step_complex_maps/manifest.json", json.dumps({"steps": steps}))
+        steps.append(
+            {
+                "index": idx,
+                "record_id": candidates[idx]["record_id"],
+                "file": f"reasoning_step_{idx:03d}.html",
+                "simplex_tree_file": f"reasoning_step_{idx:03d}_simplex_tree.html",
+                "summary": {"num_vertices": 1},
+                "step_complex_fingerprint": f"fixture-step-fingerprint-{idx}",
+                "step_complex_fingerprint_basis": basis,
+                "simplex_tree": {"backend": "gudhi.SimplexTree"},
+                "simplex_tree_available": True,
+            }
+        )
+    step_manifest_contract = {
+        "schema_version": "tropicalgt.reasoning_step_complex_maps.v1",
+        "available": True,
+        "no_proxy_or_fallback": True,
+        "actual_data_only": True,
+        "one_page_per_model_evaluated_reasoning_step": True,
+        "embedding_trajectory_map_is_not_a_step_complex": True,
+        "step_count": 4,
+        "rendered_complex_pages": 4,
+        "rendered_simplex_tree_pages": 4,
+        "fingerprint_source": "sha256 canonical JSON over per-step gudhi_canonical_complex(filtered_simplicial_object); record id/path excluded",
+        "all_step_complex_fingerprints_present": True,
+        "unique_step_complex_fingerprint_count": 4,
+        "all_step_complex_fingerprints_unique": True,
+        "duplicate_step_complex_fingerprint_groups": [],
+        "gudhi_simplex_tree_step_count": 4,
+        "simplex_tree_unavailable_count": 0,
+        "simplex_tree_unavailable_steps": [],
+        "claim": "Each listed step opens its own radius-filtered complex and SimplexTree/explicit-unavailable page; no global trajectory PCA surface is used as a substitute.",
+    }
+    _write(row / "reasoning_step_complex_maps/manifest.json", json.dumps({"contract": step_manifest_contract, "steps": steps}))
     analogical_topk_readability_contract = {
         "schema_version": "tropicalgt.analogical_topk_readability.v1",
         "status": "available",
@@ -833,6 +878,21 @@ def test_validate_audit_root_rejects_missing_tropical_support_readability_contra
     report = validator.validate_audit_root(audit, min_rows=1, min_candidates=4, min_depth=2)
     assert not report["ok"]
     assert any("tropical support payload is missing readability contract" in err for err in report["errors"])
+
+
+def test_validate_audit_root_rejects_missing_reasoning_step_complex_fingerprints(tmp_path: Path):
+    validator = _load_validator()
+    audit = tmp_path / "step_00000001" / "got_audit"
+    row = _row(audit, ".")
+    manifest_path = row / "reasoning_step_complex_maps" / "manifest.json"
+    payload = json.loads(manifest_path.read_text(encoding="utf-8"))
+    payload["steps"][0].pop("step_complex_fingerprint")
+    payload["contract"]["all_step_complex_fingerprints_present"] = False
+    manifest_path.write_text(json.dumps(payload), encoding="utf-8")
+    _write(audit / "codex_browser_index.html", _codex_browser_html(_browser_samples(audit, ["."])))
+    report = validator.validate_audit_root(audit, min_rows=1, min_candidates=4, min_depth=2)
+    assert not report["ok"]
+    assert any("fingerprint" in err and "reasoning-step" in err for err in report["errors"])
 
 
 def test_validate_audit_root_rejects_missing_analogical_simplex_tree_analogy_contract(tmp_path: Path):

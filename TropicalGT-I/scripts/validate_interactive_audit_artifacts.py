@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+from collections import Counter
 import html
 import json
 import math
@@ -898,14 +899,48 @@ def validate_row(row_dir: Path, *, min_candidates: int = 8, min_depth: int = 2, 
             _assert("vertex-only correspondences" in analogical_html and preserved_marker, errors, "analogical map HTML does not distinguish preserved simplices from vertex-only correspondences")
 
     steps = [row for row in manifest.get("steps", []) if isinstance(row, dict)]
+    step_contract = manifest.get("contract", {}) if isinstance(manifest.get("contract"), dict) else {}
     _assert(len(steps) == len(candidates), errors, "reasoning-step complex map count does not match candidates")
+    _assert(isinstance(step_contract, dict) and step_contract.get("schema_version") == "tropicalgt.reasoning_step_complex_maps.v1", errors, "reasoning-step manifest is missing contract schema")
+    if isinstance(step_contract, dict):
+        _assert(step_contract.get("no_proxy_or_fallback") is True, errors, "reasoning-step manifest contract missing no-proxy flag")
+        _assert(step_contract.get("actual_data_only") is True, errors, "reasoning-step manifest contract is not actual-data-only")
+        _assert(step_contract.get("one_page_per_model_evaluated_reasoning_step") is True, errors, "reasoning-step manifest contract does not require one page per model state")
+        _assert(step_contract.get("embedding_trajectory_map_is_not_a_step_complex") is True, errors, "reasoning-step manifest allows trajectory map as step complex")
+        _assert(step_contract.get("all_step_complex_fingerprints_present") is True, errors, "reasoning-step manifest contract says fingerprints are missing")
+        _assert(int(_finite_float(step_contract.get("unique_step_complex_fingerprint_count"), -1.0)) >= 1 if steps else True, errors, "reasoning-step manifest has no unique complex fingerprints")
+        duplicate_groups = step_contract.get("duplicate_step_complex_fingerprint_groups", [])
+        _assert(isinstance(duplicate_groups, list), errors, "reasoning-step manifest duplicate fingerprint groups are not a list")
+        if isinstance(duplicate_groups, list):
+            for group in duplicate_groups:
+                if not isinstance(group, dict):
+                    errors.append("reasoning-step manifest duplicate fingerprint group is not an object")
+                    continue
+                _assert(bool(group.get("fingerprint")), errors, "reasoning-step duplicate group lacks fingerprint")
+                _assert(len(group.get("step_indices", [])) > 1 if isinstance(group.get("step_indices"), list) else False, errors, "reasoning-step duplicate group lacks repeated step indices")
+                _assert(group.get("allowed_only_if_canonical_filtered_complex_payload_identical") is True, errors, "reasoning-step duplicate group lacks identical-payload caveat")
     _assert(all(isinstance(row.get("simplex_tree"), dict) and row["simplex_tree"].get("backend") == "gudhi.SimplexTree" for row in steps), errors, "reasoning-step manifest is missing GUDHI SimplexTree provenance")
+    fingerprints = [str(row.get("step_complex_fingerprint", "")) for row in steps]
+    _assert(all(fingerprints), errors, "reasoning-step manifest steps are missing complex fingerprints")
+    _assert(all(isinstance(row.get("step_complex_fingerprint_basis"), dict) for row in steps), errors, "reasoning-step manifest steps are missing fingerprint basis")
+    if fingerprints and isinstance(step_contract, dict):
+        _assert(int(_finite_float(step_contract.get("unique_step_complex_fingerprint_count"), -1.0)) == len(set(fingerprints)), errors, "reasoning-step manifest fingerprint unique count mismatch")
+        expected_duplicate_groups = sum(1 for count in Counter(fingerprints).values() if count > 1)
+        duplicate_groups = step_contract.get("duplicate_step_complex_fingerprint_groups", []) if isinstance(step_contract.get("duplicate_step_complex_fingerprint_groups"), list) else []
+        _assert(len(duplicate_groups) == expected_duplicate_groups, errors, "reasoning-step manifest duplicate fingerprint groups do not match step fingerprints")
+        if len(set(fingerprints)) == len(fingerprints):
+            _assert(step_contract.get("all_step_complex_fingerprints_unique") is True, errors, "reasoning-step manifest unique-fingerprint flag is false despite unique fingerprints")
     for idx, node in enumerate(nodes):
         rid = str(node.get("record_id", ""))
         step = steps[idx] if idx < len(steps) else {}
         expected_step_href = f"reasoning_step_complex_maps/{step.get('file', '')}"
         expected_tree_href = f"reasoning_step_complex_maps/{step.get('simplex_tree_file', '')}"
         _assert(str(step.get("record_id", rid)) == rid, errors, f"reasoning-step manifest record_id mismatch at index {idx}")
+        basis = step.get("step_complex_fingerprint_basis", {}) if isinstance(step.get("step_complex_fingerprint_basis"), dict) else {}
+        _assert(basis.get("schema_version") == "tropicalgt.reasoning_step_complex_fingerprint_basis.v1", errors, f"reasoning-step manifest fingerprint basis schema mismatch at index {idx}")
+        _assert(basis.get("source") == "gudhi_canonical_complex(filtered_simplicial_object)", errors, f"reasoning-step manifest fingerprint source mismatch at index {idx}")
+        _assert(basis.get("no_record_id_or_path_in_hash") is True, errors, f"reasoning-step manifest fingerprint includes record id/path at index {idx}")
+        _assert(isinstance(basis.get("simplices"), list) and bool(basis.get("simplices")), errors, f"reasoning-step manifest fingerprint basis lacks simplices at index {idx}")
         _assert(node.get("reasoning_step_index") == idx, errors, f"trajectory node {rid} has wrong reasoning_step_index")
         _assert(node.get("step_complex_href") == expected_step_href, errors, f"trajectory node {rid} has wrong step_complex_href")
         _assert(node.get("step_simplex_tree_href") == expected_tree_href, errors, f"trajectory node {rid} has wrong step_simplex_tree_href")
