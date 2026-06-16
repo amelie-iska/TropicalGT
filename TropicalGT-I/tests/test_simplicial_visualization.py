@@ -914,17 +914,49 @@ def test_tropical_support_heatmap_layout_keeps_legend_out_of_margin(tmp_path: Pa
     assert audit["strict_wall_hit_count"] == 1
     assert audit["near_wall_hit_count"] == 2
     assert audit["near_wall_only_count"] == 1
+    assert audit["metric_scope"] == "margin_threshold_audit_not_certified_normal_fan_wall_crossing"
+    assert audit["low_strict_wall_interpretation_status"] == "strict_wall_margin_events_observed"
+    assert audit["metric_issue"] is False
     assert payload["support_flow_edges"][2]["wall_margin_bucket"] == "strict_wall"
     assert payload["support_flow_edges"][3]["wall_margin_bucket"] == "near_wall"
     assert "active support probability" in html
     assert "Grouped token labels" in html
     assert "near-wall hit rate" in html
+    assert "Wall audit scope" in html
     assert "strict wall threshold" in html
     assert "Tropical active-support audit" in html
     compact = html.replace(" ", "")
     assert '"showlegend":false' in compact
     assert '"r":190' in compact
     assert "Support frequency and mean selected margin" in html
+
+
+def test_tropical_support_wall_audit_preserves_explicit_zero_threshold(tmp_path: Path):
+    result = {
+        "wall_margin_threshold": 0.0,
+        "near_wall_margin_threshold": 0.0001,
+        "graph_token_trace": {
+            "tokens": [
+                {"index": 0, "text": "zero", "kind": "node", "node_type": "root", "active_support_index": 0, "margin": 0.0},
+                {"index": 1, "text": "near", "kind": "node", "node_type": "leaf", "active_support_index": 1, "margin": 0.0001},
+                {"index": 2, "text": "inside", "kind": "edge", "edge_type": "causal", "active_support_index": 1, "margin": 0.01},
+            ]
+        },
+    }
+    paths = write_tropical_support_heatmap(result, tmp_path)
+    html = Path(paths["tropical_support_heatmap"]).read_text(encoding="utf-8")
+    payload = json.loads(Path(paths["tropical_support_payload"]).read_text(encoding="utf-8"))
+    audit = payload["metrics"]["wall_margin_audit"]
+    assert audit["wall_margin_threshold"] == 0.0
+    assert audit["near_wall_margin_threshold"] == 0.0001
+    assert audit["strict_wall_hit_count"] == 1
+    assert audit["near_wall_hit_count"] == 2
+    assert audit["near_wall_only_count"] == 1
+    assert audit["metric_scope"] == "margin_threshold_audit_not_certified_normal_fan_wall_crossing"
+    assert audit["metric_issue"] is False
+    assert payload["support_flow_edges"][0]["wall_margin_bucket"] == "strict_wall"
+    assert payload["support_flow_edges"][1]["wall_margin_bucket"] == "near_wall"
+    assert "Wall audit scope" in html
 
 
 def test_tropical_support_high_collapse_uses_compact_diagnostic(tmp_path: Path):

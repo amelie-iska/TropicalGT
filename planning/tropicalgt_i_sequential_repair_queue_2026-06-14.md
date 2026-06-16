@@ -101,7 +101,7 @@
 ### 8. Tropical Support and Wall Crossing
 
 - [x] Make support heatmaps interpretable with grouped token labels, top-support summaries, margin profiles, collapse diagnostics, and wall-hit context.
-- [ ] Audit wall-hit rate definition and explain when low wall-crossing is mathematically expected versus a metric issue.
+- [x] Audit wall-hit rate definition and explain when low wall-crossing is mathematically expected versus a metric issue.
 - [ ] Fix/rename negative `tropical_margin_loss` so sign and objective direction are clear.
 - [ ] Investigate rising `certificate_loss` and separate real certificate loss from diagnostic penalties.
 
@@ -347,3 +347,11 @@ The live item-by-item repair inventory is maintained in `planning/tropicalgt_i_c
 - [x] Exposed grouped token labels, top-support group, collapse diagnostics, margin profile, and strict/near wall-hit context in both the observed-support matrix view and high-collapse diagnostic view.
 - [x] Kept support heatmaps as observed assignment matrices only: yellow cells are selected model supports, confidence remains in model probability summaries and selected-margin profiles, and no proxy scores or fallback support objects are introduced.
 - [x] Verification passed: focused tropical support tests `2 passed`; full simplicial visualization `34 passed`; artifact validator `10 passed`; compile checks passed for modified source/tests.
+
+### Current Objective Update - Wall-Hit Metric Scope Pass
+
+- [x] Reclassified tropical wall-hit reporting as a margin-threshold wall audit, not a certified normal-fan wall-crossing count.
+- [x] Added machine-readable wall-audit scope, strict/near-wall definitions, low-strict interpretation status, interpretation text, and `metric_issue` status to `tropical_support_payload.json`.
+- [x] Fixed threshold selection so an explicit `0.0` strict wall threshold is preserved instead of being replaced by the default threshold.
+- [x] Updated validator requirements so current interactive audit artifacts must include the no-proxy metric scope and low-strict interpretation whenever wall-margin audit data is present.
+- [x] Verification passed: focused tropical support wall tests `3 passed`; full simplicial visualization `35 passed`; artifact validator `10 passed`; compile checks passed for modified source/tests/validator.

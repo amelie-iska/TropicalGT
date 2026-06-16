@@ -433,10 +433,20 @@ git diff --check
 - Verification completed: `/home/iska/miniconda3/envs/tokengt/bin/python -m py_compile TropicalGT-I/src/tropicalgt/visualization.py TropicalGT-I/tests/test_simplicial_visualization.py`, focused tropical support tests (`2 passed`), `pytest TropicalGT-I/tests/test_simplicial_visualization.py -q` (`34 passed`), `pytest TropicalGT-I/tests/test_interactive_artifact_validator.py -q` (`10 passed`).
 
 
+## 2026-06-16 Wall-Hit Metric Scope Addendum
+
+- Tropical wall-hit reporting is now explicitly scoped as a model tropical-margin threshold audit, not a certified normal-fan wall-crossing count. Low strict wall-hit rates are interpreted through the actual margin bands: strict events observed, near-wall-only ambiguity, interior chamber margins, or metric issue when finite margins are unavailable.
+- `tropical_support_payload.json` now records `metric_scope`, strict and near-wall definitions, `low_strict_wall_interpretation_status`, explanatory text, and a boolean `metric_issue` flag inside `wall_margin_audit`.
+- The visualization preserves explicit zero thresholds and displays wall-audit scope plus low-strict interpretation in both observed-support and collapse-diagnostic views.
+- The interactive artifact validator now requires the no-proxy wall-audit scope and interpretation fields for current payloads with wall-margin audit data.
+- b60 latest checked training state reached step `1287` with train loss/NLL `1.235/1.212`; trainer PID `378962` and watcher PID `379304` remain alive under the step-5000 gate.
+- Verification completed: `/home/iska/miniconda3/envs/tokengt/bin/python -m py_compile TropicalGT-I/src/tropicalgt/visualization.py TropicalGT-I/scripts/validate_interactive_audit_artifacts.py TropicalGT-I/tests/test_simplicial_visualization.py TropicalGT-I/tests/test_interactive_artifact_validator.py`, focused tropical support wall tests (`3 passed`), `pytest TropicalGT-I/tests/test_simplicial_visualization.py -q` (`35 passed`), and `pytest TropicalGT-I/tests/test_interactive_artifact_validator.py -q` (`10 passed`).
+
+
 ## Real Implementations Only Policy
 
 No TropicalGT-I metric, loss, visualization, analogical map, persistence module, free resolution, derived comparison, tropical-cycle diagnostic, or CAS artifact should be presented as a mathematical object unless it is computed from the actual model outputs, graph states, embeddings, probabilities, simplex trees, bifiltrations, or certified CAS/backend output that define that object. Temporary placeholders, synthetic fallback objects, mock charts, fabricated simplices, and convenience stand-ins are not acceptable. When a requested object cannot yet be computed, the artifact must render an explicit unavailable/uncertified state and the training metric must either be disabled or logged under an audit-only unavailable flag. Finite chain-presentation diagnostics may be shown only as chain diagnostics, never as free resolutions. Total-graded or ungraded CAS output may be shown as real CAS output only under its actual grading; it must not be advertised as a multigraded `F2[x_level,x_radius]` free resolution unless the backend certifies that multigraded structure.
 
 Use "one dimensional cone" or "one dimensional cones" as the preferred fan-theoretic language whenever the intended object is a cone of a fan or a cone-indexed filtration datum. Use singular or plural according to ordinary grammar.
 
-_Last updated: 2026-06-16T06:59:36Z_
+_Last updated: 2026-06-16T07:03:01Z_

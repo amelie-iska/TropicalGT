@@ -3069,19 +3069,25 @@ def write_tropical_support_heatmap(result: dict[str, object], output_dir: str | 
 
     result_metrics = result.get("metrics", {}) if isinstance(result, dict) else {}
     trace_metrics = trace.get("metrics", {}) if isinstance(trace, dict) else {}
-    wall_threshold = (
-        finite_object_float(trace, "wall_margin_threshold")
-        or finite_object_float(trace_metrics, "wall_margin_threshold")
-        or finite_object_float(result, "wall_margin_threshold")
-        or finite_object_float(result_metrics, "wall_margin_threshold")
-        or 1.0e-3
+    def first_finite_float(default: float, *values: float | None) -> float:
+        for value in values:
+            if value is not None:
+                return float(value)
+        return float(default)
+
+    wall_threshold = first_finite_float(
+        1.0e-3,
+        finite_object_float(trace, "wall_margin_threshold"),
+        finite_object_float(trace_metrics, "wall_margin_threshold"),
+        finite_object_float(result, "wall_margin_threshold"),
+        finite_object_float(result_metrics, "wall_margin_threshold"),
     )
-    near_wall_threshold = (
-        finite_object_float(trace, "near_wall_margin_threshold")
-        or finite_object_float(trace_metrics, "near_wall_margin_threshold")
-        or finite_object_float(result, "near_wall_margin_threshold")
-        or finite_object_float(result_metrics, "near_wall_margin_threshold")
-        or max(float(wall_threshold) * 10.0, float(wall_threshold))
+    near_wall_threshold = first_finite_float(
+        max(float(wall_threshold) * 10.0, float(wall_threshold)),
+        finite_object_float(trace, "near_wall_margin_threshold"),
+        finite_object_float(trace_metrics, "near_wall_margin_threshold"),
+        finite_object_float(result, "near_wall_margin_threshold"),
+        finite_object_float(result_metrics, "near_wall_margin_threshold"),
     )
     wall_threshold = max(float(wall_threshold), 0.0)
     near_wall_threshold = max(float(near_wall_threshold), wall_threshold)
@@ -3263,6 +3269,22 @@ def write_tropical_support_heatmap(result: dict[str, object], output_dir: str | 
     strict_wall_hit_count = int(sum(strict_wall_flags))
     near_wall_hit_count = int(sum(near_wall_flags))
     near_wall_only_count = int(sum(near_wall_only_flags))
+    if not finite_margins.size:
+        wall_interpretation_status = "metric_issue_no_finite_margins"
+        wall_interpretation = "No finite tropical margins were present, so strict and near-wall rates are an unavailable metric state rather than evidence about chamber crossings."
+        wall_metric_issue = True
+    elif strict_wall_hit_count > 0:
+        wall_interpretation_status = "strict_wall_margin_events_observed"
+        wall_interpretation = "At least one selected-support margin is within the configured strict threshold; inspect the per-token wall buckets for the actual observed margin events."
+        wall_metric_issue = False
+    elif near_wall_only_count > 0:
+        wall_interpretation_status = "low_strict_expected_near_wall_ambiguity"
+        wall_interpretation = "The strict rate is low because no selected-support margin entered the strict band, but near-wall-only events show ambiguity close to the chamber boundary."
+        wall_metric_issue = False
+    else:
+        wall_interpretation_status = "low_strict_expected_interior_margins"
+        wall_interpretation = "The strict rate is low because all finite selected-support margins are above the near-wall threshold, consistent with interior chamber behavior for this margin audit."
+        wall_metric_issue = False
     wall_margin_audit = {
         "wall_margin_threshold": float(wall_threshold),
         "near_wall_margin_threshold": float(near_wall_threshold),
@@ -3272,7 +3294,13 @@ def write_tropical_support_heatmap(result: dict[str, object], output_dir: str | 
         "strict_wall_hit_rate": float(strict_wall_hit_count / max(n, 1)),
         "near_wall_hit_rate": float(near_wall_hit_count / max(n, 1)),
         "near_wall_only_rate": float(near_wall_only_count / max(n, 1)),
-        "definition": "strict_wall_hit_rate counts margin <= wall_margin_threshold; near_wall_hit_rate counts margin <= near_wall_margin_threshold so low strict wall-hit rate can still reveal near-wall ambiguity.",
+        "metric_scope": "margin_threshold_audit_not_certified_normal_fan_wall_crossing",
+        "strict_definition": "strict_wall_hit_rate counts finite selected-support margins with margin <= wall_margin_threshold.",
+        "near_wall_definition": "near_wall_hit_rate counts finite selected-support margins with margin <= near_wall_margin_threshold; near_wall_only counts near-wall hits outside the strict band.",
+        "low_strict_wall_interpretation_status": wall_interpretation_status,
+        "low_strict_wall_interpretation": wall_interpretation,
+        "metric_issue": bool(wall_metric_issue),
+        "definition": "strict_wall_hit_rate counts margin <= wall_margin_threshold; near_wall_hit_rate counts margin <= near_wall_margin_threshold so low strict wall-hit rate can still reveal near-wall ambiguity. This is a model tropical-margin threshold audit, not a certified normal-fan wall-crossing count.",
     }
     support_flow_edges = []
     for row_idx, token in enumerate(tokens):
@@ -3370,6 +3398,8 @@ def write_tropical_support_heatmap(result: dict[str, object], output_dir: str | 
             ("strict wall hits", f"{strict_wall_hit_count}/{n} <= {wall_threshold:.4g}"),
             ("near-wall hits", f"{near_wall_hit_count}/{n} <= {near_wall_threshold:.4g}"),
             ("near-wall only", f"{near_wall_only_count}/{n}"),
+            ("wall audit scope", str(wall_margin_audit.get("metric_scope", "unavailable"))),
+            ("low strict interpretation", str(wall_margin_audit.get("low_strict_wall_interpretation_status", "unavailable"))),
         ]
         fig = make_subplots(
             rows=2,
@@ -3475,7 +3505,7 @@ def write_tropical_support_heatmap(result: dict[str, object], output_dir: str | 
             template="plotly_dark",
             title=(
                 "Tropical active-support collapse diagnostic: observed supports only"
-                f"<br><sup>top-support collapse rate={collapse_rate:.3f}; top support {html.escape(top_support_label)} captures {100.0 * collapse_rate:.1f}% of tokens. Strict wall-hit rate={wall_margin_audit['strict_wall_hit_rate']:.3f}; near-wall hit rate={wall_margin_audit['near_wall_hit_rate']:.3f}. Yellow cells are selected-support assignments; margins are plotted separately.</sup>"
+                f"<br><sup>top-support collapse rate={collapse_rate:.3f}; top support {html.escape(top_support_label)} captures {100.0 * collapse_rate:.1f}% of tokens. Strict wall-hit rate={wall_margin_audit['strict_wall_hit_rate']:.3f}; near-wall hit rate={wall_margin_audit['near_wall_hit_rate']:.3f}. Wall audit scope: {html.escape(str(wall_margin_audit.get('metric_scope', 'unavailable')))}; interpretation: {html.escape(str(wall_margin_audit.get('low_strict_wall_interpretation_status', 'unavailable')))}. Yellow cells are selected-support assignments; margins are plotted separately.</sup>"
             ),
             margin=dict(t=126, l=88, r=48, b=96),
             height=max(960, min(1420, 620 + 10 * n)),
@@ -3578,7 +3608,7 @@ def write_tropical_support_heatmap(result: dict[str, object], output_dir: str | 
         template="plotly_dark",
         title=(
             "Tropical active-support audit: observed supports only"
-            f"<br><sup>observed supports={len(support_indices)}/{n}; top-support collapse rate={collapse_rate:.3f}; effective={effective_supports:.2f}; entropy={support_entropy:.3f} bits. Grouped token labels: {html.escape(grouped_label_summary or 'unavailable')}; top support group={html.escape(str(top_support_summary.get('support_group', 'unavailable')))}. Strict wall-hit rate={wall_margin_audit['strict_wall_hit_rate']:.3f}; near-wall hit rate={wall_margin_audit['near_wall_hit_rate']:.3f}. Yellow cells mark selected support assignments only.</sup>"
+            f"<br><sup>observed supports={len(support_indices)}/{n}; top-support collapse rate={collapse_rate:.3f}; effective={effective_supports:.2f}; entropy={support_entropy:.3f} bits. Grouped token labels: {html.escape(grouped_label_summary or 'unavailable')}; top support group={html.escape(str(top_support_summary.get('support_group', 'unavailable')))}. Strict wall-hit rate={wall_margin_audit['strict_wall_hit_rate']:.3f}; near-wall hit rate={wall_margin_audit['near_wall_hit_rate']:.3f}. Wall audit scope: {html.escape(str(wall_margin_audit.get('metric_scope', 'unavailable')))}; interpretation: {html.escape(str(wall_margin_audit.get('low_strict_wall_interpretation_status', 'unavailable')))}. Yellow cells mark selected support assignments only.</sup>"
         ),
         height=max(1040, min(1660, 700 + 12 * n)),
         margin=dict(t=150, l=112, r=190, b=124),

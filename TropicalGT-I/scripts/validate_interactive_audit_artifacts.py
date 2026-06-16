@@ -557,6 +557,10 @@ def validate_row(row_dir: Path, *, min_candidates: int = 8, min_depth: int = 2, 
     if isinstance(wall_audit, dict):
         _assert(_finite_float(wall_audit.get("near_wall_hit_rate"), -1.0) >= _finite_float(wall_audit.get("strict_wall_hit_rate"), 0.0), errors, "near-wall hit rate is below strict wall-hit rate")
         _assert(_finite_float(wall_audit.get("near_wall_margin_threshold"), -1.0) >= _finite_float(wall_audit.get("wall_margin_threshold"), 0.0), errors, "near-wall threshold is below strict wall threshold")
+        _assert(wall_audit.get("metric_scope") == "margin_threshold_audit_not_certified_normal_fan_wall_crossing", errors, "wall margin audit is missing no-proxy metric scope")
+        _assert(isinstance(wall_audit.get("low_strict_wall_interpretation_status"), str) and bool(wall_audit.get("low_strict_wall_interpretation_status")), errors, "wall margin audit is missing low-strict interpretation status")
+        _assert(isinstance(wall_audit.get("low_strict_wall_interpretation"), str) and bool(wall_audit.get("low_strict_wall_interpretation")), errors, "wall margin audit is missing low-strict interpretation text")
+        _assert(isinstance(wall_audit.get("metric_issue"), bool), errors, "wall margin audit is missing metric_issue boolean")
     else:
         _assert(legacy_probability_unavailable, errors, "tropical support payload is missing wall margin audit")
     _assert(str(support_metrics.get("render_contract", "")).startswith("assignment_matrix is binary model argmax support"), errors, "tropical support payload is missing binary assignment render contract")
