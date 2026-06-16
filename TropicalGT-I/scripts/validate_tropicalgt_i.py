@@ -63,6 +63,8 @@ def main() -> None:
         "manifest": dataset_manifest(ds, root),
         "graph_json_fallback_records": graph_json_fallback_count,
         "invalid_graph_rate": graph_json_fallback_count / max(len(ds), 1),
+        "legacy_graph_json_substitution_guardrail_records": graph_json_fallback_count,
+        "legacy_graph_json_substitution_guardrail_rate": graph_json_fallback_count / max(len(ds), 1),
         "graph_json_derived_text_graph_records": graph_json_derived_text_graph_count,
         "graph_json_derived_text_graph_rate": graph_json_derived_text_graph_count / max(len(ds), 1),
         "graph_json_parse_unavailable_records": graph_json_parse_unavailable_count,

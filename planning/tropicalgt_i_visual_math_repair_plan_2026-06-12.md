@@ -899,3 +899,20 @@ CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/scripts:TropicalGT-I/src /home/i
 CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/scripts:TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_readiness_audit.py::test_readiness_audit_fixture_without_checkpoint TropicalGT-I/tests/test_parameter_golf_review_loop.py::test_active_training_contract_reports_losses_and_graph_order_metrics -q -p no:cacheprovider --basetemp=/tmp/tropicalgt-pytest-readiness-review-graph-json-alias
 # 2 passed
 ```
+
+## 2026-06-16 Graph JSON Validator Guardrail Alias
+
+Sequential validation/readout no-proxy item completed after the readiness/review guardrail alias:
+
+- Added `legacy_graph_json_substitution_guardrail_records` and `legacy_graph_json_substitution_guardrail_rate` to `validate_tropicalgt_i.py` output.
+- Preserved compatibility fields `graph_json_fallback_records` and `invalid_graph_rate` so existing validators and generated reports keep reading old artifacts.
+- Added a CLI regression proving the new alias is emitted and agrees with the compatibility rate on fixture data.
+
+Validation:
+
+```text
+CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/scripts:TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m py_compile TropicalGT-I/scripts/validate_tropicalgt_i.py TropicalGT-I/tests/test_readiness_audit.py
+# passed
+CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/scripts:TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_readiness_audit.py::test_validate_tropicalgt_i_reports_legacy_graph_json_guardrail_alias -q -p no:cacheprovider --basetemp=/tmp/tropicalgt-pytest-validate-graph-json-alias
+# 1 passed
+```

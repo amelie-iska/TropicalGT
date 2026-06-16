@@ -1,4 +1,6 @@
 import json
+import subprocess
+import sys
 from pathlib import Path
 
 import pandas as pd
@@ -15,6 +17,36 @@ def test_load_keys_accepts_colon_and_aliases(tmp_path):
     assert loaded["wandb"] == "wandb-value"
     assert loaded["github"] == "github-value"
     assert loaded["huggingface"] == "hf-value"
+
+
+def test_validate_tropicalgt_i_reports_legacy_graph_json_guardrail_alias(tmp_path):
+    config = tmp_path / "config.json"
+    output = tmp_path / "validate.json"
+    config.write_text(
+        json.dumps(
+            {
+                "fixture_size": 4,
+                "train_limit": 4,
+                "val_limit": 4,
+                "batch_size": 2,
+                "seq_len": 32,
+                "tokengt": {"max_nodes": 16, "max_edges": 32, "node_id_dim": 8, "feature_dim": 48, "graph_token": True},
+            }
+        ),
+        encoding="utf-8",
+    )
+    script = Path(__file__).resolve().parents[1] / "scripts" / "validate_tropicalgt_i.py"
+
+    subprocess.run(
+        [sys.executable, str(script), "--config", str(config), "--split", "train", "--output", str(output)],
+        check=True,
+        cwd=Path(__file__).resolve().parents[1],
+    )
+
+    report = json.loads(output.read_text(encoding="utf-8"))
+    assert report["graph_json_fallback_records"] == 0
+    assert report["legacy_graph_json_substitution_guardrail_records"] == 0
+    assert report["legacy_graph_json_substitution_guardrail_rate"] == report["invalid_graph_rate"] == 0.0
 
 
 def test_advanced_bpb_contract_passes_current_b54_gate_config():
