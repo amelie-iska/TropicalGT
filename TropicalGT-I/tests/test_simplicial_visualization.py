@@ -687,10 +687,10 @@ def test_got_trajectory_visualization_renders_simplicial_panel_and_nll_surface(t
 
     scaling = {
         "candidates": [
-            {"record_id": record.record_id, "embedding": [0.0, 0.0, 0.0], "score": 0.1, "nll": 2.0, "level": 0, "path": [], "filtered_simplicial_object": radius_step_obj(record, 0.0)},
-            {"record_id": child_record.record_id, "parent": record.record_id, "embedding": [1.0, 0.3, 0.2], "score": 0.5, "nll": 1.3, "level": 1, "path": ["verify"], "input_text": "input", "decoded_argmax": "output", "filtered_simplicial_object": radius_step_obj(child_record, 1.0)},
-            {"record_id": sibling_record.record_id, "parent": record.record_id, "embedding": [0.2, 1.1, -0.4], "score": 0.4, "nll": 1.5, "level": 1, "path": ["expand"], "filtered_simplicial_object": radius_step_obj(sibling_record, 2.0)},
-            {"record_id": leaf_record.record_id, "parent": child_record.record_id, "embedding": [1.4, -0.8, 0.9], "score": 0.7, "nll": 0.9, "level": 2, "path": ["verify", "refine"], "filtered_simplicial_object": radius_step_obj(leaf_record, 3.0)},
+            {"record_id": record.record_id, "embedding": [0.0, 0.0, 0.0], "action_probability_vector": [0.70, 0.20, 0.10], "score": 0.1, "nll": 2.0, "level": 0, "path": [], "filtered_simplicial_object": radius_step_obj(record, 0.0)},
+            {"record_id": child_record.record_id, "parent": record.record_id, "embedding": [1.0, 0.3, 0.2], "action_probability_vector": [0.20, 0.70, 0.10], "score": 0.5, "nll": 1.3, "level": 1, "path": ["verify"], "input_text": "input", "decoded_argmax": "output", "filtered_simplicial_object": radius_step_obj(child_record, 1.0)},
+            {"record_id": sibling_record.record_id, "parent": record.record_id, "embedding": [0.2, 1.1, -0.4], "action_probability_vector": [0.20, 0.10, 0.70], "score": 0.4, "nll": 1.5, "level": 1, "path": ["expand"], "filtered_simplicial_object": radius_step_obj(sibling_record, 2.0)},
+            {"record_id": leaf_record.record_id, "parent": child_record.record_id, "embedding": [1.4, -0.8, 0.9], "action_probability_vector": [0.40, 0.40, 0.20], "score": 0.7, "nll": 0.9, "level": 2, "path": ["verify", "refine"], "filtered_simplicial_object": radius_step_obj(leaf_record, 3.0)},
         ]
     }
     paths = write_got_trajectory_visualization(scaling, tmp_path)
@@ -818,6 +818,19 @@ def test_got_trajectory_visualization_renders_simplicial_panel_and_nll_surface(t
     assert "Graph-of-thought embedding-space trajectory map" in embedding_map_html
     assert "actual graph_state PCA" in embedding_map_html
     assert "distance corr" in embedding_map_html
+    overlay_contract = full_complex_payload["trajectory_complex_overlay_contract"]
+    assert overlay_contract["schema_version"] == "tropicalgt.trajectory_complex_overlay_contract.v1"
+    assert overlay_contract["safe_to_render_available_views"] is True
+    assert overlay_contract["solid_lines_reserved_for_radius_simplices"] is True
+    assert overlay_contract["dotted_lines_reserved_for_trajectory_decoding_order_overlays"] is True
+    assert overlay_contract["embedding_view"]["safe_to_render_overlay_semantics"] is True
+    assert overlay_contract["embedding_view"]["distance_metric"] == "euclidean"
+    assert overlay_contract["embedding_view"]["solid_lines_semantics"] == "radius-filtered 1-simplices only"
+    assert overlay_contract["embedding_view"]["dotted_lines_semantics"] == "trajectory and decoding/order overlays only"
+    assert overlay_contract["probability_view_available"] is True
+    assert overlay_contract["probability_view"]["safe_to_render_overlay_semantics"] is True
+    assert overlay_contract["probability_view"]["distance_metric"] == "jensen_shannon"
+    assert overlay_contract["probability_view"]["filtration_model"] == "model_candidate_probability_jensen_shannon_vietoris_rips_2_skeleton"
     overlay = full_complex_payload["filtered_simplicial_object"]["trajectory_overlay"]
     assert overlay["source"] == "graph_of_thought_parent_edges"
     assert overlay["semantic_note"].startswith("Radius topology is induced")

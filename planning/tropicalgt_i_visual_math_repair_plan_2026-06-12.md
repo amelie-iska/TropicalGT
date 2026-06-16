@@ -1129,3 +1129,24 @@ CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/t
 CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_simplicial_visualization.py TropicalGT-I/tests/test_interactive_artifact_validator.py -q -p no:cacheprovider --basetemp=/tmp/tropicalgt-pytest-landscape-contract-full
 # 67 passed
 ```
+
+## 2026-06-16 Trajectory Complex Overlay Contract
+
+Sequential simplicial/overlay repair completed after the persistence-landscape visual contract:
+
+- Added `tropicalgt.trajectory_complex_overlay_contract.v1` to `got_full_trajectory_complex_payload.json` so the full trajectory complex payload explicitly separates solid radius-filtered simplices from dotted GoT trajectory/decoding-order overlays.
+- Added per-view `tropicalgt.trajectory_complex_overlay_view_contract.v1` records for the embedding-radius trajectory complex and, when available, the Jensen-Shannon probability trajectory complex.
+- The contract records distance metric, filtration model, vertex/edge/face counts, SimplexTree backend, trajectory overlay source, decoding-order overlay source, dotted/directed overlay checks, and no-proxy/no-fallback flags.
+- The Jensen-Shannon probability SimplexTree page title now explicitly names the probability metric when rendered from model candidate probability vectors.
+- The interactive artifact validator now rejects missing overlay contracts, embedding/probability metric mismatches, unsafe overlay semantics, and probability-view contracts that silently substitute embedding/static probability proxies.
+
+Validation:
+
+```text
+CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_simplicial_visualization.py::test_got_trajectory_visualization_renders_simplicial_panel_and_nll_surface TropicalGT-I/tests/test_interactive_artifact_validator.py::test_validate_audit_root_accepts_three_interactive_rows TropicalGT-I/tests/test_interactive_artifact_validator.py::test_validate_audit_root_rejects_missing_trajectory_overlay_contract TropicalGT-I/tests/test_interactive_artifact_validator.py::test_validate_audit_root_rejects_probability_overlay_metric_mismatch -q -p no:cacheprovider --basetemp=/tmp/tropicalgt-pytest-trajectory-overlay-contract
+# 4 passed
+CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m py_compile TropicalGT-I/src/tropicalgt/visualization.py TropicalGT-I/scripts/validate_interactive_audit_artifacts.py TropicalGT-I/tests/test_simplicial_visualization.py TropicalGT-I/tests/test_interactive_artifact_validator.py
+# passed
+CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_simplicial_visualization.py TropicalGT-I/tests/test_interactive_artifact_validator.py -q -p no:cacheprovider --basetemp=/tmp/tropicalgt-pytest-trajectory-overlay-contract-full
+# 69 passed
+```

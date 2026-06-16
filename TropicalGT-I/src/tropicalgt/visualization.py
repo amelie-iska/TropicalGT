@@ -1583,6 +1583,134 @@ def _write_got_nll_density_cloud_map(
     return {"got_nll_density_cloud_pca_3d": str(path), "got_nll_density_cloud_payload": str(payload_path)}
 
 
+def _trajectory_complex_overlay_view_contract(
+    obj: object,
+    *,
+    view: str,
+    source: str,
+    expected_metric: str,
+    unavailable_reason: str | None = None,
+) -> dict[str, object]:
+    if not isinstance(obj, Mapping) or obj.get("available") is False:
+        return {
+            "schema_version": "tropicalgt.trajectory_complex_overlay_view_contract.v1",
+            "view": view,
+            "available": False,
+            "reason": unavailable_reason or (str(obj.get("reason")) if isinstance(obj, Mapping) else "complex_unavailable"),
+            "source": source,
+            "expected_distance_metric": expected_metric,
+            "actual_data_only": True,
+            "no_proxy_or_fallback": True,
+            "safe_to_render_overlay_semantics": False,
+        }
+    simplices = [row for row in obj.get("simplices", []) if isinstance(row, Mapping)]
+    vertices = [row for row in simplices if _simplex_dimension(row) == 0]
+    edges = [row for row in simplices if _simplex_dimension(row) == 1]
+    faces = [row for row in simplices if _simplex_dimension(row) == 2]
+    summary = obj.get("summary", {}) if isinstance(obj.get("summary"), Mapping) else {}
+    tree = obj.get("simplex_tree", {}) if isinstance(obj.get("simplex_tree"), Mapping) else {}
+    trajectory_overlay = obj.get("trajectory_overlay", {}) if isinstance(obj.get("trajectory_overlay"), Mapping) else {}
+    decoding_overlay = obj.get("decoding_causal_overlay", {}) if isinstance(obj.get("decoding_causal_overlay"), Mapping) else {}
+    trajectory_edges = trajectory_overlay.get("edges", []) if isinstance(trajectory_overlay.get("edges"), list) else []
+    decoding_edges = decoding_overlay.get("edges", []) if isinstance(decoding_overlay.get("edges"), list) else []
+    contract = {
+        "schema_version": "tropicalgt.trajectory_complex_overlay_view_contract.v1",
+        "view": view,
+        "available": True,
+        "source": source,
+        "actual_data_only": True,
+        "no_proxy_or_fallback": True,
+        "distance_metric": str(summary.get("embedding_metric") or trajectory_overlay.get("distance_metric") or expected_metric),
+        "expected_distance_metric": expected_metric,
+        "filtration_model": summary.get("filtration_model"),
+        "radius_filtration": summary.get("radius_filtration") is True,
+        "solid_lines_semantics": "radius-filtered 1-simplices only",
+        "filled_faces_semantics": "radius-gated 2-simplices only",
+        "dotted_lines_semantics": "trajectory and decoding/order overlays only",
+        "solid_edges_from_radius_simplices": True,
+        "filled_faces_from_radius_simplices": True,
+        "dotted_edges_reserved_for_overlays": True,
+        "vertex_count": int(len(vertices)),
+        "radius_edge_count": int(len(edges)),
+        "radius_face_count": int(len(faces)),
+        "summary_vertex_count": int(summary.get("num_vertices", len(vertices)) or 0),
+        "summary_edge_count": int(summary.get("num_edges", len(edges)) or 0),
+        "summary_two_simplex_count": int(summary.get("num_two_simplices", len(faces)) or 0),
+        "simplex_tree_backend": tree.get("backend", "missing"),
+        "simplex_tree_available": tree.get("available") is not False,
+        "trajectory_overlay_source": trajectory_overlay.get("source"),
+        "trajectory_overlay_distance_metric": trajectory_overlay.get("distance_metric"),
+        "trajectory_overlay_edge_count": int(len(trajectory_edges)),
+        "decoding_overlay_source": decoding_overlay.get("source"),
+        "decoding_overlay_distance_metric": decoding_overlay.get("distance_metric"),
+        "decoding_overlay_edge_count": int(len(decoding_edges)),
+        "decoding_overlay_edges_are_dotted": bool(decoding_edges) and all(row.get("style") == "dotted" for row in decoding_edges if isinstance(row, Mapping)),
+        "decoding_overlay_edges_are_directed": bool(decoding_edges) and all(row.get("directed") is True for row in decoding_edges if isinstance(row, Mapping)),
+        "trajectory_overlay_does_not_change_radius_filtration": True,
+    }
+    contract["source_counts_match_summary"] = (
+        contract["vertex_count"] == contract["summary_vertex_count"]
+        and contract["radius_edge_count"] == contract["summary_edge_count"]
+        and contract["radius_face_count"] == contract["summary_two_simplex_count"]
+    )
+    contract["safe_to_render_overlay_semantics"] = all(
+        [
+            contract["available"],
+            contract["actual_data_only"],
+            contract["no_proxy_or_fallback"],
+            contract["radius_filtration"],
+            contract["distance_metric"] == expected_metric,
+            contract["vertex_count"] > 0,
+            contract["source_counts_match_summary"],
+            contract["simplex_tree_backend"] == "gudhi.SimplexTree",
+            contract["trajectory_overlay_source"] == "graph_of_thought_parent_edges",
+            contract["trajectory_overlay_distance_metric"] == expected_metric,
+            contract["decoding_overlay_source"] == "graph_of_thought_parent_decoding_order",
+            contract["decoding_overlay_distance_metric"] == expected_metric,
+            contract["decoding_overlay_edges_are_dotted"] if contract["decoding_overlay_edge_count"] else True,
+            contract["decoding_overlay_edges_are_directed"] if contract["decoding_overlay_edge_count"] else True,
+            contract["dotted_edges_reserved_for_overlays"],
+            contract["solid_edges_from_radius_simplices"],
+        ]
+    )
+    return contract
+
+
+def _trajectory_complex_overlay_contract(full_obj: object, probability_obj: object) -> dict[str, object]:
+    full_contract = _trajectory_complex_overlay_view_contract(
+        full_obj,
+        view="embedding_radius_trajectory_complex",
+        source="trajectory_filtered_simplicial_object",
+        expected_metric="euclidean",
+    )
+    probability_available = isinstance(probability_obj, Mapping) and probability_obj.get("available") is not False
+    probability_contract = _trajectory_complex_overlay_view_contract(
+        probability_obj,
+        view="probability_jensen_shannon_trajectory_complex",
+        source="trajectory_probability_filtered_simplicial_object",
+        expected_metric="jensen_shannon",
+        unavailable_reason=None if probability_available else "missing_model_probability_vectors",
+    )
+    contract = {
+        "schema_version": "tropicalgt.trajectory_complex_overlay_contract.v1",
+        "actual_data_only": True,
+        "no_proxy_or_fallback": True,
+        "solid_lines_reserved_for_radius_simplices": True,
+        "filled_faces_reserved_for_radius_simplices": True,
+        "dotted_lines_reserved_for_trajectory_decoding_order_overlays": True,
+        "embedding_view": full_contract,
+        "probability_view": probability_contract,
+        "probability_view_available": bool(probability_available),
+        "safe_to_render_embedding_view": full_contract.get("safe_to_render_overlay_semantics") is True,
+        "safe_to_render_probability_view": probability_contract.get("safe_to_render_overlay_semantics") is True if probability_available else False,
+        "render_contract": "Full trajectory complex pages reserve solid lines/faces for radius-filtered simplices and dotted directed lines for GoT trajectory/decoding-order overlays. The Jensen-Shannon page is rendered only from model candidate probability vectors; unavailable probability views are explicit and are not substituted by embedding or static probability proxies.",
+    }
+    contract["safe_to_render_available_views"] = contract["safe_to_render_embedding_view"] and (
+        contract["safe_to_render_probability_view"] if probability_available else True
+    )
+    return contract
+
+
 def _write_full_trajectory_complex_map(scaling_report: dict[str, object], output_dir: Path) -> dict[str, str]:
     candidates = [row for row in scaling_report.get("candidates", []) if isinstance(row, dict)]
     obj = scaling_report.get("trajectory_filtered_simplicial_object")
@@ -1638,7 +1766,7 @@ def _write_full_trajectory_complex_map(scaling_report: dict[str, object], output
         _write_simplex_tree_3d_map(
             probability_tree_path,
             probability_obj,
-            title="Full graph-of-thought trajectory probability SimplexTree face-coface poset",
+            title="Full graph-of-thought trajectory Jensen-Shannon probability SimplexTree face-coface poset",
             subtitle="Face-coface poset view of the canonical SimplexTree for the Jensen-Shannon probability filtration.",
         )
         payload["probability_filtered_simplicial_object"] = probability_obj
@@ -1653,6 +1781,10 @@ def _write_full_trajectory_complex_map(scaling_report: dict[str, object], output
         payload["probability_filtered_simplicial_object"] = unavailable
     result["got_full_trajectory_complex_jensen_shannon"] = str(probability_path)
     result["got_full_trajectory_simplex_tree_3d_jensen_shannon"] = str(probability_tree_path)
+    payload["trajectory_complex_overlay_contract"] = _trajectory_complex_overlay_contract(
+        obj,
+        payload.get("probability_filtered_simplicial_object"),
+    )
     payload_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
     return result
 

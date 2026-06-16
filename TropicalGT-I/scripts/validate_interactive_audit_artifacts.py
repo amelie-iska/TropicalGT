@@ -146,6 +146,46 @@ def _validate_radius_slider_contract(contract_path: Path, errors: list[str], lab
     return payload
 
 
+def _validate_trajectory_overlay_view_contract(
+    contract: Any,
+    errors: list[str],
+    label: str,
+    *,
+    expected_metric: str,
+    required_available: bool,
+) -> None:
+    _assert(isinstance(contract, dict), errors, f"{label} overlay contract is missing")
+    if not isinstance(contract, dict):
+        return
+    _assert(contract.get("schema_version") == "tropicalgt.trajectory_complex_overlay_view_contract.v1", errors, f"{label} overlay contract has wrong schema")
+    _assert(contract.get("actual_data_only") is True, errors, f"{label} overlay contract is not actual-data-only")
+    _assert(contract.get("no_proxy_or_fallback") is True, errors, f"{label} overlay contract allows proxy/fallback data")
+    if not required_available:
+        _assert(contract.get("available") is False, errors, f"{label} overlay contract should be unavailable")
+        _assert(bool(contract.get("reason")), errors, f"{label} unavailable overlay contract lacks reason")
+        return
+    _assert(contract.get("available") is True, errors, f"{label} overlay contract is unavailable")
+    _assert(contract.get("distance_metric") == expected_metric, errors, f"{label} overlay contract has wrong distance metric")
+    _assert(contract.get("expected_distance_metric") == expected_metric, errors, f"{label} overlay contract has wrong expected metric")
+    _assert(contract.get("radius_filtration") is True, errors, f"{label} overlay contract is not a radius filtration")
+    _assert(contract.get("solid_lines_semantics") == "radius-filtered 1-simplices only", errors, f"{label} solid-line semantics are wrong")
+    _assert(contract.get("filled_faces_semantics") == "radius-gated 2-simplices only", errors, f"{label} filled-face semantics are wrong")
+    _assert(contract.get("dotted_lines_semantics") == "trajectory and decoding/order overlays only", errors, f"{label} dotted-line semantics are wrong")
+    _assert(contract.get("solid_edges_from_radius_simplices") is True, errors, f"{label} does not reserve solid edges for radius simplices")
+    _assert(contract.get("dotted_edges_reserved_for_overlays") is True, errors, f"{label} does not reserve dotted edges for overlays")
+    _assert(_finite_float(contract.get("vertex_count"), 0.0) > 0, errors, f"{label} has no vertices")
+    _assert(contract.get("source_counts_match_summary") is True, errors, f"{label} source counts do not match summary")
+    _assert(contract.get("simplex_tree_backend") == "gudhi.SimplexTree", errors, f"{label} missing GUDHI SimplexTree backend")
+    _assert(contract.get("trajectory_overlay_source") == "graph_of_thought_parent_edges", errors, f"{label} trajectory overlay source is wrong")
+    _assert(contract.get("trajectory_overlay_distance_metric") == expected_metric, errors, f"{label} trajectory overlay metric is wrong")
+    _assert(contract.get("decoding_overlay_source") == "graph_of_thought_parent_decoding_order", errors, f"{label} decoding overlay source is wrong")
+    _assert(contract.get("decoding_overlay_distance_metric") == expected_metric, errors, f"{label} decoding overlay metric is wrong")
+    if _finite_float(contract.get("decoding_overlay_edge_count"), 0.0) > 0:
+        _assert(contract.get("decoding_overlay_edges_are_dotted") is True, errors, f"{label} decoding overlay edges are not dotted")
+        _assert(contract.get("decoding_overlay_edges_are_directed") is True, errors, f"{label} decoding overlay edges are not directed")
+    _assert(contract.get("safe_to_render_overlay_semantics") is True, errors, f"{label} overlay contract is unsafe")
+
+
 def _validate_reasoning_step_slider_summary(
     summary: Any,
     sidecar: dict[str, Any],
@@ -942,21 +982,56 @@ def validate_row(row_dir: Path, *, min_candidates: int = 8, min_depth: int = 2, 
     embedding_html = _read_text(row_dir / REQUIRED_HTML["embedding_map"][0]) if (row_dir / REQUIRED_HTML["embedding_map"][0]).exists() else ""
     _assert("simplicial-object-panel" in embedding_html and "hover-simplicial-card" in embedding_html, errors, "embedding map does not expose filtered-complex hover panel")
 
+    overlay_contract = full_complex_payload.get("trajectory_complex_overlay_contract", {}) if isinstance(full_complex_payload, dict) else {}
+    _assert(isinstance(overlay_contract, dict), errors, "trajectory complex overlay contract is missing")
+    if isinstance(overlay_contract, dict):
+        _assert(overlay_contract.get("schema_version") == "tropicalgt.trajectory_complex_overlay_contract.v1", errors, "trajectory complex overlay contract has wrong schema")
+        _assert(overlay_contract.get("actual_data_only") is True, errors, "trajectory complex overlay contract is not actual-data-only")
+        _assert(overlay_contract.get("no_proxy_or_fallback") is True, errors, "trajectory complex overlay contract allows proxy/fallback data")
+        _assert(overlay_contract.get("solid_lines_reserved_for_radius_simplices") is True, errors, "trajectory complex overlay contract does not reserve solid lines for radius simplices")
+        _assert(overlay_contract.get("dotted_lines_reserved_for_trajectory_decoding_order_overlays") is True, errors, "trajectory complex overlay contract does not reserve dotted lines for overlays")
+        _assert(overlay_contract.get("safe_to_render_available_views") is True, errors, "trajectory complex overlay contract marks available views unsafe")
     full_obj = full_complex_payload.get("filtered_simplicial_object", {})
     summary = full_obj.get("summary", {}) if isinstance(full_obj, dict) else {}
     simplex_tree = full_obj.get("simplex_tree", {}) if isinstance(full_obj, dict) and isinstance(full_obj.get("simplex_tree"), dict) else {}
     full_vertices = [row for row in full_obj.get("simplices", []) if isinstance(row, dict) and int(row.get("dimension", -1)) == 0] if isinstance(full_obj, dict) else []
     _assert(simplex_tree.get("backend") == "gudhi.SimplexTree", errors, "full trajectory complex payload is missing GUDHI SimplexTree provenance")
     prob_obj = full_complex_payload.get("probability_filtered_simplicial_object", {}) if isinstance(full_complex_payload, dict) else {}
+    if isinstance(overlay_contract, dict):
+        _validate_trajectory_overlay_view_contract(
+            overlay_contract.get("embedding_view"),
+            errors,
+            "embedding trajectory complex",
+            expected_metric="euclidean",
+            required_available=True,
+        )
     if isinstance(prob_obj, dict):
         if prob_obj.get("available") is False:
             _assert(prob_obj.get("reason") in {"missing_model_probability_vectors", "unavailable_no_embedding_or_probability_radius_edges"}, errors, "probability complex unavailable for an unrecognized reason")
+            if isinstance(overlay_contract, dict):
+                _validate_trajectory_overlay_view_contract(
+                    overlay_contract.get("probability_view"),
+                    errors,
+                    "probability trajectory complex",
+                    expected_metric="jensen_shannon",
+                    required_available=False,
+                )
         else:
             prob_summary = prob_obj.get("summary", {}) if isinstance(prob_obj.get("summary"), dict) else {}
             _assert(prob_summary.get("filtration_model") == "model_candidate_probability_jensen_shannon_vietoris_rips_2_skeleton", errors, "probability complex is not a model-probability Jensen-Shannon filtration")
             _assert(int(prob_summary.get("num_edges", 0) or 0) > 0, errors, "probability complex has no Jensen-Shannon radius edges")
             prob_tree = prob_obj.get("simplex_tree", {}) if isinstance(prob_obj.get("simplex_tree"), dict) else {}
             _assert(prob_tree.get("backend") == "gudhi.SimplexTree", errors, "probability complex is missing GUDHI SimplexTree provenance")
+            if isinstance(overlay_contract, dict):
+                _validate_trajectory_overlay_view_contract(
+                    overlay_contract.get("probability_view"),
+                    errors,
+                    "probability trajectory complex",
+                    expected_metric="jensen_shannon",
+                    required_available=True,
+                )
+                _assert(overlay_contract.get("probability_view_available") is True, errors, "trajectory overlay contract says probability view unavailable")
+                _assert(overlay_contract.get("safe_to_render_probability_view") is True, errors, "trajectory overlay contract says probability view is unsafe")
     _assert(int(summary.get("num_vertices", 0) or 0) >= len(candidates), errors, "full trajectory complex has fewer vertices than candidates")
     _assert(int(summary.get("num_edges", 0) or 0) >= len(edges), errors, "full trajectory complex has fewer edges than trajectory")
     _assert(sum(1 for row in full_vertices if row.get("embedding")) == len(full_vertices), errors, "full trajectory complex vertices do not all carry embeddings")

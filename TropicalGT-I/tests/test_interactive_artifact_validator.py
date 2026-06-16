@@ -340,8 +340,10 @@ def _row(root: Path, name: str) -> Path:
         json.dumps(
             {
                 "filtered_simplicial_object": {
-                    "summary": {"num_vertices": 4, "num_edges": 3, "num_two_simplices": 0},
+                    "summary": {"num_vertices": 4, "num_edges": 3, "num_two_simplices": 0, "radius_filtration": True, "embedding_metric": "euclidean", "filtration_model": "embedding_vietoris_rips_2_skeleton"},
                     "simplex_tree": {"backend": "gudhi.SimplexTree", "dimension": 1, "num_simplices": 7},
+                    "trajectory_overlay": {"source": "graph_of_thought_parent_edges", "distance_metric": "euclidean", "edge_count": 3, "edges": [{"source": "root", "target": "a"}, {"source": "root", "target": "b"}, {"source": "a", "target": "c"}]},
+                    "decoding_causal_overlay": {"source": "graph_of_thought_parent_decoding_order", "distance_metric": "euclidean", "edge_count": 3, "edges": [{"source": "root", "target": "a", "style": "dotted", "directed": True}, {"source": "root", "target": "b", "style": "dotted", "directed": True}, {"source": "a", "target": "c", "style": "dotted", "directed": True}]},
                     "simplices": [
                         {"simplex": ["root"], "dimension": 0, "embedding": [0, 0, 0], "input_text": "i", "decoded_argmax": "o"},
                         {"simplex": ["a"], "dimension": 0, "embedding": [1, 0, 0], "input_text": "i", "decoded_argmax": "o"},
@@ -358,9 +360,13 @@ def _row(root: Path, name: str) -> Path:
                         "num_vertices": 4,
                         "num_edges": 3,
                         "num_two_simplices": 0,
+                        "radius_filtration": True,
+                        "embedding_metric": "jensen_shannon",
                         "filtration_model": "model_candidate_probability_jensen_shannon_vietoris_rips_2_skeleton",
                     },
                     "simplex_tree": {"backend": "gudhi.SimplexTree", "dimension": 1, "num_simplices": 7},
+                    "trajectory_overlay": {"source": "graph_of_thought_parent_edges", "distance_metric": "jensen_shannon", "edge_count": 3, "edges": [{"source": "root", "target": "a"}, {"source": "root", "target": "b"}, {"source": "a", "target": "c"}]},
+                    "decoding_causal_overlay": {"source": "graph_of_thought_parent_decoding_order", "distance_metric": "jensen_shannon", "edge_count": 3, "edges": [{"source": "root", "target": "a", "style": "dotted", "directed": True}, {"source": "root", "target": "b", "style": "dotted", "directed": True}, {"source": "a", "target": "c", "style": "dotted", "directed": True}]},
                     "simplices": [
                         {"simplex": ["root"], "dimension": 0, "model_probability_vector": [0.7, 0.2, 0.1]},
                         {"simplex": ["a"], "dimension": 0, "model_probability_vector": [0.2, 0.7, 0.1]},
@@ -370,6 +376,89 @@ def _row(root: Path, name: str) -> Path:
                         {"simplex": ["root", "b"], "dimension": 1},
                         {"simplex": ["a", "c"], "dimension": 1},
                     ],
+                },
+                "trajectory_complex_overlay_contract": {
+                    "schema_version": "tropicalgt.trajectory_complex_overlay_contract.v1",
+                    "actual_data_only": True,
+                    "no_proxy_or_fallback": True,
+                    "solid_lines_reserved_for_radius_simplices": True,
+                    "filled_faces_reserved_for_radius_simplices": True,
+                    "dotted_lines_reserved_for_trajectory_decoding_order_overlays": True,
+                    "probability_view_available": True,
+                    "safe_to_render_embedding_view": True,
+                    "safe_to_render_probability_view": True,
+                    "safe_to_render_available_views": True,
+                    "embedding_view": {
+                        "schema_version": "tropicalgt.trajectory_complex_overlay_view_contract.v1",
+                        "view": "embedding_radius_trajectory_complex",
+                        "available": True,
+                        "source": "trajectory_filtered_simplicial_object",
+                        "actual_data_only": True,
+                        "no_proxy_or_fallback": True,
+                        "distance_metric": "euclidean",
+                        "expected_distance_metric": "euclidean",
+                        "filtration_model": "embedding_vietoris_rips_2_skeleton",
+                        "radius_filtration": True,
+                        "solid_lines_semantics": "radius-filtered 1-simplices only",
+                        "filled_faces_semantics": "radius-gated 2-simplices only",
+                        "dotted_lines_semantics": "trajectory and decoding/order overlays only",
+                        "solid_edges_from_radius_simplices": True,
+                        "filled_faces_from_radius_simplices": True,
+                        "dotted_edges_reserved_for_overlays": True,
+                        "vertex_count": 4,
+                        "radius_edge_count": 3,
+                        "radius_face_count": 0,
+                        "summary_vertex_count": 4,
+                        "summary_edge_count": 3,
+                        "summary_two_simplex_count": 0,
+                        "source_counts_match_summary": True,
+                        "simplex_tree_backend": "gudhi.SimplexTree",
+                        "trajectory_overlay_source": "graph_of_thought_parent_edges",
+                        "trajectory_overlay_distance_metric": "euclidean",
+                        "trajectory_overlay_edge_count": 3,
+                        "decoding_overlay_source": "graph_of_thought_parent_decoding_order",
+                        "decoding_overlay_distance_metric": "euclidean",
+                        "decoding_overlay_edge_count": 3,
+                        "decoding_overlay_edges_are_dotted": True,
+                        "decoding_overlay_edges_are_directed": True,
+                        "safe_to_render_overlay_semantics": True,
+                    },
+                    "probability_view": {
+                        "schema_version": "tropicalgt.trajectory_complex_overlay_view_contract.v1",
+                        "view": "probability_jensen_shannon_trajectory_complex",
+                        "available": True,
+                        "source": "trajectory_probability_filtered_simplicial_object",
+                        "actual_data_only": True,
+                        "no_proxy_or_fallback": True,
+                        "distance_metric": "jensen_shannon",
+                        "expected_distance_metric": "jensen_shannon",
+                        "filtration_model": "model_candidate_probability_jensen_shannon_vietoris_rips_2_skeleton",
+                        "radius_filtration": True,
+                        "solid_lines_semantics": "radius-filtered 1-simplices only",
+                        "filled_faces_semantics": "radius-gated 2-simplices only",
+                        "dotted_lines_semantics": "trajectory and decoding/order overlays only",
+                        "solid_edges_from_radius_simplices": True,
+                        "filled_faces_from_radius_simplices": True,
+                        "dotted_edges_reserved_for_overlays": True,
+                        "vertex_count": 4,
+                        "radius_edge_count": 3,
+                        "radius_face_count": 0,
+                        "summary_vertex_count": 4,
+                        "summary_edge_count": 3,
+                        "summary_two_simplex_count": 0,
+                        "source_counts_match_summary": True,
+                        "simplex_tree_backend": "gudhi.SimplexTree",
+                        "trajectory_overlay_source": "graph_of_thought_parent_edges",
+                        "trajectory_overlay_distance_metric": "jensen_shannon",
+                        "trajectory_overlay_edge_count": 3,
+                        "decoding_overlay_source": "graph_of_thought_parent_decoding_order",
+                        "decoding_overlay_distance_metric": "jensen_shannon",
+                        "decoding_overlay_edge_count": 3,
+                        "decoding_overlay_edges_are_dotted": True,
+                        "decoding_overlay_edges_are_directed": True,
+                        "safe_to_render_overlay_semantics": True,
+                    },
+                    "render_contract": "Full trajectory complex pages reserve solid lines/faces for radius-filtered simplices and dotted directed lines for GoT trajectory/decoding-order overlays. The Jensen-Shannon page is rendered only from model candidate probability vectors; unavailable probability views are explicit and are not substituted by embedding or static probability proxies.",
                 }
             }
         ),
@@ -1065,6 +1154,37 @@ def test_validate_audit_root_accepts_three_interactive_rows(tmp_path: Path):
     assert report["rows_checked"] == 3
     assert report["validation_metrics"]["bpb"] == 1.5
     assert all(row["step_complex_maps"] == 4 for row in report["row_reports"])
+
+
+def test_validate_audit_root_rejects_missing_trajectory_overlay_contract(tmp_path: Path):
+    validator = _load_validator()
+    audit = tmp_path / "step_00000001" / "got_audit"
+    row = _row(audit, ".")
+    payload_path = row / "got_full_trajectory_complex_payload.json"
+    payload = json.loads(payload_path.read_text(encoding="utf-8"))
+    payload.pop("trajectory_complex_overlay_contract")
+    payload_path.write_text(json.dumps(payload), encoding="utf-8")
+    _write(audit / "codex_browser_index.html", _codex_browser_html(_browser_samples(audit, ["."])))
+    report = validator.validate_audit_root(audit, min_rows=1, min_candidates=4, min_depth=2)
+    assert not report["ok"]
+    assert any("trajectory complex overlay contract" in err for err in report["errors"])
+
+
+def test_validate_audit_root_rejects_probability_overlay_metric_mismatch(tmp_path: Path):
+    validator = _load_validator()
+    audit = tmp_path / "step_00000001" / "got_audit"
+    row = _row(audit, ".")
+    payload_path = row / "got_full_trajectory_complex_payload.json"
+    payload = json.loads(payload_path.read_text(encoding="utf-8"))
+    payload["trajectory_complex_overlay_contract"]["probability_view"]["distance_metric"] = "euclidean"
+    payload["trajectory_complex_overlay_contract"]["probability_view"]["safe_to_render_overlay_semantics"] = False
+    payload["trajectory_complex_overlay_contract"]["safe_to_render_probability_view"] = False
+    payload["trajectory_complex_overlay_contract"]["safe_to_render_available_views"] = False
+    payload_path.write_text(json.dumps(payload), encoding="utf-8")
+    _write(audit / "codex_browser_index.html", _codex_browser_html(_browser_samples(audit, ["."])))
+    report = validator.validate_audit_root(audit, min_rows=1, min_candidates=4, min_depth=2)
+    assert not report["ok"]
+    assert any("probability trajectory complex" in err and "distance metric" in err for err in report["errors"])
 
 
 def test_validate_audit_root_rejects_missing_persistence_landscape_payload(tmp_path: Path):
