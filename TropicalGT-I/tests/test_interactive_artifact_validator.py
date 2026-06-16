@@ -755,10 +755,21 @@ def _row(root: Path, name: str) -> Path:
                     "field_counts": {"F2": 2},
                     "homology_dimensions_observed": [0, 1],
                     "east_north_structure_maps_present": True,
+                    "module_lattice_overlay_trace_names": ["actual x_level structure maps over F2", "actual x_radius structure maps over F2"],
+                    "module_lattice_overlay_available": True,
                     "rank_rows": [
                         {"source_bidegree_x_level_x_radius": [0, 0], "target_bidegree_x_level_x_radius": [1, 0], "source_monomial": "x_level^0 x_radius^0", "target_monomial": "x_level^1 x_radius^0", "direction": "x_level", "field": "F2", "homology_rank": {"0": 1, "1": 0}, "method": "rank(B_target + image(Z_source)) over F2"},
                         {"source_bidegree_x_level_x_radius": [0, 0], "target_bidegree_x_level_x_radius": [0, 1], "source_monomial": "x_level^0 x_radius^0", "target_monomial": "x_level^0 x_radius^1", "direction": "x_radius", "field": "F2", "homology_rank": {"0": 1, "1": 0}, "method": "rank(B_target + image(Z_source)) over F2"},
                     ],
+                    "no_proxy_or_fallback": True,
+                },
+                "primary_structure_map_evidence": {
+                    "schema_version": "tropicalgt.primary_structure_map_evidence.v1",
+                    "available": True,
+                    "source": "bifiltration.structure_maps",
+                    "directions_rendered": ["x_level", "x_radius"],
+                    "primary_table_rows": 2,
+                    "module_lattice_overlay_trace_names": ["actual x_level structure maps over F2", "actual x_radius structure maps over F2"],
                     "no_proxy_or_fallback": True,
                 },
                 "staircase_cards": [

@@ -5651,6 +5651,51 @@ def _write_two_parameter_bifiltration_staircase_html(
         "rank_rows": structure_rank_rows,
         "no_proxy_or_fallback": True,
     }
+    structure_overlay_trace_names: list[str] = []
+    structure_overlay_styles = {
+        "x_level": ("actual x_level structure maps over F2", "rgba(94,234,212,0.74)", "triangle-up"),
+        "x_radius": ("actual x_radius structure maps over F2", "rgba(250,204,21,0.74)", "triangle-right"),
+    }
+    for direction, (trace_name, color, marker_symbol) in structure_overlay_styles.items():
+        edge_x: list[Any] = []
+        edge_y: list[Any] = []
+        edge_text: list[Any] = []
+        for row in structure_rank_rows:
+            if row.get("direction") != direction:
+                continue
+            src_grade = row.get("source_bidegree_x_level_x_radius")
+            tgt_grade = row.get("target_bidegree_x_level_x_radius")
+            if not (isinstance(src_grade, Sequence) and isinstance(tgt_grade, Sequence) and len(src_grade) >= 2 and len(tgt_grade) >= 2):
+                continue
+            ranks = row.get("homology_rank", {})
+            h0_rank = ranks.get("0", "unavailable") if isinstance(ranks, Mapping) else "unavailable"
+            h1_rank = ranks.get("1", "unavailable") if isinstance(ranks, Mapping) else "unavailable"
+            hover = (
+                "actual adjacent F2 structure map"
+                f"<br>direction={direction}"
+                f"<br>source=(x_level^{src_grade[0]}, x_radius^{src_grade[1]})"
+                f"<br>target=(x_level^{tgt_grade[0]}, x_radius^{tgt_grade[1]})"
+                f"<br>H0 rank={h0_rank}<br>H1 rank={h1_rank}"
+            )
+            edge_x.extend([int(src_grade[1]), int(tgt_grade[1]), None])
+            edge_y.extend([int(src_grade[0]), int(tgt_grade[0]), None])
+            edge_text.extend([hover, hover, None])
+        if edge_x:
+            structure_overlay_trace_names.append(trace_name)
+            fig_module.add_trace(
+                go.Scatter(
+                    x=edge_x,
+                    y=edge_y,
+                    mode="lines+markers",
+                    name=trace_name,
+                    line=dict(color=color, width=2.8, dash="solid"),
+                    marker=dict(color=color, size=7.0, symbol=marker_symbol, line=dict(color="#f8fafc", width=0.45)),
+                    text=edge_text,
+                    hovertemplate="%{text}<extra></extra>",
+                )
+            )
+    structure_map_summary["module_lattice_overlay_trace_names"] = structure_overlay_trace_names
+    structure_map_summary["module_lattice_overlay_available"] = bool(structure_overlay_trace_names)
 
     fig_3d = go.Figure()
     dim_offsets = {0: -0.045, 1: 0.045}
@@ -6074,6 +6119,15 @@ def _write_two_parameter_bifiltration_staircase_html(
         head = "".join(f"<th>{html.escape(str(h))}</th>" for h in headers)
         return f"<section class='card'><h2>{html.escape(caption)}</h2><table><thead><tr>{head}</tr></thead><tbody>{''.join(rows_html)}</tbody></table></section>"
 
+    structure_h = ["direction", "source bidegree", "target bidegree", "H0 rank", "H1 rank", "method"]
+    structure_c = [
+        [row.get("direction", "") for row in structure_rank_rows],
+        [row.get("source_bidegree_x_level_x_radius", []) for row in structure_rank_rows],
+        [row.get("target_bidegree_x_level_x_radius", []) for row in structure_rank_rows],
+        [(row.get("homology_rank", {}) if isinstance(row.get("homology_rank", {}), Mapping) else {}).get("0", "") for row in structure_rank_rows],
+        [(row.get("homology_rank", {}) if isinstance(row.get("homology_rank", {}), Mapping) else {}).get("1", "") for row in structure_rank_rows],
+        [row.get("method", "") for row in structure_rank_rows],
+    ]
     rank_h, rank_c = _rank_invariant_columns(bifiltration)
     betti_h, betti_c = _m2_betti_columns(m2)
     free_h, free_c = _m2_free_module_columns(m2)
@@ -6136,7 +6190,7 @@ td {{ background:#07111f; color:#d7e8ff; }}
 <h1>Trajectory 2-parameter persistence over F2[x_level,x_radius]</h1>
 <p class='lede'>Actual 2-parameter module fibers and multigraded chain-generator bidegrees over F2[x_level,x_radius]. The primary view is the Miller-Sturmfels staircase view of the bivariate module diagram: horizontal lattice coordinates are x_radius and vertical lattice coordinates are x_level; x_radius runs horizontally, x_level vertically, shaded upward-closed regions are generated submodules, and white lattice points are the displayed S/I_C basis complement.</p>
 <div class='callout'><b>Computed bifiltration:</b> {html.escape(rank_note)}<br>This section is an exponent-lattice module diagram in the sense of the two-variable monomial-ideal staircase picture: the coordinate axes are the x_radius and x_level one dimensional cone(s). The large gold/cyan/blue boundary points are minimal antichain generators; smaller dim-colored points are dominated observed bidegrees and are not treated as additional generators. White lattice points are displayed quotient-basis complements, colored cells/points are actual H1 fiber ranks. Adjacent structure maps persisted={len(bifiltration.get("structure_maps", [])) if isinstance(bifiltration, Mapping) else 0}. Staircase cards render exact two-variable monomial-ideal resolutions when the Miller-Sturmfels adjacent-LCM theorem applies. Lower CAS tables render only certified CAS output under its actual grading; diagnostic chain data is not substituted for a free resolution.</div>
-<section class='panel'><h2>Miller-Sturmfels bivariate module staircases from actual multidegree generators</h2><div class='staircase-grid'>{staircase_svgs}</div></section>
+<section class='panel'><h2>Miller-Sturmfels bivariate module staircases from actual multidegree generators</h2><div class='staircase-grid'>{staircase_svgs}</div><div class='card-grid'>{_table_html(structure_h, structure_c, 'Adjacent F2 structure maps from raw bifiltration')}</div></section>
 <details class='secondary-disclosure'><summary>Secondary fiber-rank diagnostics</summary><section class='panel'><h2>F2[x_level,x_radius] support and homology fiber ranks</h2>{chart1}</section><section class='panel'><h2>Fiber-rank lattice with H0/H1 layer offsets</h2>{chart2}</section><div class='card-grid'>{_table_html(rank_h, rank_c, 'Rank-invariant samples over F2[x_level,x_radius]')}</div></details>
 <details class='secondary-disclosure'><summary>Certified algebra tables and CAS certificates</summary><div class='card-grid'>{_table_html(betti_h, betti_c, 'Betti-style diagnostics')}{_table_html(free_h, free_c, 'Free chain modules / certified free modules')}{_table_html(diff_h, diff_c, 'Differentials / boundary maps')}{_table_html(ideal_h, ideal_c, 'Certified Fitting ideals and determinantal minors')}{_table_html(be_h, be_c, 'Buchsbaum-Eisenbud rank and multiplier diagnostics')}{_table_html(cert_h, cert_c, 'CAS certificate summary')}</div></details>
 </main>
@@ -6148,7 +6202,7 @@ td {{ background:#07111f; color:#d7e8ff; }}
         "coefficient_ring": "F2[x_level,x_radius]",
         "primary_view": "miller_sturmfels_bivariate_staircase",
         "primary_view_contract": "The primary view is an exponent-lattice staircase over F2[x_level,x_radius]: x_radius is horizontal, x_level is vertical, shaded regions are upward-closed generated submodules, and white lattice points are displayed quotient-basis complements from actual bifiltration chain-generator bidegrees.",
-        "secondary_views": ["fiber_rank_heatmap", "fiber_rank_lattice_3d", "rank_invariant_samples_table", "certified_algebra_tables", "certified_fitting_minor_tables", "buchsbaum_eisenbud_diagnostic_tables"],
+        "secondary_views": ["fiber_rank_heatmap", "fiber_rank_lattice_3d", "structure_map_lattice_overlay", "rank_invariant_samples_table", "certified_algebra_tables", "certified_fitting_minor_tables", "buchsbaum_eisenbud_diagnostic_tables"],
         "rank_invariant_sample_count": len(rank_inv_rows),
         "rank_surface_primary": False,
         "rank_surface_policy": "3D fiber-rank displays are secondary diagnostics only and are not rendered as the primary module view.",
@@ -6160,6 +6214,15 @@ td {{ background:#07111f; color:#d7e8ff; }}
         "actual_data_only": True,
         "no_proxy_resolution_claim": True,
         "structure_map_summary": structure_map_summary,
+        "primary_structure_map_evidence": {
+            "schema_version": "tropicalgt.primary_structure_map_evidence.v1",
+            "available": bool(structure_rank_rows),
+            "source": "bifiltration.structure_maps",
+            "directions_rendered": sorted({str(row.get("direction")) for row in structure_rank_rows if row.get("direction")}),
+            "primary_table_rows": len(structure_rank_rows),
+            "module_lattice_overlay_trace_names": structure_overlay_trace_names,
+            "no_proxy_or_fallback": True,
+        },
         "module_visual_contract": {
             "schema_version": "tropicalgt.two_parameter_module_staircase_contract.v1",
             "no_proxy_or_fallback": True,
@@ -6173,6 +6236,8 @@ td {{ background:#07111f; color:#d7e8ff; }}
             "structure_map_summary_required": True,
             "structure_map_summary_schema": "tropicalgt.two_parameter_structure_maps.v1",
             "structure_map_summary_source": "bifiltration.structure_maps",
+            "primary_structure_map_evidence_required": True,
+            "primary_structure_map_evidence_schema": "tropicalgt.primary_structure_map_evidence.v1",
             "raw_bifiltration_required_fields": [
                 "fiber_rank_profile",
                 "chain_module_generators",

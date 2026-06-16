@@ -1268,9 +1268,21 @@ def test_level_radius_bifiltration_reports_scoped_real_staircase_resolution(tmp_
     assert structure_summary["direction_counts"]["x_radius"] > 0
     assert structure_summary["field"] == "F2"
     assert structure_summary["east_north_structure_maps_present"] is True
+    assert structure_summary["module_lattice_overlay_available"] is True
+    assert set(structure_summary["module_lattice_overlay_trace_names"]) == {
+        "actual x_level structure maps over F2",
+        "actual x_radius structure maps over F2",
+    }
     assert structure_summary["no_proxy_or_fallback"] is True
     assert len(structure_summary["rank_rows"]) == len(structure_maps)
     assert all(set(row["homology_rank"]) >= {"0", "1"} for row in structure_summary["rank_rows"])
+    primary_structure_evidence = visual_payload["primary_structure_map_evidence"]
+    assert primary_structure_evidence["schema_version"] == "tropicalgt.primary_structure_map_evidence.v1"
+    assert primary_structure_evidence["available"] is True
+    assert primary_structure_evidence["source"] == "bifiltration.structure_maps"
+    assert set(primary_structure_evidence["directions_rendered"]) >= {"x_level", "x_radius"}
+    assert primary_structure_evidence["primary_table_rows"] == len(structure_maps)
+    assert primary_structure_evidence["no_proxy_or_fallback"] is True
     contract = visual_payload["module_visual_contract"]
     assert contract["schema_version"] == "tropicalgt.two_parameter_module_staircase_contract.v1"
     assert contract["no_proxy_or_fallback"] is True
@@ -1282,6 +1294,8 @@ def test_level_radius_bifiltration_reports_scoped_real_staircase_resolution(tmp_
     assert contract["structure_map_summary_required"] is True
     assert contract["structure_map_summary_schema"] == "tropicalgt.two_parameter_structure_maps.v1"
     assert contract["structure_map_summary_source"] == "bifiltration.structure_maps"
+    assert contract["primary_structure_map_evidence_required"] is True
+    assert contract["primary_structure_map_evidence_schema"] == "tropicalgt.primary_structure_map_evidence.v1"
     assert contract["raw_bifiltration_payload"] == "../trajectory_level_radius_bifiltration.json"
     assert "chain-presentation diagnostics are never substituted" in contract["safe_resolution_policy"]
     assert set(contract["raw_bifiltration_required_fields"]) >= {
@@ -1291,6 +1305,7 @@ def test_level_radius_bifiltration_reports_scoped_real_staircase_resolution(tmp_
         "structure_maps",
         "grid_fiber_provenance",
     }
+    assert "structure_map_lattice_overlay" in visual_payload["secondary_views"]
     assert "rank_invariant_samples_table" in visual_payload["secondary_views"]
     assert "certified_fitting_minor_tables" in visual_payload["secondary_views"]
     assert "buchsbaum_eisenbud_diagnostic_tables" in visual_payload["secondary_views"]
@@ -1316,6 +1331,9 @@ def test_level_radius_bifiltration_reports_scoped_real_staircase_resolution(tmp_
     assert "not a full persistence-module free resolution" in primary_card["theorem_scope"]
     assert "horizontal lattice coordinates are x_radius" in html
     assert "The primary view is the Miller-Sturmfels staircase" in html
+    assert "Adjacent F2 structure maps from raw bifiltration" in html
+    assert "actual x_level structure maps over F2" in html
+    assert "actual x_radius structure maps over F2" in html
     assert "Columns are radius grades" in html
     assert "Adjacent structure maps persisted=" in html
     assert "diagnostic chain data is not substituted for a free resolution" in html

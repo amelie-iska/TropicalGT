@@ -1006,3 +1006,23 @@ CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/t
 CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_algebraic_persistence.py TropicalGT-I/tests/test_interactive_artifact_validator.py -q -p no:cacheprovider --basetemp=/tmp/tropicalgt-pytest-two-param-structure-summary-full
 # 48 passed
 ```
+
+
+## 2026-06-16 Primary Structure-Map Overlay
+
+Sequential two-parameter bifiltration visual repair completed after the structure-map evidence contract:
+
+- Added actual `x_level` and `x_radius` F2 structure-map segment overlays to the module-lattice Plotly diagnostic, with hover text sourced from raw `bifiltration.structure_maps` H0/H1 ranks.
+- Added a primary-page “Adjacent F2 structure maps from raw bifiltration” evidence table so the Miller-Sturmfels page visibly exposes the adjacent map data without relying on secondary hover state.
+- Added `tropicalgt.primary_structure_map_evidence.v1` to the visual payload and validator so the rendered page must cite raw structure maps, render both directions, keep exact table counts, and assert no proxy/fallback evidence.
+
+Validation:
+
+```text
+CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m py_compile TropicalGT-I/src/tropicalgt/visualization.py TropicalGT-I/scripts/validate_interactive_audit_artifacts.py TropicalGT-I/tests/test_algebraic_persistence.py TropicalGT-I/tests/test_interactive_artifact_validator.py
+# passed
+CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_algebraic_persistence.py::test_level_radius_bifiltration_reports_scoped_real_staircase_resolution TropicalGT-I/tests/test_interactive_artifact_validator.py::test_validate_audit_root_accepts_three_interactive_rows TropicalGT-I/tests/test_interactive_artifact_validator.py::test_validate_audit_root_rejects_missing_bifiltration_structure_map_summary -q -p no:cacheprovider --basetemp=/tmp/tropicalgt-pytest-primary-structure-overlay
+# 3 passed
+CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_algebraic_persistence.py TropicalGT-I/tests/test_interactive_artifact_validator.py -q -p no:cacheprovider --basetemp=/tmp/tropicalgt-pytest-primary-structure-overlay-full
+# 48 passed
+```

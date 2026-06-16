@@ -448,6 +448,17 @@ def validate_row(row_dir: Path, *, min_candidates: int = 8, min_depth: int = 2, 
         _assert(int(_finite_float(summary_direction_counts.get("x_radius"), -1.0)) == structure_direction_counts.get("x_radius", 0), errors, "trajectory bifiltration x_radius structure-map count does not match raw data")
         rank_rows = structure_summary.get("rank_rows", [])
         _assert(isinstance(rank_rows, list) and len(rank_rows) == (len(structure_maps) if isinstance(structure_maps, list) else 0), errors, "trajectory bifiltration structure-map summary lacks per-map rank rows")
+        _assert(structure_summary.get("module_lattice_overlay_available") is True, errors, "trajectory bifiltration structure-map summary does not expose the module-lattice overlay")
+        overlay_trace_names = structure_summary.get("module_lattice_overlay_trace_names", [])
+        _assert(isinstance(overlay_trace_names, list) and "actual x_level structure maps over F2" in overlay_trace_names and "actual x_radius structure maps over F2" in overlay_trace_names, errors, "trajectory bifiltration module-lattice overlay lacks x_level/x_radius trace names")
+        primary_structure_evidence = bifiltration_visual_payload.get("primary_structure_map_evidence", {}) if isinstance(bifiltration_visual_payload.get("primary_structure_map_evidence"), dict) else {}
+        _assert(primary_structure_evidence.get("schema_version") == "tropicalgt.primary_structure_map_evidence.v1", errors, "trajectory bifiltration visual payload lacks primary structure-map evidence schema")
+        _assert(primary_structure_evidence.get("available") is True, errors, "trajectory bifiltration primary structure-map evidence is unavailable")
+        _assert(primary_structure_evidence.get("source") == "bifiltration.structure_maps", errors, "trajectory bifiltration primary structure-map evidence does not cite raw structure maps")
+        directions_rendered = primary_structure_evidence.get("directions_rendered", []) if isinstance(primary_structure_evidence.get("directions_rendered"), list) else []
+        _assert("x_level" in directions_rendered and "x_radius" in directions_rendered, errors, "trajectory bifiltration primary structure-map evidence lacks both directions")
+        _assert(int(_finite_float(primary_structure_evidence.get("primary_table_rows"), -1.0)) == (len(structure_maps) if isinstance(structure_maps, list) else 0), errors, "trajectory bifiltration primary structure-map evidence table count does not match raw maps")
+        _assert(primary_structure_evidence.get("no_proxy_or_fallback") is True, errors, "trajectory bifiltration primary structure-map evidence allows proxy/fallback evidence")
         staircase_cards = bifiltration_visual_payload.get("staircase_cards", [])
         _assert(isinstance(staircase_cards, list) and bool(staircase_cards), errors, "trajectory bifiltration visual payload lacks staircase card contracts")
         if isinstance(staircase_cards, list):
