@@ -691,3 +691,11 @@ The live item-by-item repair inventory is maintained in `planning/tropicalgt_i_c
 - [x] Added visualization regression coverage for the browser table rows and normalized display payload fields.
 - [x] Verification passed: py-compile for visualization/CAS files and tests; `pytest TropicalGT-I/tests/test_simplicial_visualization.py TropicalGT-I/tests/test_algebraic_persistence.py -q` (`64 passed`); `git diff --check` clean.
 - [ ] Next source-side repair item: inspect derived/analogical memory comparison text for whether unavailable or diagnostic-only CAS components are explained clearly when similarity components mismatch.
+
+### Current Objective Update - Derived CAS No-Proxy Explanation Pass
+
+- [x] Added explicit component-level explanations to certified real free-resolution comparisons for ring, CAS input hash, artifact hash, multigraded Betti data, differentials, Fitting ideals, minors, and Buchsbaum-Eisenbud/BEMultipliers sidecars.
+- [x] Marked Buchsbaum-Eisenbud/BEMultipliers comparison data as diagnostic-only in the analogical/derived comparison payload, so it cannot be treated as a resolution backend or substituted for Betti, differential, Fitting, or minor agreement.
+- [x] Added unavailable-state metadata for missing query or memory CAS evidence: unavailable reasons, no-proxy/no-fallback policy, and an explanation that missing certified resolutions are not estimated or replaced.
+- [x] Updated derived/free-resolution interpretation text so mismatched CAS artifacts and diagnostic-only BEMultipliers sidecars are explained directly in browser-visible payloads.
+- [x] Focused verification passed: visualization tests `36 passed`.

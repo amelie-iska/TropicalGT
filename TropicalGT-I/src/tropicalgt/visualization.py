@@ -7542,9 +7542,9 @@ def _derived_invariant_comparison(query_topology: dict[str, object], memory_topo
     chain_resolution_similarity = float((sim or {}).get("chain_presentation_similarity", 0.0) or 0.0)
     high_coarse_low_resolution = bool(coarse_signature_similarity >= 0.75 and chain_resolution_similarity <= 1e-12)
     if real_resolution_pair_available and certified_cas_evidence_match:
-        resolution_interpretation = "Both sides expose CAS-certified multigraded real free resolutions with matching Betti shifts, differential summaries, Fitting/minor ideals, and Buchsbaum-Eisenbud multiplier evidence."
+        resolution_interpretation = "Both sides expose CAS-certified multigraded real free resolutions with matching Betti shifts, differential summaries, and Fitting/minor ideals; matching Buchsbaum-Eisenbud/BEMultipliers entries are diagnostic-only sidecars, and the resolution claim rests on the certified CAS resolution."
     elif real_resolution_pair_available:
-        resolution_interpretation = "Both sides expose CAS-certified multigraded real free resolutions, but their CAS artifacts do not match; this is not a derived-equivalence claim without an explicit resolution/chain-map isomorphism."
+        resolution_interpretation = "Both sides expose CAS-certified multigraded real free resolutions, but their CAS artifacts do not match; diagnostic-only BEMultipliers sidecars cannot substitute for a matching certified resolution, Fitting/minor ideals, or an explicit chain-map isomorphism."
     elif high_coarse_low_resolution:
         resolution_interpretation = "Coarse derived-signature similarity is high while chain/free-resolution similarity is zero; this is reported as a coarse invariant collision, not a derived-equivalence claim. A real derived/free-resolution comparison requires CAS-certified multigraded resolutions for both sides."
     else:
@@ -8054,6 +8054,17 @@ def _certified_cas_resolution_signature(report: Mapping[str, object]) -> dict[st
 
 
 def _compare_real_free_resolution_summaries(query: Mapping[str, object], memory: Mapping[str, object]) -> dict[str, object]:
+    component_explanations = {
+        "ring": "Coefficient rings must match exactly before any derived/free-resolution comparison is admissible.",
+        "input_sha256": "The CAS input presentation hash must match; different presentations require an explicit certified isomorphism, not a proxy comparison.",
+        "artifact_hash": "The attached CAS artifact hash must match exactly for a stored-certificate identity claim.",
+        "betti_by_multidegree": "Minimal multigraded Betti data must agree as exact CAS output.",
+        "differential_summaries": "Certified differential shapes, source/target multidegrees, and matrix hashes must agree.",
+        "fitting_ideals": "Fitting ideals are exact determinantal invariants from the CAS presentation and must agree when used as evidence.",
+        "minors": "Determinantal minor ideals must agree as exact CAS output; they are not estimated from chain diagnostics.",
+        "buchsbaum_eisenbud": "Buchsbaum-Eisenbud/BEMultipliers entries are diagnostic-only sidecars computed from a certified Macaulay2 chain complex; they are never a resolution backend and cannot substitute for Betti, differential, Fitting, or minor agreement.",
+    }
+    diagnostic_only_components = ["buchsbaum_eisenbud"]
     available = bool(query.get("available") and memory.get("available"))
     if not available:
         return {
@@ -8061,6 +8072,12 @@ def _compare_real_free_resolution_summaries(query: Mapping[str, object], memory:
             "query": query,
             "memory": memory,
             "reason": "CAS-certified multigraded real free resolution unavailable for one or both sides",
+            "unavailable_reasons": {"query": query.get("reason"), "memory": memory.get("reason")},
+            "unavailable_explanation": "No derived/free-resolution comparison is made unless both sides expose CAS-certified multigraded real free resolutions; missing evidence is unavailable, not estimated or replaced by a fallback.",
+            "component_explanations": component_explanations,
+            "diagnostic_only_components": diagnostic_only_components,
+            "mismatch_explanations": [],
+            "comparison_policy": "no_proxy_no_fallback_exact_cas_components_only",
             "safe_for_derived_category_claims": False,
             "certified_cas_evidence_match": False,
             "certified_cas_evidence_similarity": 0.0,
@@ -8081,23 +8098,34 @@ def _compare_real_free_resolution_summaries(query: Mapping[str, object], memory:
     total = max(len(components), 1)
     safe = bool(all(components.values()))
     mismatches = [key for key, value in components.items() if not value]
+    mismatch_explanations = [
+        {
+            "component": key,
+            "diagnostic_only": key in diagnostic_only_components,
+            "explanation": component_explanations.get(key, "CAS evidence component mismatch."),
+        }
+        for key in mismatches
+    ]
     return {
         "available": True,
         "query": query,
         "memory": memory,
         "component_matches": components,
+        "component_explanations": component_explanations,
+        "diagnostic_only_components": diagnostic_only_components,
         "mismatched_components": mismatches,
+        "mismatch_explanations": mismatch_explanations,
         "certified_cas_evidence_match": safe,
         "certified_cas_evidence_similarity": float(matched / total),
         "safe_for_derived_category_claims": safe,
+        "comparison_policy": "no_proxy_no_fallback_exact_cas_components_only",
         "reason": None if safe else "Certified CAS free-resolution artifacts differ: " + ", ".join(mismatches),
         "interpretation": (
-            "The certified multigraded real free-resolution artifacts match exactly at the stored CAS-evidence level."
+            "The certified multigraded real free-resolution artifacts match exactly at the stored CAS-evidence level; Buchsbaum-Eisenbud/BEMultipliers entries are diagnostic-only sidecars, not substitute resolution evidence."
             if safe
-            else "Both sides have certified multigraded real free resolutions, but matching is not proved because one or more CAS-evidence components differ."
+            else "Both sides have certified multigraded real free resolutions, but matching is not proved because one or more exact CAS-evidence components differ; diagnostic-only BEMultipliers sidecars cannot substitute for the missing agreement."
         ),
     }
-
 
 def _stable_artifact_hash(value: object) -> str:
     try:

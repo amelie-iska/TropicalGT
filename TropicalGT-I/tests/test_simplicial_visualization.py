@@ -1481,6 +1481,11 @@ def test_derived_comparison_requires_matching_certified_cas_artifacts():
     assert comparison["derived_equivalence_claim"] == "cas_certified_matching_real_resolution_witness"
     assert real["component_matches"]["fitting_ideals"] is True
     assert real["component_matches"]["buchsbaum_eisenbud"] is True
+    assert real["diagnostic_only_components"] == ["buchsbaum_eisenbud"]
+    assert real["mismatch_explanations"] == []
+    assert real["comparison_policy"] == "no_proxy_no_fallback_exact_cas_components_only"
+    assert "diagnostic-only" in real["component_explanations"]["buchsbaum_eisenbud"]
+    assert "not substitute resolution evidence" in real["interpretation"]
 
     mismatched = _topology_with_certified_real_resolution(
         input_hash="hash-b",
@@ -1500,8 +1505,26 @@ def test_derived_comparison_requires_matching_certified_cas_artifacts():
     assert "input_sha256" in real_mismatch["mismatched_components"]
     assert "fitting_ideals" in real_mismatch["mismatched_components"]
     assert "buchsbaum_eisenbud" in real_mismatch["mismatched_components"]
+    be_mismatch = next(row for row in real_mismatch["mismatch_explanations"] if row["component"] == "buchsbaum_eisenbud")
+    assert be_mismatch["diagnostic_only"] is True
+    assert "cannot substitute" in be_mismatch["explanation"]
+    assert real_mismatch["comparison_policy"] == "no_proxy_no_fallback_exact_cas_components_only"
+    assert "cannot substitute" in real_mismatch["interpretation"]
     assert mismatch["derived_equivalence_claim"] == "compatible_finite_invariant_witness"
     assert "do not match" in mismatch["free_resolution_similarity_interpretation"]
+    assert "diagnostic-only BEMultipliers" in mismatch["free_resolution_similarity_interpretation"]
+
+    unavailable = _derived_invariant_comparison(
+        {"commutative_algebra": {}},
+        matching,
+        sim={"derived_signature_similarity": 1.0, "chain_presentation_similarity": 1.0, "derived_algebraic_similarity": 1.0},
+    )
+    real_unavailable = unavailable["real_free_resolution_comparison"]
+    assert real_unavailable["available"] is False
+    assert real_unavailable["comparison_policy"] == "no_proxy_no_fallback_exact_cas_components_only"
+    assert "unavailable, not estimated" in real_unavailable["unavailable_explanation"]
+    assert real_unavailable["unavailable_reasons"]["query"]
+    assert real_unavailable["mismatch_explanations"] == []
 
 
 def test_analogical_memory_visualization_requires_retrieval_probability_map_certificate(tmp_path: Path):

@@ -609,3 +609,22 @@ Use "one dimensional cone" or "one dimensional cones" as the preferred fan-theor
 - Focused verification passed: `pytest TropicalGT-I/tests/test_simplicial_visualization.py TropicalGT-I/tests/test_algebraic_persistence.py -q` (`64 passed`).
 
 _Last updated: 2026-06-16T19:55:00Z_
+
+## 2026-06-16 Sequential Derived/CAS Update: No-Proxy Explanation Pass
+
+Status: complete for the analogical comparison explanation checkpoint.
+
+- Certified real free-resolution comparisons now carry machine-readable `component_explanations`, `diagnostic_only_components`, `mismatch_explanations`, and the policy tag `no_proxy_no_fallback_exact_cas_components_only`.
+- Missing query or memory CAS evidence now reports per-side unavailable reasons and explicitly states that missing certified resolutions are unavailable, not estimated and not replaced by fallback data.
+- Buchsbaum-Eisenbud/BEMultipliers entries are explicitly diagnostic-only sidecars in the analogical/derived comparison payload. They are never a resolution backend and cannot substitute for matching Betti shifts, differentials, Fitting ideals, minors, or a certified chain-map/isomorphism.
+- Browser-visible derived/free-resolution interpretation text now explains both exact matches and mismatches under the same no-proxy/no-fallback policy.
+
+Verification:
+
+```bash
+PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m py_compile TropicalGT-I/src/tropicalgt/visualization.py TropicalGT-I/tests/test_simplicial_visualization.py
+PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_simplicial_visualization.py -q
+# 36 passed in 3.07s
+git diff --check
+# clean
+```
