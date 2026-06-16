@@ -7174,7 +7174,16 @@ def write_analogical_memory_visualization(
     rows = [row for row in memory.get("retrieved", []) if isinstance(row, dict)]
     if not rows:
         reason = "No non-self model-probability analogical memories retrieved; no analogical correspondence certificate is rendered."
-        return _write_analogical_unavailable_outputs(output_dir, path, map_path, reason, "no_non_self_model_memory")
+        return _write_analogical_unavailable_outputs(
+            output_dir,
+            path,
+            map_path,
+            reason,
+            "no_non_self_model_memory",
+            memory=memory,
+            raw_retrieved_count=len(rows),
+            qualified_memory_count=0,
+        )
     bank_records = _load_memory_bank_records(memory.get("bank_path", ""))
     enriched = [_enrich_memory_row(row, bank_records) for row in rows]
     query = query_context if isinstance(query_context, dict) else {}
@@ -7186,7 +7195,16 @@ def write_analogical_memory_visualization(
     query_topology = query.get("topological_algebra") if isinstance(query.get("topological_algebra"), dict) else {}
     if not query_complex:
         reason = "No model probability filtered query trajectory complex was available; analogical maps are not rendered without model probabilities."
-        return _write_analogical_unavailable_outputs(output_dir, path, map_path, reason, "missing_model_probability_query_complex")
+        return _write_analogical_unavailable_outputs(
+            output_dir,
+            path,
+            map_path,
+            reason,
+            "missing_model_probability_query_complex",
+            memory=memory,
+            raw_retrieved_count=len(rows),
+            qualified_memory_count=0,
+        )
 
     enriched = [
         row
@@ -7195,7 +7213,17 @@ def write_analogical_memory_visualization(
     ]
     if not enriched:
         reason = "No model probability filtered codomain trajectory complex was available; analogical maps are not rendered without model probabilities."
-        return _write_analogical_unavailable_outputs(output_dir, path, map_path, reason, "missing_model_probability_codomain_complex", query_complex_source=query_complex_source)
+        return _write_analogical_unavailable_outputs(
+            output_dir,
+            path,
+            map_path,
+            reason,
+            "missing_model_probability_codomain_complex",
+            query_complex_source=query_complex_source,
+            memory=memory,
+            raw_retrieved_count=len(rows),
+            qualified_memory_count=0,
+        )
 
     pair_pages: list[dict[str, object]] = []
     map_reports: list[dict[str, object]] = []
@@ -7221,7 +7249,15 @@ def write_analogical_memory_visualization(
             }
         )
     index_path = output_dir / "analogical_memory_topk_index.html"
-    _write_analogical_topk_index(index_path, pair_pages, map_reports)
+    topk_contract = _analogical_topk_contract(
+        memory,
+        raw_retrieved_count=len(rows),
+        qualified_memory_count=len(enriched),
+        top_k_rendered=len(map_reports),
+        status="available",
+        query_complex_source=query_complex_source,
+    )
+    _write_analogical_topk_index(index_path, pair_pages, map_reports, contract=topk_contract)
 
     map_path.write_text(
         json.dumps(
@@ -7230,6 +7266,7 @@ def write_analogical_memory_visualization(
                 "query_summary": query_complex.get("summary", {}) if isinstance(query_complex, dict) else {},
                 "query_complex_source": query_complex_source,
                 "query_derived_signature": query_topology.get("derived_equivalence_signature", {}) if isinstance(query_topology, dict) else {},
+                "topk_contract": topk_contract,
                 "maps": map_reports,
             },
             indent=2,
@@ -7762,10 +7799,22 @@ def _write_analogical_unavailable_outputs(
     status: str,
     *,
     query_complex_source: str = "",
+    memory: Mapping[str, object] | None = None,
+    raw_retrieved_count: int = 0,
+    qualified_memory_count: int = 0,
 ) -> dict[str, str]:
     _write_dark_empty(retrieval_path, reason)
     index_path = output_dir / "analogical_memory_topk_index.html"
-    _write_analogical_topk_index(index_path, [], [])
+    contract = _analogical_topk_contract(
+        memory,
+        raw_retrieved_count=raw_retrieved_count,
+        qualified_memory_count=qualified_memory_count,
+        top_k_rendered=0,
+        status=status,
+        unavailable_reason=reason,
+        query_complex_source=query_complex_source,
+    )
+    _write_analogical_topk_index(index_path, [], [], contract=contract)
     map02_path = output_dir / "analogical_memory_map_02.html"
     map02_path.write_text(
         f"""<!doctype html>
@@ -7782,7 +7831,13 @@ def _write_analogical_unavailable_outputs(
 """,
         encoding="utf-8",
     )
-    payload: dict[str, object] = {"available": False, "reason": status, "maps": []}
+    payload: dict[str, object] = {
+        "available": False,
+        "reason": status,
+        "reason_detail": reason,
+        "topk_contract": contract,
+        "maps": [],
+    }
     if query_complex_source:
         payload["query_complex_source"] = query_complex_source
     map_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
@@ -7794,7 +7849,93 @@ def _write_analogical_unavailable_outputs(
     }
 
 
-def _write_analogical_topk_index(path: Path, pair_pages: list[dict[str, object]], map_reports: list[dict[str, object]]) -> None:
+def _analogical_contract_value(value: object) -> object:
+    if value is None or isinstance(value, (str, int, float, bool)):
+        return value
+    if isinstance(value, Mapping):
+        return {str(k): _analogical_contract_value(v) for k, v in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_analogical_contract_value(v) for v in value]
+    return str(value)
+
+
+def _analogical_memory_quality_gate(memory: Mapping[str, object]) -> object:
+    for key in (
+        "quality_threshold",
+        "memory_quality_threshold",
+        "min_quality_score",
+        "minimum_quality_score",
+        "quality_gate",
+    ):
+        if key in memory:
+            return _analogical_contract_value(memory.get(key))
+    retrieval = memory.get("retrieval")
+    if isinstance(retrieval, Mapping):
+        for key in ("quality_threshold", "min_quality_score", "quality_gate"):
+            if key in retrieval:
+                return _analogical_contract_value(retrieval.get(key))
+    return "not_reported"
+
+
+def _analogical_topk_contract(
+    memory: Mapping[str, object] | None,
+    *,
+    raw_retrieved_count: int,
+    qualified_memory_count: int,
+    top_k_rendered: int,
+    status: str,
+    unavailable_reason: str = "",
+    query_complex_source: str = "",
+) -> dict[str, object]:
+    memory = memory if isinstance(memory, Mapping) else {}
+    requested = memory.get("top_k", memory.get("retrieval_limit", memory.get("k")))
+    return {
+        "schema_version": "tropicalgt.analogical_topk.v1",
+        "available": status == "available",
+        "status": status,
+        "reason_detail": unavailable_reason,
+        "no_proxy_or_fallback": True,
+        "retrieval_requires_model_probability_vectors": True,
+        "query_complex_required": "trajectory_probability_filtered_simplicial_object",
+        "codomain_complex_required": "trajectory_probability_filtered_simplicial_object",
+        "embedding_only_assignment_allowed": False,
+        "assignment_metric": "jensen_shannon_distance_on_model_probability_vectors",
+        "simplicial_map_claim_requires": "vertex_edge_face_simplex_tree_and_filtration_preservation",
+        "chain_map_claim_requires": "certified_filtered_simplicial_map",
+        "persistence_module_morphism_claim_requires": "certified_filtered_simplicial_map",
+        "query_complex_source": query_complex_source or "unavailable",
+        "raw_retrieved_count": int(raw_retrieved_count),
+        "qualified_model_probability_memory_count": int(qualified_memory_count),
+        "rejected_retrieved_count": int(max(raw_retrieved_count - qualified_memory_count, 0)),
+        "top_k_requested": _analogical_contract_value(requested) if requested is not None else "not_reported",
+        "top_k_rendered": int(top_k_rendered),
+        "quality_gate": _analogical_memory_quality_gate(memory),
+        "bank_path": str(memory.get("bank_path", "")),
+    }
+
+
+def _analogical_contract_panel(contract: Mapping[str, object] | None) -> str:
+    if not isinstance(contract, Mapping):
+        return ""
+    reason = str(contract.get("reason_detail") or "")
+    reason_html = f"<p><strong>Unavailable reason:</strong> {html.escape(reason)}</p>" if reason else ""
+    return (
+        "<aside class='contract'>"
+        "<div><span class='badge'>no proxy</span><span class='badge'>model probabilities only</span><span class='badge'>trajectory complexes required</span></div>"
+        f"<p><strong>Status:</strong> {html.escape(str(contract.get('status', 'unknown')))}; "
+        f"rendered {int(contract.get('top_k_rendered', 0) or 0)} / "
+        f"{html.escape(str(contract.get('qualified_model_probability_memory_count', 0)))} qualified model-probability memories "
+        f"from {html.escape(str(contract.get('raw_retrieved_count', 0)))} retrieved rows. "
+        "Embedding-only assignments are rejected; chain maps and persistence-module morphisms are reported only after a certified filtered simplicial map.</p>"
+        f"<p><strong>Assignment contract:</strong> {html.escape(str(contract.get('assignment_metric', 'unavailable')))}; "
+        f"query source {html.escape(str(contract.get('query_complex_source', 'unavailable')))}; "
+        f"quality gate {html.escape(str(contract.get('quality_gate', 'not_reported')))}.</p>"
+        f"{reason_html}"
+        "</aside>"
+    )
+
+
+def _write_analogical_topk_index(path: Path, pair_pages: list[dict[str, object]], map_reports: list[dict[str, object]], *, contract: Mapping[str, object] | None = None) -> None:
     rows = []
     for page, report in zip(pair_pages, map_reports, strict=False):
         rel = html.escape(Path(str(page.get("path", ""))).name)
@@ -7823,7 +7964,20 @@ def _write_analogical_topk_index(path: Path, pair_pages: list[dict[str, object]]
             f"<td>{float(report.get('edge_preservation_rate', 0.0)):.4f}</td>"
             "</tr>"
         )
-    body = "\n".join(rows) or "<tr><td colspan='21'>No retrieved memories.</td></tr>"
+    if rows:
+        body = "\n".join(rows)
+    else:
+        reason = ""
+        if isinstance(contract, Mapping):
+            reason = str(contract.get("reason_detail") or contract.get("status") or "No retrieved memories.")
+        body = (
+            "<tr class='unavailable'><td colspan='21'>"
+            "<strong>Insufficient model-probability memory.</strong> "
+            f"No retrieved memories satisfy the no-proxy analogical contract. {html.escape(reason)} "
+            "No vertex assignment, simplex-tree map, chain map, or persistence-module morphism is fabricated."
+            "</td></tr>"
+        )
+    contract_panel = _analogical_contract_panel(contract)
     path.write_text(
         f"""<!doctype html>
 <html>
@@ -7842,12 +7996,17 @@ def _write_analogical_topk_index(path: Path, pair_pages: list[dict[str, object]]
     th {{ color: #99f6e4; font-weight: 650; }}
     a {{ color: #7dd3fc; text-decoration: none; }}
     a:hover {{ text-decoration: underline; }}
+    .contract {{ border: 1px solid rgba(125,211,252,0.28); background: #0d1626; padding: 14px 16px; margin: 18px 0 4px; }}
+    .contract p {{ margin: 8px 0 0; }}
+    .badge {{ display: inline-block; margin: 0 8px 8px 0; padding: 3px 8px; border: 1px solid rgba(153,246,228,0.35); color: #99f6e4; font-size: 11px; text-transform: uppercase; letter-spacing: 0; }}
+    tr.unavailable td {{ color: #fecdd3; background: #1f1118; line-height: 1.5; }}
   </style>
 </head>
 <body>
   <main>
 	    <h1>Analogical top-k probability correspondences</h1>
 	    <p>Each row opens one query-to-memory vertex assignment with a finite filtered-complex certificate. The NLL/fitness landscape and the GUDHI persistence landscape are different objects: this table reports the persistence-landscape vector plus the wider vectorized GUDHI family (Landscape, BettiCurve, Silhouette, Entropy, PersistenceLengths, TopologicalVector, PersistenceImage) and the retrieval-side probability-map score contribution. These are real cached vectors and finite probability-complex certificates; the cosine/L2 comparisons are differentiable with respect to those vectors, while this HTML does not claim autograd through GUDHI diagram vectorization. Unavailable vectors stay zero rather than being fabricated. Edge, face, and filtration preservation can fail and are reported on the rank page.</p>
+	    {contract_panel}
 	    <table>
 	      <thead><tr><th>rank</th><th>correspondence</th><th>retrieval</th><th>landscape contrib.</th><th>vector contrib.</th><th>PH</th><th>chain pres.</th><th>comm. alg.</th><th>persistence-landscape L2 sim</th><th>persistence-landscape cosine</th><th>vector aggregate</th><th>vector methods</th><th>prob-map contrib.</th><th>prob-map sim</th><th>prob-map preserved</th><th>prob-map source</th><th>map claim</th><th>derived/algebraic</th><th>coarse signature</th><th>simplex-tree map</th><th>edge certificate</th></tr></thead>
       <tbody>{body}</tbody>

@@ -450,3 +450,38 @@ PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pyt
 ```
 
 Next linear item: monitor b63 through its early periodic checkpoint and continue the no-proxy visual/math repair queue.
+
+
+## 2026-06-16 Analogical Top-K No-Proxy Contract Pass
+
+Sequential visual/math repair item completed after periodic retention hardening:
+
+- Added an explicit `tropicalgt.analogical_topk.v1` contract to `analogical_simplicial_maps.json` for both available and unavailable analogical-memory outputs.
+- The contract records the no-proxy policy, required `trajectory_probability_filtered_simplicial_object` query/codomain complexes, model-probability-vector requirement, Jensen-Shannon probability assignment metric, rendered/qualified/rejected top-k counts, quality-gate metadata when reported, and the rule that chain maps or persistence-module morphisms are reported only after a certified filtered simplicial map.
+- Updated the analogical top-k HTML index with a visible contract panel and a rigorous early-training unavailable state. When the memory bank is empty or lacks qualified model-probability trajectory complexes, the page now says exactly why no vertex assignment, simplex-tree map, chain map, or persistence-module morphism is rendered.
+- Preserved the existing no-fallback behavior: embedding-only `probability_filtered_simplicial_object` rows are still rejected, missing query probabilities still make the report unavailable, and unavailable vectors/certificates remain unavailable rather than being fabricated.
+
+Validation:
+
+```text
+PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_simplicial_visualization.py -q -p no:cacheprovider --basetemp=/tmp/tropicalgt-pytest-analogical -k "analogical_memory"
+# 6 passed, 36 deselected
+PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m py_compile TropicalGT-I/src/tropicalgt/visualization.py TropicalGT-I/tests/test_simplicial_visualization.py
+# passed
+```
+
+Operational note: b63 reached step 250/5000 with train loss/NLL about 1.558/1.536, no traceback or ENOSPC, and `periodic/step_00000250` was generated. That first periodic audit is large, so disk pressure around step 500 remains an active operational watch item for Herschel and the main controller.
+
+Next linear item: continue the no-proxy visual/math repair queue while b63 trains toward 5K; keep watching periodic retention/disk pressure before each source-side change that might generate artifacts.
+
+
+## 2026-06-16 Deep Cleanup Pass
+
+User-requested cleanup pass completed immediately after the analogical top-k contract work:
+
+- Confirmed a blanket ignored-file cleanup was unsafe because `git clean -ndX` would target important ignored paths including `TropicalGT-I/data/`, `TropicalGT-I/checkpoints/`, `TropicalGT-I/outputs/`, `wandb/`, and `keys.txt`.
+- Performed targeted cleanup only: removed pytest temp directories, temporary validator reports, Python bytecode caches under source/test/script/planning paths, and repo-local test caches where present.
+- Pruned the already-completed non-final b63 step-250 generated periodic audit payload and left `PRUNED_NONFINAL_AUDIT_PAYLOAD.json` as a compact no-proxy marker. This did not touch datasets, checkpoints, W&B folders, source files, configs, logs, secrets, or final 5K required artifacts.
+- Disk recovered from about 45 GB free to about 61 GB free, and b63 stayed active. Latest parsed post-cleanup health was step 304/5000 with train loss/NLL about 1.533/1.510 and no traceback or ENOSPC.
+
+Next operational watch: step 500 will generate the next periodic audit. If it again creates very large non-final payloads, the controller/Herschel should verify retention or prune non-final generated payloads promptly while preserving the final 5K gate requirements.

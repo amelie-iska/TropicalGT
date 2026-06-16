@@ -1505,6 +1505,14 @@ def test_analogical_memory_visualization_renders_simplicial_maps(tmp_path: Path)
     assert "rank 2" in rank2_html
     assert '<input id="filtration-slider"' in rank2_html
     assert len(maps["maps"]) == 2
+    assert maps["topk_contract"]["schema_version"] == "tropicalgt.analogical_topk.v1"
+    assert maps["topk_contract"]["no_proxy_or_fallback"] is True
+    assert maps["topk_contract"]["retrieval_requires_model_probability_vectors"] is True
+    assert maps["topk_contract"]["embedding_only_assignment_allowed"] is False
+    assert maps["topk_contract"]["assignment_metric"] == "jensen_shannon_distance_on_model_probability_vectors"
+    assert maps["topk_contract"]["qualified_model_probability_memory_count"] == 2
+    assert maps["topk_contract"]["top_k_rendered"] == 2
+    assert maps["topk_contract"]["query_complex_source"] == "trajectory_probability_filtered_simplicial_object"
     assert maps["maps"][1]["pair_page"].endswith("analogical_memory_map_02.html")
     assert not Path(maps["maps"][0]["pair_page"]).is_absolute()
     assert not Path(maps["maps"][1]["pair_page"]).is_absolute()
@@ -1935,6 +1943,11 @@ def test_analogical_memory_visualization_rejects_non_trajectory_probability_fall
     maps = json.loads(Path(paths["analogical_simplicial_maps"]).read_text(encoding="utf-8"))
     assert maps["available"] is False
     assert maps["reason"] == "missing_model_probability_query_complex"
+    assert maps["reason_detail"].startswith("No model probability filtered query trajectory complex")
+    assert maps["topk_contract"]["no_proxy_or_fallback"] is True
+    assert maps["topk_contract"]["embedding_only_assignment_allowed"] is False
+    assert maps["topk_contract"]["raw_retrieved_count"] == 1
+    assert maps["topk_contract"]["qualified_model_probability_memory_count"] == 0
     assert maps["maps"] == []
 
 
@@ -1943,9 +1956,18 @@ def test_analogical_memory_without_retrieval_emits_unavailable_surfaces(tmp_path
     maps = json.loads(Path(paths["analogical_simplicial_maps"]).read_text(encoding="utf-8"))
     index_html = Path(paths["analogical_memory_topk_index_html"]).read_text(encoding="utf-8")
     map_html = Path(paths["analogical_memory_map_02_html"]).read_text(encoding="utf-8")
-    assert maps == {"available": False, "reason": "no_non_self_model_memory", "maps": []}
+    assert maps["available"] is False
+    assert maps["reason"] == "no_non_self_model_memory"
+    assert maps["reason_detail"].startswith("No non-self model-probability analogical memories retrieved")
+    assert maps["topk_contract"]["status"] == "no_non_self_model_memory"
+    assert maps["topk_contract"]["no_proxy_or_fallback"] is True
+    assert maps["topk_contract"]["retrieval_requires_model_probability_vectors"] is True
+    assert maps["topk_contract"]["top_k_rendered"] == 0
+    assert maps["maps"] == []
     assert "Analogical top-k probability correspondences" in index_html
+    assert "Insufficient model-probability memory" in index_html
     assert "No retrieved memories" in index_html
+    assert "Embedding-only assignments are rejected" in index_html
     assert "Analogical probability-matched correspondence filtered-complex certificate unavailable" in map_html
     assert "No vertex assignment" in map_html
 
@@ -1972,7 +1994,14 @@ def test_analogical_memory_without_query_probabilities_is_unavailable_not_fallba
     )
     html = Path(paths["analogical_memory_retrieval_html"]).read_text(encoding="utf-8")
     maps = json.loads(Path(paths["analogical_simplicial_maps"]).read_text(encoding="utf-8"))
-    assert maps == {"available": False, "reason": "missing_model_probability_query_complex", "maps": []}
+    assert maps["available"] is False
+    assert maps["reason"] == "missing_model_probability_query_complex"
+    assert maps["reason_detail"].startswith("No model probability filtered query trajectory complex")
+    assert maps["topk_contract"]["no_proxy_or_fallback"] is True
+    assert maps["topk_contract"]["embedding_only_assignment_allowed"] is False
+    assert maps["topk_contract"]["raw_retrieved_count"] == 1
+    assert maps["topk_contract"]["qualified_model_probability_memory_count"] == 0
+    assert maps["maps"] == []
     assert "analogical_memory_topk_index_html" in paths
     assert "analogical_memory_map_02_html" in paths
     assert "No model probability filtered query trajectory complex was available" in html
