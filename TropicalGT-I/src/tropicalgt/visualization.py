@@ -1777,6 +1777,14 @@ def _write_full_trajectory_complex_map(scaling_report: dict[str, object], output
             "model candidate probability vectors were not present, so no Jensen-Shannon radius complex or simplex tree was rendered."
         )
         _write_dark_empty(probability_path, message)
+        _write_simplex_tree_poset_contract(
+            probability_tree_path,
+            _unavailable_simplex_tree_poset_contract(
+                probability_tree_path,
+                title="Full graph-of-thought trajectory Jensen-Shannon probability SimplexTree face-coface poset",
+                reason="missing_model_probability_vectors",
+            ),
+        )
         _write_dark_empty(probability_tree_path, message)
         payload["probability_filtered_simplicial_object"] = unavailable
     result["got_full_trajectory_complex_jensen_shannon"] = str(probability_path)
@@ -2405,6 +2413,28 @@ def _write_reasoning_step_complex_maps(candidates: list[dict[str, object]], outp
             title=f"Reasoning step GUDHI SimplexTree face-coface poset: q{idx}",
             subtitle=f"record_id={record_id}; level={row.get('level')}; path={row.get('path', [])}",
         )
+        tree_poset_contract_path = _simplex_tree_poset_contract_path(tree_path)
+        if tree_poset_contract_path.exists():
+            try:
+                tree_poset_contract = json.loads(tree_poset_contract_path.read_text(encoding="utf-8"))
+            except json.JSONDecodeError:
+                tree_poset_contract = {
+                    "schema_version": "unreadable",
+                    "available": False,
+                    "reason": "simplex_tree_poset_contract_json_decode_error",
+                    "actual_data_only": False,
+                    "no_proxy_or_fallback": False,
+                    "safe_to_render_simplex_tree": False,
+                }
+        else:
+            tree_poset_contract = {
+                "schema_version": "missing",
+                "available": False,
+                "reason": "simplex_tree_poset_contract_missing",
+                "actual_data_only": False,
+                "no_proxy_or_fallback": False,
+                "safe_to_render_simplex_tree": False,
+            }
         rows.append(
             {
                 "index": idx,
@@ -2413,6 +2443,8 @@ def _write_reasoning_step_complex_maps(candidates: list[dict[str, object]], outp
                 "path": row.get("path", []),
                 "file": file_name,
                 "simplex_tree_file": tree_file_name,
+                "simplex_tree_poset_contract_file": tree_poset_contract_path.name,
+                "simplex_tree_poset_contract": tree_poset_contract,
                 "slider_contract_file": slider_contract_path.name,
                 "radius_slider_contract": radius_slider_contract,
                 "step_complex_source_contract": source_contract,
@@ -2570,11 +2602,62 @@ def _complex_slider_contract_path(path: Path) -> Path:
     return path.with_name(f"{path.stem}_slider_contract.json")
 
 
+def _simplex_tree_poset_contract_path(path: Path) -> Path:
+    return path.with_name(f"{path.stem}_simplex_tree_poset_contract.json")
+
+
+def _unavailable_simplex_tree_poset_contract(
+    path: Path,
+    *,
+    title: str,
+    reason: str,
+    backend: str = "unavailable_gudhi_simplex_tree",
+) -> dict[str, object]:
+    return {
+        "schema_version": "tropicalgt.simplex_tree_poset.v1",
+        "available": False,
+        "html_file": path.name,
+        "title": title,
+        "source": "gudhi_canonical_complex(filtered_simplicial_object).simplex_tree",
+        "backend": backend,
+        "safe_to_render_simplex_tree": False,
+        "reason": reason,
+        "actual_data_only": True,
+        "no_proxy_or_fallback": True,
+        "safe_unavailable_render": True,
+        "layout": "unavailable_no_simplex_tree_poset_rendered",
+        "primary_edges": "unavailable",
+        "not_disconnected_simplex_columns": True,
+        "empty_simplex_root_present": False,
+        "displayed_simplex_count": 0,
+        "source_simplex_count": 0,
+        "actual_face_to_coface_cover_edges": 0,
+        "empty_root_vertex_cover_edges": 0,
+        "optional_sorted_label_trie_prefix_edges": 0,
+    }
+
+
+def _write_simplex_tree_poset_contract(path: Path, contract: Mapping[str, object]) -> None:
+    _simplex_tree_poset_contract_path(path).write_text(
+        json.dumps(dict(contract), indent=2),
+        encoding="utf-8",
+    )
+
+
 def _write_simplex_tree_3d_map(path: Path, obj: dict[str, object], title: str, subtitle: str = "") -> None:
     obj = _gudhi_canonical_complex(obj)
     tree_status = obj.get("simplex_tree", {}) if isinstance(obj.get("simplex_tree"), dict) else {}
     if tree_status and tree_status.get("available") is False:
-        reason = tree_status.get("error") or tree_status.get("reason") or "gudhi_simplex_tree_unavailable"
+        reason = str(tree_status.get("error") or tree_status.get("reason") or "gudhi_simplex_tree_unavailable")
+        _write_simplex_tree_poset_contract(
+            path,
+            _unavailable_simplex_tree_poset_contract(
+                path,
+                title=title,
+                reason=reason,
+                backend=str(tree_status.get("backend", "unavailable_gudhi_simplex_tree")),
+            ),
+        )
         _write_dark_empty(
             path,
             (
@@ -2585,6 +2668,15 @@ def _write_simplex_tree_3d_map(path: Path, obj: dict[str, object], title: str, s
         return
     simplices = [row for row in obj.get("simplices", []) if isinstance(row, dict) and row.get("simplex")]
     if not simplices:
+        _write_simplex_tree_poset_contract(
+            path,
+            _unavailable_simplex_tree_poset_contract(
+                path,
+                title=title,
+                reason="no_simplices_available",
+                backend=str(tree_status.get("backend", "missing")),
+            ),
+        )
         _write_dark_empty(path, f"{title}: no simplices available.")
         return
     max_nodes = 1600
@@ -2602,6 +2694,15 @@ def _write_simplex_tree_3d_map(path: Path, obj: dict[str, object], title: str, s
         tuple(sorted(str(vertex) for vertex in (row.get("simplex") or []))): row for row in simplices
     }
     if not simplex_rows:
+        _write_simplex_tree_poset_contract(
+            path,
+            _unavailable_simplex_tree_poset_contract(
+                path,
+                title=title,
+                reason="no_canonical_simplices_available",
+                backend=str(tree_status.get("backend", "missing")),
+            ),
+        )
         _write_dark_empty(path, f"{title}: no canonical simplices available.")
         return
 
@@ -2799,8 +2900,14 @@ def _write_simplex_tree_3d_map(path: Path, obj: dict[str, object], title: str, s
         dimension_counts[key] = int(dimension_counts.get(key, 0) + 1)
     simplex_tree_poset_contract = {
         "schema_version": "tropicalgt.simplex_tree_poset.v1",
+        "available": True,
+        "html_file": path.name,
+        "title": title,
+        "source": "gudhi_canonical_complex(filtered_simplicial_object).simplex_tree",
         "backend": str(tree.get("backend", "json")),
         "safe_to_render_simplex_tree": tree.get("available") is not False,
+        "actual_data_only": True,
+        "no_proxy_or_fallback": True,
         "layout": "model_embedding_barycentric_face_coface_poset",
         "not_disconnected_simplex_columns": True,
         "empty_simplex_root_present": root_key in positions,
@@ -2815,8 +2922,26 @@ def _write_simplex_tree_3d_map(path: Path, obj: dict[str, object], title: str, s
         "primary_edges": "actual_face_to_coface_covers",
         "optional_prefix_links_visible": "legendonly",
         "position_source": "model_embedding_barycenters_with_dimension_and_filtration_lift",
-        "no_proxy_or_fallback": True,
     }
+    simplex_tree_poset_contract["all_non_vertex_simplices_have_face_cover_edges"] = all(
+        any(target == key and source != root_key for source, target, _label in hasse_pairs)
+        for key in node_keys
+        if len(key) > 1
+    )
+    simplex_tree_poset_contract["safe_to_render_simplex_tree"] = all(
+        [
+            simplex_tree_poset_contract["available"],
+            simplex_tree_poset_contract["actual_data_only"],
+            simplex_tree_poset_contract["no_proxy_or_fallback"],
+            simplex_tree_poset_contract["backend"] == "gudhi.SimplexTree",
+            simplex_tree_poset_contract["not_disconnected_simplex_columns"],
+            simplex_tree_poset_contract["empty_simplex_root_present"],
+            int(simplex_tree_poset_contract["displayed_simplex_count"]) > 0,
+            simplex_tree_poset_contract["primary_edges"] == "actual_face_to_coface_covers",
+            simplex_tree_poset_contract["all_non_vertex_simplices_have_face_cover_edges"],
+        ]
+    )
+    _write_simplex_tree_poset_contract(path, simplex_tree_poset_contract)
     fig.update_layout(
         template="plotly_dark",
         meta={"simplex_tree_poset_contract": simplex_tree_poset_contract},
@@ -3437,6 +3562,7 @@ def _display_thresholds(obj: dict[str, object], max_steps: int = 32) -> list[flo
 def _reasoning_step_complex_manifest_contract(rows: list[dict[str, object]]) -> dict[str, object]:
     simplex_tree_available = [row for row in rows if bool(row.get("simplex_tree_available"))]
     slider_rows = [row.get("radius_slider_contract") for row in rows if isinstance(row.get("radius_slider_contract"), dict)]
+    poset_rows = [row.get("simplex_tree_poset_contract") for row in rows if isinstance(row.get("simplex_tree_poset_contract"), dict)]
     source_rows = [row.get("step_complex_source_contract") for row in rows if isinstance(row.get("step_complex_source_contract"), dict)]
     source_unavailable = [
         {
@@ -3456,6 +3582,16 @@ def _reasoning_step_complex_manifest_contract(rows: list[dict[str, object]]) -> 
         }
         for row in rows
         if not (isinstance(row.get("radius_slider_contract"), dict) and row.get("radius_slider_contract", {}).get("safe_to_render_radius_filtration") is True)
+    ]
+    poset_unavailable = [
+        {
+            "index": int(row.get("index", 0) or 0),
+            "record_id": str(row.get("record_id", "")),
+            "reason": str((row.get("simplex_tree_poset_contract") if isinstance(row.get("simplex_tree_poset_contract"), dict) else {}).get("reason", "missing_or_unsafe_simplex_tree_poset_contract")),
+            "simplex_tree_poset_contract_file": str(row.get("simplex_tree_poset_contract_file", "")),
+        }
+        for row in rows
+        if not (isinstance(row.get("simplex_tree_poset_contract"), dict) and row.get("simplex_tree_poset_contract", {}).get("safe_to_render_simplex_tree") is True)
     ]
     fingerprint_groups: dict[str, list[dict[str, object]]] = defaultdict(list)
     for row in rows:
@@ -3498,6 +3634,21 @@ def _reasoning_step_complex_manifest_contract(rows: list[dict[str, object]]) -> 
         "step_count": int(len(rows)),
         "rendered_complex_pages": int(len([row for row in rows if row.get("file")])),
         "rendered_simplex_tree_pages": int(len([row for row in rows if row.get("simplex_tree_file")])),
+        "simplex_tree_poset_contract_schema_version": "tropicalgt.simplex_tree_poset.v1",
+        "simplex_tree_poset_contract_source": "per-step reasoning_step_*_simplex_tree_poset_contract.json sidecars summarized into this manifest",
+        "rendered_simplex_tree_poset_contracts": int(len(poset_rows)),
+        "all_steps_have_simplex_tree_poset_contracts": bool(rows) and len(poset_rows) == len(rows),
+        "all_step_simplex_tree_posets_no_proxy": bool(rows)
+        and all(row.get("actual_data_only") is True and row.get("no_proxy_or_fallback") is True for row in poset_rows),
+        "all_step_simplex_tree_posets_use_gudhi": bool(rows)
+        and all(row.get("backend") == "gudhi.SimplexTree" for row in poset_rows),
+        "all_step_simplex_tree_posets_face_coface_primary": bool(rows)
+        and all(row.get("primary_edges") == "actual_face_to_coface_covers" for row in poset_rows),
+        "all_step_simplex_tree_posets_safe_to_render": bool(rows)
+        and len(poset_unavailable) == 0
+        and all(row.get("safe_to_render_simplex_tree") is True for row in poset_rows),
+        "simplex_tree_poset_unavailable_count": int(len(poset_unavailable)),
+        "simplex_tree_poset_unavailable_steps": poset_unavailable,
         "slider_contract_schema_version": "tropicalgt.reasoning_step_radius_slider_summary.v1",
         "radius_slider_contract_source": "per-step reasoning_step_*_slider_contract.json sidecars summarized into this manifest",
         "rendered_slider_contracts": int(len(slider_rows)),
@@ -3561,11 +3712,13 @@ def _reasoning_step_contract_panel(contract: Mapping[str, object] | None) -> str
         "<div><span class='badge'>no proxy</span><span class='badge'>per-step complex</span><span class='badge'>radius slider verified</span><span class='badge'>simplex-tree explicit</span></div>"
         f"<p><strong>Status:</strong> rendered {int(contract.get('rendered_complex_pages', 0) or 0)} complex pages, "
         f"{int(contract.get('rendered_slider_contracts', 0) or 0)} radius-slider contract summaries, and "
-        f"{int(contract.get('rendered_simplex_tree_pages', 0) or 0)} simplex-tree pages for "
+        f"{int(contract.get('rendered_simplex_tree_pages', 0) or 0)} simplex-tree pages, and "
+        f"{int(contract.get('rendered_simplex_tree_poset_contracts', 0) or 0)} simplex-tree poset contracts for "
         f"{int(contract.get('step_count', 0) or 0)} model-evaluated reasoning states.</p>"
         f"<p><strong>Contract:</strong> {html.escape(str(contract.get('claim', '')))} "
         f"GUDHI SimplexTree available for {int(contract.get('gudhi_simplex_tree_step_count', 0) or 0)} step(s); "
-        f"explicitly unavailable for {int(contract.get('simplex_tree_unavailable_count', 0) or 0)}.</p>"
+        f"explicitly unavailable for {int(contract.get('simplex_tree_unavailable_count', 0) or 0)}. "
+        f"Auditable poset sidecars safe={html.escape(str(contract.get('all_step_simplex_tree_posets_safe_to_render', False)))}.</p>"
         f"<p><strong>Step source:</strong> candidate-owned filtered objects={html.escape(str(contract.get('all_step_complexes_use_candidate_filtered_object_source', False)))}; "
         f"no trajectory/static proxy={html.escape(str(contract.get('all_step_complex_source_contracts_no_proxy', False)))}; "
         f"safe source contracts={html.escape(str(contract.get('all_step_complex_source_contracts_safe', False)))}.</p>"

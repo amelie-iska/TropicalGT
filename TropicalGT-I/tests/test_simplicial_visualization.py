@@ -410,10 +410,15 @@ def test_simplex_tree_page_is_unavailable_without_gudhi_not_raw_json(monkeypatch
     out = tmp_path / "tree.html"
     _write_simplex_tree_3d_map(out, obj, "forced missing GUDHI tree")
     html = out.read_text(encoding="utf-8")
+    sidecar = json.loads(out.with_name("tree_simplex_tree_poset_contract.json").read_text(encoding="utf-8"))
     assert "unavailable_gudhi_simplex_tree" in html
     assert "No simplex-tree/trie or face-coface poset is rendered without a real GUDHI SimplexTree" in html
     assert "actual face-to-coface covers" not in html
     assert "optional sorted-label trie prefix links" not in html
+    assert sidecar["schema_version"] == "tropicalgt.simplex_tree_poset.v1"
+    assert sidecar["available"] is False
+    assert sidecar["safe_unavailable_render"] is True
+    assert sidecar["no_proxy_or_fallback"] is True
 
 
 def test_simplex_tree_poset_contract_records_actual_face_coface_covers(tmp_path: Path):
@@ -436,7 +441,15 @@ def test_simplex_tree_poset_contract_records_actual_face_coface_covers(tmp_path:
     _write_simplex_tree_3d_map(out, obj, "contracted simplex tree")
     html = out.read_text(encoding="utf-8")
     compact = html.replace(" ", "")
+    sidecar = json.loads(out.with_name("simplex_tree_poset_simplex_tree_poset_contract.json").read_text(encoding="utf-8"))
     assert "simplex_tree_poset_contract" in html
+    assert sidecar["schema_version"] == "tropicalgt.simplex_tree_poset.v1"
+    assert sidecar["available"] is True
+    assert sidecar["safe_to_render_simplex_tree"] is True
+    assert sidecar["source"] == "gudhi_canonical_complex(filtered_simplicial_object).simplex_tree"
+    assert sidecar["backend"] == "gudhi.SimplexTree"
+    assert sidecar["no_proxy_or_fallback"] is True
+    assert sidecar["all_non_vertex_simplices_have_face_cover_edges"] is True
     assert '"schema_version":"tropicalgt.simplex_tree_poset.v1"' in compact
     assert '"layout":"model_embedding_barycentric_face_coface_poset"' in compact
     assert '"not_disconnected_simplex_columns":true' in compact
@@ -896,6 +909,14 @@ def test_got_trajectory_visualization_renders_simplicial_panel_and_nll_surface(t
     assert step_manifest["contract"]["step_count"] == 4
     assert step_manifest["contract"]["rendered_complex_pages"] == 4
     assert step_manifest["contract"]["rendered_simplex_tree_pages"] == 4
+    assert step_manifest["contract"]["simplex_tree_poset_contract_schema_version"] == "tropicalgt.simplex_tree_poset.v1"
+    assert step_manifest["contract"]["rendered_simplex_tree_poset_contracts"] == 4
+    assert step_manifest["contract"]["all_steps_have_simplex_tree_poset_contracts"] is True
+    assert step_manifest["contract"]["all_step_simplex_tree_posets_no_proxy"] is True
+    assert step_manifest["contract"]["all_step_simplex_tree_posets_use_gudhi"] is True
+    assert step_manifest["contract"]["all_step_simplex_tree_posets_face_coface_primary"] is True
+    assert step_manifest["contract"]["all_step_simplex_tree_posets_safe_to_render"] is True
+    assert step_manifest["contract"]["simplex_tree_poset_unavailable_count"] == 0
     assert step_manifest["contract"]["source_contract_schema_version"] == "tropicalgt.reasoning_step_complex_source_contract.v1"
     assert step_manifest["contract"]["rendered_source_contracts"] == 4
     assert step_manifest["contract"]["all_steps_have_source_contracts"] is True
@@ -934,6 +955,10 @@ def test_got_trajectory_visualization_renders_simplicial_panel_and_nll_surface(t
     assert all(row.get("step_complex_source_contract", {}).get("uses_global_trajectory_complex_as_proxy") is False for row in step_manifest["steps"])
     assert all(row.get("step_complex_source_contract", {}).get("displayed_vertex_count") == row.get("summary", {}).get("num_vertices") for row in step_manifest["steps"])
     assert all(row.get("slider_contract_file") == f"reasoning_step_{idx:03d}_slider_contract.json" for idx, row in enumerate(step_manifest["steps"]))
+    assert all(row.get("simplex_tree_poset_contract_file") == f"reasoning_step_{idx:03d}_simplex_tree_simplex_tree_poset_contract.json" for idx, row in enumerate(step_manifest["steps"]))
+    assert all(row.get("simplex_tree_poset_contract", {}).get("schema_version") == "tropicalgt.simplex_tree_poset.v1" for row in step_manifest["steps"])
+    assert all(row.get("simplex_tree_poset_contract", {}).get("safe_to_render_simplex_tree") is True for row in step_manifest["steps"])
+    assert all(row.get("simplex_tree_poset_contract", {}).get("primary_edges") == "actual_face_to_coface_covers" for row in step_manifest["steps"])
     assert all(row.get("radius_slider_contract", {}).get("schema_version") == "tropicalgt.reasoning_step_radius_slider_summary.v1" for row in step_manifest["steps"])
     assert all(row.get("radius_slider_contract", {}).get("safe_to_render_radius_filtration") is True for row in step_manifest["steps"])
     assert all(row.get("radius_slider_contract", {}).get("first_frame_disjoint_vertices_only") is True for row in step_manifest["steps"])
@@ -943,6 +968,12 @@ def test_got_trajectory_visualization_renders_simplicial_panel_and_nll_surface(t
     assert first_step.exists()
     first_step_html = first_step.read_text(encoding="utf-8")
     first_step_slider_contract = json.loads((tmp_path / "reasoning_step_complex_maps" / "reasoning_step_000_slider_contract.json").read_text(encoding="utf-8"))
+    first_step_tree_contract = json.loads((tmp_path / "reasoning_step_complex_maps" / "reasoning_step_000_simplex_tree_simplex_tree_poset_contract.json").read_text(encoding="utf-8"))
+    full_tree_contract = json.loads((tmp_path / "got_full_trajectory_simplex_tree_3d_simplex_tree_poset_contract.json").read_text(encoding="utf-8"))
+    assert first_step_tree_contract["schema_version"] == "tropicalgt.simplex_tree_poset.v1"
+    assert first_step_tree_contract["safe_to_render_simplex_tree"] is True
+    assert first_step_tree_contract["primary_edges"] == "actual_face_to_coface_covers"
+    assert full_tree_contract["safe_to_render_simplex_tree"] is True
     assert "Filtration radius" in first_step_html
     assert "play filtration min-to-max" in first_step_html
     assert "first radius frame is vertex-only" in first_step_html

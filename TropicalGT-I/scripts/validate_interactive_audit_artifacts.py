@@ -174,6 +174,52 @@ def _slider_contract_path(html_path: Path) -> Path:
     return html_path.with_name(f"{html_path.stem}_slider_contract.json")
 
 
+def _simplex_tree_poset_contract_path(html_path: Path) -> Path:
+    return html_path.with_name(f"{html_path.stem}_simplex_tree_poset_contract.json")
+
+
+def _validate_simplex_tree_poset_contract(
+    contract_path: Path,
+    errors: list[str],
+    label: str,
+    *,
+    required_available: bool = True,
+) -> dict[str, Any]:
+    _assert(contract_path.exists(), errors, f"{label} missing simplex-tree poset contract sidecar {contract_path.name}")
+    if not contract_path.exists():
+        return {}
+    payload = _read_json(contract_path)
+    _assert(isinstance(payload, dict), errors, f"{label} simplex-tree poset contract is not an object")
+    if not isinstance(payload, dict):
+        return {}
+    _assert(payload.get("schema_version") == "tropicalgt.simplex_tree_poset.v1", errors, f"{label} simplex-tree poset contract has wrong schema")
+    _assert(payload.get("source") == "gudhi_canonical_complex(filtered_simplicial_object).simplex_tree", errors, f"{label} simplex-tree poset contract has wrong source")
+    _assert(payload.get("actual_data_only") is True, errors, f"{label} simplex-tree poset contract is not actual-data-only")
+    _assert(payload.get("no_proxy_or_fallback") is True, errors, f"{label} simplex-tree poset contract allows proxy/fallback data")
+    _assert(str(payload.get("html_file", "")).strip() != "", errors, f"{label} simplex-tree poset contract lacks html file")
+    if not required_available:
+        _assert(payload.get("available") is False, errors, f"{label} simplex-tree poset contract should be unavailable")
+        _assert(payload.get("safe_to_render_simplex_tree") is False, errors, f"{label} unavailable simplex-tree poset contract is marked safe")
+        _assert(payload.get("safe_unavailable_render") is True, errors, f"{label} unavailable simplex-tree poset contract is not safe unavailable render")
+        _assert(str(payload.get("reason", "")).strip() != "", errors, f"{label} unavailable simplex-tree poset contract lacks reason")
+        _assert(int(_finite_float(payload.get("displayed_simplex_count"), -1.0)) == 0, errors, f"{label} unavailable simplex-tree poset contract displays simplices")
+        return payload
+    _assert(payload.get("available") is True, errors, f"{label} simplex-tree poset contract is unavailable")
+    _assert(payload.get("backend") == "gudhi.SimplexTree", errors, f"{label} simplex-tree poset contract is not backed by GUDHI")
+    _assert(payload.get("safe_to_render_simplex_tree") is True, errors, f"{label} simplex-tree poset contract is unsafe")
+    _assert(payload.get("layout") == "model_embedding_barycentric_face_coface_poset", errors, f"{label} simplex-tree poset layout is wrong")
+    _assert(payload.get("not_disconnected_simplex_columns") is True, errors, f"{label} simplex-tree poset permits disconnected simplex columns")
+    _assert(payload.get("empty_simplex_root_present") is True, errors, f"{label} simplex-tree poset lacks empty-simplex root")
+    _assert(int(_finite_float(payload.get("displayed_simplex_count"), 0.0)) > 0, errors, f"{label} simplex-tree poset displays no simplices")
+    _assert(int(_finite_float(payload.get("source_simplex_count"), 0.0)) >= int(_finite_float(payload.get("displayed_simplex_count"), 0.0)), errors, f"{label} simplex-tree poset source/displayed count mismatch")
+    _assert(int(_finite_float(payload.get("actual_face_to_coface_cover_edges"), 0.0)) >= int(_finite_float(payload.get("empty_root_vertex_cover_edges"), 0.0)), errors, f"{label} simplex-tree poset cover-edge count is inconsistent")
+    _assert(payload.get("primary_edges") == "actual_face_to_coface_covers", errors, f"{label} simplex-tree poset primary edges are not face-to-coface covers")
+    _assert(payload.get("optional_prefix_links_visible") == "legendonly", errors, f"{label} simplex-tree trie prefix links are not legend-only")
+    _assert(payload.get("position_source") == "model_embedding_barycenters_with_dimension_and_filtration_lift", errors, f"{label} simplex-tree poset position source is wrong")
+    _assert(payload.get("all_non_vertex_simplices_have_face_cover_edges") is True, errors, f"{label} simplex-tree poset has non-vertex simplices without face-cover edges")
+    return payload
+
+
 def _validate_radius_slider_contract(contract_path: Path, errors: list[str], label: str) -> dict[str, Any]:
     _assert(contract_path.exists(), errors, f"{label} missing radius slider contract sidecar {contract_path.name}")
     if not contract_path.exists():
@@ -1175,11 +1221,30 @@ def validate_row(row_dir: Path, *, min_candidates: int = 8, min_depth: int = 2, 
         errors,
         "full trajectory complex",
     )
+    _validate_simplex_tree_poset_contract(
+        _simplex_tree_poset_contract_path(row_dir / REQUIRED_HTML["full_simplex_tree"][0]),
+        errors,
+        "full trajectory simplex tree",
+        required_available=True,
+    )
     if isinstance(prob_obj, dict) and prob_obj.get("available") is not False:
         _validate_radius_slider_contract(
             _slider_contract_path(row_dir / REQUIRED_HTML["probability_complex"][0]),
             errors,
             "probability trajectory complex",
+        )
+        _validate_simplex_tree_poset_contract(
+            _simplex_tree_poset_contract_path(row_dir / REQUIRED_HTML["probability_simplex_tree"][0]),
+            errors,
+            "probability trajectory simplex tree",
+            required_available=True,
+        )
+    elif isinstance(prob_obj, dict):
+        _validate_simplex_tree_poset_contract(
+            _simplex_tree_poset_contract_path(row_dir / REQUIRED_HTML["probability_simplex_tree"][0]),
+            errors,
+            "probability trajectory simplex tree",
+            required_available=False,
         )
 
     maps_path = row_dir / "analogical_simplicial_maps.json"
@@ -1342,6 +1407,14 @@ def validate_row(row_dir: Path, *, min_candidates: int = 8, min_depth: int = 2, 
         _assert(step_contract.get("all_step_complex_source_counts_match_summary") is True, errors, "reasoning-step manifest source counts do not match summaries")
         _assert(step_contract.get("all_step_complexes_have_vertices") is True, errors, "reasoning-step manifest source contracts lack vertices")
         _assert(int(_finite_float(step_contract.get("source_contract_unavailable_count"), -1.0)) == 0, errors, "reasoning-step manifest lists unavailable source contracts")
+        _assert(step_contract.get("simplex_tree_poset_contract_schema_version") == "tropicalgt.simplex_tree_poset.v1", errors, "reasoning-step manifest missing simplex-tree poset contract schema")
+        _assert(int(_finite_float(step_contract.get("rendered_simplex_tree_poset_contracts"), -1.0)) == len(steps), errors, "reasoning-step manifest rendered simplex-tree poset contract count mismatch")
+        _assert(step_contract.get("all_steps_have_simplex_tree_poset_contracts") is True, errors, "reasoning-step manifest says simplex-tree poset contracts are missing")
+        _assert(step_contract.get("all_step_simplex_tree_posets_no_proxy") is True, errors, "reasoning-step manifest says simplex-tree poset contracts allow proxy data")
+        _assert(step_contract.get("all_step_simplex_tree_posets_use_gudhi") is True, errors, "reasoning-step manifest says simplex-tree posets are not GUDHI-backed")
+        _assert(step_contract.get("all_step_simplex_tree_posets_face_coface_primary") is True, errors, "reasoning-step manifest says simplex-tree posets are not face-to-coface primary")
+        _assert(step_contract.get("all_step_simplex_tree_posets_safe_to_render") is True, errors, "reasoning-step manifest says simplex-tree posets are unsafe")
+        _assert(int(_finite_float(step_contract.get("simplex_tree_poset_unavailable_count"), -1.0)) == 0, errors, "reasoning-step manifest lists unavailable simplex-tree poset contracts")
         _assert(step_contract.get("slider_contract_schema_version") == "tropicalgt.reasoning_step_radius_slider_summary.v1", errors, "reasoning-step manifest missing radius slider summary schema")
         _assert(int(_finite_float(step_contract.get("rendered_slider_contracts"), -1.0)) == len(steps), errors, "reasoning-step manifest rendered slider contract count mismatch")
         _assert(step_contract.get("all_steps_have_radius_slider_contracts") is True, errors, "reasoning-step manifest says radius slider summaries are missing")
@@ -1402,6 +1475,19 @@ def validate_row(row_dir: Path, *, min_candidates: int = 8, min_depth: int = 2, 
             errors,
             f"reasoning-step complex {idx}",
         )
+        expected_poset_file = str(step.get("simplex_tree_poset_contract_file") or Path(str(step.get("simplex_tree_file", ""))).with_suffix("").name + "_simplex_tree_poset_contract.json")
+        poset_path = _simplex_tree_poset_contract_path(row_dir / expected_tree_href)
+        _assert(poset_path.name == expected_poset_file, errors, f"reasoning-step simplex tree {idx} manifest poset contract file mismatch")
+        poset_payload = _validate_simplex_tree_poset_contract(
+            poset_path,
+            errors,
+            f"reasoning-step simplex tree {idx}",
+            required_available=True,
+        )
+        embedded_poset = step.get("simplex_tree_poset_contract") if isinstance(step.get("simplex_tree_poset_contract"), dict) else {}
+        _assert(embedded_poset.get("schema_version") == poset_payload.get("schema_version"), errors, f"reasoning-step simplex tree {idx} embedded poset schema mismatch")
+        _assert(embedded_poset.get("safe_to_render_simplex_tree") == poset_payload.get("safe_to_render_simplex_tree"), errors, f"reasoning-step simplex tree {idx} embedded poset safety mismatch")
+        _assert(int(_finite_float(embedded_poset.get("displayed_simplex_count"), -1.0)) == int(_finite_float(poset_payload.get("displayed_simplex_count"), -2.0)), errors, f"reasoning-step simplex tree {idx} embedded poset count mismatch")
         _validate_reasoning_step_slider_summary(
             step.get("radius_slider_contract"),
             slider_payload,

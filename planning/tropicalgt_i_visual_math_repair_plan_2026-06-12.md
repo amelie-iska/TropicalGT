@@ -1240,3 +1240,24 @@ CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/t
 CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_metrics_and_memory.py::test_probability_simplicial_map_diagnostics_certifies_filtered_chain_map TropicalGT-I/tests/test_metrics_and_memory.py::test_analogical_memory_retrieval_uses_probability_simplicial_map_weight -q -p no:cacheprovider --basetemp=/tmp/tropicalgt-pytest-analogical-prob-evidence-memory
 # 2 passed
 ```
+
+## 2026-06-16 Simplex-Tree Poset Sidecar Contract
+
+Sequential simplicial/simplex-tree repair continued after analogical probability-vector evidence propagation:
+
+- Added standalone `tropicalgt.simplex_tree_poset.v1` JSON sidecars for every simplex-tree face-to-coface poset page, rather than relying only on Plotly HTML metadata.
+- The sidecar certifies GUDHI-backed source, actual-data/no-proxy flags, empty-simplex root presence, primary actual face-to-coface cover edges, legend-only sorted-label trie prefix links, model-embedding barycentric position source, and safety for rendering.
+- Unavailable simplex-tree pages now write explicit unavailable sidecars with exact reason, zero displayed simplices, safe-unavailable render, and no-proxy flags instead of leaving validator behavior to infer from dark HTML.
+- Reasoning-step manifests now embed each step's poset contract, list the sidecar filename, and summarize whether all per-step posets are GUDHI-backed, no-proxy, face-to-coface-primary, and safe to render.
+- The interactive artifact validator now requires full trajectory, probability trajectory, and per-step simplex-tree poset sidecars; missing, unsafe, proxy-like, non-GUDHI, disconnected-column, or non-face-to-coface-primary contracts fail validation.
+
+Validation:
+
+```text
+CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m py_compile TropicalGT-I/src/tropicalgt/visualization.py TropicalGT-I/scripts/validate_interactive_audit_artifacts.py TropicalGT-I/tests/test_simplicial_visualization.py TropicalGT-I/tests/test_interactive_artifact_validator.py
+# passed
+CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_simplicial_visualization.py::test_simplex_tree_page_is_unavailable_without_gudhi_not_raw_json TropicalGT-I/tests/test_simplicial_visualization.py::test_simplex_tree_poset_contract_records_actual_face_coface_covers TropicalGT-I/tests/test_simplicial_visualization.py::test_got_trajectory_visualization_renders_simplicial_panel_and_nll_surface TropicalGT-I/tests/test_interactive_artifact_validator.py::test_validate_audit_root_accepts_three_interactive_rows TropicalGT-I/tests/test_interactive_artifact_validator.py::test_validate_audit_root_rejects_missing_reasoning_step_simplex_tree_poset_contract -q -p no:cacheprovider --basetemp=/tmp/tropicalgt-pytest-simplex-tree-poset-sidecar
+# 5 passed
+CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_simplicial_visualization.py TropicalGT-I/tests/test_interactive_artifact_validator.py -q -p no:cacheprovider --basetemp=/tmp/tropicalgt-pytest-simplex-tree-poset-sidecar-full
+# 76 passed
+```

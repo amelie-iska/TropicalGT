@@ -87,6 +87,43 @@ def _slider_contract(html_file: str, *, vertices: int = 4, solid_edges: int = 3,
     }
 
 
+def _simplex_tree_poset_contract(
+    html_file: str,
+    *,
+    displayed: int = 1,
+    cover_edges: int | None = None,
+    root_edges: int | None = None,
+) -> dict[str, object]:
+    cover_edges = displayed if cover_edges is None else cover_edges
+    root_edges = min(displayed, cover_edges) if root_edges is None else root_edges
+    return {
+        "schema_version": "tropicalgt.simplex_tree_poset.v1",
+        "available": True,
+        "html_file": html_file,
+        "title": html_file,
+        "source": "gudhi_canonical_complex(filtered_simplicial_object).simplex_tree",
+        "backend": "gudhi.SimplexTree",
+        "safe_to_render_simplex_tree": True,
+        "actual_data_only": True,
+        "no_proxy_or_fallback": True,
+        "layout": "model_embedding_barycentric_face_coface_poset",
+        "not_disconnected_simplex_columns": True,
+        "empty_simplex_root_present": True,
+        "displayed_simplex_count": displayed,
+        "source_simplex_count": displayed,
+        "truncated": False,
+        "max_nodes": 1600,
+        "dimension_counts": {"dim_0": displayed},
+        "actual_face_to_coface_cover_edges": cover_edges,
+        "empty_root_vertex_cover_edges": root_edges,
+        "optional_sorted_label_trie_prefix_edges": displayed,
+        "primary_edges": "actual_face_to_coface_covers",
+        "optional_prefix_links_visible": "legendonly",
+        "position_source": "model_embedding_barycenters_with_dimension_and_filtration_lift",
+        "all_non_vertex_simplices_have_face_cover_edges": True,
+    }
+
+
 def _step_source_contract(candidate: dict[str, object], step_file: str, simplex_tree_file: str, fingerprint: str) -> dict[str, object]:
     return {
         "schema_version": "tropicalgt.reasoning_step_complex_source_contract.v1",
@@ -488,6 +525,8 @@ def _row(root: Path, name: str) -> Path:
         fingerprint = f"fixture-step-fingerprint-{idx}"
         step_file = f"reasoning_step_{idx:03d}.html"
         simplex_tree_file = f"reasoning_step_{idx:03d}_simplex_tree.html"
+        simplex_tree_poset_contract_file = f"reasoning_step_{idx:03d}_simplex_tree_simplex_tree_poset_contract.json"
+        simplex_tree_poset_contract = _simplex_tree_poset_contract(simplex_tree_file, displayed=1, cover_edges=1, root_edges=1)
         steps.append(
             {
                 "index": idx,
@@ -496,6 +535,8 @@ def _row(root: Path, name: str) -> Path:
                 "path": candidates[idx]["path"],
                 "file": step_file,
                 "simplex_tree_file": simplex_tree_file,
+                "simplex_tree_poset_contract_file": simplex_tree_poset_contract_file,
+                "simplex_tree_poset_contract": simplex_tree_poset_contract,
                 "slider_contract_file": f"reasoning_step_{idx:03d}_slider_contract.json",
                 "radius_slider_contract": _slider_summary(
                     step_file,
@@ -523,6 +564,16 @@ def _row(root: Path, name: str) -> Path:
         "step_count": 4,
         "rendered_complex_pages": 4,
         "rendered_simplex_tree_pages": 4,
+        "simplex_tree_poset_contract_schema_version": "tropicalgt.simplex_tree_poset.v1",
+        "simplex_tree_poset_contract_source": "per-step reasoning_step_*_simplex_tree_poset_contract.json sidecars summarized into this manifest",
+        "rendered_simplex_tree_poset_contracts": 4,
+        "all_steps_have_simplex_tree_poset_contracts": True,
+        "all_step_simplex_tree_posets_no_proxy": True,
+        "all_step_simplex_tree_posets_use_gudhi": True,
+        "all_step_simplex_tree_posets_face_coface_primary": True,
+        "all_step_simplex_tree_posets_safe_to_render": True,
+        "simplex_tree_poset_unavailable_count": 0,
+        "simplex_tree_poset_unavailable_steps": [],
         "source_contract_schema_version": "tropicalgt.reasoning_step_complex_source_contract.v1",
         "source_contract_source": "candidate.filtered_simplicial_object on each manifest row",
         "rendered_source_contracts": 4,
@@ -1233,12 +1284,18 @@ def _row(root: Path, name: str) -> Path:
     _write(row / "trajectory_persistence/persistence_landscapes.json", json.dumps(landscape_payload))
     _write(row / "got_full_trajectory_complex_slider_contract.json", json.dumps(_slider_contract("got_full_trajectory_complex.html")))
     _write(row / "got_full_trajectory_complex_jensen_shannon_slider_contract.json", json.dumps(_slider_contract("got_full_trajectory_complex_jensen_shannon.html")))
+    _write(row / "got_full_trajectory_simplex_tree_3d_simplex_tree_poset_contract.json", json.dumps(_simplex_tree_poset_contract("got_full_trajectory_simplex_tree_3d.html", displayed=7, cover_edges=10, root_edges=4)))
+    _write(row / "got_full_trajectory_simplex_tree_3d_jensen_shannon_simplex_tree_poset_contract.json", json.dumps(_simplex_tree_poset_contract("got_full_trajectory_simplex_tree_3d_jensen_shannon.html", displayed=7, cover_edges=10, root_edges=4)))
     for step in steps:
         _write(row / "reasoning_step_complex_maps" / step["file"], _html("Reasoning step filtered simplicial complex map"))
         _write(row / "reasoning_step_complex_maps" / step["simplex_tree_file"], _html("Reasoning step GUDHI simplex tree", "Plotly.newPlot simplex-tree inclusion"))
         _write(
             row / "reasoning_step_complex_maps" / step["file"].replace(".html", "_slider_contract.json"),
             json.dumps(_slider_contract(step["file"], vertices=1, solid_edges=0, filled_faces=0)),
+        )
+        _write(
+            row / "reasoning_step_complex_maps" / step["simplex_tree_poset_contract_file"],
+            json.dumps(step["simplex_tree_poset_contract"]),
         )
     return row
 
@@ -1574,6 +1631,17 @@ def test_validate_audit_root_rejects_missing_reasoning_step_slider_contract(tmp_
     report = validator.validate_audit_root(audit, min_rows=1, min_candidates=4, min_depth=2)
     assert not report["ok"]
     assert any("radius slider contract" in err and "reasoning-step complex 0" in err for err in report["errors"])
+
+
+def test_validate_audit_root_rejects_missing_reasoning_step_simplex_tree_poset_contract(tmp_path: Path):
+    validator = _load_validator()
+    audit = tmp_path / "step_00000001" / "got_audit"
+    row = _row(audit, ".")
+    (row / "reasoning_step_complex_maps" / "reasoning_step_000_simplex_tree_simplex_tree_poset_contract.json").unlink()
+    _write(audit / "codex_browser_index.html", _codex_browser_html(_browser_samples(audit, ["."])))
+    report = validator.validate_audit_root(audit, min_rows=1, min_candidates=4, min_depth=2)
+    assert not report["ok"]
+    assert any("simplex-tree poset contract" in err and "reasoning-step simplex tree 0" in err for err in report["errors"])
 
 
 def test_validate_audit_root_rejects_missing_reasoning_step_slider_summary(tmp_path: Path):
