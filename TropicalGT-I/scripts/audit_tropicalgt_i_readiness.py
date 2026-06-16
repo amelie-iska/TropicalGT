@@ -144,6 +144,26 @@ def build_readiness_report(
             "enabled" if wandb_enabled else "wandb disabled",
         )
 
+    memory_bank_path = str(cfg.get("memory_bank_path", "") or "")
+    output_dir = str(cfg.get("output_dir", "") or "")
+    memory_scoped = _path_is_under(memory_bank_path, output_dir) if memory_bank_path and output_dir else True
+    memory_path = _repo_path(memory_bank_path) if memory_bank_path else None
+    memory_exists = bool(memory_path and memory_path.exists())
+    report["memory"] = {
+        "memory_bank_path": memory_bank_path,
+        "output_dir": output_dir,
+        "memory_bank_exists": memory_exists,
+        "memory_bank_bytes": memory_path.stat().st_size if memory_path and memory_exists else 0,
+        "memory_bank_scoped_to_output_dir": memory_scoped,
+        "scope_policy": "memory banks must live under the current run output_dir unless a future explicit certified import mechanism is added",
+    }
+    add_gate(
+        gates,
+        "memory_bank_path_scoped_to_output_dir",
+        memory_scoped,
+        memory_bank_path or "memory disabled",
+    )
+
     root = cfg.get("data_root")
     require_data = bool(cfg.get("require_data", bool(root)))
     cfg_sample = dict(cfg)
@@ -511,6 +531,23 @@ def tooling_report() -> dict[str, Any]:
         "core_scripts": {name: {"path": str(path), "exists": path.exists()} for name, path in core.items()},
         "ablation_scripts": {name: {"path": str(path), "exists": path.exists()} for name, path in ablation.items()},
     }
+
+
+def _repo_path(path: str) -> Path:
+    raw = Path(path)
+    return raw.resolve(strict=False) if raw.is_absolute() else (REPO_ROOT / raw).resolve(strict=False)
+
+
+def _path_is_under(path: str, parent: str) -> bool:
+    if not path or not parent:
+        return False
+    try:
+        child = _repo_path(path)
+        root = _repo_path(parent)
+        child.relative_to(root)
+        return True
+    except Exception:
+        return False
 
 
 def add_gate(gates: list[dict[str, Any]], name: str, passed: bool, detail: str = "") -> None:

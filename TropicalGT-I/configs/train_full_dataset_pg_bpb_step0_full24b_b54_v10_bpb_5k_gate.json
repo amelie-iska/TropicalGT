@@ -87,7 +87,7 @@
     "split_ratio": 0.5,
     "verification_window": 4
   },
-  "memory_bank_path": "TropicalGT-I/outputs/tropicalgt_i_pg_bpb_step0_full24b_b52_v4_bpb_restart/memory_bank/trajectory_memories.jsonl",
+  "memory_bank_path": "TropicalGT-I/outputs/tropicalgt_i_pg_bpb_step0_full24b_b54_v10_bpb_5k_gate/memory_bank/trajectory_memories.jsonl",
   "memory_max_records": 64,
   "memory_quality_min_margin_mean": 0.001,
   "memory_quality_min_nll_improvement": 0.05,

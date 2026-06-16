@@ -745,3 +745,10 @@ The live item-by-item repair inventory is maintained in `planning/tropicalgt_i_c
 - [x] Hardened readiness gates for BPB runs: `graph_json_fallback_zero` and `graph_json_parse_unavailable_zero` must both pass, so malformed explicit `graph_json` cannot slip through preflight as a derived graph substitute.
 - [x] Added readiness regression coverage proving malformed explicit `graph_json` blocks readiness with `graph_json_parse_unavailable_zero` while preserving exact fixture-mode behavior.
 - [x] Focused verification passed: py-compile for touched scripts/tests, `git diff --check`, `pytest TropicalGT-I/tests/test_readiness_audit.py TropicalGT-I/tests/test_training_metrics.py TropicalGT-I/tests/test_data_loader.py -q` (`32 passed`, two SentencePiece import deprecation warnings), and a direct `validate_tropicalgt_i.py` malformed-parquet smoke showing parse-unavailable rate `1.0`.
+
+### Current Objective Update - Memory Bank Path Scope Gate Pass
+
+- [x] Added a readiness memory section and `memory_bank_path_scoped_to_output_dir` gate so future BPB runs cannot silently retrieve analogical memories from older run directories as if they were current-run evidence.
+- [x] Corrected the stale tracked b54 BPB config memory-bank path to live under its own `output_dir` instead of the older b52 restart directory.
+- [x] Added regression coverage proving cross-run memory-bank paths block readiness.
+- [x] Focused verification passed: py-compile for readiness script/test, `git diff --check`, tracked BPB config memory-path scope audit, and `pytest TropicalGT-I/tests/test_readiness_audit.py TropicalGT-I/tests/test_training_metrics.py TropicalGT-I/tests/test_data_loader.py -q` (`33 passed`, two SentencePiece import deprecation warnings).

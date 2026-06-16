@@ -61,6 +61,47 @@ def test_readiness_audit_fixture_without_checkpoint(tmp_path):
     assert "| config_loads | pass |" in markdown
 
 
+def test_readiness_audit_blocks_cross_run_memory_bank_path(tmp_path):
+    config = tmp_path / "config.json"
+    config.write_text(
+        """
+{
+  "run_name": "audit_cross_run_memory",
+  "fixture_size": 4,
+  "train_limit": 4,
+  "val_limit": 4,
+  "batch_size": 2,
+  "seq_len": 32,
+  "seed": 1729,
+  "device": "cpu",
+  "output_dir": "%s",
+  "memory_bank_path": "%s",
+  "model": {"dim": 32, "hidden_dim": 32, "graph_feature_dim": 48},
+  "tokengt": {"feature_dim": 48}
+}
+"""
+        % (tmp_path / "outputs" / "current", tmp_path / "outputs" / "old" / "memory.jsonl"),
+        encoding="utf-8",
+    )
+    report = build_readiness_report(
+        config_path=config,
+        checkpoint_path=None,
+        split="validation",
+        sample_limit=4,
+        details_limit=1,
+        trace_limit=4,
+        scale_depth=0,
+        scale_width=2,
+        scale_branch_factor=2,
+        require_cuda=False,
+        require_checkpoint=False,
+        render_visualizations=False,
+    )
+    assert report["status"] == "blocked"
+    assert report["memory"]["memory_bank_scoped_to_output_dir"] is False
+    assert "memory_bank_path_scoped_to_output_dir" in report["failed_gates"]
+
+
 def test_readiness_audit_blocks_malformed_explicit_graph_json(tmp_path):
     data_root = tmp_path / "shards" / "train"
     data_root.mkdir(parents=True)
