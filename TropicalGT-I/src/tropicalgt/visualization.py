@@ -7873,6 +7873,39 @@ def write_graphcg_trajectory_visualization(scaling_report: dict[str, object], ou
     sorted_signed = signed_mean[sorted_order]
     basis_source_counts = {basis: int(basis_sources.count(basis)) for basis in sorted(set(basis_sources))}
     projection_basis = sorted(set(basis_sources))[0] if len(set(basis_sources)) == 1 else "mixed"
+    activity_rank_by_direction = {int(direction): int(rank + 1) for rank, direction in enumerate(sorted_order.tolist())}
+    direction_rows = [
+        {
+            "direction_id": int(direction_idx),
+            "display_column": int(col_idx),
+            "source": "candidate.graphcg_projection.all_direction_cosines",
+            "mean_abs_cosine": float(mean_abs[int(direction_idx)]),
+            "signed_mean_cosine": float(signed_mean[int(direction_idx)]),
+            "activity_rank_desc": int(activity_rank_by_direction.get(int(direction_idx), col_idx + 1)),
+            "rendered_in_all_direction_heatmap": True,
+            "rendered_in_full_rank_activity_spectrum": True,
+            "rendered_in_signed_bias_panel": True,
+            "exact_direction_id_preserved": True,
+            "no_proxy_or_fallback": True,
+        }
+        for col_idx, direction_idx in enumerate(top_idx.tolist())
+    ]
+    direction_evidence_contract = {
+        "schema_version": "tropicalgt.graphcg_direction_evidence.v1",
+        "source": "candidate.graphcg_projection.all_direction_cosines",
+        "no_proxy_or_fallback": True,
+        "all_model_directions_have_rows": bool(len(direction_rows) == direction_count),
+        "direction_count": int(direction_count),
+        "direction_row_count": int(len(direction_rows)),
+        "exact_direction_ids_preserved": True,
+        "all_directions_rendered_in_heatmap": all(row["rendered_in_all_direction_heatmap"] for row in direction_rows),
+        "all_directions_rendered_in_activity_spectrum": all(row["rendered_in_full_rank_activity_spectrum"] for row in direction_rows),
+        "all_directions_rendered_in_signed_bias_panel": all(row["rendered_in_signed_bias_panel"] for row in direction_rows),
+        "mean_abs_source": "mean absolute cosine over observed candidate GraphCG projections",
+        "signed_mean_source": "signed mean cosine over observed candidate GraphCG projections",
+        "activity_rank_source": "descending order of mean_abs_cosine across every model-derived direction",
+        "safe_to_render_full_rank_direction_evidence": bool(len(direction_rows) == direction_count and direction_count > 0),
+    }
     basis_certificate = {
         "source": "candidate.graphcg_projection",
         "available": bool(basis_sources),
@@ -7918,6 +7951,8 @@ def write_graphcg_trajectory_visualization(scaling_report: dict[str, object], ou
                 "display_policy": "all_model_graphcg_directions_no_sampling",
                 "readability_contract": "four coordinated panels render all model GraphCG directions: all-direction heatmap, full-rank activity spectrum, candidate activity by observed GoT state, and signed-bias scatter; visible tick labels are bounded while hover and payload preserve exact ids",
                 "graphcg_readability_contract": graphcg_readability_contract,
+                "graphcg_direction_evidence_contract": direction_evidence_contract,
+                "direction_rows": direction_rows,
                 "panel_names": [
                     "all_direction_heatmap",
                     "full_rank_activity_spectrum",

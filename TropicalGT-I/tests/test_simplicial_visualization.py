@@ -1512,6 +1512,20 @@ def test_graphcg_visualization_preserves_projection_basis_certificate(tmp_path: 
         "direction_signed_bias",
     }
     assert "path" in " ".join(contract["hover_fields"])
+    direction_contract = payload["graphcg_direction_evidence_contract"]
+    assert direction_contract["schema_version"] == "tropicalgt.graphcg_direction_evidence.v1"
+    assert direction_contract["all_model_directions_have_rows"] is True
+    assert direction_contract["direction_count"] == 4
+    assert direction_contract["direction_row_count"] == 4
+    assert direction_contract["exact_direction_ids_preserved"] is True
+    assert direction_contract["all_directions_rendered_in_heatmap"] is True
+    assert direction_contract["all_directions_rendered_in_activity_spectrum"] is True
+    assert direction_contract["all_directions_rendered_in_signed_bias_panel"] is True
+    assert direction_contract["safe_to_render_full_rank_direction_evidence"] is True
+    assert [row["direction_id"] for row in payload["direction_rows"]] == [0, 1, 2, 3]
+    assert all(row["source"] == "candidate.graphcg_projection.all_direction_cosines" for row in payload["direction_rows"])
+    assert all(row["exact_direction_id_preserved"] is True for row in payload["direction_rows"])
+    assert all("mean_abs_cosine" in row and "signed_mean_cosine" in row for row in payload["direction_rows"])
     assert payload["panel_names"] == [
         "all_direction_heatmap",
         "full_rank_activity_spectrum",

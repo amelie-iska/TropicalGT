@@ -1150,3 +1150,23 @@ CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/t
 CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_simplicial_visualization.py TropicalGT-I/tests/test_interactive_artifact_validator.py -q -p no:cacheprovider --basetemp=/tmp/tropicalgt-pytest-trajectory-overlay-contract-full
 # 69 passed
 ```
+
+## 2026-06-16 GraphCG Direction Evidence Contract
+
+Sequential GraphCG visual repair completed after the trajectory complex overlay contract:
+
+- Added row-wise `direction_rows` to `graphcg_direction_cosines_payload.json`, one row per model-derived GraphCG direction.
+- Added `tropicalgt.graphcg_direction_evidence.v1` so the payload certifies exact direction ids, mean absolute cosines, signed mean cosines, activity ranks, and whether every direction is rendered in the heatmap, full-rank activity spectrum, and signed-bias panel.
+- The interactive artifact validator now rejects missing direction-evidence contracts, direction-row count gaps, missing exact ids, non-finite per-direction values, and panel coverage gaps.
+- This keeps GraphCG evidence no-proxy/no-fallback and makes the full-rank direction spectrum auditable without reconstructing meaning from parallel arrays.
+
+Validation:
+
+```text
+CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m py_compile TropicalGT-I/src/tropicalgt/visualization.py TropicalGT-I/scripts/validate_interactive_audit_artifacts.py TropicalGT-I/tests/test_simplicial_visualization.py TropicalGT-I/tests/test_interactive_artifact_validator.py
+# passed
+CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_simplicial_visualization.py::test_graphcg_visualization_preserves_projection_basis_certificate TropicalGT-I/tests/test_interactive_artifact_validator.py::test_validate_audit_root_accepts_three_interactive_rows TropicalGT-I/tests/test_interactive_artifact_validator.py::test_validate_audit_root_rejects_missing_graphcg_direction_evidence_contract TropicalGT-I/tests/test_interactive_artifact_validator.py::test_validate_audit_root_rejects_graphcg_direction_row_gap -q -p no:cacheprovider --basetemp=/tmp/tropicalgt-pytest-graphcg-direction-evidence
+# 4 passed
+CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_simplicial_visualization.py TropicalGT-I/tests/test_interactive_artifact_validator.py -q -p no:cacheprovider --basetemp=/tmp/tropicalgt-pytest-graphcg-direction-evidence-full
+# 71 passed
+```

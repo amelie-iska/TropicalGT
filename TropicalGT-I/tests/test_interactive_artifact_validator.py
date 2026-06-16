@@ -851,6 +851,38 @@ def _row(root: Path, name: str) -> Path:
                 "candidate_effective_direction_count": [4.0, 4.0, 4.0, 4.0],
                 "direction_activity_sorted": [0.2 for _ in range(8)],
                 "candidate_hover_rows": [f"candidate {idx} path action text" for idx in range(4)],
+                "direction_rows": [
+                    {
+                        "direction_id": idx,
+                        "display_column": idx,
+                        "source": "candidate.graphcg_projection.all_direction_cosines",
+                        "mean_abs_cosine": 0.2,
+                        "signed_mean_cosine": 0.05,
+                        "activity_rank_desc": idx + 1,
+                        "rendered_in_all_direction_heatmap": True,
+                        "rendered_in_full_rank_activity_spectrum": True,
+                        "rendered_in_signed_bias_panel": True,
+                        "exact_direction_id_preserved": True,
+                        "no_proxy_or_fallback": True,
+                    }
+                    for idx in range(8)
+                ],
+                "graphcg_direction_evidence_contract": {
+                    "schema_version": "tropicalgt.graphcg_direction_evidence.v1",
+                    "source": "candidate.graphcg_projection.all_direction_cosines",
+                    "no_proxy_or_fallback": True,
+                    "all_model_directions_have_rows": True,
+                    "direction_count": 8,
+                    "direction_row_count": 8,
+                    "exact_direction_ids_preserved": True,
+                    "all_directions_rendered_in_heatmap": True,
+                    "all_directions_rendered_in_activity_spectrum": True,
+                    "all_directions_rendered_in_signed_bias_panel": True,
+                    "mean_abs_source": "mean absolute cosine over observed candidate GraphCG projections",
+                    "signed_mean_source": "signed mean cosine over observed candidate GraphCG projections",
+                    "activity_rank_source": "descending order of mean_abs_cosine across every model-derived direction",
+                    "safe_to_render_full_rank_direction_evidence": True,
+                },
                 "graphcg_readability_contract": {
                     "schema_version": "tropicalgt.graphcg_direction_readability.v1",
                     "source": "candidate.graphcg_projection",
@@ -1413,6 +1445,37 @@ def test_validate_audit_root_rejects_missing_graphcg_basis_certificate(tmp_path:
     report = validator.validate_audit_root(audit, min_rows=1, min_candidates=4, min_depth=2)
     assert not report["ok"]
     assert any("projection-basis certificate" in err for err in report["errors"])
+
+
+def test_validate_audit_root_rejects_missing_graphcg_direction_evidence_contract(tmp_path: Path):
+    validator = _load_validator()
+    audit = tmp_path / "step_00000001" / "got_audit"
+    row = _row(audit, ".")
+    payload_path = row / "graphcg_direction_cosines_payload.json"
+    payload = json.loads(payload_path.read_text(encoding="utf-8"))
+    payload.pop("graphcg_direction_evidence_contract")
+    payload_path.write_text(json.dumps(payload), encoding="utf-8")
+    _write(audit / "codex_browser_index.html", _codex_browser_html(_browser_samples(audit, ["."])))
+    report = validator.validate_audit_root(audit, min_rows=1, min_candidates=4, min_depth=2)
+    assert not report["ok"]
+    assert any("per-direction evidence contract" in err for err in report["errors"])
+
+
+def test_validate_audit_root_rejects_graphcg_direction_row_gap(tmp_path: Path):
+    validator = _load_validator()
+    audit = tmp_path / "step_00000001" / "got_audit"
+    row = _row(audit, ".")
+    payload_path = row / "graphcg_direction_cosines_payload.json"
+    payload = json.loads(payload_path.read_text(encoding="utf-8"))
+    payload["direction_rows"] = payload["direction_rows"][:-1]
+    payload["graphcg_direction_evidence_contract"]["all_model_directions_have_rows"] = False
+    payload["graphcg_direction_evidence_contract"]["direction_row_count"] = 7
+    payload["graphcg_direction_evidence_contract"]["safe_to_render_full_rank_direction_evidence"] = False
+    payload_path.write_text(json.dumps(payload), encoding="utf-8")
+    _write(audit / "codex_browser_index.html", _codex_browser_html(_browser_samples(audit, ["."])))
+    report = validator.validate_audit_root(audit, min_rows=1, min_candidates=4, min_depth=2)
+    assert not report["ok"]
+    assert any("direction evidence" in err or "direction rows" in err for err in report["errors"])
 
 
 def test_validate_audit_root_rejects_missing_graphcg_readability_contract(tmp_path: Path):
