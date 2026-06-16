@@ -13,7 +13,7 @@ This checklist merges the browser/photo review, the current active training stat
 
 ## 2. Browser QA and Visual Evidence
 
-- Keep the served audit bundle at `127.0.0.1:8991` pointed to the latest completed real b60 periodic audit; current browser serving was reattached to step `2750` without copying generated artifacts.
+- Keep the served audit bundle at `127.0.0.1:8991` pointed to the latest completed real b60 periodic audit; current browser serving was reattached to step `3000` without copying generated artifacts. The step-3000 validation report records BPB/exact BPB `1.5293022093208184`, graph-BPB `20.20904657226864`, graph-conditioned BPB without side cost `1.3445352900384904`, NLL `1.0600315146148205`, and invalid graph rate `0.0`.
 - Every visual change should be regenerated from `inference_audit.json` or live periodic audit payloads, never from synthetic examples.
 - Review pages visually after edits when browser access is available; keep screenshots/evidence for before/after when possible.
 - If browser navigation is blocked by the app policy, continue regenerating the served artifact files and record the blocked browser step in status rather than using a workaround.

@@ -565,3 +565,11 @@ The live item-by-item repair inventory is maintained in `planning/tropicalgt_i_c
 - [x] Kept path-only bundles available before the gate, but blocked all `--run-*` command execution until the boundary report is at/after step 5000, the checkpoint exists, and the latest audit directory exists when backfill/validators are requested.
 - [x] Added regression coverage proving execution flags fail closed with `missing_checkpoint` instead of running eval/visualization/backfill/validator commands against incomplete evidence.
 - [ ] Section 12 5K gate remains open: executable review commands stay blocked until the real step-5000 report, checkpoint, and audit artifacts exist.
+
+### Current Objective Update - Step-3000 Browser Refresh Pass
+
+- [x] Verified b60 step-3000 `validation_report.json`, `periodic_validation_artifacts.json`, and `got_audit/inference_audit.html` all exist as real generated artifacts.
+- [x] Reattached remote `127.0.0.1:8991` and the local Codex tunnel to the step-3000 `got_audit` directory without copying generated artifacts; remote server PID at verification time: `593331`.
+- [x] Recorded real step-3000 validation metrics: BPB/exact BPB `1.5293022093208184`, graph-BPB `20.20904657226864`, graph-conditioned BPB without side cost `1.3445352900384904`, NLL `1.0600315146148205`, and invalid graph rate `0.0`.
+- [x] Confirmed step-5000 validation and audit artifacts are still absent, so post-5K analyses, visualization generation, Codex subagent review, and any step-0 restart remain blocked on real 5K evidence.
+- [ ] Continue Section 12 linearly: preserve trainer PID `378962` and watcher PID `379304`, monitor disk under the configured generated-audit retention policy, and wait for step-5000 evidence before analysis, subagent review, or restart.
