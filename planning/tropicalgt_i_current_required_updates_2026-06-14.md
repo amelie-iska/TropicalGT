@@ -874,4 +874,26 @@ git diff --check
 # clean
 ```
 
-_Last updated: 2026-06-16T15:23:49Z_
+## 2026-06-16 Sequential Training/Readiness Update: Training Report Checkpoint Integrity Metadata
+
+Status: complete for source-side checkpoint evidence metadata in future training reports; actual BPB restart remains blocked by the existing zero-byte b60 checkpoint.
+
+- `_save_training_checkpoint()` now returns a checkpoint integrity record after atomic replace and load verification, including path, availability, size, expected step, observed step, and whether load verification was enabled.
+- Training reports now include `checkpoint_integrity` for the final checkpoint and `latest_checkpoint_integrity` for the latest periodic checkpoint path when present, so post-5K review can inspect checkpoint evidence directly from the report.
+- `_checkpoint_integrity_report()` records explicit unavailable reasons instead of letting missing or invalid checkpoint paths masquerade as usable evidence.
+- Regression tests cover report integrity metadata on a real tiny training run and unavailable integrity reporting for missing checkpoint paths.
+- No checkpoints, generated reports, datasets, W&B folders, caches, or secrets were staged.
+
+Verification:
+
+```bash
+PYTHONPATH=TropicalGT-I/scripts:TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m py_compile TropicalGT-I/src/tropicalgt/run.py TropicalGT-I/tests/test_training_resume.py
+PYTHONPATH=TropicalGT-I/scripts:TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_training_resume.py -q
+# 7 passed in 1.54s
+PYTHONPATH=TropicalGT-I/scripts:TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_training_resume.py TropicalGT-I/tests/test_readiness_audit.py TropicalGT-I/tests/test_training_metrics.py TropicalGT-I/tests/test_data_loader.py -q
+# 44 passed, 2 warnings in 1.63s
+git diff --check
+# clean
+```
+
+_Last updated: 2026-06-16T15:27:52Z_

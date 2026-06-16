@@ -205,6 +205,7 @@
 - [x] Hardened `parameter_golf_codex_review_loop.py` so a missed BPB target halts by default after writing review artifacts, recording `blocked_pending_evidence_backed_config_patch` instead of automatically relaunching the same config. Legacy same-config continuation now requires an explicit opt-in flag.
 - [x] Hardened shared checkpoint loading so empty, unloadable, or malformed checkpoints raise explicit `checkpoint_*` evidence errors before inference/eval/readiness callers can use them.
 - [x] Hardened review-loop boundary checkpoint snapshots so missing, empty, unloadable, or malformed checkpoints are recorded as unavailable evidence and are not copied into review outputs or reused as boundary checkpoints.
+- [x] Added checkpoint integrity metadata to training reports so final/latest checkpoint evidence records availability, size, expected step, observed step, and load-verification status.
 
 ### Current Remaining Implementation List - 2026-06-16
 

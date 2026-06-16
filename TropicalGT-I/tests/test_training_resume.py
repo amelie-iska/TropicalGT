@@ -5,7 +5,7 @@ import pytest
 import torch
 
 import tropicalgt.run as run_module
-from tropicalgt.run import build_model, train, _save_training_checkpoint
+from tropicalgt.run import build_model, train, _checkpoint_integrity_report, _save_training_checkpoint
 
 
 def test_training_checkpoint_resume(tmp_path: Path):
@@ -35,9 +35,14 @@ def test_training_checkpoint_resume(tmp_path: Path):
     assert first["advanced_bpb_contract"]["required"] is False
     assert not [gate for gate in first["advanced_bpb_contract_gates"] if gate["status"] == "fail"]
     assert Path(first["checkpoint"]).exists()
+    assert first["checkpoint_integrity"]["available"] is True
+    assert first["checkpoint_integrity"]["observed_step"] == 1
+    assert first["checkpoint_integrity"]["size_bytes"] > 0
     latest_checkpoint = Path(first["latest_checkpoint"])
     assert latest_checkpoint.exists()
     assert latest_checkpoint.stat().st_size > 0
+    assert first["latest_checkpoint_integrity"]["available"] is True
+    assert first["latest_checkpoint_integrity"]["observed_step"] == 1
     latest_obj = torch.load(latest_checkpoint, map_location="cpu")
     assert latest_obj["step"] == 1
     assert latest_obj["run_name"] == "resume_test"
@@ -118,6 +123,18 @@ def test_train_blocks_bpb_config_that_fails_advanced_contract(tmp_path: Path, mo
     assert "advanced_bpb_real_data_required" in str(exc.value)
     assert "advanced_bpb_wandb_online_project" in str(exc.value)
     assert not (tmp_path / "outputs" / "train_report.json").exists()
+
+
+def test_checkpoint_integrity_report_records_unavailable_checkpoint(tmp_path: Path):
+    checkpoint = tmp_path / "missing.pt"
+
+    report = _checkpoint_integrity_report(checkpoint, expected_step=3, verify_load=True)
+
+    assert report["available"] is False
+    assert report["path"] == str(checkpoint)
+    assert report["expected_step"] == 3
+    assert report["verified_load"] is True
+    assert report["unavailable_reason"].startswith("checkpoint_stat_failed:")
 
 
 def test_load_checkpoint_reports_empty_checkpoint_explicitly(tmp_path: Path):

@@ -776,7 +776,13 @@ def train(config_path: str | Path, resume_from: str | Path | None = None, max_st
         epoch += 1
     pbar.close()
     ckpt_path = ckpt_dir / f"{run_name}.pt"
-    _save_training_checkpoint(ckpt_path, model, opt, cfg, metrics_last, history, step, run_name)
+    checkpoint_integrity = _save_training_checkpoint(ckpt_path, model, opt, cfg, metrics_last, history, step, run_name)
+    verify_checkpoint_load = _cfg_bool(cfg.get("checkpoint_verify_load"), True)
+    latest_checkpoint_integrity = (
+        _checkpoint_integrity_report(latest_ckpt_path, expected_step=None, verify_load=verify_checkpoint_load)
+        if latest_ckpt_path.exists()
+        else {"available": False, "path": str(latest_ckpt_path), "unavailable_reason": "checkpoint_missing"}
+    )
     eval_report = evaluate_model(
         model,
         val_ds,
@@ -876,6 +882,8 @@ def train(config_path: str | Path, resume_from: str | Path | None = None, max_st
     report = {
         "checkpoint": str(ckpt_path),
         "latest_checkpoint": str(latest_ckpt_path) if latest_ckpt_path.exists() else "",
+        "checkpoint_integrity": checkpoint_integrity,
+        "latest_checkpoint_integrity": latest_checkpoint_integrity,
         "resume_from": resume_path,
         "resumed": bool(resume_path),
         "start_step": loaded_step,
@@ -1739,6 +1747,32 @@ def _verify_checkpoint_file(path: Path, *, expected_step: int | None, verify_loa
     return int(size)
 
 
+def _checkpoint_integrity_report(path: Path, *, expected_step: int | None, verify_load: bool = True) -> dict[str, Any]:
+    try:
+        size = _verify_checkpoint_file(path, expected_step=expected_step, verify_load=verify_load)
+    except RuntimeError as exc:
+        return {
+            "available": False,
+            "path": str(path),
+            "unavailable_reason": str(exc),
+            "expected_step": expected_step,
+            "verified_load": bool(verify_load),
+        }
+    observed_step: int | None = None
+    if verify_load:
+        obj = torch.load(path, map_location="cpu")
+        if isinstance(obj, dict):
+            observed_step = int(obj.get("step", 0) or 0)
+    return {
+        "available": True,
+        "path": str(path),
+        "size_bytes": int(size),
+        "expected_step": expected_step,
+        "observed_step": observed_step,
+        "verified_load": bool(verify_load),
+    }
+
+
 def _save_training_checkpoint(
     path: Path,
     model: TropicalGTModel,
@@ -1748,7 +1782,7 @@ def _save_training_checkpoint(
     history: list[dict[str, float]],
     step: int,
     run_name: str,
-) -> None:
+) -> dict[str, Any]:
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp_path = path.with_name(f".{path.name}.tmp.{os.getpid()}.{time.time_ns()}")
     verify_load = _cfg_bool(cfg.get("checkpoint_verify_load"), True)
@@ -1760,7 +1794,7 @@ def _save_training_checkpoint(
             os.fsync(handle.fileno())
         os.replace(tmp_path, path)
         _fsync_parent_dir(path)
-        _verify_checkpoint_file(path, expected_step=step, verify_load=verify_load)
+        return _checkpoint_integrity_report(path, expected_step=step, verify_load=verify_load)
     finally:
         if tmp_path.exists():
             try:
