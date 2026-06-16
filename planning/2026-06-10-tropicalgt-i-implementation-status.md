@@ -356,3 +356,10 @@
 - Certified reports now include `tropical_basis_check` and `tropical_prevariety_summary` with prevariety rays, max cones, lineality, multiplicities when available, and per-field unavailable errors when Macaulay2 does not support a check for the input.
 - The tropical fan audit HTML table surfaces the tropical-basis and prevariety diagnostics alongside the certified fan/cycle fields.
 - Verification: `python -m py_compile TropicalGT-I/src/tropicalgt/cas_tropical.py TropicalGT-I/src/tropicalgt/visualization.py` passed; `PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_algebraic_persistence.py -q` returned `18 passed`; tropical fan focused visualization tests returned `2 passed`; full `test_simplicial_visualization.py` returned `27 passed`.
+
+## Iteration 44: 5K Review Artifact Inventory Contract
+
+- Updated `parameter_golf_codex_review_loop.py` for the current BPB target: default `--target-bpb` is now `1.12`, and the active training contract carries the same target unless a caller overrides it.
+- Added a bounded `artifact_inventory` section to each 5K active training contract. It records the output directory, report path, recent periodic step directories, latest `got_audit` directory, bounded HTML/JSON/PNG/SVG/MD artifact paths, advanced sidecar paths, existing report visualizations, and ready-to-run interactive audit validator commands.
+- The inventory is path-only and explicitly does not copy, stage, or commit generated artifacts; it is meant to guide the Codex/Galileo post-5K review of metrics, sidecars, topological/geometric/algebraic visualizations, and restart evidence.
+- Verification: `python -m py_compile TropicalGT-I/scripts/parameter_golf_codex_review_loop.py` passed; `PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_parameter_golf_review_loop.py -q` returned `3 passed`.

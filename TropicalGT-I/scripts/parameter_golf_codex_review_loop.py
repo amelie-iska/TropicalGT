@@ -28,7 +28,7 @@ def main() -> None:
     parser.add_argument("--python", default=sys.executable)
     parser.add_argument("--train-script", type=Path, default=ROOT / "TropicalGT-I" / "scripts" / "train_tropicalgt_i.py")
     parser.add_argument("--review-every-steps", type=int, default=5000)
-    parser.add_argument("--target-bpb", type=float, default=1.18)
+    parser.add_argument("--target-bpb", type=float, default=1.12)
     parser.add_argument("--metric", default="eval.bpb")
     parser.add_argument("--graph-metric", default="eval.graph_bpb")
     parser.add_argument("--max-total-steps", type=int)
@@ -142,7 +142,7 @@ def _review_boundary(
     bpb = _metric_value(report, checkpoint, args.metric)
     graph_bpb = _metric_value(report, checkpoint, args.graph_metric)
     triggered = bpb is None or bpb > args.target_bpb
-    active_contract = _active_training_contract(cfg, report, checkpoint, boundary_step)
+    active_contract = _active_training_contract(cfg, report, checkpoint, boundary_step, report_path=report_path, target_bpb=args.target_bpb)
     contract_json = output_dir / f"active_training_contract_step_{boundary_step:08d}.json"
     contract_md = output_dir / f"active_training_contract_step_{boundary_step:08d}.md"
     contract_json.write_text(json.dumps(active_contract, indent=2), encoding="utf-8")
@@ -319,16 +319,103 @@ def _review_prompt(
     )
 
 
-def _active_training_contract(cfg: dict[str, Any], report: dict[str, Any], checkpoint: dict[str, Any], boundary_step: int) -> dict[str, Any]:
+def _project_path(value: Any, default: str | Path) -> Path:
+    raw = Path(str(value or default))
+    return raw if raw.is_absolute() else ROOT / raw
+
+
+def _step_dir_number(path: Path) -> int:
+    name = path.name
+    if name.startswith("step_"):
+        try:
+            return int(name.split("_", 1)[1])
+        except ValueError:
+            return -1
+    return -1
+
+
+def _relative_project_path(path: Path) -> str:
+    try:
+        return path.resolve().relative_to(ROOT.resolve()).as_posix()
+    except Exception:
+        return str(path)
+
+
+def _bounded_artifact_files(root: Path, *, limit: int = 160) -> list[str]:
+    if not root.exists():
+        return []
+    suffixes = {".html", ".json", ".md", ".png", ".svg"}
+    skip_names = {"plotly.min.js"}
+    files = [
+        path
+        for path in root.rglob("*")
+        if path.is_file() and path.suffix.lower() in suffixes and path.name not in skip_names
+    ]
+    files.sort(key=lambda path: (str(path.parent), path.name))
+    return [_relative_project_path(path) for path in files[:limit]]
+
+
+def _review_artifact_inventory(cfg: dict[str, Any], report: dict[str, Any], report_path: Path | None, boundary_step: int) -> dict[str, Any]:
+    output_dir = _project_path(cfg.get("output_dir"), ROOT / "TropicalGT-I" / "outputs" / "train")
+    periodic_root = output_dir / "periodic"
+    periodic_steps = sorted([path for path in periodic_root.glob("step_*") if path.is_dir()], key=_step_dir_number)
+    latest_step_dir = periodic_steps[-1] if periodic_steps else None
+    latest_got_audit = latest_step_dir / "got_audit" if latest_step_dir is not None else None
+    analysis_roots = [path for path in (latest_step_dir, output_dir / "analysis", output_dir / "eval_validation_visualizations") if path is not None and path.exists()]
+    latest_files: list[str] = []
+    for root in analysis_roots:
+        latest_files.extend(_bounded_artifact_files(root, limit=80))
+    latest_files = list(dict.fromkeys(latest_files))[:180]
+    sidecar_terms = (
+        "validation_report",
+        "periodic_validation_artifacts",
+        "inference_audit",
+        "tropical_fan",
+        "tropical_support",
+        "graphcg",
+        "analogical",
+        "bifiltration",
+        "persistence",
+        "nll_density",
+        "payload",
+        "sidecar",
+    )
+    sidecars = [path for path in latest_files if any(term in path for term in sidecar_terms)]
+    validator_commands: list[str] = []
+    if latest_got_audit is not None and latest_got_audit.exists():
+        validator_commands.append(
+            "PYTHONPATH=TropicalGT-I/src "
+            f"{shlex.quote(sys.executable)} TropicalGT-I/scripts/validate_interactive_audit_artifacts.py "
+            f"--audit-root {shlex.quote(_relative_project_path(latest_got_audit))} "
+            "--json-output /tmp/tropicalgt_interactive_audit_validation.json "
+            "--markdown-output /tmp/tropicalgt_interactive_audit_validation.md"
+        )
+    return {
+        "output_dir": _relative_project_path(output_dir),
+        "report_path": _relative_project_path(report_path) if report_path else "",
+        "boundary_step": int(boundary_step),
+        "periodic_step_dirs_tail": [_relative_project_path(path) for path in periodic_steps[-8:]],
+        "latest_periodic_dir": _relative_project_path(latest_step_dir) if latest_step_dir is not None else "",
+        "latest_got_audit_dir": _relative_project_path(latest_got_audit) if latest_got_audit is not None and latest_got_audit.exists() else "",
+        "latest_artifacts_tail": latest_files,
+        "advanced_sidecars_tail": sidecars[:120],
+        "report_visualizations": report.get("visualizations", {}),
+        "interactive_audit_validator_commands": validator_commands,
+        "inventory_policy": "bounded source paths only; generated artifacts are not staged or copied",
+    }
+
+
+def _active_training_contract(cfg: dict[str, Any], report: dict[str, Any], checkpoint: dict[str, Any], boundary_step: int, report_path: Path | None = None, target_bpb: float | None = None) -> dict[str, Any]:
     metrics = dict(report.get("metrics") or checkpoint.get("metrics") or {})
     eval_metrics = dict(report.get("eval") or {})
     history_tail = checkpoint.get("history_tail") or report.get("history", [])[-20:]
     model_cfg = dict(cfg.get("model", {}))
+    primary_target = float(target_bpb if target_bpb is not None else cfg.get("target_bpb", 1.12))
     return {
         "boundary_step": int(boundary_step),
         "objective": {
             "primary_metric": "eval.bpb",
-            "primary_target": 1.18,
+            "primary_target": primary_target,
             "secondary_metric": "eval.graph_bpb",
             "base_loss": "byte-level autoregressive cross entropy / NLL",
             "graph_decoding": "causal DAG topological autoregressive order; deterministic random autoregressive order for non-causal or cyclic graphs",
@@ -405,6 +492,7 @@ def _active_training_contract(cfg: dict[str, Any], report: dict[str, Any], check
             "grad_norm": metrics.get("grad_norm"),
         },
         "history_tail": history_tail,
+        "artifact_inventory": _review_artifact_inventory(cfg, report, report_path, boundary_step),
         "report_visualizations": report.get("visualizations", {}),
     }
 
@@ -442,6 +530,7 @@ def _active_training_contract_markdown(contract: dict[str, Any]) -> str:
                 "algebra_topology": contract.get("algebra_topology_metrics", {}),
                 "data": contract.get("data_metrics", {}),
                 "throughput_and_vram": contract.get("throughput_and_vram", {}),
+                "artifact_inventory": contract.get("artifact_inventory", {}),
             },
             indent=2,
         ),

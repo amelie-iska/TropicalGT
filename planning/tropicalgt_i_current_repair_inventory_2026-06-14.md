@@ -351,3 +351,18 @@ Verification:
 - Tropical fan focused visualization tests -> `2 passed`; `PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_simplicial_visualization.py -q` -> `27 passed`.
 
 Next sequential item: expand certified tropical package coverage only where Macaulay2 exposes stable, testable methods, and keep all unsupported checks as explicit unavailable states.
+
+## 2026-06-16 5K Review Contract Inventory Pass
+
+Status: implemented and focused-tested.
+
+Changes made:
+- The review-loop target now defaults to BPB `< 1.12`.
+- Active training contracts include a bounded artifact inventory with latest periodic audit directories, advanced JSON/HTML sidecars, and validator commands for the post-5K reviewer.
+- This supports the requested workflow: train to 5000 steps, analyze metrics/sidecars/visualizations, then restart from step 0 with evidence-backed hyperparameter/config changes.
+
+Verification:
+- `python -m py_compile TropicalGT-I/scripts/parameter_golf_codex_review_loop.py` passed.
+- `PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_parameter_golf_review_loop.py -q` -> `3 passed`.
+
+Next sequential item: after b59 reaches 5000, use this inventory to guide the subagent review and step-0 restart; until then continue non-interfering source/audit hardening.

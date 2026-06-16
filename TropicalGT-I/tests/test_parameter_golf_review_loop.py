@@ -47,7 +47,35 @@ def test_active_training_contract_reports_losses_and_graph_order_metrics():
     }
     contract = loop._active_training_contract(cfg, report, {}, 5000)
     assert contract["compression_metrics"]["eval_bpb"] == 1.4
+    assert contract["objective"]["primary_target"] == 1.12
     assert contract["active_losses"]["gflownet_trajectory_balance"] == 0.1
     assert contract["data_metrics"]["causal_dag_ar_rate"] == 0.75
     assert contract["tropical_metrics"]["sequence_tropical_margin_mean"] == 0.3
+    assert "artifact_inventory" in contract
+    assert "artifact_inventory" in loop._active_training_contract_markdown(contract)
     assert "Active Losses" in loop._active_training_contract_markdown(contract)
+
+
+def test_active_training_contract_inventories_latest_periodic_artifacts(tmp_path: Path):
+    loop = _load_review_loop()
+    output_dir = tmp_path / "run"
+    got_audit = output_dir / "periodic" / "step_00005000" / "got_audit"
+    got_audit.mkdir(parents=True)
+    (got_audit / "tropical_fan_diagnostics.json").write_text("{}", encoding="utf-8")
+    (got_audit / "tropical_fan_diagnostics.html").write_text("<html></html>", encoding="utf-8")
+    (output_dir / "periodic" / "step_00002500").mkdir(parents=True)
+    report_path = output_dir / "train_report.json"
+    report_path.write_text("{}", encoding="utf-8")
+    contract = loop._active_training_contract(
+        {"output_dir": str(output_dir)},
+        {"visualizations": {"metrics": "metrics/training_metrics.html"}},
+        {},
+        5000,
+        report_path=report_path,
+    )
+    inventory = contract["artifact_inventory"]
+    assert inventory["latest_periodic_dir"].endswith("step_00005000")
+    assert inventory["latest_got_audit_dir"].endswith("got_audit")
+    assert any(path.endswith("tropical_fan_diagnostics.json") for path in inventory["advanced_sidecars_tail"])
+    assert inventory["interactive_audit_validator_commands"]
+    assert inventory["inventory_policy"].startswith("bounded source paths only")
