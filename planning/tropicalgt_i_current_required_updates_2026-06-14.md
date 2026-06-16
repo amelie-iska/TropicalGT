@@ -608,7 +608,6 @@ Use "one dimensional cone" or "one dimensional cones" as the preferred fan-theor
 - Certified-CAS signatures used for derived/analogical comparison include these flags, so BEMultipliers status/matrix hashes cannot masquerade as resolution evidence.
 - Focused verification passed: `pytest TropicalGT-I/tests/test_simplicial_visualization.py TropicalGT-I/tests/test_algebraic_persistence.py -q` (`64 passed`).
 
-_Last updated: 2026-06-16T19:55:00Z_
 
 ## 2026-06-16 Sequential Derived/CAS Update: No-Proxy Explanation Pass
 
@@ -668,3 +667,26 @@ PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pyt
 git diff --check
 # clean
 ```
+
+## 2026-06-16 Sequential Training/Readiness Update: Advanced BPB Contract Gate
+
+Status: complete for source-side BPB contract readiness enforcement; incomplete for an actual restart because b60 still lacks a nonempty loadable step-5000 checkpoint.
+
+- `audit_tropicalgt_i_readiness.py` now emits an `advanced_bpb_contract` section for BPB-focused step-0/5K-gate configs. The section is config-only and intentionally strict: missing advanced-method switches fail rather than being inferred from model defaults.
+- The contract gates TokenGT graph tokens, graph autoregressive decoding, required Parameter-Golf and HF reasoning data sources, real-data requirement, long-context/multi-record shape, positive GFlowNet/GraphCG/certificate/sequence-tropical weights, full-rank GraphCG direction bank, memory probability/topological quality thresholds, many top-k retrieval, graph-BPB side weighting, 250-step validation/visual cadence, periodic interactive/browser artifacts, meet-in-the-middle forward+reverse and ROAR/random-order settings, and online W&B project/run-name configuration.
+- Fixture/smoke readiness configs are reported as `advanced_bpb_contract.required=false`, so local non-BPB tests remain small and are not silently promoted into BPB training evidence.
+- Tests now assert the current b54 5K gate config passes the full advanced BPB contract, and that disabled GraphCG, weak/non-explicit HF reasoning source names, missing explicit W&B run-name fields, meet-in-middle, memory-quality, periodic-artifact, and cadence settings are blocked with named failed gates.
+- No W&B entity/organization value was guessed or hardcoded; the report surfaces the configured project/run-name and whether an explicit entity is present. The W&B gate requires an explicit `wandb_run_name` or `wandb_name`, while a stricter entity gate should be added only when the intended non-secret W&B entity is known.
+- No training restart was launched. Under the no-proxy/no-fallback policy, the b60 restart remains blocked by the zero-byte checkpoint; this pass hardens the next preflight rather than manufacturing missing checkpoint-sidecar evidence.
+
+Verification:
+
+```bash
+PYTHONPATH=TropicalGT-I/scripts:TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m py_compile TropicalGT-I/scripts/audit_tropicalgt_i_readiness.py TropicalGT-I/tests/test_readiness_audit.py
+PYTHONPATH=TropicalGT-I/scripts:TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_readiness_audit.py -q
+# 7 passed in 1.50s
+PYTHONPATH=TropicalGT-I/scripts:TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_readiness_audit.py TropicalGT-I/tests/test_training_metrics.py TropicalGT-I/tests/test_data_loader.py -q
+# 35 passed, 2 warnings in 1.53s
+```
+
+_Last updated: 2026-06-16T20:20:00Z_

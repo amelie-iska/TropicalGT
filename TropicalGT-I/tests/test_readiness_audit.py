@@ -1,8 +1,9 @@
+import json
 from pathlib import Path
 
 import pandas as pd
 
-from audit_tropicalgt_i_readiness import build_readiness_report, render_markdown
+from audit_tropicalgt_i_readiness import advanced_bpb_contract_report, build_readiness_report, render_markdown
 from tropicalgt.run import load_keys
 
 
@@ -13,6 +14,45 @@ def test_load_keys_accepts_colon_and_aliases(tmp_path):
     assert loaded["wandb"] == "wandb-value"
     assert loaded["github"] == "github-value"
     assert loaded["huggingface"] == "hf-value"
+
+
+def test_advanced_bpb_contract_passes_current_b54_gate_config():
+    config_path = Path(__file__).resolve().parents[1] / "configs" / "train_full_dataset_pg_bpb_step0_full24b_b54_v10_bpb_5k_gate.json"
+    cfg = json.loads(config_path.read_text(encoding="utf-8"))
+
+    section, gates = advanced_bpb_contract_report(cfg)
+
+    assert section["required"] is True
+    assert section["target_bpb"] == 1.12
+    assert not [gate for gate in gates if gate["status"] == "fail"]
+
+
+def test_advanced_bpb_contract_blocks_disabled_advanced_methods():
+    config_path = Path(__file__).resolve().parents[1] / "configs" / "train_full_dataset_pg_bpb_step0_full24b_b54_v10_bpb_5k_gate.json"
+    cfg = json.loads(config_path.read_text(encoding="utf-8"))
+    cfg["visualization_every_steps"] = 1000
+    cfg["periodic_interactive_artifacts_enabled"] = False
+    cfg["model"]["graphcg_weight"] = 0.0
+    cfg["model"]["graphcg_num_directions"] = cfg["model"]["dim"] - 1
+    cfg["meet_in_middle"]["enabled"] = False
+    cfg["meet_in_middle"]["noncausal_use_random_order_autoregression"] = False
+    cfg["memory_quality_min_probability_simplices"] = 0
+    cfg["hybrid_data"]["sources"][0]["name"] = "hf_only"
+    cfg.pop("wandb_name", None)
+    cfg.pop("wandb_run_name", None)
+
+    _, gates = advanced_bpb_contract_report(cfg)
+    failed = {gate["name"] for gate in gates if gate["status"] == "fail"}
+
+    assert "advanced_bpb_visual_audit_cadence_250" in failed
+    assert "advanced_bpb_periodic_interactive_artifacts" in failed
+    assert "advanced_bpb_hf_reasoning_required_source" in failed
+    assert "advanced_bpb_graphcg_weight_positive" in failed
+    assert "advanced_bpb_graphcg_full_rank_directions" in failed
+    assert "advanced_bpb_meet_in_middle_enabled" in failed
+    assert "advanced_bpb_meet_in_middle_roar_random_order" in failed
+    assert "advanced_bpb_memory_quality_probability_complex" in failed
+    assert "advanced_bpb_wandb_online_project" in failed
 
 
 def test_readiness_audit_fixture_without_checkpoint(tmp_path):
