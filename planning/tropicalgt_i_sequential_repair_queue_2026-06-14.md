@@ -857,3 +857,11 @@ The live item-by-item repair inventory is maintained in `planning/tropicalgt_i_c
 - [x] Report rows expose parent id/path, selected action rows, model probabilities, audit-selection scores, stochastic sampling metadata when available, and the shared action-selection contract.
 - [x] Added regression coverage proving the public report carries branch-selection contracts and selected-action count consistency.
 - [x] Verification passed: py-compile; focused scaling/provenance tests (`12 passed`); metric provenance audit (`334 covered, 0 uncovered`).
+
+### Current Objective Update - Herschel GFlowNet Branch-Selection Evidence Pass
+
+- [x] Added `inference_scaling_tree.json` to the Herschel-required audit sidecar inventory when it exists in the latest GoT audit directory.
+- [x] Added `tropicalgt.herschel_gflownet_branch_selection_evidence.v1` to the Herschel 5K summary, sourced only from recorded inference-scaling tree sidecars.
+- [x] Herschel now reports available source counts, valid branch-selection rows, selected-action totals, action-selection policy counts, and unsafe/missing sidecar reasons.
+- [x] Markdown and HTML reports expose GFlowNet branch-selection evidence and a policy-count chart without running training, eval, browser automation, checkpoint loading, or GPU commands.
+- [x] Verification passed: py-compile; focused Herschel/bundle tests (`11 passed`); broader Herschel/bundle/review-loop/provenance tests (`36 passed`); metric provenance audit (`339 covered, 0 uncovered`); metric provenance tests (`7 passed`).

@@ -1085,3 +1085,11 @@ CUDA_VISIBLE_DEVICES="" /home/iska/miniconda3/bin/conda run -n tokengt python -m
 - Each branch-selection row records parent record id/path, expansion level, parent rank, selected actions, model probabilities, audit-selection scores, stochastic sampling weights/ranks when present, the shared `tropicalgt.gflownet_action_selection_contract.v1`, and no-proxy/no-fallback status.
 - Regression coverage proves deeper non-stop inference reports include the branch-selection audit, selected-action count consistency, and identical action-selection contracts on every selected action row.
 - Verification passed: py-compile; focused scaling/provenance tests (`12 passed`); metric provenance audit (`334 covered, 0 uncovered`).
+
+## 2026-06-18 Herschel GFlowNet Branch-Selection Evidence
+
+- Herschel now treats `inference_scaling_tree.json` as a required recorded audit sidecar alongside `analogical_simplicial_maps.json` when the latest GoT audit directory contains it.
+- The 5K report extracts only real `tropicalgt.gflownet_branch_selection_audit.v1` rows with embedded `tropicalgt.gflownet_action_selection_contract.v1` contracts, real model action-probability source, and no-proxy/no-fallback flags.
+- Markdown and HTML reports now include a `GFlowNet Branch Selection Evidence` section plus a branch-selection policy chart, so Herschel can review action-selection policies and selected-action counts while deciding post-5K restart configs.
+- Missing, unparsable, or unsafe branch-selection sidecars remain unavailable and cannot justify a restart or artifact promotion.
+- Verification passed: py-compile; focused Herschel/bundle tests (`11 passed`); broader Herschel/bundle/review-loop/provenance tests (`36 passed`); metric provenance audit (`339 covered, 0 uncovered`); metric provenance tests (`7 passed`).

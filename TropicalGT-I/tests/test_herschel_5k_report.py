@@ -56,6 +56,54 @@ def test_write_herschel_report_preserves_blockers_and_sidecar_groups(tmp_path: P
         json.dumps({"query_context_contract": query_context_contract, "topk_contract": {"query_context_contract_schema_version": "tropicalgt.analogical_query_context_conversion.v1", "query_context_contract": query_context_contract}}),
         encoding="utf-8",
     )
+    action_selection_contract = {
+        "schema_version": "tropicalgt.gflownet_action_selection_contract.v1",
+        "source": "gflownet_action_probs",
+        "probability_source": "TropicalGTModel.gfn(graph_state).softmax",
+        "audit_selection_score_source": "model_probability_minus_repeat_penalty",
+        "selection_policy": "ranked_diverse_action_sweep",
+        "branch_factor_requested": 2,
+        "ranked_candidate_count": 4,
+        "selected_action_count": 2,
+        "allow_stop": False,
+        "diverse_actions": True,
+        "stochastic": False,
+        "temperature": 1.0,
+        "exploration": 0.0,
+        "selected_from_real_model_action_probabilities": True,
+        "not_a_policy_quality_certificate": True,
+        "no_proxy_or_fallback": True,
+    }
+    inference_scaling_tree_path = tmp_path / "inference_scaling_tree.json"
+    inference_scaling_tree_path.write_text(
+        json.dumps(
+            {
+                "levels": [
+                    {
+                        "level": 0,
+                        "branch_selection": [
+                            {
+                                "schema_version": "tropicalgt.gflownet_branch_selection_audit.v1",
+                                "source": "run_inference_scaling._select_branch_actions",
+                                "parent_record_id": "unit",
+                                "parent_path": [],
+                                "level": 0,
+                                "parent_rank": 0,
+                                "selected_action_count": 2,
+                                "selected_actions": [
+                                    {"branch_rank": 0, "action": "expand", "probability": 0.7, "audit_selection_score": 0.7, "action_selection_contract": action_selection_contract},
+                                    {"branch_rank": 1, "action": "verify", "probability": 0.2, "audit_selection_score": 0.2, "action_selection_contract": action_selection_contract},
+                                ],
+                                "action_selection_contract": action_selection_contract,
+                                "no_proxy_or_fallback": True,
+                            }
+                        ],
+                    }
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
     validator_json = tmp_path / "interactive_validator.json"
     validator_json.write_text(
         json.dumps(
@@ -135,6 +183,7 @@ def test_write_herschel_report_preserves_blockers_and_sidecar_groups(tmp_path: P
                 "got_audit/persistence_landscape.json",
                 "got_audit/analogical_memory_report.json",
                 str(analogical_maps_path),
+                str(inference_scaling_tree_path),
                 "got_audit/graphcg_report.json",
                 "got_audit/nll_density_grid.json",
                 "got_audit/chart_bundle_metrics.json",
@@ -181,6 +230,7 @@ def test_write_herschel_report_preserves_blockers_and_sidecar_groups(tmp_path: P
     assert groups["analogical_memory"] == 2
     assert groups["tropical_toric"] == 1
     assert groups["graphcg"] == 1
+    assert groups["gflownet"] == 1
     assert groups["nll_density"] == 1
     assert groups["chart_bundle"] == 2
     assert groups["vector_bundle"] == 1
@@ -197,6 +247,16 @@ def test_write_herschel_report_preserves_blockers_and_sidecar_groups(tmp_path: P
     assert validator_gaps["top_examples"][0]["required_action"].startswith("regenerate analogical")
     assert validator_gaps["sources"][0]["gap_count"] == 3
     assert validator_gaps["sources"][0]["validator_ok"] is False
+    gflownet_branch = summary["artifact_evidence"]["gflownet_branch_selection_evidence"]
+    assert gflownet_branch["schema_version"] == "tropicalgt.herschel_gflownet_branch_selection_evidence.v1"
+    assert gflownet_branch["available"] is True
+    assert gflownet_branch["source_count"] == 1
+    assert gflownet_branch["available_source_count"] == 1
+    assert gflownet_branch["total_valid_branch_selection_rows"] == 1
+    assert gflownet_branch["total_selected_actions"] == 2
+    assert gflownet_branch["policy_counts"] == {"ranked_diverse_action_sweep": 1}
+    assert gflownet_branch["sources"][0]["no_proxy_or_fallback"] is True
+    assert gflownet_branch["sources"][0]["valid_branch_selection_row_count"] == 1
     analogical_query = summary["artifact_evidence"]["analogical_query_context_evidence"]
     assert analogical_query["schema_version"] == "tropicalgt.herschel_analogical_query_context_evidence.v1"
     assert analogical_query["available"] is True
@@ -219,6 +279,8 @@ def test_write_herschel_report_preserves_blockers_and_sidecar_groups(tmp_path: P
     assert "analogical_memory" in markdown
     assert "row 0 missing json analogical_simplex_tree_analogy.json" in markdown
     assert "regenerate analogical memory sidecars" in markdown
+    assert "## GFlowNet Branch Selection Evidence" in markdown
+    assert "ranked_diverse_action_sweep" in markdown
     assert "## Analogical Query Context Evidence" in markdown
     assert "trajectory_probability_filtered_simplicial_object" in markdown
     assert "probability_filtered_simplicial_object" in markdown
@@ -230,6 +292,9 @@ def test_write_herschel_report_preserves_blockers_and_sidecar_groups(tmp_path: P
     assert "data-chart='validator-gap-counts'" in html
     assert "Restart Decision Flow" in html
     assert "Validator Gap Actions" in html
+    assert "GFlowNet Branch Selection Evidence" in html
+    assert "data-chart='gflownet-branch-selection-policies'" in html
+    assert "ranked_diverse_action_sweep" in html
     assert "Analogical Query Context Evidence" in html
     assert "valid_query_probability_trajectory_complex" in html
     assert "row 0 missing json analogical_simplex_tree_analogy.json" in html

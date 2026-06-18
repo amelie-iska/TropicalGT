@@ -164,6 +164,53 @@ def test_prepare_review_bundle_defaults_to_periodic_validation_artifacts(tmp_pat
         ),
         encoding="utf-8",
     )
+    action_selection_contract = {
+        "schema_version": "tropicalgt.gflownet_action_selection_contract.v1",
+        "source": "gflownet_action_probs",
+        "probability_source": "TropicalGTModel.gfn(graph_state).softmax",
+        "audit_selection_score_source": "model_probability_minus_repeat_penalty",
+        "selection_policy": "ranked_diverse_action_sweep",
+        "branch_factor_requested": 2,
+        "ranked_candidate_count": 3,
+        "selected_action_count": 2,
+        "allow_stop": False,
+        "diverse_actions": True,
+        "stochastic": False,
+        "temperature": 1.0,
+        "exploration": 0.0,
+        "selected_from_real_model_action_probabilities": True,
+        "not_a_policy_quality_certificate": True,
+        "no_proxy_or_fallback": True,
+    }
+    (periodic_dir / "got_audit" / "inference_scaling_tree.json").write_text(
+        json.dumps(
+            {
+                "levels": [
+                    {
+                        "level": 0,
+                        "branch_selection": [
+                            {
+                                "schema_version": "tropicalgt.gflownet_branch_selection_audit.v1",
+                                "source": "run_inference_scaling._select_branch_actions",
+                                "parent_record_id": "unit",
+                                "parent_path": [],
+                                "level": 0,
+                                "parent_rank": 0,
+                                "selected_action_count": 2,
+                                "selected_actions": [
+                                    {"branch_rank": 0, "action": "expand", "probability": 0.6, "audit_selection_score": 0.6, "action_selection_contract": action_selection_contract},
+                                    {"branch_rank": 1, "action": "verify", "probability": 0.3, "audit_selection_score": 0.3, "action_selection_contract": action_selection_contract},
+                                ],
+                                "action_selection_contract": action_selection_contract,
+                                "no_proxy_or_fallback": True,
+                            }
+                        ],
+                    }
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
     cfg_path = tmp_path / "config.json"
     cfg_path.write_text(
         json.dumps(
@@ -208,12 +255,17 @@ def test_prepare_review_bundle_defaults_to_periodic_validation_artifacts(tmp_pat
     assert bundle["commands"]["interactive_audit_validators"]
     sidecars = bundle["artifact_inventory"]["advanced_sidecars_tail"]
     assert any(path.endswith("periodic/step_00005000/got_audit/analogical_simplicial_maps.json") for path in sidecars)
+    assert any(path.endswith("periodic/step_00005000/got_audit/inference_scaling_tree.json") for path in sidecars)
     assert bundle["artifact_inventory"]["herschel_required_sidecars_present"]
     persisted_contract = json.loads((module.ROOT / bundle["artifacts"]["contract_json"]).read_text(encoding="utf-8"))
     assert any(
         path.endswith("periodic/step_00005000/got_audit/analogical_simplicial_maps.json")
         for path in persisted_contract["artifact_inventory"]["advanced_sidecars_tail"]
     )
+    gflownet_branch = bundle["herschel_report_summary"]["artifact_evidence"]["gflownet_branch_selection_evidence"]
+    assert gflownet_branch["available"] is True
+    assert gflownet_branch["policy_counts"] == {"ranked_diverse_action_sweep": 1}
+    assert gflownet_branch["total_selected_actions"] == 2
     analogical_query = bundle["herschel_report_summary"]["artifact_evidence"]["analogical_query_context_evidence"]
     assert analogical_query["available"] is True
     assert analogical_query["sources"][0]["selected_query_complex_source"] == "trajectory_probability_filtered_simplicial_object"

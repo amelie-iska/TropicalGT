@@ -311,6 +311,7 @@ PROVENANCE_REGISTRY: tuple[ProvenanceEntry, ...] = (
             "action_selection_contract",
             "audit_selection_score_source",
             "selected_from_real_model_action_probabilities",
+            "no_proxy_ok",
         ),
     ),
     ProvenanceEntry(

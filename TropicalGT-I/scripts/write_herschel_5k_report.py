@@ -184,6 +184,7 @@ def _sidecar_groups(paths: list[str]) -> dict[str, int]:
         "analogical_memory": 0,
         "tropical_toric": 0,
         "graphcg": 0,
+        "gflownet": 0,
         "nll_density": 0,
         "chart_bundle": 0,
         "vector_bundle": 0,
@@ -208,6 +209,9 @@ def _sidecar_groups(paths: list[str]) -> dict[str, int]:
         if "graphcg" in lower:
             groups["graphcg"] += 1
             matched = True
+        if any(term in lower for term in ("gflownet", "inference_scaling_tree", "branch_selection", "action_selection")):
+            groups["gflownet"] += 1
+            matched = True
         if "nll" in lower or "density" in lower:
             groups["nll_density"] += 1
             matched = True
@@ -223,6 +227,97 @@ def _sidecar_groups(paths: list[str]) -> dict[str, int]:
         if not matched:
             groups["other"] += 1
     return groups
+
+
+def _gflownet_branch_selection_evidence(sidecar_paths: list[str]) -> dict[str, Any]:
+    sources: list[dict[str, Any]] = []
+    policy_counts: dict[str, int] = {}
+    total_rows = 0
+    total_actions = 0
+    for raw_path in sidecar_paths:
+        lower = raw_path.lower()
+        if not any(term in lower for term in ("inference_scaling_tree", "branch_selection", "action_selection", "gflownet")):
+            continue
+        resolved = _resolve_output_path(Path(raw_path))
+        source: dict[str, Any] = {"path": _project_path(resolved), "available": False}
+        if not resolved.exists():
+            source["reason"] = "gflownet_branch_selection_sidecar_missing"
+            sources.append(source)
+            continue
+        try:
+            payload = json.loads(resolved.read_text(encoding="utf-8"))
+        except Exception as exc:  # pragma: no cover - parse message is platform-dependent
+            source["reason"] = f"gflownet_branch_selection_sidecar_parse_error:{exc}"
+            sources.append(source)
+            continue
+        if not isinstance(payload, dict):
+            source["reason"] = "gflownet_branch_selection_sidecar_not_object"
+            sources.append(source)
+            continue
+        levels = payload.get("levels", []) if isinstance(payload.get("levels"), list) else []
+        rows: list[dict[str, Any]] = []
+        for level in levels:
+            if not isinstance(level, dict):
+                continue
+            branch_rows = level.get("branch_selection", []) if isinstance(level.get("branch_selection"), list) else []
+            rows.extend(row for row in branch_rows if isinstance(row, dict))
+        if not rows and isinstance(payload.get("branch_selection"), list):
+            rows = [row for row in payload.get("branch_selection", []) if isinstance(row, dict)]
+        valid_rows: list[dict[str, Any]] = []
+        source_policy_counts: dict[str, int] = {}
+        source_selected_actions = 0
+        for row in rows:
+            contract = row.get("action_selection_contract") if isinstance(row.get("action_selection_contract"), dict) else {}
+            selected_actions = row.get("selected_actions", []) if isinstance(row.get("selected_actions"), list) else []
+            row_schema_ok = row.get("schema_version") == "tropicalgt.gflownet_branch_selection_audit.v1"
+            contract_schema_ok = contract.get("schema_version") == "tropicalgt.gflownet_action_selection_contract.v1"
+            no_proxy_ok = bool(row.get("no_proxy_or_fallback") is True and contract.get("no_proxy_or_fallback") is True)
+            real_prob_ok = bool(contract.get("selected_from_real_model_action_probabilities") is True)
+            policy = str(contract.get("selection_policy", "unavailable"))
+            source_selected_actions += len(selected_actions)
+            if row_schema_ok and contract_schema_ok and no_proxy_ok and real_prob_ok:
+                valid_rows.append(row)
+                source_policy_counts[policy] = source_policy_counts.get(policy, 0) + 1
+                policy_counts[policy] = policy_counts.get(policy, 0) + 1
+        total_rows += len(valid_rows)
+        total_actions += source_selected_actions
+        source.update(
+            {
+                "available": bool(valid_rows),
+                "branch_selection_row_count": len(rows),
+                "valid_branch_selection_row_count": len(valid_rows),
+                "selected_action_count": source_selected_actions,
+                "policy_counts": source_policy_counts,
+                "required_branch_schema": "tropicalgt.gflownet_branch_selection_audit.v1",
+                "required_action_contract_schema": "tropicalgt.gflownet_action_selection_contract.v1",
+                "no_proxy_or_fallback": bool(valid_rows)
+                and all(
+                    row.get("no_proxy_or_fallback") is True
+                    and isinstance(row.get("action_selection_contract"), dict)
+                    and row["action_selection_contract"].get("no_proxy_or_fallback") is True
+                    for row in valid_rows
+                ),
+            }
+        )
+        if not rows:
+            source["reason"] = "gflownet_branch_selection_rows_missing"
+        elif not valid_rows:
+            source["reason"] = "gflownet_branch_selection_contract_missing_or_unsafe"
+        sources.append(source)
+    available_sources = [row for row in sources if row.get("available")]
+    return {
+        "schema_version": "tropicalgt.herschel_gflownet_branch_selection_evidence.v1",
+        "available": bool(available_sources),
+        "source_count": len(sources),
+        "available_source_count": len(available_sources),
+        "required_branch_schema": "tropicalgt.gflownet_branch_selection_audit.v1",
+        "required_action_contract_schema": "tropicalgt.gflownet_action_selection_contract.v1",
+        "total_valid_branch_selection_rows": total_rows,
+        "total_selected_actions": total_actions,
+        "policy_counts": {key: policy_counts[key] for key in sorted(policy_counts)},
+        "sources": sources,
+        "policy": "Herschel reports GFlowNet branch-selection evidence only from recorded inference_scaling_tree sidecars; missing or unsafe contracts stay unavailable and cannot justify restart decisions.",
+    }
 
 
 def _analogical_query_context_evidence(sidecar_paths: list[str]) -> dict[str, Any]:
@@ -347,6 +442,7 @@ def summarize_bundle(bundle: dict[str, Any], *, bundle_path: Path | None = None)
             "sidecar_groups": _sidecar_groups(sidecars),
             "advanced_sidecars_tail": sidecars[:120],
             "validator_gap_evidence": validator_gap_evidence,
+            "gflownet_branch_selection_evidence": _gflownet_branch_selection_evidence(sidecars),
             "analogical_query_context_evidence": _analogical_query_context_evidence(sidecars),
         },
         "restart_decision": {
@@ -421,6 +517,31 @@ def render_markdown(summary: dict[str, Any]) -> str:
             "",
         ]
     )
+    gflownet_branch = artifacts.get("gflownet_branch_selection_evidence", {}) if isinstance(artifacts.get("gflownet_branch_selection_evidence"), dict) else {}
+    lines.extend(
+        [
+            "## GFlowNet Branch Selection Evidence",
+            "",
+            f"- Available: `{gflownet_branch.get('available', False)}`",
+            f"- Sources: `{gflownet_branch.get('source_count', 0)}`",
+            f"- Valid branch rows: `{gflownet_branch.get('total_valid_branch_selection_rows', 0)}`",
+            f"- Selected actions: `{gflownet_branch.get('total_selected_actions', 0)}`",
+            "",
+            "```json",
+            json.dumps(gflownet_branch.get("policy_counts", {}), indent=2),
+            "```",
+            "",
+        ]
+    )
+    for source in gflownet_branch.get("sources", []) if isinstance(gflownet_branch.get("sources"), list) else []:
+        if not isinstance(source, dict):
+            continue
+        lines.append(
+            f"- `{source.get('path', '')}` available=`{source.get('available')}` rows=`{source.get('valid_branch_selection_row_count', 0)}` "
+            f"actions=`{source.get('selected_action_count', 0)}` policies=`{source.get('policy_counts', {})}`"
+        )
+        if source.get("reason"):
+            lines.append(f"  - reason: `{source.get('reason')}`")
     analogical_query_context = artifacts.get("analogical_query_context_evidence", {}) if isinstance(artifacts.get("analogical_query_context_evidence"), dict) else {}
     lines.extend(
         [
@@ -557,6 +678,7 @@ def render_html(summary: dict[str, Any]) -> str:
     validator_gaps = artifacts.get("validator_gap_evidence", {}) if isinstance(artifacts.get("validator_gap_evidence"), dict) else {}
     sidecar_groups = artifacts.get("sidecar_groups", {}) if isinstance(artifacts.get("sidecar_groups"), dict) else {}
     validator_counts = validator_gaps.get("combined_category_counts", {}) if isinstance(validator_gaps.get("combined_category_counts"), dict) else {}
+    gflownet_branch = artifacts.get("gflownet_branch_selection_evidence", {}) if isinstance(artifacts.get("gflownet_branch_selection_evidence"), dict) else {}
     analogical_query_context = artifacts.get("analogical_query_context_evidence", {}) if isinstance(artifacts.get("analogical_query_context_evidence"), dict) else {}
     validator_sources = validator_gaps.get("sources", []) if isinstance(validator_gaps.get("sources"), list) else []
     sidecars = [str(path) for path in artifacts.get("advanced_sidecars_tail", [])]
@@ -594,6 +716,22 @@ def render_html(summary: dict[str, Any]) -> str:
         )
     if not action_rows:
         action_rows.append("<tr><td colspan='4' class='muted'>No concrete validator gap examples recorded.</td></tr>")
+    gflownet_branch_rows = []
+    for source in gflownet_branch.get("sources", []) if isinstance(gflownet_branch.get("sources"), list) else []:
+        if not isinstance(source, dict):
+            continue
+        gflownet_branch_rows.append(
+            "<tr>"
+            f"<td>{html.escape(str(source.get('path', '')))}</td>"
+            f"<td>{html.escape(str(source.get('available')))}</td>"
+            f"<td>{html.escape(str(source.get('valid_branch_selection_row_count', 0)))}</td>"
+            f"<td>{html.escape(str(source.get('selected_action_count', 0)))}</td>"
+            f"<td>{html.escape(str(source.get('policy_counts', {})))}</td>"
+            f"<td>{html.escape(str(source.get('reason', '')))}</td>"
+            "</tr>"
+        )
+    if not gflownet_branch_rows:
+        gflownet_branch_rows.append("<tr><td colspan='6' class='muted'>No inference-scaling branch-selection sidecar paths recorded.</td></tr>")
     analogical_query_rows = []
     for source in analogical_query_context.get("sources", []) if isinstance(analogical_query_context.get("sources"), list) else []:
         if not isinstance(source, dict):
@@ -659,8 +797,10 @@ code {{ white-space:break-spaces; }}
 <section class="panel"><h2>Restart Decision Flow</h2><div class="flow"><div>5K bundle<br><b>step {html.escape(str(run.get('boundary_step')))}</b></div><div>Target missed<br><b>{html.escape(str(metrics.get('target_missed')))}</b></div><div>Checkpoint safe<br><b>{html.escape(str(checkpoint.get('restart_safe')))}</b></div><div>Execution ready<br><b>{html.escape(str(execution.get('ready')))}</b></div><div>Advanced gate<br><b>{html.escape(str(advanced.get('safe_for_restart')))}</b></div><div>Action<br><b>{html.escape(str(restart.get('action')))}</b></div></div></section>
 {_bar_chart_svg(sidecar_groups, title='Advanced Sidecar Groups', chart_id='sidecar-groups')}
 {_bar_chart_svg(validator_counts, title='Strict Validator Evidence Gaps', chart_id='validator-gap-counts')}
+{_bar_chart_svg(gflownet_branch.get('policy_counts', {}) if isinstance(gflownet_branch, dict) else {}, title='GFlowNet Branch Selection Policies', chart_id='gflownet-branch-selection-policies')}
 <section class="panel"><h2>Validator Sources</h2><table><thead><tr><th>Name</th><th>JSON path</th><th>Available</th><th>Gaps</th><th>Reason</th></tr></thead><tbody>{''.join(source_rows)}</tbody></table></section>
 <section class="panel"><h2>Validator Gap Actions</h2><table><thead><tr><th>Category</th><th>Count</th><th>Required action</th><th>Examples</th></tr></thead><tbody>{''.join(action_rows)}</tbody></table></section>
+<section class="panel"><h2>GFlowNet Branch Selection Evidence</h2><table><thead><tr><th>Sidecar</th><th>Available</th><th>Valid rows</th><th>Selected actions</th><th>Policies</th><th>Reason</th></tr></thead><tbody>{''.join(gflownet_branch_rows)}</tbody></table></section>
 <section class="panel"><h2>Analogical Query Context Evidence</h2><table><thead><tr><th>Sidecar</th><th>Available</th><th>Selected source</th><th>Status</th><th>Probability vertices</th><th>Rejected keys</th><th>Reason</th></tr></thead><tbody>{''.join(analogical_query_rows)}</tbody></table></section>
 <section class="panel"><h2>Blockers And Warnings</h2><div class="grid"><div><h3>Checkpoint</h3><ul>{_html_list(checkpoint.get('warnings', []))}</ul></div><div><h3>Execution</h3><ul>{_html_list(execution.get('issues', []))}</ul></div><div><h3>Advanced BPB</h3><ul>{_html_list(advanced.get('failed_gates', []))}</ul></div><div><h3>Restart</h3><ul>{_html_list(restart.get('blockers', []))}</ul></div></div></section>
 <section class="panel"><h2>Advanced Sidecars Tail</h2><input id="sidecar-filter" type="search" placeholder="Filter sidecar paths"><ul id="sidecar-list">{sidecar_items}</ul></section>

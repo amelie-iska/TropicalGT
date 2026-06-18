@@ -494,3 +494,19 @@ Verification:
 - `PYTHONPATH=TropicalGT-I/src:TropicalGT-I/scripts /home/iska/miniconda3/envs/tokengt/bin/python TropicalGT-I/scripts/audit_metric_provenance.py --fail-on-uncovered` -> `334 covered, 0 uncovered`.
 
 Next sequential item: continue source-side no-proxy/report surfacing and browser QA without starting or interrupting GPU work.
+
+## 2026-06-18 Herschel GFlowNet Branch-Selection Evidence Pass
+
+Status: implemented and focused-tested.
+
+Changes made:
+- Herschel review bundles now inventory `inference_scaling_tree.json` from the latest GoT audit directory when present.
+- Herschel reports real GFlowNet branch-selection contracts, selected-action counts, and policy counts from recorded sidecars only.
+- Missing or unsafe branch-selection sidecars remain explicit unavailable evidence.
+
+Verification:
+- `PYTHONPATH=TropicalGT-I/src:TropicalGT-I/scripts /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_herschel_5k_report.py TropicalGT-I/tests/test_prepare_5k_review_bundle.py -q` -> `11 passed`.
+- Broader Herschel/bundle/review-loop/provenance slice -> `36 passed`.
+- `audit_metric_provenance.py --fail-on-uncovered` -> `339 covered, 0 uncovered`.
+
+Next sequential item: continue post-5K evidence/report surfacing and validator/backfill coverage without launching or interrupting GPU work.
