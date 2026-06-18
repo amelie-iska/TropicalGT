@@ -1517,3 +1517,21 @@ Validation:
 CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src:TropicalGT-I/scripts /home/iska/miniconda3/envs/tokengt/bin/pytest -q TropicalGT-I/tests/test_interactive_artifact_validator.py -k "analogical_query_context or analogical_topk_readability or analogical_simplex_tree_analogy or accepts_three_interactive_rows"
 # 5 passed, 40 deselected
 ```
+
+## 2026-06-18 Herschel Analogical Query Context Evidence
+
+Sequential 5K-reporting item completed after the validator gate:
+
+- `write_herschel_5k_report.py` now extracts analogical query-context evidence from recorded `analogical_simplicial_maps.json` sidecars.
+- The report records whether the sidecar exists, whether the required contract schema is present, whether the top-k contract embeds the same query-context contract, the selected query complex source, selected probability-vertex count, conversion status, rejected query-context keys, topological-algebra availability, and no-proxy/embedding-only policy flags.
+- Missing sidecars and parser failures remain explicit unavailable evidence. Herschel does not synthesize query-domain status from validator prose, embeddings, or memory rows.
+- Markdown and HTML output now include `Analogical Query Context Evidence`, so the 5K review can explain why alias query domains were rejected before any restart decision.
+
+Validation:
+
+```text
+CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src:TropicalGT-I/scripts /home/iska/miniconda3/envs/tokengt/bin/pytest -q TropicalGT-I/tests/test_herschel_5k_report.py
+# 2 passed
+CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src:TropicalGT-I/scripts /home/iska/miniconda3/envs/tokengt/bin/pytest -q TropicalGT-I/tests/test_herschel_5k_report.py TropicalGT-I/tests/test_interactive_artifact_validator.py TropicalGT-I/tests/test_metric_provenance.py
+# 54 passed
+```

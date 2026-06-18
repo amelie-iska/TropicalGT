@@ -801,3 +801,11 @@ The live item-by-item repair inventory is maintained in `planning/tropicalgt_i_c
 - [x] Unavailable missing-query states must now fail closed with `selected_query_complex_source=unavailable`; no-memory states can still remain unavailable without fabricating a query-domain map.
 - [x] Updated the validator fixture to include a rejected `probability_filtered_simplicial_object` alias row while selecting only `trajectory_probability_filtered_simplicial_object`.
 - [x] Focused verification passed: analogical query-context validator tests (`5 passed`).
+
+### Current Objective Update - Herschel Analogical Query Context Evidence Pass
+
+- [x] Herschel now reads recorded `analogical_simplicial_maps.json` sidecars from the post-5K review bundle and extracts only the real `tropicalgt.analogical_query_context_conversion.v1` contract.
+- [x] The summary records selected query source, availability, probability vertex count, conversion status, rejected query-context keys, topological-algebra availability, top-k embedding consistency, and no-proxy/embedding-only policy fields.
+- [x] Missing or unparsable analogical query-context sidecars are explicit unavailable sources and cannot justify a restart or artifact promotion.
+- [x] Markdown and HTML reports now include an `Analogical Query Context Evidence` section/table for user review while Herschel continues training/review cycles.
+- [x] Focused verification passed: Herschel report tests (`2 passed`); broader Herschel/validator/provenance slice passed (`54 passed`) with provenance audit `331 covered, 0 uncovered`.

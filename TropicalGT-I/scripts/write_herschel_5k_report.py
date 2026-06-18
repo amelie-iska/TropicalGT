@@ -225,6 +225,71 @@ def _sidecar_groups(paths: list[str]) -> dict[str, int]:
     return groups
 
 
+def _analogical_query_context_evidence(sidecar_paths: list[str]) -> dict[str, Any]:
+    sources: list[dict[str, Any]] = []
+    for raw_path in sidecar_paths:
+        lower = raw_path.lower()
+        if "analogical_simplicial_maps" not in lower and "analogical_query_context" not in lower:
+            continue
+        resolved = _resolve_output_path(Path(raw_path))
+        source: dict[str, Any] = {
+            "path": _project_path(resolved),
+            "available": False,
+        }
+        if not resolved.exists():
+            source["reason"] = "analogical_query_context_sidecar_missing"
+            sources.append(source)
+            continue
+        try:
+            payload = json.loads(resolved.read_text(encoding="utf-8"))
+        except Exception as exc:  # pragma: no cover - parse message is platform-dependent
+            source["reason"] = f"analogical_query_context_sidecar_parse_error:{exc}"
+            sources.append(source)
+            continue
+        if not isinstance(payload, dict):
+            source["reason"] = "analogical_query_context_sidecar_not_object"
+            sources.append(source)
+            continue
+        contract = payload.get("query_context_contract") if isinstance(payload.get("query_context_contract"), dict) else {}
+        topk = payload.get("topk_contract") if isinstance(payload.get("topk_contract"), dict) else {}
+        topk_contract = topk.get("query_context_contract") if isinstance(topk.get("query_context_contract"), dict) else {}
+        rejected = contract.get("rejected_query_context_keys", []) if isinstance(contract.get("rejected_query_context_keys"), list) else []
+        schema_ok = contract.get("schema_version") == "tropicalgt.analogical_query_context_conversion.v1"
+        embedded_ok = bool(topk_contract == contract and topk.get("query_context_contract_schema_version") == "tropicalgt.analogical_query_context_conversion.v1")
+        source.update(
+            {
+                "available": bool(schema_ok),
+                "schema_version": contract.get("schema_version", "unavailable"),
+                "topk_embeds_same_contract": embedded_ok,
+                "selected_query_complex_source": contract.get("selected_query_complex_source", "unavailable"),
+                "selected_query_complex_available": bool(contract.get("selected_query_complex_available", False)),
+                "selected_query_probability_vertex_count": contract.get("selected_query_probability_vertex_count", 0),
+                "conversion_status": contract.get("conversion_status", "unavailable"),
+                "query_topological_algebra_available": bool(contract.get("query_topological_algebra_available", False)),
+                "rejected_query_context_key_count": len(rejected),
+                "rejected_query_context_keys": [str(row.get("key", "")) for row in rejected if isinstance(row, dict)],
+                "embedding_only_assignment_allowed": bool(contract.get("embedding_only_assignment_allowed", True)),
+                "probability_assignment_metric_required": contract.get("probability_assignment_metric_required", "unavailable"),
+                "no_proxy_or_fallback": bool(contract.get("no_proxy_or_fallback", False)),
+            }
+        )
+        if not schema_ok:
+            source["reason"] = "analogical_query_context_contract_missing_or_wrong_schema"
+        elif not embedded_ok:
+            source["reason"] = "analogical_query_context_contract_not_embedded_in_topk_contract"
+        sources.append(source)
+    available_sources = [row for row in sources if row.get("available")]
+    return {
+        "schema_version": "tropicalgt.herschel_analogical_query_context_evidence.v1",
+        "available": bool(available_sources),
+        "source_count": len(sources),
+        "available_source_count": len(available_sources),
+        "required_contract_schema": "tropicalgt.analogical_query_context_conversion.v1",
+        "sources": sources,
+        "policy": "Herschel reports analogical query-domain contracts only from recorded analogical_simplicial_maps sidecars; missing sidecars remain unavailable and cannot justify a restart.",
+    }
+
+
 def summarize_bundle(bundle: dict[str, Any], *, bundle_path: Path | None = None) -> dict[str, Any]:
     decision = bundle.get("decision") if isinstance(bundle.get("decision"), dict) else {}
     gate = bundle.get("restart_evidence_gate") if isinstance(bundle.get("restart_evidence_gate"), dict) else {}
@@ -282,6 +347,7 @@ def summarize_bundle(bundle: dict[str, Any], *, bundle_path: Path | None = None)
             "sidecar_groups": _sidecar_groups(sidecars),
             "advanced_sidecars_tail": sidecars[:120],
             "validator_gap_evidence": validator_gap_evidence,
+            "analogical_query_context_evidence": _analogical_query_context_evidence(sidecars),
         },
         "restart_decision": {
             "action": gate.get("restart_action", "unavailable"),
@@ -355,6 +421,26 @@ def render_markdown(summary: dict[str, Any]) -> str:
             "",
         ]
     )
+    analogical_query_context = artifacts.get("analogical_query_context_evidence", {}) if isinstance(artifacts.get("analogical_query_context_evidence"), dict) else {}
+    lines.extend(
+        [
+            "## Analogical Query Context Evidence",
+            "",
+            f"- Available: `{analogical_query_context.get('available', False)}`",
+            f"- Sources: `{analogical_query_context.get('source_count', 0)}`",
+            f"- Required contract: `{analogical_query_context.get('required_contract_schema', 'unavailable')}`",
+            "",
+        ]
+    )
+    for source in analogical_query_context.get("sources", []) if isinstance(analogical_query_context.get("sources"), list) else []:
+        if not isinstance(source, dict):
+            continue
+        lines.append(
+            f"- `{source.get('path', '')}` available=`{source.get('available')}` selected=`{source.get('selected_query_complex_source', 'unavailable')}` "
+            f"status=`{source.get('conversion_status', 'unavailable')}` prob_vertices=`{source.get('selected_query_probability_vertex_count', 0)}` rejected=`{source.get('rejected_query_context_keys', [])}`"
+        )
+        if source.get("reason"):
+            lines.append(f"  - reason: `{source.get('reason')}`")
     ranked_validator_categories = validator_gaps.get("ranked_categories", []) if isinstance(validator_gaps.get("ranked_categories"), list) else []
     if ranked_validator_categories:
         lines.extend(["### Required Actions", ""])
@@ -471,6 +557,7 @@ def render_html(summary: dict[str, Any]) -> str:
     validator_gaps = artifacts.get("validator_gap_evidence", {}) if isinstance(artifacts.get("validator_gap_evidence"), dict) else {}
     sidecar_groups = artifacts.get("sidecar_groups", {}) if isinstance(artifacts.get("sidecar_groups"), dict) else {}
     validator_counts = validator_gaps.get("combined_category_counts", {}) if isinstance(validator_gaps.get("combined_category_counts"), dict) else {}
+    analogical_query_context = artifacts.get("analogical_query_context_evidence", {}) if isinstance(artifacts.get("analogical_query_context_evidence"), dict) else {}
     validator_sources = validator_gaps.get("sources", []) if isinstance(validator_gaps.get("sources"), list) else []
     sidecars = [str(path) for path in artifacts.get("advanced_sidecars_tail", [])]
     source_rows = []
@@ -507,6 +594,23 @@ def render_html(summary: dict[str, Any]) -> str:
         )
     if not action_rows:
         action_rows.append("<tr><td colspan='4' class='muted'>No concrete validator gap examples recorded.</td></tr>")
+    analogical_query_rows = []
+    for source in analogical_query_context.get("sources", []) if isinstance(analogical_query_context.get("sources"), list) else []:
+        if not isinstance(source, dict):
+            continue
+        analogical_query_rows.append(
+            "<tr>"
+            f"<td>{html.escape(str(source.get('path', '')))}</td>"
+            f"<td>{html.escape(str(source.get('available')))}</td>"
+            f"<td>{html.escape(str(source.get('selected_query_complex_source', 'unavailable')))}</td>"
+            f"<td>{html.escape(str(source.get('conversion_status', 'unavailable')))}</td>"
+            f"<td>{html.escape(str(source.get('selected_query_probability_vertex_count', 0)))}</td>"
+            f"<td>{html.escape(str(source.get('rejected_query_context_keys', [])))}</td>"
+            f"<td>{html.escape(str(source.get('reason', '')))}</td>"
+            "</tr>"
+        )
+    if not analogical_query_rows:
+        analogical_query_rows.append("<tr><td colspan='7' class='muted'>No analogical query-context sidecar paths recorded.</td></tr>")
     sidecar_items = "".join(f"<li data-path='{html.escape(path.lower())}'>{html.escape(path)}</li>" for path in sidecars[:160]) or "<li class='muted'>No sidecar paths recorded.</li>"
     restart_safe = checkpoint.get("restart_safe") and execution.get("ready") and advanced.get("safe_for_restart") and restart.get("step0_restart_allowed")
     return f"""<!doctype html>
@@ -557,6 +661,7 @@ code {{ white-space:break-spaces; }}
 {_bar_chart_svg(validator_counts, title='Strict Validator Evidence Gaps', chart_id='validator-gap-counts')}
 <section class="panel"><h2>Validator Sources</h2><table><thead><tr><th>Name</th><th>JSON path</th><th>Available</th><th>Gaps</th><th>Reason</th></tr></thead><tbody>{''.join(source_rows)}</tbody></table></section>
 <section class="panel"><h2>Validator Gap Actions</h2><table><thead><tr><th>Category</th><th>Count</th><th>Required action</th><th>Examples</th></tr></thead><tbody>{''.join(action_rows)}</tbody></table></section>
+<section class="panel"><h2>Analogical Query Context Evidence</h2><table><thead><tr><th>Sidecar</th><th>Available</th><th>Selected source</th><th>Status</th><th>Probability vertices</th><th>Rejected keys</th><th>Reason</th></tr></thead><tbody>{''.join(analogical_query_rows)}</tbody></table></section>
 <section class="panel"><h2>Blockers And Warnings</h2><div class="grid"><div><h3>Checkpoint</h3><ul>{_html_list(checkpoint.get('warnings', []))}</ul></div><div><h3>Execution</h3><ul>{_html_list(execution.get('issues', []))}</ul></div><div><h3>Advanced BPB</h3><ul>{_html_list(advanced.get('failed_gates', []))}</ul></div><div><h3>Restart</h3><ul>{_html_list(restart.get('blockers', []))}</ul></div></div></section>
 <section class="panel"><h2>Advanced Sidecars Tail</h2><input id="sidecar-filter" type="search" placeholder="Filter sidecar paths"><ul id="sidecar-list">{sidecar_items}</ul></section>
 </main>

@@ -24,6 +24,38 @@ def _load_bundle_module():
 
 def test_write_herschel_report_preserves_blockers_and_sidecar_groups(tmp_path: Path):
     module = _load_report_module()
+    query_context_contract = {
+        "schema_version": "tropicalgt.analogical_query_context_conversion.v1",
+        "actual_data_only": True,
+        "no_proxy_or_fallback": True,
+        "observed_query_context_keys": ["trajectory_probability_filtered_simplicial_object", "topological_algebra"],
+        "accepted_query_complex_keys": ["trajectory_probability_filtered_simplicial_object"],
+        "selected_query_complex_source": "trajectory_probability_filtered_simplicial_object",
+        "selected_query_complex_available": True,
+        "selected_query_probability_vertex_count": 3,
+        "query_topological_algebra_source": "topological_algebra",
+        "query_topological_algebra_available": True,
+        "rejected_query_context_keys": [
+            {
+                "key": "probability_filtered_simplicial_object",
+                "reason": "non_trajectory_probability_complex_not_accepted_as_query_fallback",
+                "has_real_probability_filtration": True,
+                "probability_vertex_count": 3,
+            }
+        ],
+        "rejects_probability_filtered_simplicial_object_alias_as_fallback": True,
+        "rejects_filtered_simplicial_object_without_model_probabilities": True,
+        "conversion_path": "query_context.trajectory_probability_filtered_simplicial_object",
+        "conversion_status": "valid_query_probability_trajectory_complex",
+        "fail_closed_reason": None,
+        "embedding_only_assignment_allowed": False,
+        "probability_assignment_metric_required": "jensen_shannon_distance_on_model_probability_vectors",
+    }
+    analogical_maps_path = tmp_path / "analogical_simplicial_maps.json"
+    analogical_maps_path.write_text(
+        json.dumps({"query_context_contract": query_context_contract, "topk_contract": {"query_context_contract_schema_version": "tropicalgt.analogical_query_context_conversion.v1", "query_context_contract": query_context_contract}}),
+        encoding="utf-8",
+    )
     validator_json = tmp_path / "interactive_validator.json"
     validator_json.write_text(
         json.dumps(
@@ -102,6 +134,7 @@ def test_write_herschel_report_preserves_blockers_and_sidecar_groups(tmp_path: P
                 "got_audit/certificate_indexed_cas_evidence.json",
                 "got_audit/persistence_landscape.json",
                 "got_audit/analogical_memory_report.json",
+                str(analogical_maps_path),
                 "got_audit/graphcg_report.json",
                 "got_audit/nll_density_grid.json",
                 "got_audit/chart_bundle_metrics.json",
@@ -145,7 +178,7 @@ def test_write_herschel_report_preserves_blockers_and_sidecar_groups(tmp_path: P
     groups = summary["artifact_evidence"]["sidecar_groups"]
     assert groups["cas_algebra"] == 2
     assert groups["topology_persistence"] == 1
-    assert groups["analogical_memory"] == 1
+    assert groups["analogical_memory"] == 2
     assert groups["tropical_toric"] == 1
     assert groups["graphcg"] == 1
     assert groups["nll_density"] == 1
@@ -164,6 +197,18 @@ def test_write_herschel_report_preserves_blockers_and_sidecar_groups(tmp_path: P
     assert validator_gaps["top_examples"][0]["required_action"].startswith("regenerate analogical")
     assert validator_gaps["sources"][0]["gap_count"] == 3
     assert validator_gaps["sources"][0]["validator_ok"] is False
+    analogical_query = summary["artifact_evidence"]["analogical_query_context_evidence"]
+    assert analogical_query["schema_version"] == "tropicalgt.herschel_analogical_query_context_evidence.v1"
+    assert analogical_query["available"] is True
+    assert analogical_query["source_count"] == 1
+    assert analogical_query["available_source_count"] == 1
+    assert analogical_query["sources"][0]["topk_embeds_same_contract"] is True
+    assert analogical_query["sources"][0]["selected_query_complex_source"] == "trajectory_probability_filtered_simplicial_object"
+    assert analogical_query["sources"][0]["selected_query_complex_available"] is True
+    assert analogical_query["sources"][0]["selected_query_probability_vertex_count"] == 3
+    assert analogical_query["sources"][0]["conversion_status"] == "valid_query_probability_trajectory_complex"
+    assert analogical_query["sources"][0]["rejected_query_context_keys"] == ["probability_filtered_simplicial_object"]
+    assert analogical_query["sources"][0]["embedding_only_assignment_allowed"] is False
     assert "no training" in summary["policy"]
 
     markdown = markdown_path.read_text(encoding="utf-8")
@@ -174,6 +219,9 @@ def test_write_herschel_report_preserves_blockers_and_sidecar_groups(tmp_path: P
     assert "analogical_memory" in markdown
     assert "row 0 missing json analogical_simplex_tree_analogy.json" in markdown
     assert "regenerate analogical memory sidecars" in markdown
+    assert "## Analogical Query Context Evidence" in markdown
+    assert "trajectory_probability_filtered_simplicial_object" in markdown
+    assert "probability_filtered_simplicial_object" in markdown
     assert "checkpoint_file_is_empty" in markdown
     assert "blocked_missing_required_evidence_no_restart" in markdown
     html = html_path.read_text(encoding="utf-8")
@@ -182,6 +230,8 @@ def test_write_herschel_report_preserves_blockers_and_sidecar_groups(tmp_path: P
     assert "data-chart='validator-gap-counts'" in html
     assert "Restart Decision Flow" in html
     assert "Validator Gap Actions" in html
+    assert "Analogical Query Context Evidence" in html
+    assert "valid_query_probability_trajectory_complex" in html
     assert "row 0 missing json analogical_simplex_tree_analogy.json" in html
     assert "sidecar-filter" in html
     assert "analogical_memory" in html
