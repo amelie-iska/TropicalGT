@@ -947,3 +947,19 @@ The live item-by-item repair inventory is maintained in `planning/tropicalgt_i_c
 - [x] Herschel now reports available trajectory views, radius-slider contract counts, simplex-tree poset contract counts, per-step manifest counts, vertex/edge/face totals, source/displayed simplex totals, and status counts.
 - [x] Availability requires actual-data/no-proxy contracts, disjoint-vertex first frames, monotone min-to-max radius growth, GUDHI face-to-coface SimplexTree posets, and per-step source/slider/poset contracts.
 - [x] Verification passed: py-compile; focused Herschel/bundle tests (`11 passed`); broader Herschel/bundle/review-loop/provenance tests (`36 passed`); metric provenance audit (`423 covered, 0 uncovered`).
+
+## 2026-06-18 Herschel Topological Algebra Evidence Pass
+
+Status: implemented for the current sequential item.
+
+Changes made:
+- The 5K review bundle now discovers recorded topology/algebra sidecars: `trajectory_topological_algebra.json`, `trajectory_growth_topology.json`, `inference_topology.json`, and `inference_algebra.json`.
+- Herschel's report summary now includes `tropicalgt.herschel_topological_algebra_evidence.v1` with real sidecar counts for growth rows, ordinary/probability topological reports, persistence intervals, chain-complex ranks, boundary maps, multiparameter fibers, rank samples, and chain generators.
+- Empty or incomplete sidecars remain unavailable; `inference_algebra.json` with `{}` is explicitly reported as `inference_algebra_empty_unavailable`.
+
+Verification:
+- Focused Herschel/bundle tests passed: `11 passed`.
+- Broader Herschel/bundle/review-loop/provenance tests passed: `36 passed`.
+- Metric provenance audit passed: `findings=423 covered=423 uncovered=0`.
+
+Next sequential item: inspect the remaining implemented sidecar families that Herschel still does not summarize, then either add the next evidence slice or return to the ranked visual/math repair queue.

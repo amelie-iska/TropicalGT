@@ -658,6 +658,31 @@ def test_write_herschel_report_preserves_blockers_and_sidecar_groups(tmp_path: P
         ),
         encoding="utf-8",
     )
+    topological_report = {
+        "enabled": True,
+        "audit_level": "full",
+        "chain_complex": {"chain_group_ranks": {"0": 3, "1": 2}, "boundary_maps": {"d1": [[1, 0], [0, 1]]}},
+        "graph_metrics": {"backend": "networkx"},
+        "persistence": {"available": True, "backend": "gudhi", "intervals": [[0.0, 1.0], [0.2, "inf"]]},
+        "multiparameter_persistence": {
+            "num_parameters": 2,
+            "fiber_rank_profile": [{"grade": [0, 0], "chain_group_ranks": {"0": 3}}],
+            "rank_invariant_samples": [{"source_grade": [0, 0], "target_grade": [1, 0], "rank": 1}],
+            "chain_module_generators": [{"simplex": ["v0"], "homological_degree": 0, "multidegree": [0, 0]}],
+        },
+        "persistence_representations": {"available": True},
+    }
+    trajectory_topological_algebra_path = tmp_path / "trajectory_topological_algebra.json"
+    trajectory_topological_algebra_path.write_text(json.dumps(topological_report), encoding="utf-8")
+    inference_topology_path = tmp_path / "inference_topology.json"
+    inference_topology_path.write_text(json.dumps(topological_report), encoding="utf-8")
+    inference_algebra_path = tmp_path / "inference_algebra.json"
+    inference_algebra_path.write_text(json.dumps({}), encoding="utf-8")
+    trajectory_growth_topology_path = tmp_path / "trajectory_growth_topology.json"
+    trajectory_growth_topology_path.write_text(
+        json.dumps([{"topological_algebra": topological_report, "probability_topological_algebra": topological_report} for _ in range(2)]),
+        encoding="utf-8",
+    )
     validator_json = tmp_path / "interactive_validator.json"
     validator_json.write_text(
         json.dumps(
@@ -747,6 +772,10 @@ def test_write_herschel_report_preserves_blockers_and_sidecar_groups(tmp_path: P
                 str(full_simplex_poset_path),
                 str(probability_simplex_poset_path),
                 str(step_manifest_path),
+                str(trajectory_topological_algebra_path),
+                str(trajectory_growth_topology_path),
+                str(inference_topology_path),
+                str(inference_algebra_path),
                 str(inference_scaling_tree_path),
                 str(tropical_support_path),
                 str(graphcg_direction_path),
@@ -791,7 +820,7 @@ def test_write_herschel_report_preserves_blockers_and_sidecar_groups(tmp_path: P
     assert "checkpoint_file_is_empty" in " ".join(summary["restart_decision"]["blockers"])
     groups = summary["artifact_evidence"]["sidecar_groups"]
     assert groups["cas_algebra"] == 2
-    assert groups["topology_persistence"] == 5
+    assert groups["topology_persistence"] == 8
     assert groups["analogical_memory"] == 4
     assert groups["tropical_toric"] == 3
     assert groups["graphcg"] == 1
@@ -958,6 +987,27 @@ def test_write_herschel_report_preserves_blockers_and_sidecar_groups(tmp_path: P
         "reasoning_step_manifest_available": 1,
         "simplex_tree_poset_available": 2,
     }
+    topological_algebra = summary["artifact_evidence"]["topological_algebra_evidence"]
+    assert topological_algebra["schema_version"] == "tropicalgt.herschel_topological_algebra_evidence.v1"
+    assert topological_algebra["available"] is True
+    assert topological_algebra["source_count"] == 4
+    assert topological_algebra["available_source_count"] == 3
+    assert topological_algebra["total_growth_rows"] == 2
+    assert topological_algebra["total_topology_reports"] == 4
+    assert topological_algebra["total_probability_topology_reports"] == 2
+    assert topological_algebra["total_persistence_intervals"] == 12
+    assert topological_algebra["total_finite_intervals"] == 6
+    assert topological_algebra["total_chain_group_rank_entries"] == 12
+    assert topological_algebra["total_boundary_maps"] == 6
+    assert topological_algebra["total_multiparameter_fiber_rows"] == 6
+    assert topological_algebra["total_rank_invariant_samples"] == 6
+    assert topological_algebra["total_chain_module_generators"] == 6
+    assert topological_algebra["status_counts"] == {
+        "inference_algebra_empty_unavailable": 1,
+        "inference_topology_available": 1,
+        "trajectory_growth_topology_available": 1,
+        "trajectory_topological_algebra_available": 1,
+    }
     assert "no training" in summary["policy"]
 
     markdown = markdown_path.read_text(encoding="utf-8")
@@ -988,6 +1038,9 @@ def test_write_herschel_report_preserves_blockers_and_sidecar_groups(tmp_path: P
     assert "## Analogical Query Context Evidence" in markdown
     assert "## Analogical Memory Evidence" in markdown
     assert "## Simplicial Complex And Simplex-Tree Evidence" in markdown
+    assert "## Topological Algebra Evidence" in markdown
+    assert "trajectory_growth_topology_available" in markdown
+    assert "inference_algebra_empty_unavailable" in markdown
     assert "topk_maps_available" in markdown
     assert "trajectory_probability_filtered_simplicial_object" in markdown
     assert "probability_filtered_simplicial_object" in markdown
@@ -1028,6 +1081,9 @@ def test_write_herschel_report_preserves_blockers_and_sidecar_groups(tmp_path: P
     assert "analogical-memory-statuses" in html
     assert "Simplicial Complex And Simplex-Tree Evidence" in html
     assert "simplicial-complex-statuses" in html
+    assert "Topological Algebra Evidence" in html
+    assert "topological-algebra-statuses" in html
+    assert "trajectory_growth_topology_available" in html
     assert "valid_query_probability_trajectory_complex" in html
     assert "row 0 missing json analogical_simplex_tree_analogy.json" in html
     assert "sidecar-filter" in html

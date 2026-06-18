@@ -1182,3 +1182,14 @@ Status: complete for the Herschel 5K report and bundle contract layer.
 - Global trajectory plots, embedding trajectory maps, or static probability complexes cannot substitute for per-step filtered complexes.
 
 Verification passed: py-compile for touched source/tests; focused Herschel/bundle tests (`11 passed`); broader Herschel/bundle/review-loop/provenance tests (`36 passed`); metric provenance audit (`findings=423 covered=423 uncovered=0`).
+
+### Current Objective Update - Herschel Topological Algebra Evidence Pass
+
+- [x] Added `trajectory_topological_algebra.json`, `trajectory_growth_topology.json`, `inference_topology.json`, and `inference_algebra.json` to the Herschel-required audit sidecar inventory when present in the latest recorded `got_audit` directory.
+- [x] Added `tropicalgt.herschel_topological_algebra_evidence.v1` to the Herschel 5K summary, sourced only from recorded topology/algebra sidecars.
+- [x] Herschel now reports growth rows, topological algebra report counts, probability-topological report counts, persistence intervals, finite intervals, chain-rank entries, boundary maps, multiparameter fibers, rank invariant samples, chain-module generators, and status counts.
+- [x] Empty `inference_algebra.json` is reported as `inference_algebra_empty_unavailable`; incomplete topology reports remain unavailable and cannot justify algebraic, derived, persistence-module, BPB, or restart claims.
+- [x] Markdown and HTML reports now expose `Topological Algebra Evidence` plus a status chart for post-5K review.
+- [x] Verification passed: py-compile; focused Herschel/bundle tests (`11 passed`); broader Herschel/bundle/review-loop/provenance tests (`36 passed`); metric provenance audit (`423 covered, 0 uncovered`).
+
+Next sequential item: continue the Herschel evidence family queue by surfacing any remaining implemented 5K sidecars not yet summarized, then move back into source-side visual/math repairs only after the current report evidence layer is complete.

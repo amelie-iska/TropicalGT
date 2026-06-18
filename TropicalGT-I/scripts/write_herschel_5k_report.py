@@ -211,7 +211,7 @@ def _sidecar_groups(paths: list[str]) -> dict[str, int]:
         if any(term in lower for term in ("cas", "betti", "fitting", "minor", "free_resolution", "buchsbaum", "be_", "certificate_indexed")):
             groups["cas_algebra"] += 1
             matched = True
-        if any(term in lower for term in ("persistence", "bifiltration", "simplex", "barcode", "landscape")):
+        if any(term in lower for term in ("persistence", "bifiltration", "simplex", "barcode", "landscape", "topology", "topological")):
             groups["topology_persistence"] += 1
             matched = True
         if "analogical" in lower or "memory" in lower:
@@ -1771,6 +1771,173 @@ def _simplicial_complex_evidence(sidecar_paths: list[str]) -> dict[str, Any]:
     }
 
 
+def _topological_algebra_evidence(sidecar_paths: list[str]) -> dict[str, Any]:
+    sources: list[dict[str, Any]] = []
+    status_counts: dict[str, int] = {}
+    total_growth_rows = 0
+    total_topology_reports = 0
+    total_probability_topology_reports = 0
+    total_persistence_intervals = 0
+    total_finite_intervals = 0
+    total_chain_group_rank_entries = 0
+    total_boundary_maps = 0
+    total_multiparameter_fiber_rows = 0
+    total_rank_invariant_samples = 0
+    total_chain_generators = 0
+
+    def _count(key: str) -> None:
+        if key:
+            status_counts[str(key)] = status_counts.get(str(key), 0) + 1
+
+    def _int(value: Any) -> int:
+        return _optional_int(value) or 0
+
+    def _report_stats(report: Any) -> dict[str, Any]:
+        if not isinstance(report, dict) or not report:
+            return {"available": False, "reason": "topological_algebra_report_missing"}
+        chain = report.get("chain_complex", {}) if isinstance(report.get("chain_complex"), dict) else {}
+        persistence = report.get("persistence", {}) if isinstance(report.get("persistence"), dict) else {}
+        intervals = persistence.get("intervals", []) if isinstance(persistence.get("intervals"), list) else []
+        finite = [row for row in intervals if isinstance(row, (list, tuple)) and len(row) >= 2 and str(row[1]).lower() not in {"inf", "infinity"}]
+        multi = report.get("multiparameter_persistence", {}) if isinstance(report.get("multiparameter_persistence"), dict) else {}
+        two_param = report.get("two_parameter_persistence", {}) if isinstance(report.get("two_parameter_persistence"), dict) else {}
+        fiber_rows = multi.get("fiber_rank_profile", []) if isinstance(multi.get("fiber_rank_profile"), list) else []
+        if not fiber_rows and isinstance(two_param.get("fiber_rank_profile"), list):
+            fiber_rows = two_param.get("fiber_rank_profile", [])
+        rank_samples = multi.get("rank_invariant_samples", []) if isinstance(multi.get("rank_invariant_samples"), list) else []
+        if not rank_samples and isinstance(two_param.get("rank_invariant_samples"), list):
+            rank_samples = two_param.get("rank_invariant_samples", [])
+        generators = multi.get("chain_module_generators", []) if isinstance(multi.get("chain_module_generators"), list) else []
+        if not generators and isinstance(two_param.get("chain_module_generators"), list):
+            generators = two_param.get("chain_module_generators", [])
+        chain_ranks = chain.get("chain_group_ranks", {}) if isinstance(chain.get("chain_group_ranks"), dict) else {}
+        boundary_maps = chain.get("boundary_maps", {}) if isinstance(chain.get("boundary_maps"), dict) else {}
+        available = bool(report.get("enabled", True) is not False and chain and (persistence or multi or two_param))
+        return {
+            "available": available,
+            "audit_level": report.get("audit_level", "unavailable"),
+            "graph_backend": (report.get("graph_metrics", {}) if isinstance(report.get("graph_metrics"), dict) else {}).get("backend", "unavailable"),
+            "persistence_available": bool(persistence.get("available", bool(intervals))),
+            "persistence_backend": persistence.get("backend", "unavailable"),
+            "persistence_interval_count": len(intervals),
+            "finite_persistence_interval_count": len(finite),
+            "chain_group_rank_entry_count": len(chain_ranks),
+            "boundary_map_count": len(boundary_maps),
+            "multiparameter_num_parameters": _int(multi.get("num_parameters") or two_param.get("num_parameters")),
+            "multiparameter_fiber_rank_profile_count": len(fiber_rows),
+            "rank_invariant_sample_count": len(rank_samples),
+            "chain_module_generator_count": len(generators),
+            "persistence_representations_available": bool((report.get("persistence_representations", {}) if isinstance(report.get("persistence_representations"), dict) else {}).get("available", False)),
+            "reason": "" if available else "topological_algebra_report_unavailable_or_incomplete",
+        }
+
+    for raw_path in sidecar_paths:
+        lower = raw_path.lower()
+        if lower.endswith("trajectory_topological_algebra.json"):
+            kind = "trajectory_topological_algebra"
+        elif lower.endswith("trajectory_growth_topology.json"):
+            kind = "trajectory_growth_topology"
+        elif lower.endswith("inference_topology.json"):
+            kind = "inference_topology"
+        elif lower.endswith("inference_algebra.json"):
+            kind = "inference_algebra"
+        else:
+            continue
+        resolved = _resolve_output_path(Path(raw_path))
+        source: dict[str, Any] = {"kind": kind, "path": _project_path(resolved), "available": False}
+        if not resolved.exists():
+            source["reason"] = f"{kind}_sidecar_missing"
+            _count(source["reason"])
+            sources.append(source)
+            continue
+        try:
+            payload = json.loads(resolved.read_text(encoding="utf-8"))
+        except Exception as exc:  # pragma: no cover - parser message is platform-dependent
+            source["reason"] = f"{kind}_sidecar_parse_error:{exc}"
+            _count(f"{kind}_sidecar_parse_error")
+            sources.append(source)
+            continue
+        if kind == "trajectory_growth_topology":
+            rows = payload if isinstance(payload, list) else []
+            total_growth_rows += len(rows)
+            report_stats = []
+            probability_stats = []
+            for row in rows:
+                if not isinstance(row, dict):
+                    continue
+                stats = _report_stats(row.get("topological_algebra"))
+                prob_stats = _report_stats(row.get("probability_topological_algebra"))
+                report_stats.append(stats)
+                probability_stats.append(prob_stats)
+            available_reports = [row for row in report_stats if row.get("available")]
+            available_probability = [row for row in probability_stats if row.get("available")]
+            for stats in available_reports + available_probability:
+                total_persistence_intervals += _int(stats.get("persistence_interval_count"))
+                total_finite_intervals += _int(stats.get("finite_persistence_interval_count"))
+                total_chain_group_rank_entries += _int(stats.get("chain_group_rank_entry_count"))
+                total_boundary_maps += _int(stats.get("boundary_map_count"))
+                total_multiparameter_fiber_rows += _int(stats.get("multiparameter_fiber_rank_profile_count"))
+                total_rank_invariant_samples += _int(stats.get("rank_invariant_sample_count"))
+                total_chain_generators += _int(stats.get("chain_module_generator_count"))
+            total_topology_reports += len(available_reports)
+            total_probability_topology_reports += len(available_probability)
+            available = bool(rows and (available_reports or available_probability))
+            source.update(
+                {
+                    "available": available,
+                    "status": "trajectory_growth_topology_available" if available else "trajectory_growth_topology_unavailable",
+                    "growth_row_count": len(rows),
+                    "available_topological_algebra_reports": len(available_reports),
+                    "available_probability_topological_algebra_reports": len(available_probability),
+                }
+            )
+            if not available:
+                source["reason"] = "trajectory_growth_topology_has_no_available_reports"
+            _count(str(source["status"]))
+        elif kind == "inference_algebra" and isinstance(payload, dict) and not payload:
+            source.update({"available": False, "status": "inference_algebra_empty_unavailable", "reason": "inference_algebra_sidecar_empty"})
+            _count(str(source["status"]))
+        else:
+            stats = _report_stats(payload)
+            available = bool(stats.get("available"))
+            if available:
+                total_topology_reports += 1
+                total_persistence_intervals += _int(stats.get("persistence_interval_count"))
+                total_finite_intervals += _int(stats.get("finite_persistence_interval_count"))
+                total_chain_group_rank_entries += _int(stats.get("chain_group_rank_entry_count"))
+                total_boundary_maps += _int(stats.get("boundary_map_count"))
+                total_multiparameter_fiber_rows += _int(stats.get("multiparameter_fiber_rank_profile_count"))
+                total_rank_invariant_samples += _int(stats.get("rank_invariant_sample_count"))
+                total_chain_generators += _int(stats.get("chain_module_generator_count"))
+            status = f"{kind}_available" if available else f"{kind}_unavailable"
+            source.update({"available": available, "status": status, **stats})
+            if not available and not source.get("reason"):
+                source["reason"] = stats.get("reason") or f"{kind}_unavailable"
+            _count(status)
+        sources.append(source)
+
+    available_sources = [row for row in sources if row.get("available")]
+    return {
+        "schema_version": "tropicalgt.herschel_topological_algebra_evidence.v1",
+        "available": bool(available_sources),
+        "source_count": len(sources),
+        "available_source_count": len(available_sources),
+        "total_growth_rows": total_growth_rows,
+        "total_topology_reports": total_topology_reports,
+        "total_probability_topology_reports": total_probability_topology_reports,
+        "total_persistence_intervals": total_persistence_intervals,
+        "total_finite_intervals": total_finite_intervals,
+        "total_chain_group_rank_entries": total_chain_group_rank_entries,
+        "total_boundary_maps": total_boundary_maps,
+        "total_multiparameter_fiber_rows": total_multiparameter_fiber_rows,
+        "total_rank_invariant_samples": total_rank_invariant_samples,
+        "total_chain_module_generators": total_chain_generators,
+        "status_counts": {key: status_counts[key] for key in sorted(status_counts)},
+        "sources": sources,
+        "policy": "Herschel reports topological algebra only from recorded trajectory, growth, and inference topology sidecars. Empty inference_algebra sidecars remain unavailable and cannot substitute for chain complexes, persistence intervals, or multiparameter module evidence.",
+    }
+
+
 def summarize_bundle(bundle: dict[str, Any], *, bundle_path: Path | None = None) -> dict[str, Any]:
     decision = bundle.get("decision") if isinstance(bundle.get("decision"), dict) else {}
     gate = bundle.get("restart_evidence_gate") if isinstance(bundle.get("restart_evidence_gate"), dict) else {}
@@ -1839,6 +2006,7 @@ def summarize_bundle(bundle: dict[str, Any], *, bundle_path: Path | None = None)
             "analogical_query_context_evidence": _analogical_query_context_evidence(sidecars),
             "analogical_memory_evidence": _analogical_memory_evidence(sidecars),
             "simplicial_complex_evidence": _simplicial_complex_evidence(sidecars),
+            "topological_algebra_evidence": _topological_algebra_evidence(sidecars),
         },
         "restart_decision": {
             "action": gate.get("restart_action", "unavailable"),
@@ -2203,6 +2371,37 @@ def render_markdown(summary: dict[str, Any]) -> str:
         )
         if source.get("reason"):
             lines.append(f"  - reason: `{source.get('reason')}`")
+    topological_algebra = artifacts.get("topological_algebra_evidence", {}) if isinstance(artifacts.get("topological_algebra_evidence"), dict) else {}
+    lines.extend(
+        [
+            "## Topological Algebra Evidence",
+            "",
+            f"- Available: `{topological_algebra.get('available', False)}`",
+            f"- Sources: `{topological_algebra.get('source_count', 0)}`",
+            f"- Growth rows: `{topological_algebra.get('total_growth_rows', 0)}`",
+            f"- Topology reports: `{topological_algebra.get('total_topology_reports', 0)}`",
+            f"- Probability-topology reports: `{topological_algebra.get('total_probability_topology_reports', 0)}`",
+            f"- Persistence intervals finite/total: `{topological_algebra.get('total_finite_intervals', 0)}` / `{topological_algebra.get('total_persistence_intervals', 0)}`",
+            f"- Chain rank entries / boundary maps: `{topological_algebra.get('total_chain_group_rank_entries', 0)}` / `{topological_algebra.get('total_boundary_maps', 0)}`",
+            f"- Multiparameter fibers / rank samples / generators: `{topological_algebra.get('total_multiparameter_fiber_rows', 0)}` / `{topological_algebra.get('total_rank_invariant_samples', 0)}` / `{topological_algebra.get('total_chain_module_generators', 0)}`",
+            "",
+            "```json",
+            json.dumps(topological_algebra.get("status_counts", {}), indent=2),
+            "```",
+            "",
+        ]
+    )
+    for source in topological_algebra.get("sources", []) if isinstance(topological_algebra.get("sources"), list) else []:
+        if not isinstance(source, dict):
+            continue
+        lines.append(
+            f"- `{source.get('path', '')}` kind=`{source.get('kind', 'unavailable')}` available=`{source.get('available')}` "
+            f"status=`{source.get('status', 'unavailable')}` reports=`{source.get('available_topological_algebra_reports', int(bool(source.get('available'))))}` "
+            f"probability_reports=`{source.get('available_probability_topological_algebra_reports', 0)}` intervals=`{source.get('persistence_interval_count', 0)}` "
+            f"fibers=`{source.get('multiparameter_fiber_rank_profile_count', 0)}`"
+        )
+        if source.get("reason"):
+            lines.append(f"  - reason: `{source.get('reason')}`")
     ranked_validator_categories = validator_gaps.get("ranked_categories", []) if isinstance(validator_gaps.get("ranked_categories"), list) else []
     if ranked_validator_categories:
         lines.extend(["### Required Actions", ""])
@@ -2330,6 +2529,7 @@ def render_html(summary: dict[str, Any]) -> str:
     analogical_query_context = artifacts.get("analogical_query_context_evidence", {}) if isinstance(artifacts.get("analogical_query_context_evidence"), dict) else {}
     analogical_memory = artifacts.get("analogical_memory_evidence", {}) if isinstance(artifacts.get("analogical_memory_evidence"), dict) else {}
     simplicial_complex = artifacts.get("simplicial_complex_evidence", {}) if isinstance(artifacts.get("simplicial_complex_evidence"), dict) else {}
+    topological_algebra = artifacts.get("topological_algebra_evidence", {}) if isinstance(artifacts.get("topological_algebra_evidence"), dict) else {}
     validator_sources = validator_gaps.get("sources", []) if isinstance(validator_gaps.get("sources"), list) else []
     sidecars = [str(path) for path in artifacts.get("advanced_sidecars_tail", [])]
     source_rows = []
@@ -2568,6 +2768,29 @@ def render_html(summary: dict[str, Any]) -> str:
         )
     if not simplicial_complex_rows:
         simplicial_complex_rows.append("<tr><td colspan='9' class='muted'>No simplicial complex, radius-slider, or simplex-tree sidecar paths recorded.</td></tr>")
+    topological_algebra_rows = []
+    for source in topological_algebra.get("sources", []) if isinstance(topological_algebra.get("sources"), list) else []:
+        if not isinstance(source, dict):
+            continue
+        report_or_growth_count = source.get(
+            "growth_row_count",
+            source.get("available_topological_algebra_reports", int(bool(source.get("available")))),
+        )
+        topological_algebra_rows.append(
+            "<tr>"
+            f"<td>{html.escape(str(source.get('path', '')))}</td>"
+            f"<td>{html.escape(str(source.get('kind', 'unavailable')))}</td>"
+            f"<td>{html.escape(str(source.get('available')))}</td>"
+            f"<td>{html.escape(str(source.get('status', 'unavailable')))}</td>"
+            f"<td>{html.escape(str(report_or_growth_count))}</td>"
+            f"<td>{html.escape(str(source.get('available_probability_topological_algebra_reports', 0)))}</td>"
+            f"<td>{html.escape(str(source.get('persistence_interval_count', 0)))}</td>"
+            f"<td>{html.escape(str(source.get('multiparameter_fiber_rank_profile_count', 0)))}</td>"
+            f"<td>{html.escape(str(source.get('reason', '')))}</td>"
+            "</tr>"
+        )
+    if not topological_algebra_rows:
+        topological_algebra_rows.append("<tr><td colspan='9' class='muted'>No topological algebra, growth topology, inference topology, or inference algebra sidecar paths recorded.</td></tr>")
     sidecar_items = "".join(f"<li data-path='{html.escape(path.lower())}'>{html.escape(path)}</li>" for path in sidecars[:160]) or "<li class='muted'>No sidecar paths recorded.</li>"
     restart_safe = checkpoint.get("restart_safe") and execution.get("ready") and advanced.get("safe_for_restart") and restart.get("step0_restart_allowed")
     return f"""<!doctype html>
@@ -2614,6 +2837,7 @@ code {{ white-space:break-spaces; }}
 <span class="badge {'ok' if toric_tropical_cas.get('available') else 'warn'}">toric_tropical_cas_evidence={html.escape(str(bool(toric_tropical_cas.get('available'))))}</span>
 <span class="badge {'ok' if analogical_memory.get('available') else 'warn'}">analogical_memory_evidence={html.escape(str(bool(analogical_memory.get('available'))))}</span>
 <span class="badge {'ok' if simplicial_complex.get('available') else 'warn'}">simplicial_complex_evidence={html.escape(str(bool(simplicial_complex.get('available'))))}</span>
+<span class="badge {'ok' if topological_algebra.get('available') else 'warn'}">topological_algebra_evidence={html.escape(str(bool(topological_algebra.get('available'))))}</span>
 </header>
 <main>
 <section class="grid">
@@ -2635,6 +2859,7 @@ code {{ white-space:break-spaces; }}
 {_bar_chart_svg(toric_tropical_cas.get('status_counts', {}) if isinstance(toric_tropical_cas, dict) else {}, title='Toric/Tropical CAS Statuses', chart_id='toric-tropical-cas-statuses')}
 {_bar_chart_svg(analogical_memory.get('status_counts', {}) or analogical_memory.get('quality_gate_reason_counts', {}) if isinstance(analogical_memory, dict) else {}, title='Analogical Memory Statuses', chart_id='analogical-memory-statuses')}
 {_bar_chart_svg(simplicial_complex.get('status_counts', {}) if isinstance(simplicial_complex, dict) else {}, title='Simplicial Complex And Simplex-Tree Statuses', chart_id='simplicial-complex-statuses')}
+{_bar_chart_svg(topological_algebra.get('status_counts', {}) if isinstance(topological_algebra, dict) else {}, title='Topological Algebra Statuses', chart_id='topological-algebra-statuses')}
 <section class="panel"><h2>Validator Sources</h2><table><thead><tr><th>Name</th><th>JSON path</th><th>Available</th><th>Gaps</th><th>Reason</th></tr></thead><tbody>{''.join(source_rows)}</tbody></table></section>
 <section class="panel"><h2>Validator Gap Actions</h2><table><thead><tr><th>Category</th><th>Count</th><th>Required action</th><th>Examples</th></tr></thead><tbody>{''.join(action_rows)}</tbody></table></section>
 <section class="panel"><h2>GFlowNet Branch Selection Evidence</h2><table><thead><tr><th>Sidecar</th><th>Available</th><th>Valid rows</th><th>Selected actions</th><th>Policies</th><th>Reason</th></tr></thead><tbody>{''.join(gflownet_branch_rows)}</tbody></table></section>
@@ -2648,6 +2873,7 @@ code {{ white-space:break-spaces; }}
 <section class="panel"><h2>Analogical Query Context Evidence</h2><table><thead><tr><th>Sidecar</th><th>Available</th><th>Selected source</th><th>Status</th><th>Probability vertices</th><th>Rejected keys</th><th>Reason</th></tr></thead><tbody>{''.join(analogical_query_rows)}</tbody></table></section>
 <section class="panel"><h2>Analogical Memory Evidence</h2><table><thead><tr><th>Sidecar</th><th>Kind</th><th>Available</th><th>Status</th><th>Retrieved</th><th>Qualified</th><th>Top-k rendered</th><th>Pairs</th><th>Insufficient memory</th><th>Reason</th></tr></thead><tbody>{''.join(analogical_memory_rows)}</tbody></table></section>
 <section class="panel"><h2>Simplicial Complex And Simplex-Tree Evidence</h2><table><thead><tr><th>Sidecar</th><th>Kind</th><th>Available</th><th>Status</th><th>Views/steps</th><th>Thresholds/sliders</th><th>Simplices</th><th>No proxy</th><th>Reason</th></tr></thead><tbody>{''.join(simplicial_complex_rows)}</tbody></table></section>
+<section class="panel"><h2>Topological Algebra Evidence</h2><table><thead><tr><th>Sidecar</th><th>Kind</th><th>Available</th><th>Status</th><th>Reports/growth rows</th><th>Probability reports</th><th>Intervals</th><th>Fibers</th><th>Reason</th></tr></thead><tbody>{''.join(topological_algebra_rows)}</tbody></table></section>
 <section class="panel"><h2>Blockers And Warnings</h2><div class="grid"><div><h3>Checkpoint</h3><ul>{_html_list(checkpoint.get('warnings', []))}</ul></div><div><h3>Execution</h3><ul>{_html_list(execution.get('issues', []))}</ul></div><div><h3>Advanced BPB</h3><ul>{_html_list(advanced.get('failed_gates', []))}</ul></div><div><h3>Restart</h3><ul>{_html_list(restart.get('blockers', []))}</ul></div></div></section>
 <section class="panel"><h2>Advanced Sidecars Tail</h2><input id="sidecar-filter" type="search" placeholder="Filter sidecar paths"><ul id="sidecar-list">{sidecar_items}</ul></section>
 </main>

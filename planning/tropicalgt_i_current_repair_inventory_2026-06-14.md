@@ -609,3 +609,13 @@ Verification:
 - Metric provenance audit passed: `findings=423 covered=423 uncovered=0`.
 
 Next sequential item: continue surfacing remaining real 5K sidecars into Herschel, with likely candidates `trajectory_growth_topology.json`, `inference_topology.json`, `inference_algebra.json`, and `trajectory_topological_algebra.json`, or move to source-side repair when the current report evidence family is complete.
+
+## 2026-06-18 Herschel Topological Algebra Evidence Pass
+
+Status: complete for the Herschel 5K report and bundle contract layer.
+
+- `prepare_5k_review_bundle.py` now carries recorded topological algebra, growth topology, inference topology, and inference algebra sidecars into `advanced_sidecars_tail` when present.
+- `write_herschel_5k_report.py` now emits `tropicalgt.herschel_topological_algebra_evidence.v1` under `artifact_evidence`.
+- The report summarizes real topology/algebra sidecar evidence without synthesizing chain complexes, persistence intervals, multiparameter modules, or CAS certificates.
+- Empty `inference_algebra.json` files and incomplete topology reports remain explicit unavailable states.
+- Verification passed: py-compile; focused Herschel/bundle tests (`11 passed`); broader Herschel/bundle/review-loop/provenance tests (`36 passed`); metric provenance audit (`423 covered, 0 uncovered`).

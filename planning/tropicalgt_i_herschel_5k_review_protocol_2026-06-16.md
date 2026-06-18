@@ -225,3 +225,11 @@ Herschel now treats the recorded full-trajectory complex payload, full-trajector
 Availability requires `tropicalgt.trajectory_complex_overlay_contract.v1`, `tropicalgt.radius_filtration_slider_contract.v1`, `tropicalgt.simplex_tree_poset.v1`, and `tropicalgt.reasoning_step_complex_maps.v1` evidence with actual-data/no-proxy flags. Radius sliders must start as disjoint vertices, grow min-to-max, keep solid edges/faces radius-gated, and remain monotone. SimplexTree posets must be GUDHI-backed, face-to-coface primary, not disconnected columns, and safe to render. Per-step manifests must confirm source contracts, sliders, and simplex-tree posets for every model-evaluated reasoning step. Missing or unsafe contracts remain unavailable and are not replaced by global trajectory plots or static proxy complexes.
 
 Validation: focused Herschel/bundle tests passed (`11 passed`), broader Herschel/bundle/review-loop/provenance tests passed (`36 passed`), and metric provenance audit passed (`findings=423 covered=423 uncovered=0`).
+
+## 2026-06-18 Topological Algebra Evidence Follow-Up
+
+Herschel now treats `trajectory_topological_algebra.json`, `trajectory_growth_topology.json`, `inference_topology.json`, and `inference_algebra.json` as Herschel-required recorded GoT audit sidecars when those files exist in the latest `got_audit` directory. `write_herschel_5k_report.py` exposes `tropicalgt.herschel_topological_algebra_evidence.v1`, sourced only from those recorded sidecars.
+
+The report summarizes growth rows, ordinary and probability-filtered topology report counts, persistence interval counts, finite interval counts, chain-group rank entries, boundary-map counts, multiparameter fiber/rank-sample counts, chain-module generator counts, per-source statuses, and explicit unavailable states. Empty `inference_algebra.json` payloads are rendered as `inference_algebra_empty_unavailable`; they are not substituted for chain complexes, persistence intervals, multiparameter modules, CAS certificates, derived-equivalence evidence, BPB evidence, or restart permission.
+
+Validation: py-compile passed for touched scripts/source/tests; focused Herschel/bundle tests passed (`11 passed`); broader Herschel/bundle/review-loop/provenance tests passed (`36 passed`); metric provenance audit passed (`findings=423 covered=423 uncovered=0`).

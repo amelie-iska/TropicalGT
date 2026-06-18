@@ -39,6 +39,10 @@ HERSCHEL_REQUIRED_AUDIT_SIDECARS = (
     "tropical_fan_diagnostics.json",
     "trajectory_persistence/persistence_landscapes.json",
     "trajectory_level_radius_bifiltration.json",
+    "trajectory_topological_algebra.json",
+    "trajectory_growth_topology.json",
+    "inference_topology.json",
+    "inference_algebra.json",
 )
 
 

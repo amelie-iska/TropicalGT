@@ -564,6 +564,27 @@ def test_prepare_review_bundle_defaults_to_periodic_validation_artifacts(tmp_pat
         ),
         encoding="utf-8",
     )
+    topological_report = {
+        "enabled": True,
+        "audit_level": "full",
+        "chain_complex": {"chain_group_ranks": {"0": 2, "1": 1}, "boundary_maps": {"d1": [[1], [0]]}},
+        "graph_metrics": {"backend": "networkx"},
+        "persistence": {"available": True, "backend": "gudhi", "intervals": [[0.0, 0.5], [0.3, "inf"]]},
+        "multiparameter_persistence": {
+            "num_parameters": 2,
+            "fiber_rank_profile": [{"grade": [0, 0], "chain_group_ranks": {"0": 2}}],
+            "rank_invariant_samples": [{"source_grade": [0, 0], "target_grade": [1, 0], "rank": 1}],
+            "chain_module_generators": [{"simplex": ["v0"], "homological_degree": 0, "multidegree": [0, 0]}],
+        },
+        "persistence_representations": {"available": True},
+    }
+    (periodic_dir / "got_audit" / "trajectory_topological_algebra.json").write_text(json.dumps(topological_report), encoding="utf-8")
+    (periodic_dir / "got_audit" / "inference_topology.json").write_text(json.dumps(topological_report), encoding="utf-8")
+    (periodic_dir / "got_audit" / "inference_algebra.json").write_text(json.dumps({}), encoding="utf-8")
+    (periodic_dir / "got_audit" / "trajectory_growth_topology.json").write_text(
+        json.dumps([{"topological_algebra": topological_report, "probability_topological_algebra": topological_report}]),
+        encoding="utf-8",
+    )
     (periodic_dir / "got_audit" / "trajectory_persistence").mkdir(parents=True, exist_ok=True)
     (periodic_dir / "got_audit" / "trajectory_persistence" / "persistence_landscapes.json").write_text(
         json.dumps(
@@ -786,6 +807,10 @@ def test_prepare_review_bundle_defaults_to_periodic_validation_artifacts(tmp_pat
     assert any(path.endswith("periodic/step_00005000/got_audit/chart_bundle_transport_sidecar.json") for path in sidecars)
     assert any(path.endswith("periodic/step_00005000/got_audit/trajectory_persistence/persistence_landscapes.json") for path in sidecars)
     assert any(path.endswith("periodic/step_00005000/got_audit/trajectory_level_radius_bifiltration.json") for path in sidecars)
+    assert any(path.endswith("periodic/step_00005000/got_audit/trajectory_topological_algebra.json") for path in sidecars)
+    assert any(path.endswith("periodic/step_00005000/got_audit/trajectory_growth_topology.json") for path in sidecars)
+    assert any(path.endswith("periodic/step_00005000/got_audit/inference_topology.json") for path in sidecars)
+    assert any(path.endswith("periodic/step_00005000/got_audit/inference_algebra.json") for path in sidecars)
     assert any(path.endswith("periodic/step_00005000/got_audit/toric_embedding_sidecar.json") for path in sidecars)
     assert any(path.endswith("periodic/step_00005000/got_audit/tropical_fan_diagnostics.json") for path in sidecars)
     assert bundle["artifact_inventory"]["herschel_required_sidecars_present"]
@@ -832,6 +857,22 @@ def test_prepare_review_bundle_defaults_to_periodic_validation_artifacts(tmp_pat
     )
     assert any(
         path.endswith("periodic/step_00005000/got_audit/trajectory_level_radius_bifiltration.json")
+        for path in persisted_contract["artifact_inventory"]["advanced_sidecars_tail"]
+    )
+    assert any(
+        path.endswith("periodic/step_00005000/got_audit/trajectory_topological_algebra.json")
+        for path in persisted_contract["artifact_inventory"]["advanced_sidecars_tail"]
+    )
+    assert any(
+        path.endswith("periodic/step_00005000/got_audit/trajectory_growth_topology.json")
+        for path in persisted_contract["artifact_inventory"]["advanced_sidecars_tail"]
+    )
+    assert any(
+        path.endswith("periodic/step_00005000/got_audit/inference_topology.json")
+        for path in persisted_contract["artifact_inventory"]["advanced_sidecars_tail"]
+    )
+    assert any(
+        path.endswith("periodic/step_00005000/got_audit/inference_algebra.json")
         for path in persisted_contract["artifact_inventory"]["advanced_sidecars_tail"]
     )
     assert any(
@@ -920,6 +961,19 @@ def test_prepare_review_bundle_defaults_to_periodic_validation_artifacts(tmp_pat
     assert simplicial_complex["total_simplex_tree_poset_contracts"] == 2
     assert simplicial_complex["total_source_simplices"] == 44
     assert simplicial_complex["total_displayed_simplices"] == 16
+    topological_algebra = bundle["herschel_report_summary"]["artifact_evidence"]["topological_algebra_evidence"]
+    assert topological_algebra["available"] is True
+    assert topological_algebra["source_count"] == 4
+    assert topological_algebra["available_source_count"] == 3
+    assert topological_algebra["total_growth_rows"] == 1
+    assert topological_algebra["total_topology_reports"] == 3
+    assert topological_algebra["total_probability_topology_reports"] == 1
+    assert topological_algebra["status_counts"] == {
+        "inference_algebra_empty_unavailable": 1,
+        "inference_topology_available": 1,
+        "trajectory_growth_topology_available": 1,
+        "trajectory_topological_algebra_available": 1,
+    }
 
 def test_prepare_review_bundle_blocks_command_execution_without_checkpoint(tmp_path: Path):
     module = _load_bundle_module()
