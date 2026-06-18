@@ -880,6 +880,19 @@ def test_write_herschel_report_preserves_blockers_and_sidecar_groups(tmp_path: P
                     "tropical_cycle_certified": True,
                     "safe_to_render_as_tropical_fan": True,
                     "fan_summary": {"ray_count": 2, "ambient_dimension": 2},
+                    "optional_method_diagnostics": {
+                        "cones": {
+                            "available": True,
+                            "method": "Macaulay2 Tropical cones T",
+                            "certificate_gate": "side_diagnostic_only_not_a_replacement_for_tropicalVariety_certificate",
+                        },
+                        "bergman_fan": {
+                            "available": False,
+                            "method": "Macaulay2 Tropical BergmanFan I",
+                            "error": "not a matroid ideal",
+                            "certificate_gate": "side_diagnostic_only_not_a_replacement_for_tropicalVariety_certificate",
+                        },
+                    },
                 },
                 "safe_to_render_as_tropical_fan": True,
             }
@@ -1225,9 +1238,17 @@ def test_write_herschel_report_preserves_blockers_and_sidecar_groups(tmp_path: P
     assert toric_tropical["certified_tropical_fan_count"] == 1
     assert toric_tropical["forbidden_global_claim_count"] == 0
     assert toric_tropical["total_tropical_ray_count"] == 2
+    assert toric_tropical["optional_tropical_method_count"] == 2
+    assert toric_tropical["available_optional_tropical_method_count"] == 1
+    assert toric_tropical["unavailable_optional_tropical_method_count"] == 1
+    assert toric_tropical["optional_tropical_method_status_counts"] == {"bergman_fan:unavailable": 1, "cones:available": 1}
     assert toric_tropical["status_counts"] == {"toric_embedding_sidecar:certified": 1, "tropical_fan_diagnostics:certified": 1}
     assert toric_tropical["sources"][0]["no_proxy_or_fallback"] is True
     assert toric_tropical["sources"][1]["no_proxy_or_fallback"] is True
+    tropical_source = next(row for row in toric_tropical["sources"] if row["kind"] == "tropical_fan_diagnostics")
+    assert tropical_source["optional_method_count"] == 2
+    assert tropical_source["optional_method_available_count"] == 1
+    assert tropical_source["optional_methods_certificate_gate"] == "side_diagnostic_only_not_a_replacement_for_tropicalVariety_certificate"
     analogical_query = summary["artifact_evidence"]["analogical_query_context_evidence"]
     assert analogical_query["schema_version"] == "tropicalgt.herschel_analogical_query_context_evidence.v1"
     assert analogical_query["available"] is True
@@ -1378,6 +1399,7 @@ def test_write_herschel_report_preserves_blockers_and_sidecar_groups(tmp_path: P
     assert "data-chart='chart-vector-bundle-completeness-tiers'" in html
     assert "paper_ready" in html
     assert "Toric/Tropical CAS Evidence" in html
+    assert "Optional methods" in html
     assert "data-chart='toric-tropical-cas-statuses'" in html
     assert "toric_embedding_sidecar" in html
     assert "Analogical Query Context Evidence" in html

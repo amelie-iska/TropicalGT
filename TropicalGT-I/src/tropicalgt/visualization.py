@@ -5157,6 +5157,7 @@ def _unavailable_tropical_fan_payload(reason: str, *, source_path: str = "unavai
         "ideal_spec": None,
         "cas_input_contract": input_contract,
         "diagnostics": diagnostics,
+        "optional_tropical_method_summary": _optional_tropical_method_visual_summary(diagnostics),
         "safe_to_render_as_tropical_fan": False,
         "render_contract": "Tropical fan diagnostics render one dimensional cones only from explicit model-derived ideal specs and real Macaulay2 Tropical certificates; unavailable states are not substituted by support-token proxies.",
     }
@@ -5182,9 +5183,38 @@ def _tropical_fan_ray_rows(summary: Mapping[str, Any]) -> list[dict[str, Any]]:
     return out
 
 
+def _optional_tropical_method_visual_summary(diagnostics: Mapping[str, Any]) -> dict[str, Any]:
+    methods = diagnostics.get("optional_method_diagnostics") if isinstance(diagnostics.get("optional_method_diagnostics"), Mapping) else {}
+    rows: list[dict[str, Any]] = []
+    for name in sorted(methods):
+        item = methods.get(name)
+        if not isinstance(item, Mapping):
+            continue
+        available = bool(item.get("available"))
+        rows.append({
+            "name": str(name),
+            "available": available,
+            "method": str(item.get("method", "unavailable")),
+            "text": str(item.get("text", "") or "") if available else "",
+            "error": "" if available else str(item.get("error", "not computed") or "not computed"),
+            "certificate_gate": str(item.get("certificate_gate", "side_diagnostic_only_not_a_replacement_for_tropicalVariety_certificate")),
+        })
+    available_count = sum(1 for row in rows if row.get("available"))
+    return {
+        "schema_version": "tropicalgt.tropical_fan_optional_method_visual_summary.v1",
+        "available": bool(rows),
+        "method_count": len(rows),
+        "available_method_count": available_count,
+        "unavailable_method_count": len(rows) - available_count,
+        "methods": rows,
+        "policy": "Optional Macaulay2 Tropical methods are displayed as side diagnostics only; they do not replace or weaken the tropicalVariety fan/cycle certificate gate.",
+    }
+
+
 def _write_tropical_fan_html(path: Path, payload: Mapping[str, Any]) -> None:
     diagnostics = payload.get("diagnostics") if isinstance(payload.get("diagnostics"), Mapping) else {}
     summary = diagnostics.get("fan_summary") if isinstance(diagnostics.get("fan_summary"), Mapping) else {}
+    optional_methods = payload.get("optional_tropical_method_summary") if isinstance(payload.get("optional_tropical_method_summary"), Mapping) else _optional_tropical_method_visual_summary(diagnostics)
     ray_rows = _tropical_fan_ray_rows(summary)
     available = bool(payload.get("available") and diagnostics.get("safe_to_render_as_tropical_fan") is True and ray_rows)
     if available:
@@ -5240,6 +5270,7 @@ def _write_tropical_fan_html(path: Path, payload: Mapping[str, Any]) -> None:
             ("prevariety available", bool(prevariety.get("available"))),
             ("prevariety rays", _json_clip(prevariety.get("rays", []), 180)),
             ("prevariety max cones", _json_clip(prevariety.get("max_cones", []), 180)),
+            ("optional side diagnostics", _json_clip(optional_methods, 780)),
             ("Sage scope", contract.get("sage_scope", "not a substitute certificate for this fan view")),
             ("no-proxy policy", contract.get("no_proxy_policy", "no proxy diagnostics may substitute for the certificate")),
             ("CAS input contract", _json_clip(payload.get("cas_input_contract", {}), 720)),
@@ -5276,6 +5307,7 @@ def _write_tropical_fan_html(path: Path, payload: Mapping[str, Any]) -> None:
             ("no-proxy policy", contract.get("no_proxy_policy", "no proxy diagnostics may substitute for the certificate")),
             ("render contract", payload.get("render_contract", "unavailable")),
             ("CAS input contract", _json_clip(payload.get("cas_input_contract", {}), 720)),
+            ("optional side diagnostics", _json_clip(optional_methods, 780)),
             ("one dimensional cones", "not rendered without a real Macaulay2 Tropical certificate"),
             ("warning", "not a multigraded free-resolution or derived-equivalence certificate"),
         ]
@@ -5368,6 +5400,7 @@ def write_tropical_fan_diagnostics(result: dict[str, object], output_dir: str | 
         "ideal_spec": dict(ideal_spec) if isinstance(ideal_spec, Mapping) else None,
         "cas_input_contract": input_contract,
         "diagnostics": dict(report) if isinstance(report, Mapping) else {},
+        "optional_tropical_method_summary": _optional_tropical_method_visual_summary(report if isinstance(report, Mapping) else {}),
         "safe_to_render_as_tropical_fan": safe,
         "render_contract": "Tropical fan diagnostics render one dimensional cones only from explicit model-derived ideal specs and real Macaulay2 Tropical certificates; unavailable states are not substituted by support-token proxies.",
     }

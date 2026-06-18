@@ -1653,6 +1653,35 @@ def _persistence_landscape_evidence(sidecar_paths: list[str]) -> dict[str, Any]:
     }
 
 
+def _optional_tropical_method_rows(payload: dict[str, Any], diagnostics: dict[str, Any]) -> list[dict[str, Any]]:
+    summary = payload.get("optional_tropical_method_summary") if isinstance(payload.get("optional_tropical_method_summary"), dict) else {}
+    methods = summary.get("methods") if isinstance(summary.get("methods"), list) else None
+    rows: list[dict[str, Any]] = []
+    if methods is not None:
+        for item in methods:
+            if not isinstance(item, dict):
+                continue
+            rows.append({
+                "name": str(item.get("name", "unavailable")),
+                "available": bool(item.get("available")),
+                "method": str(item.get("method", "unavailable")),
+                "certificate_gate": str(item.get("certificate_gate", "side_diagnostic_only_not_a_replacement_for_tropicalVariety_certificate")),
+            })
+        return rows
+    raw = diagnostics.get("optional_method_diagnostics") if isinstance(diagnostics.get("optional_method_diagnostics"), dict) else {}
+    for name in sorted(raw):
+        item = raw.get(name)
+        if not isinstance(item, dict):
+            continue
+        rows.append({
+            "name": str(name),
+            "available": bool(item.get("available")),
+            "method": str(item.get("method", "unavailable")),
+            "certificate_gate": str(item.get("certificate_gate", "side_diagnostic_only_not_a_replacement_for_tropicalVariety_certificate")),
+        })
+    return rows
+
+
 def _toric_tropical_cas_evidence(sidecar_paths: list[str]) -> dict[str, Any]:
     sources: list[dict[str, Any]] = []
     status_counts: dict[str, int] = {}
@@ -1663,6 +1692,10 @@ def _toric_tropical_cas_evidence(sidecar_paths: list[str]) -> dict[str, Any]:
     certified_tropical_fan_count = 0
     forbidden_global_claim_count = 0
     total_tropical_ray_count = 0
+    optional_tropical_method_count = 0
+    available_optional_tropical_method_count = 0
+    unavailable_optional_tropical_method_count = 0
+    optional_tropical_method_status_counts: dict[str, int] = {}
 
     def _count(mapping: dict[str, int], key: str) -> None:
         mapping[key] = mapping.get(key, 0) + 1
@@ -1759,6 +1792,14 @@ def _toric_tropical_cas_evidence(sidecar_paths: list[str]) -> dict[str, Any]:
             explicit_input_ok = bool(input_contract.get("explicit_cas_input_present") is True and input_contract.get("safe_to_render_certificate") is True and bool(input_contract.get("input_sha256")))
             summary = diagnostics.get("fan_summary") if isinstance(diagnostics.get("fan_summary"), dict) else {}
             ray_count = _optional_int(summary.get("ray_count")) or 0
+            optional_rows = _optional_tropical_method_rows(payload, diagnostics)
+            optional_available = sum(1 for row in optional_rows if row.get("available"))
+            optional_unavailable = len(optional_rows) - optional_available
+            optional_tropical_method_count += len(optional_rows)
+            available_optional_tropical_method_count += optional_available
+            unavailable_optional_tropical_method_count += optional_unavailable
+            for row in optional_rows:
+                _count(optional_tropical_method_status_counts, f"{row.get('name', 'unavailable')}:{'available' if row.get('available') else 'unavailable'}")
             fan_certificate_ok = bool(payload.get("available") is True and payload.get("safe_to_render_as_tropical_fan") is True and diagnostics.get("certificate_attached") is True and diagnostics.get("fan_diagnostics_certified") is True and diagnostics.get("safe_to_render_as_tropical_fan") is True and ray_count > 0)
             available = bool(schema_ok and diag_schema_ok and input_schema_ok and no_proxy_ok and explicit_input_ok and fan_certificate_ok)
             if available:
@@ -1777,6 +1818,11 @@ def _toric_tropical_cas_evidence(sidecar_paths: list[str]) -> dict[str, Any]:
                 "safe_to_render_as_tropical_fan": bool(payload.get("safe_to_render_as_tropical_fan", False)),
                 "ray_count": ray_count,
                 "ambient_dimension": _optional_int(summary.get("ambient_dimension")),
+                "optional_method_count": len(optional_rows),
+                "optional_method_available_count": optional_available,
+                "optional_method_unavailable_count": optional_unavailable,
+                "optional_method_names": [str(row.get("name", "unavailable")) for row in optional_rows],
+                "optional_methods_certificate_gate": "side_diagnostic_only_not_a_replacement_for_tropicalVariety_certificate" if optional_rows else "unavailable",
                 "explicit_cas_input_present": bool(input_contract.get("explicit_cas_input_present", False)),
                 "input_sha256": input_contract.get("input_sha256"),
                 "no_proxy_or_fallback": no_proxy_ok,
@@ -1815,6 +1861,11 @@ def _toric_tropical_cas_evidence(sidecar_paths: list[str]) -> dict[str, Any]:
         "certified_tropical_fan_count": certified_tropical_fan_count,
         "forbidden_global_claim_count": forbidden_global_claim_count,
         "total_tropical_ray_count": total_tropical_ray_count,
+        "optional_tropical_method_count": optional_tropical_method_count,
+        "available_optional_tropical_method_count": available_optional_tropical_method_count,
+        "unavailable_optional_tropical_method_count": unavailable_optional_tropical_method_count,
+        "optional_tropical_method_status_counts": {key: optional_tropical_method_status_counts[key] for key in sorted(optional_tropical_method_status_counts)},
+        "optional_tropical_method_policy": "Optional Macaulay2 Tropical side diagnostics are reportable evidence only and never substitute for the tropicalVariety certificate gate.",
         "required_toric_sidecar_schema": "tropicalgt.toric_embedding_sidecar_visual_audit.v1",
         "required_toric_cas_schema": "tropicalgt.cas_toric_embedding.v1",
         "required_tropical_fan_sidecar_schema": "tropicalgt.tropical_fan_visual_audit.v1",
@@ -2942,6 +2993,7 @@ def render_markdown(summary: dict[str, Any]) -> str:
             f"- Certified finite toric ideals: `{toric_tropical_cas.get('certified_finite_toric_ideal_count', 0)}`",
             f"- Certified tropical fans: `{toric_tropical_cas.get('certified_tropical_fan_count', 0)}`",
             f"- Forbidden global/tropical/normal-fan claim count: `{toric_tropical_cas.get('forbidden_global_claim_count', 0)}`",
+            f"- Optional tropical side methods: `{toric_tropical_cas.get('optional_tropical_method_count', 0)}` available=`{toric_tropical_cas.get('available_optional_tropical_method_count', 0)}` unavailable=`{toric_tropical_cas.get('unavailable_optional_tropical_method_count', 0)}`",
             "",
             "```json",
             json.dumps(toric_tropical_cas.get("status_counts", {}), indent=2),
@@ -2956,7 +3008,8 @@ def render_markdown(summary: dict[str, Any]) -> str:
             f"- `{source.get('path', '')}` kind=`{source.get('kind', 'unavailable')}` available=`{source.get('available')}` "
             f"status=`{source.get('status', 'unavailable')}` backend=`{source.get('backend', 'unavailable')}` "
             f"toric_ideal=`{source.get('toric_ideal_certified', False)}` fan=`{source.get('fan_diagnostics_certified', False)}` "
-            f"rays=`{source.get('ray_count', 0)}`"
+            f"rays=`{source.get('ray_count', 0)}` optional_methods=`{source.get('optional_method_count', 0)}` "
+            f"optional_available=`{source.get('optional_method_available_count', 0)}`"
         )
         if source.get("reason"):
             lines.append(f"  - reason: `{source.get('reason')}`")
@@ -3436,11 +3489,13 @@ def render_html(summary: dict[str, Any]) -> str:
             f"<td>{html.escape(str(source.get('toric_ideal_certified', False)))}</td>"
             f"<td>{html.escape(str(source.get('fan_diagnostics_certified', False)))}</td>"
             f"<td>{html.escape(str(source.get('ray_count', 0)))}</td>"
+            f"<td>{html.escape(str(source.get('optional_method_count', 0)))}</td>"
+            f"<td>{html.escape(str(source.get('optional_method_available_count', 0)))}</td>"
             f"<td>{html.escape(str(source.get('reason', '')))}</td>"
             "</tr>"
         )
     if not toric_tropical_rows:
-        toric_tropical_rows.append("<tr><td colspan='9' class='muted'>No toric/tropical CAS sidecar paths recorded.</td></tr>")
+        toric_tropical_rows.append("<tr><td colspan='11' class='muted'>No toric/tropical CAS sidecar paths recorded.</td></tr>")
     analogical_query_rows = []
     for source in analogical_query_context.get("sources", []) if isinstance(analogical_query_context.get("sources"), list) else []:
         if not isinstance(source, dict):
@@ -3608,7 +3663,7 @@ code {{ white-space:break-spaces; }}
 <section class="panel"><h2>Two-Parameter Bifiltration Visual Evidence</h2><table><thead><tr><th>Sidecar</th><th>Available</th><th>Primary view</th><th>Axes</th><th>Cards</th><th>Quotient basis</th><th>Hilbert terms</th><th>LCM syzygies</th><th>Structure maps</th><th>Reason</th></tr></thead><tbody>{''.join(two_parameter_bifiltration_rows)}</tbody></table></section>
 <section class="panel"><h2>Persistence Landscape Evidence</h2><table><thead><tr><th>Sidecar</th><th>Available</th><th>Verified unavailable</th><th>Backend</th><th>Rows</th><th>Curves</th><th>Finite intervals</th><th>Unavailable reasons</th><th>Reason</th></tr></thead><tbody>{''.join(persistence_landscape_rows)}</tbody></table></section>
 <section class="panel"><h2>Chart/Vector-Bundle Evidence</h2><table><thead><tr><th>Sidecar</th><th>Available</th><th>Completeness tier</th><th>Paper-ready telemetry</th><th>Charts</th><th>Transports</th><th>Missing groups</th><th>Reason</th></tr></thead><tbody>{''.join(chart_bundle_rows)}</tbody></table></section>
-<section class="panel"><h2>Toric/Tropical CAS Evidence</h2><table><thead><tr><th>Sidecar</th><th>Kind</th><th>Available</th><th>Status</th><th>Backend</th><th>Finite toric ideal</th><th>Tropical fan</th><th>Rays</th><th>Reason</th></tr></thead><tbody>{''.join(toric_tropical_rows)}</tbody></table></section>
+<section class="panel"><h2>Toric/Tropical CAS Evidence</h2><table><thead><tr><th>Sidecar</th><th>Kind</th><th>Available</th><th>Status</th><th>Backend</th><th>Finite toric ideal</th><th>Tropical fan</th><th>Rays</th><th>Optional methods</th><th>Optional available</th><th>Reason</th></tr></thead><tbody>{''.join(toric_tropical_rows)}</tbody></table></section>
 <section class="panel"><h2>Analogical Query Context Evidence</h2><table><thead><tr><th>Sidecar</th><th>Available</th><th>Selected source</th><th>Status</th><th>Probability vertices</th><th>Rejected keys</th><th>Reason</th></tr></thead><tbody>{''.join(analogical_query_rows)}</tbody></table></section>
 <section class="panel"><h2>Analogical Memory Evidence</h2><table><thead><tr><th>Sidecar</th><th>Kind</th><th>Available</th><th>Status</th><th>Retrieved</th><th>Qualified</th><th>Top-k rendered</th><th>Pairs</th><th>Insufficient memory</th><th>Reason</th></tr></thead><tbody>{''.join(analogical_memory_rows)}</tbody></table></section>
 <section class="panel"><h2>Simplicial Complex And Simplex-Tree Evidence</h2><table><thead><tr><th>Sidecar</th><th>Kind</th><th>Available</th><th>Status</th><th>Views/steps</th><th>Thresholds/sliders</th><th>Simplices</th><th>No proxy</th><th>Reason</th></tr></thead><tbody>{''.join(simplicial_complex_rows)}</tbody></table></section>

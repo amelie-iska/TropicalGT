@@ -659,3 +659,14 @@ Status: implemented for the CAS/tropical adapter and regression suite.
 - Validation passed CPU-only: py-compile for `cas_tropical.py`; focused tropical fan tests (`4 passed, 28 deselected`); full algebraic persistence tests (`32 passed`); metric provenance audit (`436 covered, 0 uncovered`).
 
 Next sequential item: surface the optional side diagnostics in relevant CAS/tropical visual and Herschel report paths only when present, otherwise render exact unavailable states; then continue the remaining real-CAS and visual repair queue.
+
+## 2026-06-18 Optional Tropical Diagnostics Visual/Herschel Surfacing
+
+Status: implemented for browser artifacts, Herschel JSON, Markdown, and HTML report paths.
+
+- Tropical fan audit payloads now expose `optional_tropical_method_summary` as a first-class visual summary sourced only from real CAS optional-method diagnostics.
+- The visual table and Herschel report include optional method counts and availability, but these values remain side diagnostics and do not affect tropical fan certification, restart safety, BPB evidence, toric embeddings, normal fans, vector-bundle claims, or derived equivalence.
+- Herschel can read both new top-level summaries and older raw `optional_method_diagnostics` blocks, so legacy sidecars remain explicit and safe.
+- Focused CPU-only verification passed for py-compile, tropical fan visualization tests, and the Herschel/review-bundle tests.
+
+Next sequential item: proceed to the real CAS wrapper/certificate queue, preserving unavailable states and certificate-indexed evidence only from actual backend output.

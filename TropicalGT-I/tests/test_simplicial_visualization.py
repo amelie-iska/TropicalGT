@@ -1045,6 +1045,8 @@ def test_tropical_fan_diagnostics_unavailable_without_explicit_ideal(tmp_path: P
     assert payload["available"] is False
     assert payload["safe_to_render_as_tropical_fan"] is False
     assert payload["diagnostics"]["status"] == "unavailable_no_model_derived_tropical_ideal"
+    assert payload["optional_tropical_method_summary"]["schema_version"] == "tropicalgt.tropical_fan_optional_method_visual_summary.v1"
+    assert payload["optional_tropical_method_summary"]["method_count"] == 0
     assert "No support-token" in payload["diagnostics"]["certificate_contract"]["no_proxy_policy"]
     assert "support-token proxies" in payload["render_contract"]
     input_contract = payload["cas_input_contract"]
@@ -1089,6 +1091,22 @@ def test_tropical_fan_diagnostics_renders_certified_explicit_ideal(tmp_path: Pat
             "cas_artifacts": {"raw_tagged_output": "rays=matrix {{1,-1,0},{0,-1,1}}"},
             "tropical_basis_check": {"available": True, "is_tropical_basis": True, "error": None},
             "tropical_prevariety_summary": {"available": True, "rays": [[1, -1, 0], [0, -1, 1]], "max_cones": [[1], [0], [2]]},
+            "optional_method_diagnostics": {
+                "cones": {
+                    "available": True,
+                    "method": "Macaulay2 Tropical cones T",
+                    "text": "{{0, 1}, {1, 2}}",
+                    "error": "",
+                    "certificate_gate": "side_diagnostic_only_not_a_replacement_for_tropicalVariety_certificate",
+                },
+                "bergman_fan": {
+                    "available": False,
+                    "method": "Macaulay2 Tropical BergmanFan I",
+                    "text": "",
+                    "error": "not a matroid ideal",
+                    "certificate_gate": "side_diagnostic_only_not_a_replacement_for_tropicalVariety_certificate",
+                },
+            },
             "fan_summary": {
                 "rays": [[1, -1, 0], [0, -1, 1]],
                 "max_cones": [[1], [0], [2]],
@@ -1116,6 +1134,13 @@ def test_tropical_fan_diagnostics_renders_certified_explicit_ideal(tmp_path: Pat
     assert payload["available"] is True
     assert payload["source_path"] == "result.graph_token_trace.model_derived_tropical_ideal"
     assert payload["diagnostics"]["fan_summary"]["ray_count"] == 3
+    optional = payload["optional_tropical_method_summary"]
+    assert optional["schema_version"] == "tropicalgt.tropical_fan_optional_method_visual_summary.v1"
+    assert optional["method_count"] == 2
+    assert optional["available_method_count"] == 1
+    assert optional["unavailable_method_count"] == 1
+    assert {row["name"] for row in optional["methods"]} == {"cones", "bergman_fan"}
+    assert all(row["certificate_gate"] == "side_diagnostic_only_not_a_replacement_for_tropicalVariety_certificate" for row in optional["methods"])
     input_contract = payload["cas_input_contract"]
     assert input_contract["schema_version"] == "tropicalgt.tropical_fan_input_contract.v1"
     assert input_contract["source_path"] == "result.graph_token_trace.model_derived_tropical_ideal"
@@ -1129,6 +1154,8 @@ def test_tropical_fan_diagnostics_renders_certified_explicit_ideal(tmp_path: Pat
     assert "rho_0" in markup
     assert "tropical basis check" in markup
     assert "prevariety rays" in markup
+    assert "optional side diagnostics" in markup
+    assert "side_diagnostic_only_not_a_replacement_for_tropicalVariety_certificate" in markup
     assert "one dimensional cones" in markup
     assert "not a multigraded free-resolution" in markup
     assert "Sage tropical polynomial" in markup

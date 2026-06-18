@@ -870,3 +870,26 @@ CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src:TropicalGT-I/scripts /home/i
 ```
 
 Next linear CAS item: connect optional tropical side diagnostics into visual/report surfaces only as side evidence when present; continue real CAS wrapper expansion for certified resolutions, Fitting/minor evidence, and derived/analogical comparisons without proxy substitutions.
+
+## 2026-06-18 Optional Tropical Diagnostics Visual/Herschel Surfacing
+
+Sequential CAS/UI surfacing item completed:
+
+- `write_tropical_fan_diagnostics()` now emits `tropicalgt.tropical_fan_optional_method_visual_summary.v1` beside the real Macaulay2 Tropical fan diagnostics payload.
+- The browser table displays optional Macaulay2 Tropical side diagnostics as side evidence only, with available/unavailable counts and the explicit certificate gate string.
+- Herschel now summarizes optional tropical side-method evidence from either the top-level visual summary or the raw CAS `optional_method_diagnostics` block.
+- The 5K report records aggregate optional method counts, per-method available/unavailable status counts, and per-source method counts without changing the certified tropical-fan availability predicate.
+- The certificate gate remains unchanged: `tropicalVariety` fan/cycle output from an explicit model-derived ideal is still required before one-dimensional cones are rendered as tropical fan evidence.
+
+Validation:
+
+```text
+CUDA_VISIBLE_DEVICES="" /home/iska/miniconda3/envs/tokengt/bin/python -m py_compile TropicalGT-I/src/tropicalgt/visualization.py TropicalGT-I/scripts/write_herschel_5k_report.py TropicalGT-I/tests/test_simplicial_visualization.py TropicalGT-I/tests/test_herschel_5k_report.py TropicalGT-I/tests/test_prepare_5k_review_bundle.py
+# passed
+CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest -q TropicalGT-I/tests/test_simplicial_visualization.py -k "tropical_fan_diagnostics"
+# 2 passed, 48 deselected
+CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/scripts:TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest -q TropicalGT-I/tests/test_herschel_5k_report.py TropicalGT-I/tests/test_prepare_5k_review_bundle.py
+# 11 passed
+```
+
+Next linear item: continue real CAS wrapper expansion and source contracts for certified resolutions, Fitting/minor evidence, BEMultipliers post-certificate diagnostics, and derived/analogical comparisons without proxy substitutions.

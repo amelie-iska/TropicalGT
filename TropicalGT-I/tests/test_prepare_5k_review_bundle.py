@@ -1184,6 +1184,8 @@ def test_prepare_review_bundle_defaults_to_periodic_validation_artifacts(tmp_pat
     }
     assert toric_tropical["unavailable_reason_counts"]["toric_embedding_sidecar_unavailable"] == 1
     assert toric_tropical["unavailable_reason_counts"]["tropical_fan_diagnostics_unavailable"] == 1
+    assert toric_tropical["optional_tropical_method_count"] == 0
+    assert toric_tropical["available_optional_tropical_method_count"] == 0
     analogical_query = bundle["herschel_report_summary"]["artifact_evidence"]["analogical_query_context_evidence"]
     assert analogical_query["available"] is True
     assert analogical_query["sources"][0]["selected_query_complex_source"] == "trajectory_probability_filtered_simplicial_object"
