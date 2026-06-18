@@ -210,6 +210,40 @@ def test_prepare_review_bundle_defaults_to_periodic_validation_artifacts(tmp_pat
         ),
         encoding="utf-8",
     )
+
+    (periodic_dir / "got_audit" / "inference_audit.json").write_text(
+        json.dumps(
+            {
+                "audit_seed_record_id": "seed-1",
+                "audit_seed_record_index": 7,
+                "inference_scaling": {"stochastic_actions": True, "allow_stop": False, "best": {"record_id": "b"}, "candidates": [{"record_id": "root"}, {"record_id": "a"}]},
+                "topological_algebra": {"chain_complex": {"available": True}},
+                "periodic_got_scaling_budget": {"requested": 2, "limit": 4},
+                "analogical_memory_retrieval": {
+                    "bank_size": 0,
+                    "records_added": 0,
+                    "retrieved": [],
+                    "quality_gate": {"candidate_count": 1, "eligible_count": 0, "rejected_count": 1, "reason_counts": {"nll_improvement_below_threshold": 1}},
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    backfill_payload = {
+        "schema_version": "tropicalgt.interactive_audit_backfill.v1",
+        "audit_root": str(periodic_dir / "got_audit"),
+        "step_dir": str(periodic_dir),
+        "overwrite": False,
+        "actions": [
+            {"kind": "got_trajectory_contract_backfill", "candidate_count": 2, "paths": {"got_payloads": "got_trajectory_payloads.json"}},
+            {"kind": "inference_audit_dashboard_rebuilt", "paths": {"inference_audit": "inference_audit.html"}},
+        ],
+        "policy": "Backfills only explicit unavailable diagnostics or rerenders visual contracts from existing raw payloads; it does not fabricate CAS certificates, tropical fans, toric ideals, toric embeddings, normal fans, tropical-variety embeddings, or persistence modules.",
+    }
+    (periodic_dir / "got_audit" / "backfill_report.json").write_text(json.dumps(backfill_payload), encoding="utf-8")
+    latest_payload = dict(backfill_payload)
+    latest_payload["actions"] = [{"kind": "inference_audit_dashboard_rebuilt", "paths": {"inference_audit": "inference_audit.html"}}]
+    (periodic_dir / "got_audit" / "backfill_report_latest.json").write_text(json.dumps(latest_payload), encoding="utf-8")
     (periodic_dir / "got_audit" / "analogical_simplicial_maps.json").write_text(
         json.dumps(
             {
@@ -948,6 +982,9 @@ def test_prepare_review_bundle_defaults_to_periodic_validation_artifacts(tmp_pat
     assert any(path.endswith("periodic/step_00005000/got_audit/analogical_simplex_tree_analogy.json") for path in sidecars)
     assert any(path.endswith("periodic/step_00005000/got_audit/got_trajectory_payloads.json") for path in sidecars)
     assert any(path.endswith("periodic/step_00005000/got_audit/got_embedding_map_payloads.json") for path in sidecars)
+    assert any(path.endswith("periodic/step_00005000/got_audit/inference_audit.json") for path in sidecars)
+    assert any(path.endswith("periodic/step_00005000/got_audit/backfill_report.json") for path in sidecars)
+    assert any(path.endswith("periodic/step_00005000/got_audit/backfill_report_latest.json") for path in sidecars)
     assert any(path.endswith("periodic/step_00005000/got_audit/got_full_trajectory_complex_payload.json") for path in sidecars)
     assert any(path.endswith("periodic/step_00005000/got_audit/got_full_trajectory_complex_slider_contract.json") for path in sidecars)
     assert any(path.endswith("periodic/step_00005000/got_audit/got_full_trajectory_complex_jensen_shannon_slider_contract.json") for path in sidecars)
@@ -988,6 +1025,18 @@ def test_prepare_review_bundle_defaults_to_periodic_validation_artifacts(tmp_pat
     )
     assert any(
         path.endswith("periodic/step_00005000/got_audit/got_embedding_map_payloads.json")
+        for path in persisted_contract["artifact_inventory"]["advanced_sidecars_tail"]
+    )
+    assert any(
+        path.endswith("periodic/step_00005000/got_audit/inference_audit.json")
+        for path in persisted_contract["artifact_inventory"]["advanced_sidecars_tail"]
+    )
+    assert any(
+        path.endswith("periodic/step_00005000/got_audit/backfill_report.json")
+        for path in persisted_contract["artifact_inventory"]["advanced_sidecars_tail"]
+    )
+    assert any(
+        path.endswith("periodic/step_00005000/got_audit/backfill_report_latest.json")
         for path in persisted_contract["artifact_inventory"]["advanced_sidecars_tail"]
     )
     assert any(
@@ -1090,6 +1139,17 @@ def test_prepare_review_bundle_defaults_to_periodic_validation_artifacts(tmp_pat
     assert trajectory_embedding["total_raw_model_embedding_count"] == 6
     assert trajectory_embedding["total_parent_child_transition_count"] == 2
     assert trajectory_embedding["status_counts"] == {"trajectory_embedding_visual_available": 2}
+    inference_backfill = bundle["herschel_report_summary"]["artifact_evidence"]["inference_audit_backfill_evidence"]
+    assert inference_backfill["available"] is True
+    assert inference_backfill["source_count"] == 3
+    assert inference_backfill["available_source_count"] == 3
+    assert inference_backfill["inference_audit_available_source_count"] == 1
+    assert inference_backfill["backfill_available_source_count"] == 2
+    assert inference_backfill["total_inference_candidate_count"] == 2
+    assert inference_backfill["total_backfill_action_count"] == 3
+    assert inference_backfill["total_backfill_candidate_count"] == 2
+    assert inference_backfill["status_counts"] == {"inference_audit_available": 1, "interactive_backfill_report_available": 2}
+    assert inference_backfill["action_kind_counts"] == {"got_trajectory_contract_backfill": 1, "inference_audit_dashboard_rebuilt": 2}
     bivariate_module = bundle["herschel_report_summary"]["artifact_evidence"]["bivariate_module_evidence"]
     assert bivariate_module["available"] is True
     assert bivariate_module["module_available_source_count"] == 1

@@ -674,6 +674,53 @@ def test_write_herschel_report_preserves_blockers_and_sidecar_groups(tmp_path: P
         ),
         encoding="utf-8",
     )
+
+    inference_audit_path = tmp_path / "inference_audit.json"
+    inference_audit_path.write_text(
+        json.dumps(
+            {
+                "audit_seed_record_id": "seed-1",
+                "audit_seed_record_index": 7,
+                "inference_scaling": {
+                    "stochastic_actions": True,
+                    "allow_stop": False,
+                    "best": {"record_id": "b"},
+                    "candidates": [{"record_id": "root"}, {"record_id": "a"}],
+                },
+                "topological_algebra": {"chain_complex": {"available": True}},
+                "periodic_got_scaling_budget": {"requested": 2, "limit": 4},
+                "analogical_memory_retrieval": {
+                    "bank_size": 0,
+                    "records_added": 0,
+                    "retrieved": [],
+                    "quality_gate": {
+                        "candidate_count": 1,
+                        "eligible_count": 0,
+                        "rejected_count": 1,
+                        "reason_counts": {"nll_improvement_below_threshold": 1},
+                    },
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    backfill_report_path = tmp_path / "backfill_report.json"
+    backfill_payload = {
+        "schema_version": "tropicalgt.interactive_audit_backfill.v1",
+        "audit_root": str(tmp_path),
+        "step_dir": str(tmp_path),
+        "overwrite": False,
+        "actions": [
+            {"kind": "got_trajectory_contract_backfill", "candidate_count": 2, "paths": {"got_payloads": "got_trajectory_payloads.json"}},
+            {"kind": "inference_audit_dashboard_rebuilt", "paths": {"inference_audit": "inference_audit.html"}},
+        ],
+        "policy": "Backfills only explicit unavailable diagnostics or rerenders visual contracts from existing raw payloads; it does not fabricate CAS certificates, tropical fans, toric ideals, toric embeddings, normal fans, tropical-variety embeddings, or persistence modules.",
+    }
+    backfill_report_path.write_text(json.dumps(backfill_payload), encoding="utf-8")
+    backfill_latest_path = tmp_path / "backfill_report_latest.json"
+    latest_payload = dict(backfill_payload)
+    latest_payload["actions"] = [{"kind": "inference_audit_dashboard_rebuilt", "paths": {"inference_audit": "inference_audit.html"}}]
+    backfill_latest_path.write_text(json.dumps(latest_payload), encoding="utf-8")
     persistence_landscape_path = tmp_path / "persistence_landscapes.json"
     persistence_landscape_path.write_text(
         json.dumps(
@@ -943,6 +990,9 @@ def test_write_herschel_report_preserves_blockers_and_sidecar_groups(tmp_path: P
                 "got_audit/certificate_indexed_cas_evidence.json",
                 str(trajectory_payload_path),
                 str(embedding_payload_path),
+                str(inference_audit_path),
+                str(backfill_report_path),
+                str(backfill_latest_path),
                 str(bivariate_module_path),
                 str(two_parameter_visual_path),
                 str(persistence_landscape_path),
@@ -1136,6 +1186,21 @@ def test_write_herschel_report_preserves_blockers_and_sidecar_groups(tmp_path: P
     assert trajectory_embedding["coordinate_source_counts"] == {"model graph_state embeddings": 2}
     assert {row["kind"] for row in trajectory_embedding["sources"]} == {"trajectory_payload", "embedding_map_payload"}
     assert all(row["pca_pairwise_distance_correlation"] == 0.98 for row in trajectory_embedding["sources"])
+    inference_backfill = summary["artifact_evidence"]["inference_audit_backfill_evidence"]
+    assert inference_backfill["schema_version"] == "tropicalgt.herschel_inference_audit_backfill_evidence.v1"
+    assert inference_backfill["available"] is True
+    assert inference_backfill["source_count"] == 3
+    assert inference_backfill["available_source_count"] == 3
+    assert inference_backfill["inference_audit_available_source_count"] == 1
+    assert inference_backfill["backfill_available_source_count"] == 2
+    assert inference_backfill["total_inference_candidate_count"] == 2
+    assert inference_backfill["total_backfill_action_count"] == 3
+    assert inference_backfill["total_backfill_candidate_count"] == 2
+    assert inference_backfill["total_quality_gate_candidate_count"] == 1
+    assert inference_backfill["total_quality_gate_eligible_count"] == 0
+    assert inference_backfill["total_quality_gate_rejected_count"] == 1
+    assert inference_backfill["status_counts"] == {"inference_audit_available": 1, "interactive_backfill_report_available": 2}
+    assert inference_backfill["action_kind_counts"] == {"got_trajectory_contract_backfill": 1, "inference_audit_dashboard_rebuilt": 2}
     chart_bundle = summary["artifact_evidence"]["chart_bundle_transport_evidence"]
     assert chart_bundle["schema_version"] == "tropicalgt.herschel_chart_bundle_transport_evidence.v1"
     assert chart_bundle["available"] is True
@@ -1250,6 +1315,8 @@ def test_write_herschel_report_preserves_blockers_and_sidecar_groups(tmp_path: P
     assert "effective_full_rank_qr" in markdown
     assert "## NLL Density Evidence" in markdown
     assert "density_volume" in markdown
+    assert "## Inference Audit And Backfill Evidence" in markdown
+    assert "interactive_backfill_report_available" in markdown
     assert "## Trajectory Embedding Visual Evidence" in markdown
     assert "trajectory_embedding_visual_available" in markdown
     assert "## Bivariate Module Evidence" in markdown
@@ -1291,6 +1358,10 @@ def test_write_herschel_report_preserves_blockers_and_sidecar_groups(tmp_path: P
     assert "NLL Density Evidence" in html
     assert "data-chart='nll-density-visible-layers'" in html
     assert "density_volume" in html
+    assert "Inference Audit And Backfill Evidence" in html
+    assert "data-chart='inference-audit-backfill-statuses'" in html
+    assert "data-chart='interactive-backfill-action-kinds'" in html
+    assert "interactive_backfill_report_available" in html
     assert "Trajectory Embedding Visual Evidence" in html
     assert "data-chart='trajectory-embedding-visual-statuses'" in html
     assert "trajectory_embedding_visual_available" in html

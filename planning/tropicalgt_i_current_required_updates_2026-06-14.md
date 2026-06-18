@@ -1212,3 +1212,13 @@ Next sequential item: continue the Herschel evidence family queue by surfacing a
 Next sequential item: continue the remaining unsummarized 5K sidecar queue with `inference_audit.json` and the interactive backfill reports, then move back to source-side CAS/tropical/visual repairs.
 
 Validation: py-compile passed for touched scripts/source/tests; focused Herschel/bundle tests passed (`11 passed`); broader Herschel/bundle/review-loop/provenance tests passed (`36 passed`); metric provenance audit passed (`436 covered`).
+
+## 2026-06-18 Inference Audit/Backfill Evidence Addendum
+- [x] Herschel now requires and reports `inference_audit.json`, `backfill_report.json`, and `backfill_report_latest.json` as first-class 5K evidence surfaces.
+- [x] `inference_audit.json` is summarized only as raw recorded inference evidence: candidate counts, seed identity, topological-algebra availability, periodic GoT budget keys, and analogical-memory quality-gate counts.
+- [x] Interactive backfill reports are summarized only as rendering/provenance repair logs under `tropicalgt.interactive_audit_backfill.v1`; action kinds and candidate counts are counted, but backfill actions are not model-quality, CAS, tropical fan, toric embedding, normal-fan, or persistence-module certificates.
+- [x] Missing, malformed, schema-mismatched, or no-fabrication-policy-lacking inference/backfill sidecars remain unavailable and cannot justify restarts, BPB claims, artifact promotion, or mathematical claims.
+
+Next sequential item: after verification and push, inspect whether any remaining implemented 5K sidecars are still unsummarized; otherwise resume source-side CAS/tropical/visual repair work.
+
+Validation: py-compile passed for touched scripts/source/tests; focused Herschel/bundle tests passed (`11 passed`); broader Herschel/bundle/review-loop/provenance tests passed (`36 passed`); metric provenance audit passed (`436 covered`). Live b60 bundle sanity check reports `inference_audit_available` with 12 inference candidates from the existing bundle sidecar list.

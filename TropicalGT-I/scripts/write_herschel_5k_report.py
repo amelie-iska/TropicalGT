@@ -427,6 +427,152 @@ def _trajectory_embedding_visual_evidence(sidecar_paths: list[str]) -> dict[str,
         "policy": "Herschel reports GoT trajectory and embedding-map visuals only from recorded payloads with raw model graph_state embeddings, PCA diagnostics, parent-child GoT metadata, filtered simplicial objects, and the embedding trajectory identity contract. PCA duplicate-coordinate warnings are diagnostics, not geometric-separation claims.",
     }
 
+
+def _inference_audit_backfill_evidence(sidecar_paths: list[str]) -> dict[str, Any]:
+    sources: list[dict[str, Any]] = []
+    status_counts: dict[str, int] = {}
+    action_kind_counts: dict[str, int] = {}
+    total_inference_candidates = 0
+    total_backfill_actions = 0
+    total_backfill_candidate_count = 0
+    total_quality_gate_candidates = 0
+    total_quality_gate_eligible = 0
+    total_quality_gate_rejected = 0
+    total_records_added = 0
+
+    def _count(bucket: dict[str, int], key: str) -> None:
+        if key:
+            bucket[key] = bucket.get(key, 0) + 1
+
+    for raw_path in sidecar_paths:
+        lower = raw_path.lower()
+        if not (lower.endswith("inference_audit.json") or lower.endswith("backfill_report.json") or lower.endswith("backfill_report_latest.json")):
+            continue
+        kind = "inference_audit" if lower.endswith("inference_audit.json") else "interactive_backfill_report"
+        resolved = _resolve_output_path(Path(raw_path))
+        source: dict[str, Any] = {"path": _project_path(resolved), "kind": kind, "available": False}
+        if not resolved.exists():
+            source["reason"] = f"{kind}_missing"
+            _count(status_counts, source["reason"])
+            sources.append(source)
+            continue
+        try:
+            payload = json.loads(resolved.read_text(encoding="utf-8"))
+        except Exception as exc:  # pragma: no cover - parser message is platform-dependent
+            source["reason"] = f"{kind}_parse_error:{exc}"
+            _count(status_counts, f"{kind}_parse_error")
+            sources.append(source)
+            continue
+        if not isinstance(payload, dict):
+            source["reason"] = f"{kind}_not_object"
+            _count(status_counts, source["reason"])
+            sources.append(source)
+            continue
+        if kind == "inference_audit":
+            scaling = payload.get("inference_scaling") if isinstance(payload.get("inference_scaling"), dict) else {}
+            topology = payload.get("topological_algebra") if isinstance(payload.get("topological_algebra"), dict) else {}
+            budget = payload.get("periodic_got_scaling_budget") if isinstance(payload.get("periodic_got_scaling_budget"), dict) else {}
+            memory = payload.get("analogical_memory_retrieval") if isinstance(payload.get("analogical_memory_retrieval"), dict) else {}
+            quality_gate = memory.get("quality_gate") if isinstance(memory.get("quality_gate"), dict) else {}
+            candidates = scaling.get("candidates") if isinstance(scaling.get("candidates"), list) else []
+            best = scaling.get("best") if isinstance(scaling.get("best"), dict) else {}
+            candidate_count = len([row for row in candidates if isinstance(row, dict)])
+            if candidate_count == 0 and isinstance(best, dict) and best:
+                candidate_count = 1
+            topology_available = bool(topology)
+            memory_retrieved = memory.get("retrieved") if isinstance(memory.get("retrieved"), list) else []
+            gate_candidates = _optional_int(quality_gate.get("candidate_count")) or 0
+            gate_eligible = _optional_int(quality_gate.get("eligible_count")) or 0
+            gate_rejected = _optional_int(quality_gate.get("rejected_count")) or 0
+            records_added = _optional_int(memory.get("records_added")) or 0
+            available = bool(scaling and candidate_count > 0)
+            status = "inference_audit_available" if available else "inference_audit_unavailable"
+            _count(status_counts, status)
+            if available:
+                total_inference_candidates += candidate_count
+                total_quality_gate_candidates += gate_candidates
+                total_quality_gate_eligible += gate_eligible
+                total_quality_gate_rejected += gate_rejected
+                total_records_added += records_added
+            source.update(
+                {
+                    "available": available,
+                    "status": status,
+                    "audit_seed_record_id": payload.get("audit_seed_record_id", "unavailable"),
+                    "candidate_count": candidate_count,
+                    "best_record_id": best.get("record_id", "unavailable"),
+                    "stochastic_actions": scaling.get("stochastic_actions"),
+                    "allow_stop": scaling.get("allow_stop"),
+                    "topological_algebra_available": topology_available,
+                    "periodic_got_scaling_budget_keys": sorted(str(key) for key in budget.keys()),
+                    "analogical_memory_bank_size": _optional_int(memory.get("bank_size")) or 0,
+                    "analogical_memory_retrieved_count": len(memory_retrieved),
+                    "quality_gate_candidate_count": gate_candidates,
+                    "quality_gate_eligible_count": gate_eligible,
+                    "quality_gate_rejected_count": gate_rejected,
+                    "records_added": records_added,
+                    "quality_gate_reason_counts": quality_gate.get("reason_counts", {}) if isinstance(quality_gate.get("reason_counts"), dict) else {},
+                }
+            )
+            if not available:
+                source["reason"] = "missing_inference_scaling_candidates"
+        else:
+            actions = [row for row in payload.get("actions", []) if isinstance(row, dict)] if isinstance(payload.get("actions"), list) else []
+            policy = str(payload.get("policy", ""))
+            schema_ok = payload.get("schema_version") == "tropicalgt.interactive_audit_backfill.v1"
+            policy_ok = "does not fabricate" in policy and "Backfills only explicit unavailable diagnostics" in policy
+            action_count = len(actions)
+            candidate_count = sum(_optional_int(row.get("candidate_count")) or 0 for row in actions)
+            for row in actions:
+                _count(action_kind_counts, str(row.get("kind", "unknown_backfill_action")))
+            available = bool(schema_ok and policy_ok)
+            status = "interactive_backfill_report_available" if available else "interactive_backfill_report_unavailable"
+            _count(status_counts, status)
+            if available:
+                total_backfill_actions += action_count
+                total_backfill_candidate_count += candidate_count
+            source.update(
+                {
+                    "available": available,
+                    "status": status,
+                    "schema_version": payload.get("schema_version", "unavailable"),
+                    "overwrite": payload.get("overwrite"),
+                    "action_count": action_count,
+                    "candidate_count": candidate_count,
+                    "action_kinds": [str(row.get("kind", "unknown_backfill_action")) for row in actions],
+                    "policy_no_fabrication": policy_ok,
+                    "policy": policy,
+                }
+            )
+            if not available:
+                reasons = []
+                if not schema_ok:
+                    reasons.append("missing_interactive_backfill_schema")
+                if not policy_ok:
+                    reasons.append("missing_backfill_no_fabrication_policy")
+                source["reason"] = ";".join(reasons) or "interactive_backfill_report_unavailable"
+        sources.append(source)
+    available_sources = [row for row in sources if row.get("available")]
+    return {
+        "schema_version": "tropicalgt.herschel_inference_audit_backfill_evidence.v1",
+        "available": bool(available_sources),
+        "source_count": len(sources),
+        "available_source_count": len(available_sources),
+        "inference_audit_available_source_count": sum(1 for row in available_sources if row.get("kind") == "inference_audit"),
+        "backfill_available_source_count": sum(1 for row in available_sources if row.get("kind") == "interactive_backfill_report"),
+        "total_inference_candidate_count": total_inference_candidates,
+        "total_backfill_action_count": total_backfill_actions,
+        "total_backfill_candidate_count": total_backfill_candidate_count,
+        "total_quality_gate_candidate_count": total_quality_gate_candidates,
+        "total_quality_gate_eligible_count": total_quality_gate_eligible,
+        "total_quality_gate_rejected_count": total_quality_gate_rejected,
+        "total_records_added": total_records_added,
+        "status_counts": {key: status_counts[key] for key in sorted(status_counts)},
+        "action_kind_counts": {key: action_kind_counts[key] for key in sorted(action_kind_counts)},
+        "sources": sources,
+        "policy": "Herschel reports inference_audit as raw recorded inference evidence and interactive backfill reports as rendering/provenance repair logs only. Backfill actions prove rerendering from existing payloads or explicit unavailable diagnostics, never model quality, CAS certificates, tropical fans, toric embeddings, normal fans, or persistence modules.",
+    }
+
 def _gflownet_branch_selection_evidence(sidecar_paths: list[str]) -> dict[str, Any]:
     sources: list[dict[str, Any]] = []
     policy_counts: dict[str, int] = {}
@@ -2427,6 +2573,7 @@ def summarize_bundle(bundle: dict[str, Any], *, bundle_path: Path | None = None)
             "advanced_sidecars_tail": sidecars[:120],
             "validator_gap_evidence": validator_gap_evidence,
             "trajectory_embedding_visual_evidence": _trajectory_embedding_visual_evidence(sidecars),
+            "inference_audit_backfill_evidence": _inference_audit_backfill_evidence(sidecars),
             "gflownet_branch_selection_evidence": _gflownet_branch_selection_evidence(sidecars),
             "tropical_support_evidence": _tropical_support_evidence(sidecars),
             "graphcg_direction_evidence": _graphcg_direction_evidence(sidecars),
@@ -2540,6 +2687,34 @@ def render_markdown(summary: dict[str, Any]) -> str:
             f"nodes=`{source.get('node_count', 0)}` edges=`{source.get('edge_count', 0)}` raw_embeddings=`{source.get('raw_model_embedding_count', 0)}` "
             f"pca_corr=`{_fmt(source.get('pca_pairwise_distance_correlation'))}` stress=`{_fmt(source.get('pca_normalized_stress'))}` "
             f"warning=`{source.get('pca_quality_warning')}`"
+        )
+        if source.get("reason"):
+            lines.append(f"  - reason: `{source.get('reason')}`")
+    inference_audit_backfill = artifacts.get("inference_audit_backfill_evidence", {}) if isinstance(artifacts.get("inference_audit_backfill_evidence"), dict) else {}
+    lines.extend(
+        [
+            "## Inference Audit And Backfill Evidence",
+            "",
+            f"- Available: `{inference_audit_backfill.get('available', False)}`",
+            f"- Sources: `{inference_audit_backfill.get('source_count', 0)}`",
+            f"- Inference/backfill available sources: `{inference_audit_backfill.get('inference_audit_available_source_count', 0)}` / `{inference_audit_backfill.get('backfill_available_source_count', 0)}`",
+            f"- Inference candidates: `{inference_audit_backfill.get('total_inference_candidate_count', 0)}`",
+            f"- Backfill actions / candidates: `{inference_audit_backfill.get('total_backfill_action_count', 0)}` / `{inference_audit_backfill.get('total_backfill_candidate_count', 0)}`",
+            f"- Quality gate candidates / eligible / rejected: `{inference_audit_backfill.get('total_quality_gate_candidate_count', 0)}` / `{inference_audit_backfill.get('total_quality_gate_eligible_count', 0)}` / `{inference_audit_backfill.get('total_quality_gate_rejected_count', 0)}`",
+            "",
+            "```json",
+            json.dumps(inference_audit_backfill.get("status_counts", {}), indent=2),
+            "```",
+            "",
+        ]
+    )
+    for source in inference_audit_backfill.get("sources", []) if isinstance(inference_audit_backfill.get("sources"), list) else []:
+        if not isinstance(source, dict):
+            continue
+        lines.append(
+            f"- `{source.get('path', '')}` kind=`{source.get('kind', 'unavailable')}` available=`{source.get('available')}` "
+            f"status=`{source.get('status', 'unavailable')}` candidates=`{source.get('candidate_count', 0)}` "
+            f"actions=`{source.get('action_count', 0)}` policy_no_fabrication=`{source.get('policy_no_fabrication', 'n/a')}`"
         )
         if source.get("reason"):
             lines.append(f"  - reason: `{source.get('reason')}`")
@@ -3012,6 +3187,7 @@ def render_html(summary: dict[str, Any]) -> str:
     sidecar_groups = artifacts.get("sidecar_groups", {}) if isinstance(artifacts.get("sidecar_groups"), dict) else {}
     validator_counts = validator_gaps.get("combined_category_counts", {}) if isinstance(validator_gaps.get("combined_category_counts"), dict) else {}
     trajectory_embedding = artifacts.get("trajectory_embedding_visual_evidence", {}) if isinstance(artifacts.get("trajectory_embedding_visual_evidence"), dict) else {}
+    inference_audit_backfill = artifacts.get("inference_audit_backfill_evidence", {}) if isinstance(artifacts.get("inference_audit_backfill_evidence"), dict) else {}
     gflownet_branch = artifacts.get("gflownet_branch_selection_evidence", {}) if isinstance(artifacts.get("gflownet_branch_selection_evidence"), dict) else {}
     tropical_support = artifacts.get("tropical_support_evidence", {}) if isinstance(artifacts.get("tropical_support_evidence"), dict) else {}
     graphcg_direction = artifacts.get("graphcg_direction_evidence", {}) if isinstance(artifacts.get("graphcg_direction_evidence"), dict) else {}
@@ -3081,6 +3257,24 @@ def render_html(summary: dict[str, Any]) -> str:
         )
     if not trajectory_embedding_rows:
         trajectory_embedding_rows.append("<tr><td colspan='10' class='muted'>No GoT trajectory or embedding-map payload sidecar paths recorded.</td></tr>")
+    inference_audit_backfill_rows = []
+    for source in inference_audit_backfill.get("sources", []) if isinstance(inference_audit_backfill.get("sources"), list) else []:
+        if not isinstance(source, dict):
+            continue
+        inference_audit_backfill_rows.append(
+            "<tr>"
+            f"<td>{html.escape(str(source.get('path', '')))}</td>"
+            f"<td>{html.escape(str(source.get('kind', 'unavailable')))}</td>"
+            f"<td>{html.escape(str(source.get('available')))}</td>"
+            f"<td>{html.escape(str(source.get('status', 'unavailable')))}</td>"
+            f"<td>{html.escape(str(source.get('candidate_count', 0)))}</td>"
+            f"<td>{html.escape(str(source.get('action_count', 0)))}</td>"
+            f"<td>{html.escape(str(source.get('policy_no_fabrication', 'n/a')))}</td>"
+            f"<td>{html.escape(str(source.get('reason', '')))}</td>"
+            "</tr>"
+        )
+    if not inference_audit_backfill_rows:
+        inference_audit_backfill_rows.append("<tr><td colspan='8' class='muted'>No inference-audit or backfill-report sidecar paths recorded.</td></tr>")
     gflownet_branch_rows = []
     for source in gflownet_branch.get("sources", []) if isinstance(gflownet_branch.get("sources"), list) else []:
         if not isinstance(source, dict):
@@ -3364,6 +3558,7 @@ code {{ white-space:break-spaces; }}
 <span class="badge {'ok' if restart_safe else 'warn'}">restart_safe={html.escape(str(bool(restart_safe)))}</span>
 <span class="badge {'ok' if validator_gaps.get('available') else 'warn'}">validator_gap_evidence={html.escape(str(bool(validator_gaps.get('available'))))}</span>
 <span class="badge {'ok' if trajectory_embedding.get('available') else 'warn'}">trajectory_embedding_visual_evidence={html.escape(str(bool(trajectory_embedding.get('available'))))}</span>
+<span class="badge {'ok' if inference_audit_backfill.get('available') else 'warn'}">inference_audit_backfill_evidence={html.escape(str(bool(inference_audit_backfill.get('available'))))}</span>
 <span class="badge {'ok' if tropical_support.get('available') else 'warn'}">tropical_support_evidence={html.escape(str(bool(tropical_support.get('available'))))}</span>
 <span class="badge {'ok' if graphcg_direction.get('available') else 'warn'}">graphcg_direction_evidence={html.escape(str(bool(graphcg_direction.get('available'))))}</span>
 <span class="badge {'ok' if nll_density.get('available') else 'warn'}">nll_density_evidence={html.escape(str(bool(nll_density.get('available'))))}</span>
@@ -3387,6 +3582,8 @@ code {{ white-space:break-spaces; }}
 {_bar_chart_svg(sidecar_groups, title='Advanced Sidecar Groups', chart_id='sidecar-groups')}
 {_bar_chart_svg(validator_counts, title='Strict Validator Evidence Gaps', chart_id='validator-gap-counts')}
 {_bar_chart_svg(trajectory_embedding.get('status_counts', {}) if isinstance(trajectory_embedding, dict) else {}, title='Trajectory Embedding Visual Statuses', chart_id='trajectory-embedding-visual-statuses')}
+{_bar_chart_svg(inference_audit_backfill.get('status_counts', {}) if isinstance(inference_audit_backfill, dict) else {}, title='Inference Audit And Backfill Statuses', chart_id='inference-audit-backfill-statuses')}
+{_bar_chart_svg(inference_audit_backfill.get('action_kind_counts', {}) if isinstance(inference_audit_backfill, dict) else {}, title='Interactive Backfill Action Kinds', chart_id='interactive-backfill-action-kinds')}
 {_bar_chart_svg(gflownet_branch.get('policy_counts', {}) if isinstance(gflownet_branch, dict) else {}, title='GFlowNet Branch Selection Policies', chart_id='gflownet-branch-selection-policies')}
 {_bar_chart_svg(tropical_support.get('support_probability_source_counts', {}) if isinstance(tropical_support, dict) else {}, title='Tropical Support Probability Sources', chart_id='tropical-support-probability-sources')}
 {_bar_chart_svg(graphcg_direction.get('basis_source_counts', {}) if isinstance(graphcg_direction, dict) else {}, title='GraphCG Projection Basis Sources', chart_id='graphcg-projection-basis-sources')}
@@ -3402,6 +3599,7 @@ code {{ white-space:break-spaces; }}
 <section class="panel"><h2>Validator Sources</h2><table><thead><tr><th>Name</th><th>JSON path</th><th>Available</th><th>Gaps</th><th>Reason</th></tr></thead><tbody>{''.join(source_rows)}</tbody></table></section>
 <section class="panel"><h2>Validator Gap Actions</h2><table><thead><tr><th>Category</th><th>Count</th><th>Required action</th><th>Examples</th></tr></thead><tbody>{''.join(action_rows)}</tbody></table></section>
 <section class="panel"><h2>Trajectory Embedding Visual Evidence</h2><table><thead><tr><th>Sidecar</th><th>Kind</th><th>Available</th><th>Nodes</th><th>Edges</th><th>Raw embeddings</th><th>PCA corr</th><th>PCA stress</th><th>PCA warning</th><th>Reason</th></tr></thead><tbody>{''.join(trajectory_embedding_rows)}</tbody></table></section>
+<section class="panel"><h2>Inference Audit And Backfill Evidence</h2><table><thead><tr><th>Sidecar</th><th>Kind</th><th>Available</th><th>Status</th><th>Candidates</th><th>Actions</th><th>No fabrication policy</th><th>Reason</th></tr></thead><tbody>{''.join(inference_audit_backfill_rows)}</tbody></table></section>
 <section class="panel"><h2>GFlowNet Branch Selection Evidence</h2><table><thead><tr><th>Sidecar</th><th>Available</th><th>Valid rows</th><th>Selected actions</th><th>Policies</th><th>Reason</th></tr></thead><tbody>{''.join(gflownet_branch_rows)}</tbody></table></section>
 <section class="panel"><h2>Tropical Support Evidence</h2><table><thead><tr><th>Sidecar</th><th>Available</th><th>Probability source</th><th>Tokens</th><th>Strict wall rate</th><th>Near wall rate</th><th>Status</th><th>Reason</th></tr></thead><tbody>{''.join(tropical_support_rows)}</tbody></table></section>
 <section class="panel"><h2>GraphCG Direction Evidence</h2><table><thead><tr><th>Sidecar</th><th>Available</th><th>Basis</th><th>Directions</th><th>Candidates</th><th>Active nonzero</th><th>Mean |cos| p90</th><th>Reason</th></tr></thead><tbody>{''.join(graphcg_direction_rows)}</tbody></table></section>
