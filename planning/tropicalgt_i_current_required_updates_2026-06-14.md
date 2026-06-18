@@ -1202,3 +1202,13 @@ Next sequential item: continue the Herschel evidence family queue by surfacing a
 - [x] Availability requires actual-data/no-proxy contracts and theorem-scope boundaries; secondary rank surfaces and scoped adjacent-LCM staircase resolutions are not promoted to full persistence-module free resolutions or CAS certificates.
 - [x] Markdown and HTML reports now expose `Two-Parameter Bifiltration Visual Evidence` plus a status chart for post-5K review.
 - [x] Focused Herschel/bundle verification passed (`11 passed`); broader verification follows before commit.
+
+## 2026-06-18 Trajectory/Embedding Visual Evidence Addendum
+- [x] Herschel now requires and reports `got_trajectory_payloads.json` and `got_embedding_map_payloads.json` as first-class 5K evidence rather than leaving them as unsummarized browser artifacts.
+- [x] The report accepts only payloads backed by raw model `graph_state` embeddings, validator-style PCA diagnostics, parent-child GoT edge metadata, per-node filtered simplicial objects, point-anchored trajectory NLL surfaces, and the `tropicalgt.embedding_trajectory_identity.v1` contract.
+- [x] Duplicate PCA coordinates and low unique-embedding ratios are surfaced as PCA quality warnings; they are not used as geometric-separation, semantic-identifiability, or restart-success claims.
+- [x] Missing, malformed, proxy-sourced, or identity-contract-lacking trajectory/embedding payloads remain unavailable and cannot justify a restart, BPB claim, artifact promotion, or geometric interpretation.
+
+Next sequential item: continue the remaining unsummarized 5K sidecar queue with `inference_audit.json` and the interactive backfill reports, then move back to source-side CAS/tropical/visual repairs.
+
+Validation: py-compile passed for touched scripts/source/tests; focused Herschel/bundle tests passed (`11 passed`); broader Herschel/bundle/review-loop/provenance tests passed (`36 passed`); metric provenance audit passed (`436 covered`).

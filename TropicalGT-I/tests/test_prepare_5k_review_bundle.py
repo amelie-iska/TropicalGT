@@ -152,6 +152,64 @@ def test_prepare_review_bundle_defaults_to_periodic_validation_artifacts(tmp_pat
         "visualizations": {"got_audit": str(periodic_dir / "got_audit" / "inference_audit.html")},
     }
     (periodic_dir / "periodic_validation_artifacts.json").write_text(json.dumps(periodic_report), encoding="utf-8")
+
+    pca_diag = {
+        "coordinate_source": "model graph_state embeddings",
+        "method": "sklearn PCA",
+        "n_samples": 3,
+        "embedding_dim": 2,
+        "pairwise_distance_correlation": 0.99,
+        "normalized_stress": 0.01,
+        "duplicate_pca_coordinates_rounded8": 0,
+        "unique_embedding_ratio_rounded8": 1.0,
+    }
+    trajectory_nodes = [
+        {"record_id": "root", "parent": None, "embedding": [0.0, 1.0], "embedding_source": "model graph_state", "embedding_pca": {"pc1": 0.0, "pc2": 0.0, "pc3": 0.0}},
+        {"record_id": "a", "parent": "root", "embedding": [1.0, 0.0], "embedding_source": "model graph_state", "embedding_pca": {"pc1": 1.0, "pc2": 0.0, "pc3": 0.1}},
+        {"record_id": "b", "parent": "a", "embedding": [0.5, 0.5], "embedding_source": "model graph_state", "embedding_pca": {"pc1": 1.5, "pc2": 0.2, "pc3": 0.2}},
+    ]
+    trajectory_edges = [
+        {"source": "root", "target": "a", "edge_source": "graph_of_thought_parent_edges"},
+        {"source": "a", "target": "b", "edge_source": "graph_of_thought_parent_edges"},
+    ]
+    (periodic_dir / "got_audit" / "got_trajectory_payloads.json").write_text(
+        json.dumps(
+            {
+                "embedding_pca_diagnostics": pca_diag,
+                "nodes": trajectory_nodes,
+                "edges": trajectory_edges,
+                "filtered_simplicial_objects": [{"record_id": row["record_id"]} for row in trajectory_nodes],
+                "nll_surface": {"available": True, "touches_points": True, "max_point_residual": 0.0},
+                "nll_progress": {"available": True, "node_count": 3},
+            }
+        ),
+        encoding="utf-8",
+    )
+    (periodic_dir / "got_audit" / "got_embedding_map_payloads.json").write_text(
+        json.dumps(
+            {
+                "coordinate_source": "PCA of model graph_state embeddings; no level/tree layout coordinates are used",
+                "layout_contract": {
+                    "schema_version": "tropicalgt.embedding_trajectory_identity.v1",
+                    "coordinate_source": "model graph_state embeddings",
+                    "branch_depth_metadata_present": True,
+                    "parent_child_transitions_present": True,
+                    "parent_child_transition_count": 2,
+                    "edge_source": "graph_of_thought_parent_edges",
+                    "node_embedding_source": "model graph_state",
+                    "geometric_separation_overclaim_allowed": False,
+                    "no_proxy_or_fallback": True,
+                    "pca_quality_warning": False,
+                },
+                "sampling": {"stochastic_actions": True, "temperature": 1.1, "exploration": 0.2, "seed": 17},
+                "embedding_pca_diagnostics": pca_diag,
+                "nodes": trajectory_nodes,
+                "filtered_simplicial_objects": [{"record_id": row["record_id"]} for row in trajectory_nodes],
+                "edges": trajectory_edges,
+            }
+        ),
+        encoding="utf-8",
+    )
     (periodic_dir / "got_audit" / "analogical_simplicial_maps.json").write_text(
         json.dumps(
             {
@@ -888,6 +946,8 @@ def test_prepare_review_bundle_defaults_to_periodic_validation_artifacts(tmp_pat
     assert any(path.endswith("periodic/step_00005000/got_audit/analogical_simplicial_maps.json") for path in sidecars)
     assert any(path.endswith("periodic/step_00005000/got_audit/analogical_memory_retrieval.json") for path in sidecars)
     assert any(path.endswith("periodic/step_00005000/got_audit/analogical_simplex_tree_analogy.json") for path in sidecars)
+    assert any(path.endswith("periodic/step_00005000/got_audit/got_trajectory_payloads.json") for path in sidecars)
+    assert any(path.endswith("periodic/step_00005000/got_audit/got_embedding_map_payloads.json") for path in sidecars)
     assert any(path.endswith("periodic/step_00005000/got_audit/got_full_trajectory_complex_payload.json") for path in sidecars)
     assert any(path.endswith("periodic/step_00005000/got_audit/got_full_trajectory_complex_slider_contract.json") for path in sidecars)
     assert any(path.endswith("periodic/step_00005000/got_audit/got_full_trajectory_complex_jensen_shannon_slider_contract.json") for path in sidecars)
@@ -920,6 +980,14 @@ def test_prepare_review_bundle_defaults_to_periodic_validation_artifacts(tmp_pat
     )
     assert any(
         path.endswith("periodic/step_00005000/got_audit/analogical_simplex_tree_analogy.json")
+        for path in persisted_contract["artifact_inventory"]["advanced_sidecars_tail"]
+    )
+    assert any(
+        path.endswith("periodic/step_00005000/got_audit/got_trajectory_payloads.json")
+        for path in persisted_contract["artifact_inventory"]["advanced_sidecars_tail"]
+    )
+    assert any(
+        path.endswith("periodic/step_00005000/got_audit/got_embedding_map_payloads.json")
         for path in persisted_contract["artifact_inventory"]["advanced_sidecars_tail"]
     )
     assert any(
@@ -1011,6 +1079,17 @@ def test_prepare_review_bundle_defaults_to_periodic_validation_artifacts(tmp_pat
     assert persistence_landscape["unavailable_reason_counts"]["no_finite_persistence_intervals_for_gudhi_landscape"] == 1
     assert persistence_landscape["sources"][0]["not_nll_fitness_landscape"] is True
     assert persistence_landscape["sources"][0]["verified_unavailable"] is True
+    trajectory_embedding = bundle["herschel_report_summary"]["artifact_evidence"]["trajectory_embedding_visual_evidence"]
+    assert trajectory_embedding["available"] is True
+    assert trajectory_embedding["paired_payloads_available"] is True
+    assert trajectory_embedding["source_count"] == 2
+    assert trajectory_embedding["available_source_count"] == 2
+    assert trajectory_embedding["total_trajectory_node_count"] == 3
+    assert trajectory_embedding["total_embedding_node_count"] == 3
+    assert trajectory_embedding["total_edge_count"] == 4
+    assert trajectory_embedding["total_raw_model_embedding_count"] == 6
+    assert trajectory_embedding["total_parent_child_transition_count"] == 2
+    assert trajectory_embedding["status_counts"] == {"trajectory_embedding_visual_available": 2}
     bivariate_module = bundle["herschel_report_summary"]["artifact_evidence"]["bivariate_module_evidence"]
     assert bivariate_module["available"] is True
     assert bivariate_module["module_available_source_count"] == 1

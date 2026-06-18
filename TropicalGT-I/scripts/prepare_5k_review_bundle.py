@@ -24,6 +24,8 @@ HERSCHEL_REQUIRED_AUDIT_SIDECARS = (
     "analogical_simplicial_maps.json",
     "analogical_memory_retrieval.json",
     "analogical_simplex_tree_analogy.json",
+    "got_trajectory_payloads.json",
+    "got_embedding_map_payloads.json",
     "got_full_trajectory_complex_payload.json",
     "got_full_trajectory_complex_slider_contract.json",
     "got_full_trajectory_complex_jensen_shannon_slider_contract.json",

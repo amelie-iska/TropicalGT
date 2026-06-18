@@ -614,6 +614,66 @@ def test_write_herschel_report_preserves_blockers_and_sidecar_groups(tmp_path: P
         ),
         encoding="utf-8",
     )
+
+    pca_diag = {
+        "coordinate_source": "model graph_state embeddings",
+        "method": "sklearn PCA",
+        "n_samples": 3,
+        "embedding_dim": 2,
+        "pairwise_distance_correlation": 0.98,
+        "normalized_stress": 0.02,
+        "duplicate_pca_coordinates_rounded8": 1,
+        "unique_embedding_ratio_rounded8": 0.67,
+    }
+    trajectory_nodes = [
+        {"record_id": "root", "parent": None, "embedding": [0.0, 1.0], "embedding_source": "model graph_state", "embedding_pca": {"pc1": 0.0, "pc2": 0.0, "pc3": 0.0}},
+        {"record_id": "a", "parent": "root", "embedding": [1.0, 0.0], "embedding_source": "model graph_state", "embedding_pca": {"pc1": 1.0, "pc2": 0.0, "pc3": 0.1}},
+        {"record_id": "b", "parent": "a", "embedding": [0.5, 0.5], "embedding_source": "model graph_state", "embedding_pca": {"pc1": 1.5, "pc2": 0.2, "pc3": 0.2}},
+    ]
+    trajectory_edges = [
+        {"source": "root", "target": "a", "edge_source": "graph_of_thought_parent_edges"},
+        {"source": "a", "target": "b", "edge_source": "graph_of_thought_parent_edges"},
+    ]
+    trajectory_payload_path = tmp_path / "got_trajectory_payloads.json"
+    trajectory_payload_path.write_text(
+        json.dumps(
+            {
+                "embedding_pca_diagnostics": pca_diag,
+                "nodes": trajectory_nodes,
+                "edges": trajectory_edges,
+                "filtered_simplicial_objects": [{"record_id": row["record_id"]} for row in trajectory_nodes],
+                "nll_surface": {"available": True, "touches_points": True, "max_point_residual": 0.0},
+                "nll_progress": {"available": True, "node_count": 3},
+            }
+        ),
+        encoding="utf-8",
+    )
+    embedding_payload_path = tmp_path / "got_embedding_map_payloads.json"
+    embedding_payload_path.write_text(
+        json.dumps(
+            {
+                "coordinate_source": "PCA of model graph_state embeddings; no level/tree layout coordinates are used",
+                "layout_contract": {
+                    "schema_version": "tropicalgt.embedding_trajectory_identity.v1",
+                    "coordinate_source": "model graph_state embeddings",
+                    "branch_depth_metadata_present": True,
+                    "parent_child_transitions_present": True,
+                    "parent_child_transition_count": 2,
+                    "edge_source": "graph_of_thought_parent_edges",
+                    "node_embedding_source": "model graph_state",
+                    "geometric_separation_overclaim_allowed": False,
+                    "no_proxy_or_fallback": True,
+                    "pca_quality_warning": True,
+                },
+                "sampling": {"stochastic_actions": True, "temperature": 1.1, "exploration": 0.2, "seed": 17},
+                "embedding_pca_diagnostics": pca_diag,
+                "nodes": trajectory_nodes,
+                "filtered_simplicial_objects": [{"record_id": row["record_id"]} for row in trajectory_nodes],
+                "edges": trajectory_edges,
+            }
+        ),
+        encoding="utf-8",
+    )
     persistence_landscape_path = tmp_path / "persistence_landscapes.json"
     persistence_landscape_path.write_text(
         json.dumps(
@@ -881,6 +941,8 @@ def test_write_herschel_report_preserves_blockers_and_sidecar_groups(tmp_path: P
                 str(toric_sidecar_path),
                 "got_audit/betti_table.json",
                 "got_audit/certificate_indexed_cas_evidence.json",
+                str(trajectory_payload_path),
+                str(embedding_payload_path),
                 str(bivariate_module_path),
                 str(two_parameter_visual_path),
                 str(persistence_landscape_path),
@@ -944,6 +1006,7 @@ def test_write_herschel_report_preserves_blockers_and_sidecar_groups(tmp_path: P
     assert groups["cas_algebra"] == 2
     assert groups["topology_persistence"] == 9
     assert groups["analogical_memory"] == 4
+    assert groups["other"] >= 2
     assert groups["tropical_toric"] == 3
     assert groups["graphcg"] == 1
     assert groups["gflownet"] == 1
@@ -1056,6 +1119,23 @@ def test_write_herschel_report_preserves_blockers_and_sidecar_groups(tmp_path: P
     assert two_parameter_visual["sources"][0]["axes_horizontal"] == "x_radius"
     assert two_parameter_visual["sources"][0]["axes_vertical"] == "x_level"
     assert two_parameter_visual["sources"][0]["no_proxy_or_fallback"] is True
+    trajectory_embedding = summary["artifact_evidence"]["trajectory_embedding_visual_evidence"]
+    assert trajectory_embedding["schema_version"] == "tropicalgt.herschel_trajectory_embedding_visual_evidence.v1"
+    assert trajectory_embedding["available"] is True
+    assert trajectory_embedding["paired_payloads_available"] is True
+    assert trajectory_embedding["source_count"] == 2
+    assert trajectory_embedding["available_source_count"] == 2
+    assert trajectory_embedding["total_trajectory_node_count"] == 3
+    assert trajectory_embedding["total_embedding_node_count"] == 3
+    assert trajectory_embedding["total_edge_count"] == 4
+    assert trajectory_embedding["total_filtered_simplicial_object_count"] == 6
+    assert trajectory_embedding["total_raw_model_embedding_count"] == 6
+    assert trajectory_embedding["total_parent_child_transition_count"] == 2
+    assert trajectory_embedding["pca_quality_warning_source_count"] == 2
+    assert trajectory_embedding["status_counts"] == {"trajectory_embedding_visual_available": 2}
+    assert trajectory_embedding["coordinate_source_counts"] == {"model graph_state embeddings": 2}
+    assert {row["kind"] for row in trajectory_embedding["sources"]} == {"trajectory_payload", "embedding_map_payload"}
+    assert all(row["pca_pairwise_distance_correlation"] == 0.98 for row in trajectory_embedding["sources"])
     chart_bundle = summary["artifact_evidence"]["chart_bundle_transport_evidence"]
     assert chart_bundle["schema_version"] == "tropicalgt.herschel_chart_bundle_transport_evidence.v1"
     assert chart_bundle["available"] is True
@@ -1170,6 +1250,8 @@ def test_write_herschel_report_preserves_blockers_and_sidecar_groups(tmp_path: P
     assert "effective_full_rank_qr" in markdown
     assert "## NLL Density Evidence" in markdown
     assert "density_volume" in markdown
+    assert "## Trajectory Embedding Visual Evidence" in markdown
+    assert "trajectory_embedding_visual_available" in markdown
     assert "## Bivariate Module Evidence" in markdown
     assert "certificate_failed" in markdown
     assert "## Two-Parameter Bifiltration Visual Evidence" in markdown
@@ -1209,6 +1291,9 @@ def test_write_herschel_report_preserves_blockers_and_sidecar_groups(tmp_path: P
     assert "NLL Density Evidence" in html
     assert "data-chart='nll-density-visible-layers'" in html
     assert "density_volume" in html
+    assert "Trajectory Embedding Visual Evidence" in html
+    assert "data-chart='trajectory-embedding-visual-statuses'" in html
+    assert "trajectory_embedding_visual_available" in html
     assert "Bivariate Module Evidence" in html
     assert "data-chart='bivariate-module-resolution-statuses'" in html
     assert "certificate_failed" in html

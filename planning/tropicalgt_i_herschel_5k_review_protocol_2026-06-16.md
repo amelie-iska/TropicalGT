@@ -241,3 +241,13 @@ Herschel now treats `trajectory_persistence/two_parameter_bifiltration.json` as 
 Availability requires the `tropicalgt.two_parameter_bifiltration_visual.v1` schema, `miller_sturmfels_bivariate_staircase` as the primary view, `F2[x_level,x_radius]`, x_radius horizontal and x_level vertical axes, coordinate one dimensional cones, actual-data/no-proxy contracts, primary structure-map evidence, the module staircase visual contract, Miller-Sturmfels staircase evidence, staircase card contracts, quotient-basis lattice points, Hilbert numerator terms, adjacent LCM syzygy lists, and an explicit theorem-scope boundary saying scoped staircase resolutions are not full persistence-module free resolutions without CAS certification. Rank surfaces remain secondary diagnostics only.
 
 Validation: py-compile passed for touched scripts/source/tests; focused Herschel/bundle tests passed (`11 passed`); broader Herschel/bundle/review-loop/provenance tests passed (`36 passed`); metric provenance audit passed after adding the new registry guardrail (`434 covered`).
+
+## 2026-06-18 Trajectory/Embedding Visual Evidence Addendum
+- [x] Herschel now requires and reports `got_trajectory_payloads.json` and `got_embedding_map_payloads.json` as first-class 5K evidence rather than leaving them as unsummarized browser artifacts.
+- [x] The report accepts only payloads backed by raw model `graph_state` embeddings, validator-style PCA diagnostics, parent-child GoT edge metadata, per-node filtered simplicial objects, point-anchored trajectory NLL surfaces, and the `tropicalgt.embedding_trajectory_identity.v1` contract.
+- [x] Duplicate PCA coordinates and low unique-embedding ratios are surfaced as PCA quality warnings; they are not used as geometric-separation, semantic-identifiability, or restart-success claims.
+- [x] Missing, malformed, proxy-sourced, or identity-contract-lacking trajectory/embedding payloads remain unavailable and cannot justify a restart, BPB claim, artifact promotion, or geometric interpretation.
+
+Next sequential item: continue the remaining unsummarized 5K sidecar queue with `inference_audit.json` and the interactive backfill reports, then move back to source-side CAS/tropical/visual repairs.
+
+Validation: py-compile passed for touched scripts/source/tests; focused Herschel/bundle tests passed (`11 passed`); broader Herschel/bundle/review-loop/provenance tests passed (`36 passed`); metric provenance audit passed (`436 covered`).

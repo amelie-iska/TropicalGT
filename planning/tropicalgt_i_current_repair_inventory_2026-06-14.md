@@ -628,3 +628,13 @@ Status: complete for the Herschel 5K report and bundle contract layer, pending f
 - `write_herschel_5k_report.py` now emits `tropicalgt.herschel_two_parameter_bifiltration_visual_evidence.v1` under `artifact_evidence`.
 - The report summarizes Miller-Sturmfels staircase evidence, x_radius/x_level axes, coordinate one dimensional cones, structure maps, staircase cards, quotient-basis lattice points, Hilbert numerator terms, and adjacent LCM syzygies from the recorded payload only.
 - Rank surfaces stay secondary diagnostics; unavailable CAS certificate-indexed evidence remains unavailable.
+
+## 2026-06-18 Trajectory/Embedding Visual Evidence Addendum
+- [x] Herschel now requires and reports `got_trajectory_payloads.json` and `got_embedding_map_payloads.json` as first-class 5K evidence rather than leaving them as unsummarized browser artifacts.
+- [x] The report accepts only payloads backed by raw model `graph_state` embeddings, validator-style PCA diagnostics, parent-child GoT edge metadata, per-node filtered simplicial objects, point-anchored trajectory NLL surfaces, and the `tropicalgt.embedding_trajectory_identity.v1` contract.
+- [x] Duplicate PCA coordinates and low unique-embedding ratios are surfaced as PCA quality warnings; they are not used as geometric-separation, semantic-identifiability, or restart-success claims.
+- [x] Missing, malformed, proxy-sourced, or identity-contract-lacking trajectory/embedding payloads remain unavailable and cannot justify a restart, BPB claim, artifact promotion, or geometric interpretation.
+
+Next sequential item: continue the remaining unsummarized 5K sidecar queue with `inference_audit.json` and the interactive backfill reports, then move back to source-side CAS/tropical/visual repairs.
+
+Validation: py-compile passed for touched scripts/source/tests; focused Herschel/bundle tests passed (`11 passed`); broader Herschel/bundle/review-loop/provenance tests passed (`36 passed`); metric provenance audit passed (`436 covered`).

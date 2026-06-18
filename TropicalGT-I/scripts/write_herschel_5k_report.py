@@ -243,6 +243,190 @@ def _sidecar_groups(paths: list[str]) -> dict[str, int]:
     return groups
 
 
+
+def _trajectory_embedding_visual_evidence(sidecar_paths: list[str]) -> dict[str, Any]:
+    sources: list[dict[str, Any]] = []
+    status_counts: dict[str, int] = {}
+    coordinate_source_counts: dict[str, int] = {}
+    total_trajectory_nodes = 0
+    total_embedding_nodes = 0
+    total_edges = 0
+    total_filtered_objects = 0
+    total_raw_embeddings = 0
+    total_parent_child_transitions = 0
+    pca_quality_warning_count = 0
+
+    def _count(bucket: dict[str, int], key: str) -> None:
+        if key:
+            bucket[key] = bucket.get(key, 0) + 1
+
+    def _pca_ok(diag: dict[str, Any], node_count: int) -> tuple[bool, float | None, float | None, str]:
+        source = str(diag.get("coordinate_source", "unavailable"))
+        corr = _optional_float(diag.get("pairwise_distance_correlation"))
+        stress = _optional_float(diag.get("normalized_stress"))
+        samples = _optional_int(diag.get("n_samples"))
+        ok = bool(source == "model graph_state embeddings" and samples == node_count and corr is not None and corr >= 0.75 and stress is not None and stress <= 0.75)
+        return ok, corr, stress, source
+
+    for raw_path in sidecar_paths:
+        lower = raw_path.lower()
+        if not (lower.endswith("got_trajectory_payloads.json") or lower.endswith("got_embedding_map_payloads.json")):
+            continue
+        kind = "trajectory_payload" if lower.endswith("got_trajectory_payloads.json") else "embedding_map_payload"
+        resolved = _resolve_output_path(Path(raw_path))
+        source: dict[str, Any] = {"path": _project_path(resolved), "kind": kind, "available": False}
+        if not resolved.exists():
+            source["reason"] = f"{kind}_missing"
+            _count(status_counts, source["reason"])
+            sources.append(source)
+            continue
+        try:
+            payload = json.loads(resolved.read_text(encoding="utf-8"))
+        except Exception as exc:  # pragma: no cover - parser message is platform-dependent
+            source["reason"] = f"{kind}_parse_error:{exc}"
+            _count(status_counts, f"{kind}_parse_error")
+            sources.append(source)
+            continue
+        if not isinstance(payload, dict):
+            source["reason"] = f"{kind}_not_object"
+            _count(status_counts, source["reason"])
+            sources.append(source)
+            continue
+        nodes = [row for row in payload.get("nodes", []) if isinstance(row, dict)] if isinstance(payload.get("nodes"), list) else []
+        edges = [row for row in payload.get("edges", []) if isinstance(row, dict)] if isinstance(payload.get("edges"), list) else []
+        filtered_objects = [row for row in payload.get("filtered_simplicial_objects", []) if isinstance(row, dict)] if isinstance(payload.get("filtered_simplicial_objects"), list) else []
+        pca_diag = payload.get("embedding_pca_diagnostics") if isinstance(payload.get("embedding_pca_diagnostics"), dict) else {}
+        pca_ok, pca_corr, pca_stress, coordinate_source = _pca_ok(pca_diag, len(nodes))
+        raw_embedding_count = sum(1 for row in nodes if isinstance(row.get("embedding"), list) and bool(row.get("embedding")))
+        pca_node_count = sum(1 for row in nodes if isinstance(row.get("embedding_pca"), dict) and all(_optional_float(row["embedding_pca"].get(axis)) is not None for axis in ("pc1", "pc2", "pc3")))
+        model_embedding_source_count = sum(1 for row in nodes if row.get("embedding_source") in ("model graph_state", None) and isinstance(row.get("embedding"), list) and bool(row.get("embedding")))
+        node_count = len(nodes)
+        edge_count = len(edges)
+        filtered_count = len(filtered_objects)
+        duplicate_count = _optional_int(pca_diag.get("duplicate_pca_coordinates_rounded8"))
+        unique_ratio = _optional_float(pca_diag.get("unique_embedding_ratio_rounded8"))
+        pca_warning = bool((duplicate_count or 0) > 0 or (unique_ratio is not None and unique_ratio < 0.75))
+        common_ok = bool(node_count > 0 and edge_count >= max(0, node_count - 1) and filtered_count == node_count and raw_embedding_count == node_count and pca_ok)
+        reasons: list[str] = []
+        if not common_ok:
+            if node_count <= 0:
+                reasons.append("missing_visual_nodes")
+            if edge_count < max(0, node_count - 1):
+                reasons.append("parent_child_edge_count_too_small")
+            if filtered_count != node_count:
+                reasons.append("filtered_object_count_mismatch")
+            if raw_embedding_count != node_count:
+                reasons.append("missing_raw_model_embeddings")
+            if not pca_ok:
+                reasons.append("invalid_model_graph_state_pca_diagnostics")
+        if kind == "trajectory_payload":
+            surface = payload.get("nll_surface") if isinstance(payload.get("nll_surface"), dict) else {}
+            progress = payload.get("nll_progress") if isinstance(payload.get("nll_progress"), dict) else {}
+            surface_ok = bool(surface.get("available") is True and surface.get("touches_points") is True)
+            progress_ok = isinstance(progress, dict)
+            available = bool(common_ok and surface_ok and progress_ok)
+            if not surface_ok:
+                reasons.append("trajectory_nll_surface_not_point_anchored")
+            source.update(
+                {
+                    "status": "trajectory_embedding_visual_available" if available else "trajectory_payload_unavailable",
+                    "available": available,
+                    "coordinate_source": coordinate_source,
+                    "node_count": node_count,
+                    "edge_count": edge_count,
+                    "filtered_simplicial_object_count": filtered_count,
+                    "raw_model_embedding_count": raw_embedding_count,
+                    "pca_node_count": pca_node_count,
+                    "pca_pairwise_distance_correlation": pca_corr,
+                    "pca_normalized_stress": pca_stress,
+                    "duplicate_pca_coordinate_count": duplicate_count or 0,
+                    "unique_embedding_ratio": unique_ratio,
+                    "pca_quality_warning": pca_warning,
+                    "nll_surface_available": surface.get("available"),
+                    "nll_surface_touches_points": surface.get("touches_points"),
+                    "model_embedding_source_verified": model_embedding_source_count == node_count,
+                }
+            )
+            if available:
+                total_trajectory_nodes += node_count
+        else:
+            layout = payload.get("layout_contract") if isinstance(payload.get("layout_contract"), dict) else {}
+            layout_ok = bool(
+                payload.get("coordinate_source", "").startswith("PCA of model graph_state embeddings")
+                and layout.get("schema_version") == "tropicalgt.embedding_trajectory_identity.v1"
+                and layout.get("coordinate_source") == "model graph_state embeddings"
+                and layout.get("branch_depth_metadata_present") is True
+                and layout.get("parent_child_transitions_present") is True
+                and layout.get("edge_source") == "graph_of_thought_parent_edges"
+                and layout.get("node_embedding_source") == "model graph_state"
+                and layout.get("geometric_separation_overclaim_allowed") is False
+                and layout.get("no_proxy_or_fallback") is True
+                and (_optional_int(layout.get("parent_child_transition_count")) or 0) == edge_count
+            )
+            available = bool(common_ok and layout_ok)
+            if not layout_ok:
+                reasons.append("missing_embedding_trajectory_identity_contract")
+            source.update(
+                {
+                    "status": "trajectory_embedding_visual_available" if available else "embedding_map_payload_unavailable",
+                    "available": available,
+                    "coordinate_source": coordinate_source,
+                    "node_count": node_count,
+                    "edge_count": edge_count,
+                    "filtered_simplicial_object_count": filtered_count,
+                    "raw_model_embedding_count": raw_embedding_count,
+                    "pca_node_count": pca_node_count,
+                    "pca_pairwise_distance_correlation": pca_corr,
+                    "pca_normalized_stress": pca_stress,
+                    "duplicate_pca_coordinate_count": duplicate_count or 0,
+                    "unique_embedding_ratio": unique_ratio,
+                    "pca_quality_warning": bool(layout.get("pca_quality_warning") or pca_warning),
+                    "layout_contract_schema": layout.get("schema_version", "unavailable"),
+                    "parent_child_transition_count": _optional_int(layout.get("parent_child_transition_count")) or 0,
+                    "geometric_separation_overclaim_allowed": layout.get("geometric_separation_overclaim_allowed"),
+                    "no_proxy_or_fallback": layout.get("no_proxy_or_fallback") is True,
+                    "sampling": payload.get("sampling", {}) if isinstance(payload.get("sampling"), dict) else {},
+                }
+            )
+            if available:
+                total_embedding_nodes += node_count
+                total_parent_child_transitions += _optional_int(layout.get("parent_child_transition_count")) or 0
+        status = str(source.get("status", "trajectory_embedding_visual_unavailable"))
+        _count(status_counts, status)
+        _count(coordinate_source_counts, coordinate_source)
+        if source.get("available"):
+            total_edges += edge_count
+            total_filtered_objects += filtered_count
+            total_raw_embeddings += raw_embedding_count
+            if source.get("pca_quality_warning"):
+                pca_quality_warning_count += 1
+        else:
+            source["reason"] = ";".join(reasons) or f"{kind}_unavailable"
+        sources.append(source)
+    available_sources = [row for row in sources if row.get("available")]
+    paired_payloads_available = bool(
+        any(row.get("available") and row.get("kind") == "trajectory_payload" for row in sources)
+        and any(row.get("available") and row.get("kind") == "embedding_map_payload" for row in sources)
+    )
+    return {
+        "schema_version": "tropicalgt.herschel_trajectory_embedding_visual_evidence.v1",
+        "available": bool(available_sources),
+        "paired_payloads_available": paired_payloads_available,
+        "source_count": len(sources),
+        "available_source_count": len(available_sources),
+        "total_trajectory_node_count": total_trajectory_nodes,
+        "total_embedding_node_count": total_embedding_nodes,
+        "total_edge_count": total_edges,
+        "total_filtered_simplicial_object_count": total_filtered_objects,
+        "total_raw_model_embedding_count": total_raw_embeddings,
+        "total_parent_child_transition_count": total_parent_child_transitions,
+        "pca_quality_warning_source_count": pca_quality_warning_count,
+        "status_counts": {key: status_counts[key] for key in sorted(status_counts)},
+        "coordinate_source_counts": {key: coordinate_source_counts[key] for key in sorted(coordinate_source_counts)},
+        "sources": sources,
+        "policy": "Herschel reports GoT trajectory and embedding-map visuals only from recorded payloads with raw model graph_state embeddings, PCA diagnostics, parent-child GoT metadata, filtered simplicial objects, and the embedding trajectory identity contract. PCA duplicate-coordinate warnings are diagnostics, not geometric-separation claims.",
+    }
+
 def _gflownet_branch_selection_evidence(sidecar_paths: list[str]) -> dict[str, Any]:
     sources: list[dict[str, Any]] = []
     policy_counts: dict[str, int] = {}
@@ -2242,6 +2426,7 @@ def summarize_bundle(bundle: dict[str, Any], *, bundle_path: Path | None = None)
             "sidecar_groups": _sidecar_groups(sidecars),
             "advanced_sidecars_tail": sidecars[:120],
             "validator_gap_evidence": validator_gap_evidence,
+            "trajectory_embedding_visual_evidence": _trajectory_embedding_visual_evidence(sidecars),
             "gflownet_branch_selection_evidence": _gflownet_branch_selection_evidence(sidecars),
             "tropical_support_evidence": _tropical_support_evidence(sidecars),
             "graphcg_direction_evidence": _graphcg_direction_evidence(sidecars),
@@ -2328,6 +2513,36 @@ def render_markdown(summary: dict[str, Any]) -> str:
             "",
         ]
     )
+    trajectory_embedding = artifacts.get("trajectory_embedding_visual_evidence", {}) if isinstance(artifacts.get("trajectory_embedding_visual_evidence"), dict) else {}
+    lines.extend(
+        [
+            "## Trajectory Embedding Visual Evidence",
+            "",
+            f"- Available: `{trajectory_embedding.get('available', False)}`",
+            f"- Paired trajectory+embedding payloads available: `{trajectory_embedding.get('paired_payloads_available', False)}`",
+            f"- Sources: `{trajectory_embedding.get('source_count', 0)}`",
+            f"- Trajectory / embedding nodes: `{trajectory_embedding.get('total_trajectory_node_count', 0)}` / `{trajectory_embedding.get('total_embedding_node_count', 0)}`",
+            f"- Edges / filtered objects / raw embeddings: `{trajectory_embedding.get('total_edge_count', 0)}` / `{trajectory_embedding.get('total_filtered_simplicial_object_count', 0)}` / `{trajectory_embedding.get('total_raw_model_embedding_count', 0)}`",
+            f"- Parent-child transitions: `{trajectory_embedding.get('total_parent_child_transition_count', 0)}`",
+            f"- PCA warning sources: `{trajectory_embedding.get('pca_quality_warning_source_count', 0)}`",
+            "",
+            "```json",
+            json.dumps(trajectory_embedding.get("status_counts", {}), indent=2),
+            "```",
+            "",
+        ]
+    )
+    for source in trajectory_embedding.get("sources", []) if isinstance(trajectory_embedding.get("sources"), list) else []:
+        if not isinstance(source, dict):
+            continue
+        lines.append(
+            f"- `{source.get('path', '')}` kind=`{source.get('kind', 'unavailable')}` available=`{source.get('available')}` "
+            f"nodes=`{source.get('node_count', 0)}` edges=`{source.get('edge_count', 0)}` raw_embeddings=`{source.get('raw_model_embedding_count', 0)}` "
+            f"pca_corr=`{_fmt(source.get('pca_pairwise_distance_correlation'))}` stress=`{_fmt(source.get('pca_normalized_stress'))}` "
+            f"warning=`{source.get('pca_quality_warning')}`"
+        )
+        if source.get("reason"):
+            lines.append(f"  - reason: `{source.get('reason')}`")
     gflownet_branch = artifacts.get("gflownet_branch_selection_evidence", {}) if isinstance(artifacts.get("gflownet_branch_selection_evidence"), dict) else {}
     lines.extend(
         [
@@ -2796,6 +3011,7 @@ def render_html(summary: dict[str, Any]) -> str:
     validator_gaps = artifacts.get("validator_gap_evidence", {}) if isinstance(artifacts.get("validator_gap_evidence"), dict) else {}
     sidecar_groups = artifacts.get("sidecar_groups", {}) if isinstance(artifacts.get("sidecar_groups"), dict) else {}
     validator_counts = validator_gaps.get("combined_category_counts", {}) if isinstance(validator_gaps.get("combined_category_counts"), dict) else {}
+    trajectory_embedding = artifacts.get("trajectory_embedding_visual_evidence", {}) if isinstance(artifacts.get("trajectory_embedding_visual_evidence"), dict) else {}
     gflownet_branch = artifacts.get("gflownet_branch_selection_evidence", {}) if isinstance(artifacts.get("gflownet_branch_selection_evidence"), dict) else {}
     tropical_support = artifacts.get("tropical_support_evidence", {}) if isinstance(artifacts.get("tropical_support_evidence"), dict) else {}
     graphcg_direction = artifacts.get("graphcg_direction_evidence", {}) if isinstance(artifacts.get("graphcg_direction_evidence"), dict) else {}
@@ -2845,6 +3061,26 @@ def render_html(summary: dict[str, Any]) -> str:
         )
     if not action_rows:
         action_rows.append("<tr><td colspan='4' class='muted'>No concrete validator gap examples recorded.</td></tr>")
+    trajectory_embedding_rows = []
+    for source in trajectory_embedding.get("sources", []) if isinstance(trajectory_embedding.get("sources"), list) else []:
+        if not isinstance(source, dict):
+            continue
+        trajectory_embedding_rows.append(
+            "<tr>"
+            f"<td>{html.escape(str(source.get('path', '')))}</td>"
+            f"<td>{html.escape(str(source.get('kind', 'unavailable')))}</td>"
+            f"<td>{html.escape(str(source.get('available')))}</td>"
+            f"<td>{html.escape(str(source.get('node_count', 0)))}</td>"
+            f"<td>{html.escape(str(source.get('edge_count', 0)))}</td>"
+            f"<td>{html.escape(str(source.get('raw_model_embedding_count', 0)))}</td>"
+            f"<td>{html.escape(_fmt(source.get('pca_pairwise_distance_correlation')))}</td>"
+            f"<td>{html.escape(_fmt(source.get('pca_normalized_stress')))}</td>"
+            f"<td>{html.escape(str(source.get('pca_quality_warning')))}</td>"
+            f"<td>{html.escape(str(source.get('reason', '')))}</td>"
+            "</tr>"
+        )
+    if not trajectory_embedding_rows:
+        trajectory_embedding_rows.append("<tr><td colspan='10' class='muted'>No GoT trajectory or embedding-map payload sidecar paths recorded.</td></tr>")
     gflownet_branch_rows = []
     for source in gflownet_branch.get("sources", []) if isinstance(gflownet_branch.get("sources"), list) else []:
         if not isinstance(source, dict):
@@ -3127,6 +3363,7 @@ code {{ white-space:break-spaces; }}
 <p class="muted">Generated {html.escape(str(summary.get('generated_at')))} from <code>{html.escape(str(summary.get('bundle_path')))}</code>. Evidence-only rendering: no training, validation, checkpoint loading, browser control, or GPU command is executed by this report.</p>
 <span class="badge {'ok' if restart_safe else 'warn'}">restart_safe={html.escape(str(bool(restart_safe)))}</span>
 <span class="badge {'ok' if validator_gaps.get('available') else 'warn'}">validator_gap_evidence={html.escape(str(bool(validator_gaps.get('available'))))}</span>
+<span class="badge {'ok' if trajectory_embedding.get('available') else 'warn'}">trajectory_embedding_visual_evidence={html.escape(str(bool(trajectory_embedding.get('available'))))}</span>
 <span class="badge {'ok' if tropical_support.get('available') else 'warn'}">tropical_support_evidence={html.escape(str(bool(tropical_support.get('available'))))}</span>
 <span class="badge {'ok' if graphcg_direction.get('available') else 'warn'}">graphcg_direction_evidence={html.escape(str(bool(graphcg_direction.get('available'))))}</span>
 <span class="badge {'ok' if nll_density.get('available') else 'warn'}">nll_density_evidence={html.escape(str(bool(nll_density.get('available'))))}</span>
@@ -3149,6 +3386,7 @@ code {{ white-space:break-spaces; }}
 <section class="panel"><h2>Restart Decision Flow</h2><div class="flow"><div>5K bundle<br><b>step {html.escape(str(run.get('boundary_step')))}</b></div><div>Target missed<br><b>{html.escape(str(metrics.get('target_missed')))}</b></div><div>Checkpoint safe<br><b>{html.escape(str(checkpoint.get('restart_safe')))}</b></div><div>Execution ready<br><b>{html.escape(str(execution.get('ready')))}</b></div><div>Advanced gate<br><b>{html.escape(str(advanced.get('safe_for_restart')))}</b></div><div>Action<br><b>{html.escape(str(restart.get('action')))}</b></div></div></section>
 {_bar_chart_svg(sidecar_groups, title='Advanced Sidecar Groups', chart_id='sidecar-groups')}
 {_bar_chart_svg(validator_counts, title='Strict Validator Evidence Gaps', chart_id='validator-gap-counts')}
+{_bar_chart_svg(trajectory_embedding.get('status_counts', {}) if isinstance(trajectory_embedding, dict) else {}, title='Trajectory Embedding Visual Statuses', chart_id='trajectory-embedding-visual-statuses')}
 {_bar_chart_svg(gflownet_branch.get('policy_counts', {}) if isinstance(gflownet_branch, dict) else {}, title='GFlowNet Branch Selection Policies', chart_id='gflownet-branch-selection-policies')}
 {_bar_chart_svg(tropical_support.get('support_probability_source_counts', {}) if isinstance(tropical_support, dict) else {}, title='Tropical Support Probability Sources', chart_id='tropical-support-probability-sources')}
 {_bar_chart_svg(graphcg_direction.get('basis_source_counts', {}) if isinstance(graphcg_direction, dict) else {}, title='GraphCG Projection Basis Sources', chart_id='graphcg-projection-basis-sources')}
@@ -3163,6 +3401,7 @@ code {{ white-space:break-spaces; }}
 {_bar_chart_svg(topological_algebra.get('status_counts', {}) if isinstance(topological_algebra, dict) else {}, title='Topological Algebra Statuses', chart_id='topological-algebra-statuses')}
 <section class="panel"><h2>Validator Sources</h2><table><thead><tr><th>Name</th><th>JSON path</th><th>Available</th><th>Gaps</th><th>Reason</th></tr></thead><tbody>{''.join(source_rows)}</tbody></table></section>
 <section class="panel"><h2>Validator Gap Actions</h2><table><thead><tr><th>Category</th><th>Count</th><th>Required action</th><th>Examples</th></tr></thead><tbody>{''.join(action_rows)}</tbody></table></section>
+<section class="panel"><h2>Trajectory Embedding Visual Evidence</h2><table><thead><tr><th>Sidecar</th><th>Kind</th><th>Available</th><th>Nodes</th><th>Edges</th><th>Raw embeddings</th><th>PCA corr</th><th>PCA stress</th><th>PCA warning</th><th>Reason</th></tr></thead><tbody>{''.join(trajectory_embedding_rows)}</tbody></table></section>
 <section class="panel"><h2>GFlowNet Branch Selection Evidence</h2><table><thead><tr><th>Sidecar</th><th>Available</th><th>Valid rows</th><th>Selected actions</th><th>Policies</th><th>Reason</th></tr></thead><tbody>{''.join(gflownet_branch_rows)}</tbody></table></section>
 <section class="panel"><h2>Tropical Support Evidence</h2><table><thead><tr><th>Sidecar</th><th>Available</th><th>Probability source</th><th>Tokens</th><th>Strict wall rate</th><th>Near wall rate</th><th>Status</th><th>Reason</th></tr></thead><tbody>{''.join(tropical_support_rows)}</tbody></table></section>
 <section class="panel"><h2>GraphCG Direction Evidence</h2><table><thead><tr><th>Sidecar</th><th>Available</th><th>Basis</th><th>Directions</th><th>Candidates</th><th>Active nonzero</th><th>Mean |cos| p90</th><th>Reason</th></tr></thead><tbody>{''.join(graphcg_direction_rows)}</tbody></table></section>
