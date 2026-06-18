@@ -422,13 +422,22 @@ assert "landscape_backend" in html
 assert "not norm-only summaries" in html
 ```
 
-- [ ] **Step 7.2: Repair rendering**
+- [x] **Step 7.2: Repair rendering**
 
 Render landscape curves as functions over filtration, separated by homology dimension and trajectory growth level. Do not show generic filled bands or canned-looking lines without interval provenance. If the backend cannot compute curves, render a dark unavailable page with the exact missing backend/data reason.
 
-- [ ] **Step 7.3: Add validator checks**
+- [x] **Step 7.3: Add validator checks**
 
 Require persistence landscape pages in trajectory bundles to contain backend provenance, lambda labels, interval/growth counts, and no synthetic/fallback scientific claim text.
+
+
+Implemented 2026-06-18: trajectory persistence landscape payloads now expose
+`landscape_backend` and `backend_provenance` at the top level, in addition to
+per-row GUDHI Landscape value provenance, lambda-layer counts, growth levels,
+small-multiple traces, and no-proxy/no-fallback claims. The validator rejects
+missing backend provenance and norm-only/fallback landscape payloads. CPU-only
+checks passed: focused persistence-landscape visualization test, focused
+persistence-landscape validator tests, and `py_compile` for touched Python files.
 
 ---
 

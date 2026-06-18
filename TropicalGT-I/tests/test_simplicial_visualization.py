@@ -1427,6 +1427,10 @@ def test_trajectory_persistence_uses_growth_and_chain_presentation_diagnostics(t
     assert "stacked small multiples; hover shows actual lambda value" in landscapes_html
     assert landscapes_payload["schema_version"] == "tropicalgt.persistence_landscape_visual_contract.v1"
     assert landscapes_payload["available"] is True
+    assert landscapes_payload["landscape_backend"] == "gudhi.representations"
+    assert landscapes_payload["backend_provenance"]["available"] is True
+    assert landscapes_payload["backend_provenance"]["source_field"] == "topology.persistence_representations.backend"
+    assert landscapes_payload["backend_provenance"]["backends"] == ["gudhi.representations"]
     assert landscapes_payload["actual_data_only"] is True
     assert landscapes_payload["no_proxy_or_fallback"] is True
     assert landscapes_payload["not_nll_fitness_landscape"] is True

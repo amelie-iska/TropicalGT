@@ -1328,6 +1328,14 @@ def _row(root: Path, name: str) -> Path:
         "schema_version": "tropicalgt.persistence_landscape_visual_contract.v1",
         "available": True,
         "source": "topology.persistence_representations.methods[*].landscape",
+        "landscape_backend": "gudhi.representations",
+        "backend_provenance": {
+            "available": True,
+            "source_field": "topology.persistence_representations.backend",
+            "backends": ["gudhi.representations"],
+            "row_backend_field": "landscape_rows[*].backend",
+            "values_source_field": "landscape_rows[*].values_source",
+        },
         "actual_data_only": True,
         "no_proxy_or_fallback": True,
         "not_nll_fitness_landscape": True,
@@ -1544,6 +1552,20 @@ def test_validate_audit_root_rejects_missing_persistence_landscape_payload(tmp_p
     report = validator.validate_audit_root(audit, min_rows=1, min_candidates=4, min_depth=2)
     assert not report["ok"]
     assert any("persistence landscapes payload" in err for err in report["errors"])
+
+
+def test_validate_audit_root_rejects_missing_persistence_landscape_backend_provenance(tmp_path: Path):
+    validator = _load_validator()
+    audit = tmp_path / "step_00000001" / "got_audit"
+    row = _row(audit, ".")
+    payload_path = row / "trajectory_persistence" / "persistence_landscapes.json"
+    payload = json.loads(payload_path.read_text(encoding="utf-8"))
+    payload.pop("backend_provenance")
+    payload_path.write_text(json.dumps(payload), encoding="utf-8")
+    _write(audit / "codex_browser_index.html", _codex_browser_html(_browser_samples(audit, ["."])))
+    report = validator.validate_audit_root(audit, min_rows=1, min_candidates=4, min_depth=2)
+    assert not report["ok"]
+    assert any("backend provenance" in err for err in report["errors"])
 
 
 def test_validate_audit_root_rejects_norm_only_persistence_landscape_payload(tmp_path: Path):

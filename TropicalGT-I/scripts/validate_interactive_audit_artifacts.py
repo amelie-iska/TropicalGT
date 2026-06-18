@@ -840,6 +840,11 @@ def validate_row(row_dir: Path, *, min_candidates: int = 8, min_depth: int = 2, 
     if isinstance(landscapes_payload, dict):
         _assert(landscapes_payload.get("schema_version") == "tropicalgt.persistence_landscape_visual_contract.v1", errors, "trajectory persistence landscapes payload has wrong schema")
         _assert(landscapes_payload.get("available") is True, errors, "trajectory persistence landscapes payload is unavailable")
+        backend_provenance = landscapes_payload.get("backend_provenance", {}) if isinstance(landscapes_payload.get("backend_provenance"), dict) else {}
+        _assert(str(landscapes_payload.get("landscape_backend", "")).strip() != "", errors, "trajectory persistence landscapes payload lacks landscape backend provenance")
+        _assert(backend_provenance.get("available") is True, errors, "trajectory persistence landscapes backend provenance is unavailable")
+        _assert(backend_provenance.get("source_field") == "topology.persistence_representations.backend", errors, "trajectory persistence landscapes backend provenance has wrong source field")
+        _assert(isinstance(backend_provenance.get("backends"), list) and bool(backend_provenance.get("backends")), errors, "trajectory persistence landscapes backend provenance lists no backends")
         _assert(landscapes_payload.get("actual_data_only") is True, errors, "trajectory persistence landscapes payload is not actual-data-only")
         _assert(landscapes_payload.get("no_proxy_or_fallback") is True, errors, "trajectory persistence landscapes payload allows proxy/fallback data")
         _assert(landscapes_payload.get("not_nll_fitness_landscape") is True, errors, "trajectory persistence landscapes payload confuses GUDHI landscapes with NLL/fitness landscape")

@@ -8241,6 +8241,8 @@ def _persistence_landscape_unavailable_contract(reason: str) -> dict[str, object
         "available": False,
         "reason": reason,
         "source": "topology.persistence_representations.methods[*].landscape",
+        "landscape_backend": "unavailable",
+        "backend_provenance": {"available": False, "reason": reason, "source_field": "topology.persistence_representations.backend"},
         "actual_data_only": True,
         "no_proxy_or_fallback": True,
         "not_nll_fitness_landscape": True,
@@ -8451,10 +8453,19 @@ def _write_growth_persistence_landscapes(path: Path, topology: dict[str, object]
     fig.update_yaxes(title_text="stacked small multiples; hover shows actual lambda value", row=3, col=1)
     homology_dimensions = sorted({int(row["homology_dimension"]) for row in landscape_contract_rows})
     rendered_levels = sorted({int(row["level"]) for row in landscape_contract_rows})
+    landscape_backends = sorted({str(row.get("backend", "gudhi.representations")) for row in landscape_contract_rows})
     contract = {
         "schema_version": "tropicalgt.persistence_landscape_visual_contract.v1",
         "available": bool(trace_count > 0 and landscape_contract_rows),
         "source": "topology.persistence_representations.methods[*].landscape",
+        "landscape_backend": landscape_backends[0] if len(landscape_backends) == 1 else ",".join(landscape_backends),
+        "backend_provenance": {
+            "available": bool(landscape_backends),
+            "source_field": "topology.persistence_representations.backend",
+            "backends": landscape_backends,
+            "row_backend_field": "landscape_rows[*].backend",
+            "values_source_field": "landscape_rows[*].values_source",
+        },
         "actual_data_only": True,
         "no_proxy_or_fallback": True,
         "not_nll_fitness_landscape": True,
