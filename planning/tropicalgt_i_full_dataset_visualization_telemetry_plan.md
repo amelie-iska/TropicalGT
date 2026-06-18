@@ -923,3 +923,21 @@ non-landscape evidence, but the gap count decreased from `44` to `27`;
 `persistence_landscapes` decreased from `17` to `0`. Remaining categories are
 CAS resolution certificates `12`, GraphCG `6`, other `4`, trajectory
 overlay/radius `3`, missing artifact `1`, and row coverage `1`.
+
+Completed 2026-06-18 follow-up: legacy unavailable CAS free-resolution guards
+inside `trajectory_level_radius_bifiltration.json` are now hydrated by the
+backfill tool with the current no-proxy certificate contract, BE/Fitting paper
+method contract for `2210.11433v1`, CAS execution manifest, backend attempt
+ledger, and safe unavailable diagnostics. This repair never fabricates a free
+resolution, Betti table, syzygy, Fitting ideal, differential, minor, or
+Buchsbaum-Eisenbud certificate; stale unavailable records are renderable only as
+explicit unavailable states until a real CAS backend certificate exists.
+
+Executed safe generated-artifact CAS-guard backfill on the b60 step-5000
+`got_audit` bundle without staging generated outputs. It hydrated the stored
+`real_free_resolution` guard, regenerated the two-parameter bifiltration page,
+and reran the strict validator. The strict validator still fails for remaining
+non-CAS evidence, but the gap count decreased from `27` to `15`; `CAS
+resolution certificates` decreased from `12` to `0`. Remaining categories are
+GraphCG `6`, other `4`, trajectory overlay/radius `3`, missing artifact `1`,
+and row coverage `1`.

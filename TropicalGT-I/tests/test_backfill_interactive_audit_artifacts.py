@@ -441,3 +441,75 @@ def test_backfill_writes_unavailable_persistence_landscape_contract_from_no_fini
     assert "Plotly.newPlot" in html
     assert "No finite persistence intervals" in html
     assert module._persistence_landscapes_need_backfill(audit) is False
+
+
+def test_backfill_hydrates_stale_unavailable_cas_resolution_guard(tmp_path: Path):
+    module = _load_backfill()
+    audit = tmp_path / "got_audit"
+    audit.mkdir()
+    raw = audit / "trajectory_level_radius_bifiltration.json"
+    raw.write_text(
+        json.dumps(
+            {
+                "available": True,
+                "coefficient_ring": "F2[x_level,x_radius]",
+                "num_parameters": 2,
+                "parameters": [{"name": "trajectory_level"}, {"name": "radius"}],
+                "grid_axes": [[0], [0]],
+                "levels": [0],
+                "radii": [0.0],
+                "radius_grade_policy": "exact_sorted_radius_grid_index_no_bucket_collision",
+                "fiber_rank_profile": [{"grade": [0, 0], "betti": {"0": 1}}],
+                "chain_module_generators": [{"multidegree": [0, 0], "homological_degree": 0, "simplex": ["root"]}],
+                "boundary_monomials": {},
+                "structure_maps": [],
+                "chain_presentation_diagnostics": {
+                    "ring": "F2[x_level,x_radius]",
+                    "real_free_resolution_certified": False,
+                    "real_free_resolution": {
+                        "schema_version": "tropicalgt.real_free_resolution.v1",
+                        "available": False,
+                        "status": "certificate_failed",
+                        "reason": "legacy stale unavailable guard",
+                        "coefficient_ring": "F2[x_level,x_radius]",
+                        "module_schema_version": "tropicalgt.level_radius_module.v1",
+                        "input_sha256": "abc",
+                        "backend_attempts": [{"backend": "M2", "status": "skipped_complexity_guard"}],
+                        "backend_probe": {"backends": [], "preferred_order": ["M2", "sage", "Singular"]},
+                        "bemultipliers_probe": {"is_resolution_backend": False},
+                        "cas_artifacts": {},
+                        "command_templates": {},
+                        "certificate_attached": False,
+                        "real_free_resolution_certified": False,
+                        "total_graded_resolution_certified": False,
+                        "ungraded_resolution_certified": False,
+                        "multigraded_free_resolution_certified": False,
+                        "exactness_certified": False,
+                        "minimality_certified": False,
+                        "safe_to_render_as_real_free_resolution": False,
+                        "safe_to_render_as_total_graded_resolution": False,
+                        "safe_to_render_as_multigraded_free_resolution": False,
+                    },
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    report = module.backfill_audit_root(audit)
+
+    kinds = {row["kind"] for row in report["actions"]}
+    assert "cas_resolution_guard_contract_backfill" in kinds
+    payload = json.loads(raw.read_text(encoding="utf-8"))
+    real = payload["chain_presentation_diagnostics"]["real_free_resolution"]
+    assert real["certificate_contract"]["schema_version"] == "tropicalgt.cas_free_resolution_contract.v1"
+    assert real["certificate_contract"]["no_proxy_or_fallback"] is True
+    assert real["paper_method_contract"]["schema_version"] == "tropicalgt.be_fitting_method_contract.v1"
+    assert real["paper_method_contract"]["arxiv_id"] == "2210.11433v1"
+    assert real["cas_execution_manifest"]["schema_version"] == "tropicalgt.cas_execution_manifest.v1"
+    assert real["cas_execution_manifest"]["no_proxy_or_fallback"] is True
+    assert real["cas_execution_manifest"]["backend_entries"]
+    assert real["safe_unavailable_render"] is True
+    assert real["unavailable_diagnostic"]["safe_to_render_only_as_unavailable"] is True
+    assert "Do not substitute chain diagnostics" in real["unavailable_diagnostic"]["no_proxy_policy"]
+    assert module._real_resolution_guard_needs_backfill(real) is False

@@ -11,6 +11,7 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT / "src") not in sys.path:
     sys.path.insert(0, str(ROOT / "src"))
 
+from tropicalgt.cas_free_resolution import _hydrate_cached_result_contracts, _unavailable_resolution_diagnostic  # noqa: E402
 from tropicalgt.visualization import (  # noqa: E402
     _write_inference_dashboard,
     _write_reasoning_step_complex_maps,
@@ -224,6 +225,34 @@ def _persistence_landscapes_need_backfill(root: Path) -> bool:
     return "no_finite_persistence_intervals_for_gudhi_landscape" not in reasons
 
 
+def _real_resolution_guard_needs_backfill(real: Any) -> bool:
+    if not isinstance(real, dict):
+        return False
+    if real.get("schema_version") != "tropicalgt.real_free_resolution.v1":
+        return True
+    contract = real.get("certificate_contract") if isinstance(real.get("certificate_contract"), dict) else {}
+    if contract.get("schema_version") != "tropicalgt.cas_free_resolution_contract.v1":
+        return True
+    if contract.get("no_proxy_or_fallback") is not True:
+        return True
+    paper = real.get("paper_method_contract") if isinstance(real.get("paper_method_contract"), dict) else contract.get("paper_method_contract", {})
+    if not isinstance(paper, dict) or paper.get("schema_version") != "tropicalgt.be_fitting_method_contract.v1" or paper.get("arxiv_id") != "2210.11433v1":
+        return True
+    manifest = real.get("cas_execution_manifest") if isinstance(real.get("cas_execution_manifest"), dict) else {}
+    entries = manifest.get("backend_entries", []) if isinstance(manifest.get("backend_entries"), list) else []
+    if manifest.get("schema_version") != "tropicalgt.cas_execution_manifest.v1" or manifest.get("no_proxy_or_fallback") is not True or not entries:
+        return True
+    unavailable = real.get("unavailable_diagnostic") if isinstance(real.get("unavailable_diagnostic"), dict) else {}
+    if real.get("available") is not True:
+        if real.get("safe_unavailable_render") is not True:
+            return True
+        if unavailable.get("safe_to_render_only_as_unavailable") is not True:
+            return True
+        if "Do not substitute chain diagnostics" not in str(unavailable.get("no_proxy_policy", "")):
+            return True
+    return False
+
+
 def _dashboard_missing_links(root: Path, required_names: tuple[str, ...]) -> bool:
     dashboard = root / "inference_audit.html"
     existing_required = [name for name in required_names if (root / name).exists()]
@@ -375,6 +404,59 @@ def backfill_audit_root(audit_root: str | Path, *, overwrite: bool = False) -> d
                     "paths": {"inference_scaling_tree": str(scaling_path)},
                 }
             )
+
+    bif_raw_for_cas = root / "trajectory_level_radius_bifiltration.json"
+    if bif_raw_for_cas.exists():
+        bif_payload_for_cas = _read_json(bif_raw_for_cas)
+        diagnostics = bif_payload_for_cas.get("chain_presentation_diagnostics") if isinstance(bif_payload_for_cas.get("chain_presentation_diagnostics"), dict) else {}
+        real = diagnostics.get("real_free_resolution") if isinstance(diagnostics.get("real_free_resolution"), dict) else None
+        if overwrite or _real_resolution_guard_needs_backfill(real):
+            if isinstance(real, dict):
+                hydrated_real = _hydrate_cached_result_contracts(real)
+                if hydrated_real.get("available") is not True:
+                    backend_probe = hydrated_real.get("backend_probe") if isinstance(hydrated_real.get("backend_probe"), dict) else {}
+                    bemultipliers_probe = hydrated_real.get("bemultipliers_probe") if isinstance(hydrated_real.get("bemultipliers_probe"), dict) else {}
+                    attempts = hydrated_real.get("backend_attempts") if isinstance(hydrated_real.get("backend_attempts"), list) else []
+                    unavailable = hydrated_real.get("unavailable_diagnostic") if isinstance(hydrated_real.get("unavailable_diagnostic"), dict) else {}
+                    if unavailable.get("safe_to_render_only_as_unavailable") is not True:
+                        hydrated_real["unavailable_diagnostic"] = _unavailable_resolution_diagnostic(
+                            str(hydrated_real.get("status", "certificate_failed")),
+                            str(hydrated_real.get("reason", "No certified CAS backend output is available for this module.")),
+                            attempts,
+                            backend_probe,
+                            bemultipliers_probe,
+                        )
+                    hydrated_real["safe_unavailable_render"] = True
+                    hydrated_real["unavailable_dependency_action"] = hydrated_real["unavailable_diagnostic"].get("action")
+                diagnostics["real_free_resolution"] = hydrated_real
+                bif_payload_for_cas["chain_presentation_diagnostics"] = diagnostics
+                bif_raw_for_cas.write_text(json.dumps(bif_payload_for_cas, indent=2), encoding="utf-8")
+                bif_html_for_cas = root / "trajectory_persistence" / "two_parameter_bifiltration.html"
+                rendered = write_two_parameter_bifiltration_visualization(
+                    bif_html_for_cas,
+                    bif_payload_for_cas,
+                    title="Trajectory 2-parameter persistence over F2[x_level,x_radius]",
+                )
+                refreshed = diagnostics["real_free_resolution"]
+                actions.append(
+                    {
+                        "kind": "cas_resolution_guard_contract_backfill",
+                        "reason": "Hydrated stale unavailable CAS free-resolution guard in trajectory_level_radius_bifiltration.json with current certificate, BE/Fitting paper-method, execution-manifest, and unavailable no-proxy diagnostics; no resolution certificate was fabricated.",
+                        "available": bool(refreshed.get("available")),
+                        "status": refreshed.get("status"),
+                        "safe_unavailable_render": bool(refreshed.get("safe_unavailable_render")),
+                        "paths": {"raw_bifiltration": str(bif_raw_for_cas), "visual_bifiltration": rendered},
+                    }
+                )
+            else:
+                actions.append(
+                    {
+                        "kind": "cas_resolution_guard_contract_unavailable",
+                        "reason": "trajectory_level_radius_bifiltration.json has no real_free_resolution guard to hydrate; no CAS certificate was fabricated.",
+                        "paths": {"raw_bifiltration": str(bif_raw_for_cas)},
+                    }
+                )
+
 
     landscapes_needed = overwrite or _persistence_landscapes_need_backfill(root)
     topology_path = root / "trajectory_topological_algebra.json"
