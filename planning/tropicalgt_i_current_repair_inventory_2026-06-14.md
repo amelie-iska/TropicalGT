@@ -680,3 +680,13 @@ Status: implemented for Herschel JSON, Markdown, and HTML reports.
 - The test fixture now includes a real `tropicalgt.cas_certificate_indexed_evidence.v1` sidecar with Macaulay2, `F2[x_level,x_radius]`, certified exactness/minimality, and mixed available/unavailable diagnostic blocks.
 
 Next sequential item: finish any remaining CAS report-side validation, then continue to the next actual-data-only visual/math repair slice.
+
+## 2026-06-18 Certificate-Indexed Sidecar Bundle Inventory
+
+Status: implemented for 5K review bundle preparation.
+
+- `certificate_indexed_cas_evidence.json` is now included in the Herschel-required audit sidecar scan when present under the latest GoT audit directory.
+- The active contract, review bundle, and Herschel report can now preserve and summarize standalone certificate-indexed CAS sidecars without manual path injection.
+- CPU-only prepare-bundle verification passed (`9 passed`).
+
+Next sequential item: return to the remaining visual/math repair queue with the CAS evidence handoff now covered.

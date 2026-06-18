@@ -934,6 +934,38 @@ def test_prepare_review_bundle_defaults_to_periodic_validation_artifacts(tmp_pat
         ),
         encoding="utf-8",
     )
+    (periodic_dir / "got_audit" / "certificate_indexed_cas_evidence.json").write_text(
+        json.dumps(
+            {
+                "schema_version": "tropicalgt.cas_certificate_indexed_evidence.v1",
+                "available": True,
+                "backend": "Macaulay2",
+                "coefficient_ring": "F2[x_level,x_radius]",
+                "input_sha256": "bundle-cert-input-sha",
+                "certificate_type": "Macaulay2 res coker presentation over multigraded F2 polynomial ring",
+                "exactness_certified": True,
+                "minimality_certified": True,
+                "safe_to_render_as_real_free_resolution": True,
+                "safe_to_render_as_total_graded_resolution": False,
+                "safe_to_render_as_multigraded_free_resolution": True,
+                "evidence_source_contract": {
+                    "schema_version": "tropicalgt.cas_certificate_indexed_source_contract.v1",
+                    "fitting_and_minors_do_not_imply_multipliers": True,
+                    "diagnostics_do_not_certify_resolution_or_derived_equivalence": True,
+                    "no_proxy_or_fallback": True,
+                },
+                "evidence_blocks": {
+                    "fitting_ideals": {"available": True},
+                    "determinantal_minors": {"available": True},
+                    "buchsbaum_eisenbud_multipliers": {"available": False, "safe_to_substitute_for_resolution": False},
+                },
+                "derived_category_claim_requires_chain_map_or_resolution_comparison": True,
+                "no_proxy_or_fallback": True,
+            }
+        ),
+        encoding="utf-8",
+    )
+
     cfg_path = tmp_path / "config.json"
     cfg_path.write_text(
         json.dumps(
@@ -1005,6 +1037,7 @@ def test_prepare_review_bundle_defaults_to_periodic_validation_artifacts(tmp_pat
     assert any(path.endswith("periodic/step_00005000/got_audit/inference_algebra.json") for path in sidecars)
     assert any(path.endswith("periodic/step_00005000/got_audit/toric_embedding_sidecar.json") for path in sidecars)
     assert any(path.endswith("periodic/step_00005000/got_audit/tropical_fan_diagnostics.json") for path in sidecars)
+    assert any(path.endswith("periodic/step_00005000/got_audit/certificate_indexed_cas_evidence.json") for path in sidecars)
     assert bundle["artifact_inventory"]["herschel_required_sidecars_present"]
     persisted_contract = json.loads((module.ROOT / bundle["artifacts"]["contract_json"]).read_text(encoding="utf-8"))
     assert any(
@@ -1099,6 +1132,10 @@ def test_prepare_review_bundle_defaults_to_periodic_validation_artifacts(tmp_pat
         path.endswith("periodic/step_00005000/got_audit/tropical_fan_diagnostics.json")
         for path in persisted_contract["artifact_inventory"]["advanced_sidecars_tail"]
     )
+    assert any(
+        path.endswith("periodic/step_00005000/got_audit/certificate_indexed_cas_evidence.json")
+        for path in persisted_contract["artifact_inventory"]["advanced_sidecars_tail"]
+    )
     gflownet_branch = bundle["herschel_report_summary"]["artifact_evidence"]["gflownet_branch_selection_evidence"]
     assert gflownet_branch["available"] is True
     assert gflownet_branch["policy_counts"] == {"ranked_diverse_action_sweep": 1}
@@ -1173,6 +1210,12 @@ def test_prepare_review_bundle_defaults_to_periodic_validation_artifacts(tmp_pat
     assert chart_bundle["completeness_tier_counts"] == {"telemetry_partial": 1}
     assert chart_bundle["missing_required_group_counts"] == {"graphcg_toric_agreement": 1}
     assert chart_bundle["sources"][0]["safe_to_render_as_toric_embedding_certificate"] is False
+    cas_indexed = bundle["herschel_report_summary"]["artifact_evidence"]["cas_certificate_indexed_evidence"]
+    assert cas_indexed["available"] is True
+    assert cas_indexed["source_count"] == 1
+    assert cas_indexed["available_source_count"] == 1
+    assert cas_indexed["safe_multigraded_source_count"] == 1
+    assert cas_indexed["block_available_counts"] == {"determinantal_minors": 1, "fitting_ideals": 1}
     toric_tropical = bundle["herschel_report_summary"]["artifact_evidence"]["toric_tropical_cas_evidence"]
     assert toric_tropical["available"] is False
     assert toric_tropical["source_count"] == 2

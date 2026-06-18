@@ -42,6 +42,7 @@ HERSCHEL_REQUIRED_AUDIT_SIDECARS = (
     "chart_bundle_transport_sidecar.json",
     "toric_embedding_sidecar.json",
     "tropical_fan_diagnostics.json",
+    "certificate_indexed_cas_evidence.json",
     "trajectory_persistence/persistence_landscapes.json",
     "trajectory_persistence/two_parameter_bifiltration.json",
     "trajectory_level_radius_bifiltration.json",

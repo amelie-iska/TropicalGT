@@ -914,3 +914,23 @@ CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/scripts:TropicalGT-I/src /home/i
 ```
 
 Next linear item: continue CAS evidence coverage into review-bundle validation and any remaining source contracts, then move to the next visual/math repair item once the report consumes all currently emitted CAS sidecars.
+
+## 2026-06-18 Certificate-Indexed Sidecar Bundle Inventory
+
+Sequential review-bundle item completed:
+
+- `prepare_5k_review_bundle.py` now treats `certificate_indexed_cas_evidence.json` as a Herschel-required GoT audit sidecar when it exists.
+- The persisted active training contract and review bundle now carry standalone certificate-indexed CAS evidence into `advanced_sidecars_tail` alongside toric/tropical/CAS algebra sidecars.
+- The review-bundle test creates a real `tropicalgt.cas_certificate_indexed_evidence.v1` fixture and verifies Herschel summarizes it as available with safe multigraded evidence and available Fitting/minor blocks.
+- This closes the handoff gap between source-side CAS certificate-indexed evidence and Herschel’s 5K review surface.
+
+Validation:
+
+```text
+CUDA_VISIBLE_DEVICES="" /home/iska/miniconda3/envs/tokengt/bin/python -m py_compile TropicalGT-I/scripts/prepare_5k_review_bundle.py TropicalGT-I/tests/test_prepare_5k_review_bundle.py
+# passed
+CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/scripts:TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest -q TropicalGT-I/tests/test_prepare_5k_review_bundle.py
+# 9 passed
+```
+
+Next linear item: move from CAS report handoff back to the actual-data-only visual/math repair queue unless a new CAS backend certificate gap appears in tests or live artifacts.
