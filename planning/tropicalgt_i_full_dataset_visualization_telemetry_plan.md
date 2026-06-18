@@ -794,6 +794,23 @@ SimplexTree poset sidecars, source contracts, fingerprints, and the manifest.
 If those stored candidate complexes are unavailable, the helper records an
 explicit unavailable action instead of fabricating per-step contracts.
 
+Completed 2026-06-18 follow-up: legacy audit backfill now also detects stale
+GoT trajectory contracts and, when `inference_scaling_tree.json` contains stored
+candidates, reruns the current GoT trajectory renderer to refresh embedding-map
+identity, NLL density visual-layer metadata, full/probability complex sidecars,
+and reasoning-step outputs from actual stored model evidence. Missing candidates
+are recorded as unavailable instead of producing placeholder trajectory pages.
+
+Executed safe generated-artifact GoT backfill on the b60 step-5000 `got_audit`
+bundle without staging generated outputs. It regenerated GoT embedding, NLL,
+full-complex, probability-complex, SimplexTree, and reasoning-step artifacts for
+`12` stored candidates. The strict validator still fails, as required for
+remaining stale/missing evidence, but the gap count decreased further from `175`
+to `109`; the remaining categories are analogical memory `35`, tropical support
+`30`, persistence landscapes `17`, CAS resolution certificates `12`, GraphCG `6`,
+other `4`, trajectory overlay/radius `3`, missing artifact `1`, and row coverage
+`1`.
+
 Executed safe generated-artifact backfill on the b60 step-5000 `got_audit`
 bundle without staging generated outputs. It regenerated reasoning-step contracts
 for `12` stored candidate complexes and rebuilt `inference_audit.html`. The

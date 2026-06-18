@@ -119,6 +119,35 @@ def test_backfill_regenerates_reasoning_step_contracts_from_stored_candidate_com
         ),
         encoding="utf-8",
     )
+    (audit / "got_embedding_map_payloads.json").write_text(
+        json.dumps(
+            {
+                "layout_contract": {
+                    "schema_version": "tropicalgt.embedding_trajectory_identity.v1",
+                    "no_proxy_or_fallback": True,
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+    (audit / "got_nll_density_cloud_payload.json").write_text(
+        json.dumps(
+            {
+                "visual_layer_contract": {
+                    "schema_version": "tropicalgt.nll_density_render.v1",
+                    "sample_points_are_model_states": False,
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+    for name in (
+        "got_full_trajectory_complex_slider_contract.json",
+        "got_full_trajectory_simplex_tree_3d_simplex_tree_poset_contract.json",
+        "got_full_trajectory_complex_jensen_shannon_slider_contract.json",
+        "got_full_trajectory_simplex_tree_3d_jensen_shannon_simplex_tree_poset_contract.json",
+    ):
+        (audit / name).write_text("{}", encoding="utf-8")
     stale_dir = audit / "reasoning_step_complex_maps"
     stale_dir.mkdir()
     (stale_dir / "manifest.json").write_text(json.dumps({"steps": [{"file": "reasoning_step_000.html"}]}), encoding="utf-8")
@@ -142,3 +171,65 @@ def test_backfill_regenerates_reasoning_step_contracts_from_stored_candidate_com
     assert (stale_dir / "reasoning_step_000_simplex_tree_simplex_tree_poset_contract.json").exists()
     dashboard = (audit / "inference_audit.html").read_text(encoding="utf-8")
     assert "reasoning_step_complex_maps/manifest.json" in dashboard
+
+
+
+def test_backfill_regenerates_got_trajectory_contracts_from_stored_scaling_tree(tmp_path: Path):
+    module = _load_backfill()
+    audit = tmp_path / "got_audit"
+    audit.mkdir()
+    descriptors = [
+        {"kind": "state", "index": 0, "text": "root"},
+        {"kind": "reasoning", "index": 1, "text": "expand"},
+        {"kind": "output", "index": 2, "text": "answer"},
+    ]
+    record = type("Record", (), {"record_id": "q0"})()
+    simplicial = build_embedding_radius_simplicial_object(
+        record,
+        descriptors,
+        [[0.0, 0.0, 0.0], [0.5, 0.1, 0.0], [0.2, 0.4, 0.1]],
+        metric="euclidean",
+    )
+    (audit / "inference_scaling_tree.json").write_text(
+        json.dumps(
+            {
+                "candidates": [
+                    {
+                        "record_id": "q0",
+                        "level": 0,
+                        "path": [],
+                        "embedding": [0.0, 0.0, 0.0],
+                        "score": 0.2,
+                        "nll": 1.0,
+                        "filtered_simplicial_object": simplicial,
+                    },
+                    {
+                        "record_id": "q1",
+                        "parent": "q0",
+                        "level": 1,
+                        "path": ["expand"],
+                        "embedding": [0.8, 0.2, 0.1],
+                        "score": 0.4,
+                        "nll": 0.8,
+                        "filtered_simplicial_object": simplicial,
+                    },
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    report = module.backfill_audit_root(audit)
+
+    kinds = {row["kind"] for row in report["actions"]}
+    assert "got_trajectory_contract_backfill" in kinds
+    embedding_payload = json.loads((audit / "got_embedding_map_payloads.json").read_text(encoding="utf-8"))
+    assert embedding_payload["layout_contract"]["schema_version"] == "tropicalgt.embedding_trajectory_identity.v1"
+    assert embedding_payload["layout_contract"]["coordinate_source"] == "model graph_state embeddings"
+    density_payload = json.loads((audit / "got_nll_density_cloud_payload.json").read_text(encoding="utf-8"))
+    assert density_payload["visual_layer_contract"]["schema_version"] == "tropicalgt.nll_density_render.v1"
+    assert density_payload["visual_layer_contract"]["support_samples_are_model_states"] is False
+    assert density_payload["sample_points_are_model_states"] is False
+    assert (audit / "got_full_trajectory_complex_slider_contract.json").exists()
+    manifest = json.loads((audit / "reasoning_step_complex_maps" / "manifest.json").read_text(encoding="utf-8"))
+    assert manifest["contract"]["schema_version"] == "tropicalgt.reasoning_step_complex_maps.v1"

@@ -14,6 +14,7 @@ if str(ROOT / "src") not in sys.path:
 from tropicalgt.visualization import (  # noqa: E402
     _write_inference_dashboard,
     _write_reasoning_step_complex_maps,
+    write_got_trajectory_visualization,
     write_toric_embedding_sidecar,
     write_tropical_fan_diagnostics,
     write_two_parameter_bifiltration_visualization,
@@ -39,6 +40,31 @@ def _dashboard_artifact_paths(root: Path) -> dict[str, str]:
         paths[key] = str(path)
     return paths
 
+
+
+
+def _got_trajectory_contracts_need_backfill(root: Path) -> bool:
+    embedding_payload = _read_json(root / "got_embedding_map_payloads.json")
+    layout_contract = embedding_payload.get("layout_contract", {}) if isinstance(embedding_payload.get("layout_contract"), dict) else {}
+    if layout_contract.get("schema_version") != "tropicalgt.embedding_trajectory_identity.v1":
+        return True
+    if layout_contract.get("no_proxy_or_fallback") is not True:
+        return True
+    density_payload = _read_json(root / "got_nll_density_cloud_payload.json")
+    visual_contract = density_payload.get("visual_layer_contract", {}) if isinstance(density_payload.get("visual_layer_contract"), dict) else {}
+    if visual_contract.get("schema_version") != "tropicalgt.nll_density_render.v1":
+        return True
+    if visual_contract.get("support_samples_are_model_states") is not False:
+        return True
+    if density_payload.get("sample_points_are_model_states") is True:
+        return True
+    required_sidecars = (
+        root / "got_full_trajectory_complex_slider_contract.json",
+        root / "got_full_trajectory_simplex_tree_3d_simplex_tree_poset_contract.json",
+        root / "got_full_trajectory_complex_jensen_shannon_slider_contract.json",
+        root / "got_full_trajectory_simplex_tree_3d_jensen_shannon_simplex_tree_poset_contract.json",
+    )
+    return any(not path.exists() for path in required_sidecars)
 
 
 def _reasoning_step_contracts_need_backfill(root: Path) -> bool:
@@ -121,8 +147,31 @@ def backfill_audit_root(audit_root: str | Path, *, overwrite: bool = False) -> d
         )
 
 
-    reasoning_needed = overwrite or _reasoning_step_contracts_need_backfill(root)
     scaling_path = root / "inference_scaling_tree.json"
+    got_needed = overwrite or _got_trajectory_contracts_need_backfill(root)
+    if got_needed and scaling_path.exists():
+        scaling = _read_json(scaling_path)
+        candidates = scaling.get("candidates", []) if isinstance(scaling.get("candidates"), list) else []
+        if candidates:
+            paths = write_got_trajectory_visualization(scaling, root)
+            actions.append(
+                {
+                    "kind": "got_trajectory_contract_backfill",
+                    "reason": "Regenerated GoT embedding/NLL/full-complex/reasoning-step visualization contracts from stored inference_scaling_tree.json candidates and their model outputs.",
+                    "candidate_count": len(candidates),
+                    "paths": paths,
+                }
+            )
+        else:
+            actions.append(
+                {
+                    "kind": "got_trajectory_contract_unavailable",
+                    "reason": "GoT trajectory contracts were missing or stale, but inference_scaling_tree.json had no stored candidates; no embedding/NLL/full-complex contracts were fabricated.",
+                    "paths": {"inference_scaling_tree": str(scaling_path)},
+                }
+            )
+
+    reasoning_needed = overwrite or _reasoning_step_contracts_need_backfill(root)
     if reasoning_needed and scaling_path.exists():
         scaling = _read_json(scaling_path)
         candidates = scaling.get("candidates", []) if isinstance(scaling.get("candidates"), list) else []
