@@ -240,3 +240,20 @@ CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/t
 CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m py_compile TropicalGT-I/src/tropicalgt/memory.py TropicalGT-I/tests/test_metrics_and_memory.py
 git diff --check
 ```
+
+
+## 2026-06-18 Conservative Derived/Resolution Similarity Repair
+
+- Tightened analogical-map derived/algebraic similarity to the stricter no-proxy formula: the displayed score is now the conservative minimum over certified free/resolution similarity, persistent-homology similarity, rank-invariant similarity, and certified retrieval chain-map score.
+- Coarse derived-signature cosine remains visible as a separate diagnostic column and hover field, but it is no longer a required or scoring component of `derived_algebraic_similarity`.
+- Added explicit `rank_invariant_similarity`, `chain_map_score`, `chain_map_score_available`, and `derived_algebraic_required_components` fields to analogical map reports so table/browser layers can explain exactly what clamped the derived score.
+- Added a regression using a certified real-resolution fixture to prove the derived score requires actual free/resolution evidence and certified chain-map/morphism evidence; toy chain modules alone remain insufficient.
+
+Verification:
+
+```bash
+CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_simplicial_visualization.py -k "derived or analogical_memory" -q
+CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_simplicial_visualization.py -q
+CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_interactive_artifact_validator.py TropicalGT-I/tests/test_metrics_and_memory.py -q
+CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m py_compile TropicalGT-I/src/tropicalgt/visualization.py TropicalGT-I/tests/test_simplicial_visualization.py
+```

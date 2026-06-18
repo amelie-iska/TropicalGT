@@ -2172,11 +2172,45 @@ def test_topological_similarity_summary_separates_coarse_signature_from_derived_
     assert summary["derived_algebraic_clamped_by"] == "missing_required_component"
     assert summary["derived_algebraic_components"]["signature_cosine"] > 0.99
     assert summary["derived_algebraic_components"]["free_chain_or_resolution_similarity"] == 0.0
+    assert summary["derived_algebraic_components"]["chain_map_score"] == 0.0
+    assert "signature_cosine" not in summary["derived_algebraic_required_components"]
+    assert {"free_chain_or_resolution_similarity", "persistent_homology_similarity", "rank_invariant_similarity", "chain_map_score"}.issubset(
+        set(summary["derived_algebraic_required_components"])
+    )
     assert summary["derived_algebraic_component_availability"]["signature_cosine"] is True
     assert summary["derived_algebraic_component_availability"]["free_chain_or_resolution_similarity"] is False
+    assert summary["derived_algebraic_component_availability"]["chain_map_score"] is False
     assert summary["coarse_signature_cosine_not_derived_similarity"] is True
     assert summary["high_coarse_signature_low_resolution_warning"] is True
+    assert "coarse signature cosine is displayed separately" in summary["derived_algebraic_policy"]
     assert "otherwise 0.0" in summary["derived_algebraic_policy"]
+
+
+def test_derived_algebraic_similarity_uses_rank_and_chain_map_not_coarse_signature():
+    query = _toy_topology(intervals=[{"dimension": 0, "birth": 0.0, "death": None, "infinite": True}])
+    certified = _topology_with_certified_real_resolution()["commutative_algebra"]["two_parameter_chain_presentation_diagnostics"]["real_free_resolution"]
+    query["commutative_algebra"]["multiparameter_chain_presentation_diagnostics"]["real_free_resolution"] = certified
+    memory = json.loads(json.dumps(query))
+    query["derived_equivalence_signature"]["multiparameter_h0_rank_sample"] = [{"h0_rank": 1.0}, {"h0_rank": 1.0}]
+    memory["derived_equivalence_signature"]["multiparameter_h0_rank_sample"] = [{"h0_rank": 1.0}, {"h0_rank": 0.25}]
+    row = {
+        "probability_simplicial_map_chain_map_certified": True,
+        "probability_simplicial_map_persistence_morphism_certified": True,
+        "probability_simplicial_map_preservation_rate": 0.5,
+    }
+    summary = _topological_similarity_summary(query, memory, row)
+    required_values = {
+        key: summary["derived_algebraic_components"][key]
+        for key in summary["derived_algebraic_required_components"]
+    }
+    assert summary["derived_algebraic_components_available"] == 1.0
+    assert summary["derived_algebraic_component_availability"]["chain_map_score"] is True
+    assert summary["derived_algebraic_components"]["chain_map_score"] == 0.5
+    assert summary["rank_invariant_similarity"] < 1.0
+    assert summary["derived_signature_similarity"] > summary["rank_invariant_similarity"]
+    assert "signature_cosine" not in summary["derived_algebraic_required_components"]
+    assert summary["derived_algebraic_similarity"] == min(required_values.values())
+    assert summary["derived_algebraic_clamped_by"] in required_values
 
 
 def test_analogical_memory_visualization_requires_retrieval_probability_map_certificate(tmp_path: Path):

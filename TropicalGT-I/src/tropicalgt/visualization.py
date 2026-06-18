@@ -9938,6 +9938,8 @@ def _topological_similarity_summary(query_topology: dict[str, object], memory_to
     m_ph = _persistence_numeric_vector(memory_topology)
     q_ca = _commutative_algebra_numeric_vector(query_topology)
     m_ca = _commutative_algebra_numeric_vector(memory_topology)
+    q_rank = _rank_invariant_numeric_vector(query_topology)
+    m_rank = _rank_invariant_numeric_vector(memory_topology)
     landscape_report = _persistence_landscape_vector_similarity(query_topology, memory_topology)
     retrieval_weights = row.get("retrieval_weights", {}) if isinstance(row.get("retrieval_weights"), dict) else {}
     include_landscape_in_vector = bool(
@@ -9951,26 +9953,43 @@ def _topological_similarity_summary(query_topology: dict[str, object], memory_to
         memory_topology,
         include_landscape=include_landscape_in_vector,
     )
+    probability_chain_map_certified = bool(row.get("probability_simplicial_map_chain_map_certified"))
+    probability_morphism_certified = bool(row.get("probability_simplicial_map_persistence_morphism_certified"))
+    probability_map_rate = float(row.get("probability_simplicial_map_preservation_rate", 0.0) or 0.0)
+    chain_map_score = probability_map_rate if probability_chain_map_certified and probability_morphism_certified else 0.0
     component_availability = {
         "signature_cosine": bool(q_sig.size > 0 and m_sig.size > 0 and float(np.linalg.norm(q_sig)) > 1e-12 and float(np.linalg.norm(m_sig)) > 1e-12),
         "free_chain_or_resolution_similarity": bool(q_free.size > 0 and m_free.size > 0 and float(np.linalg.norm(q_free)) > 1e-12 and float(np.linalg.norm(m_free)) > 1e-12),
         "persistent_homology_similarity": bool(q_ph.size > 0 and m_ph.size > 0 and float(np.linalg.norm(q_ph)) > 1e-12 and float(np.linalg.norm(m_ph)) > 1e-12),
+        "rank_invariant_similarity": bool(q_rank.size > 0 and m_rank.size > 0 and float(np.linalg.norm(q_rank)) > 1e-12 and float(np.linalg.norm(m_rank)) > 1e-12),
         "commutative_algebra_similarity": bool(q_ca.size > 0 and m_ca.size > 0 and float(np.linalg.norm(q_ca)) > 1e-12 and float(np.linalg.norm(m_ca)) > 1e-12),
+        "chain_map_score": bool(probability_chain_map_certified and probability_morphism_certified and probability_map_rate > 0.0),
     }
     sig_sim = _cosine_similarity(q_sig, m_sig) if component_availability["signature_cosine"] else 0.0
     free_sim = _cosine_similarity(q_free, m_free) if component_availability["free_chain_or_resolution_similarity"] else 0.0
     ph_sim = _cosine_similarity(q_ph, m_ph) if component_availability["persistent_homology_similarity"] else 0.0
+    rank_sim = _cosine_similarity(q_rank, m_rank) if component_availability["rank_invariant_similarity"] else 0.0
     ca_sim = _cosine_similarity(q_ca, m_ca) if component_availability["commutative_algebra_similarity"] else 0.0
-    required_components_available = bool(all(component_availability.values()))
+    required_component_keys = [
+        "free_chain_or_resolution_similarity",
+        "persistent_homology_similarity",
+        "rank_invariant_similarity",
+        "chain_map_score",
+    ]
+    required_components_available = bool(all(component_availability[key] for key in required_component_keys))
     derived_components = {
         "signature_cosine": float(sig_sim),
         "free_chain_or_resolution_similarity": float(free_sim),
+        "free_resolution_similarity": float(free_sim),
         "persistent_homology_similarity": float(ph_sim),
+        "rank_invariant_similarity": float(rank_sim),
         "commutative_algebra_similarity": float(ca_sim),
+        "chain_map_score": float(chain_map_score),
     }
     if required_components_available:
-        derived_algebraic = min(derived_components.values())
-        derived_clamped_by = min(derived_components, key=derived_components.get)
+        required_values = {key: derived_components[key] for key in required_component_keys}
+        derived_algebraic = min(required_values.values())
+        derived_clamped_by = min(required_values, key=required_values.get)
     else:
         derived_algebraic = 0.0
         derived_clamped_by = "missing_required_component"
@@ -10001,7 +10020,10 @@ def _topological_similarity_summary(query_topology: dict[str, object], memory_to
         "chain_presentation_similarity": float(free_sim),
         "free_resolution_similarity": float(free_sim),
         "persistent_homology_similarity": float(ph_sim),
+        "rank_invariant_similarity": float(rank_sim),
         "commutative_algebra_similarity": float(ca_sim),
+        "chain_map_score": float(chain_map_score),
+        "chain_map_score_available": float(1.0 if component_availability["chain_map_score"] else 0.0),
         "persistence_landscape_vector_available": float(1.0 if landscape_report.get("available") else 0.0),
         "persistence_landscape_cosine": float(landscape_report.get("cosine", 0.0)) if landscape_report.get("available") else 0.0,
         "persistence_landscape_l2_similarity": float(landscape_report.get("l2_similarity", 0.0)) if landscape_report.get("available") else 0.0,
@@ -10019,7 +10041,8 @@ def _topological_similarity_summary(query_topology: dict[str, object], memory_to
         "persistence_vector_component_summary": _persistence_vector_component_label(_persistence_vector_component_rows(vector_report)),
         "derived_algebraic_similarity": float(max(0.0, min(1.0, derived_algebraic))),
         "derived_algebraic_components_available": float(1.0 if required_components_available else 0.0),
-        "derived_algebraic_policy": "conservative_minimum(signature_cosine, free_chain_or_resolution_similarity, persistent_homology_similarity, commutative_algebra_similarity) when all components have nonzero evidence; otherwise 0.0",
+        "derived_algebraic_policy": "conservative_minimum(free_chain_or_resolution_similarity, persistent_homology_similarity, rank_invariant_similarity, chain_map_score) when all required components have nonzero evidence; coarse signature cosine is displayed separately and is not part of this score; otherwise 0.0",
+        "derived_algebraic_required_components": required_component_keys,
         "derived_algebraic_components": derived_components,
         "derived_algebraic_component_availability": component_availability,
         "derived_algebraic_clamped_by": derived_clamped_by,
@@ -11117,6 +11140,39 @@ def _free_rank_vector(topology: dict[str, object], length: int = 16) -> np.ndarr
         if 0 <= degree < length:
             values[degree] = float(row.get("rank", row.get("rank_upper_bound", 0.0)))
     return np.asarray(values, dtype=float)
+
+
+def _rank_invariant_numeric_vector(topology: dict[str, object], length: int = 32) -> np.ndarray:
+    values: list[float] = []
+    if not isinstance(topology, dict):
+        return np.zeros(length, dtype=float)
+    mp = topology.get("multiparameter_persistence") if isinstance(topology.get("multiparameter_persistence"), dict) else {}
+    rank_sources = [
+        mp.get("rank_invariant_samples") if isinstance(mp, dict) else None,
+        (mp.get("rank_invariant", {}) or {}).get("samples") if isinstance(mp.get("rank_invariant", {}), dict) else None,
+        (topology.get("derived_equivalence_signature", {}) or {}).get("multiparameter_h0_rank_sample") if isinstance(topology.get("derived_equivalence_signature", {}), dict) else None,
+    ]
+    for samples in rank_sources:
+        if not isinstance(samples, list):
+            continue
+        for row in samples:
+            if not isinstance(row, dict):
+                continue
+            for key in ("h0_rank", "h1_rank", "h2_rank", "rank", "value"):
+                if key in row:
+                    value = _summary_float(row, key)
+                    if value is not None:
+                        values.append(value)
+            for key in ("source_rank", "target_rank", "image_rank", "kernel_rank", "cokernel_rank"):
+                if key in row:
+                    value = _summary_float(row, key)
+                    if value is not None:
+                        values.append(value)
+        if values:
+            break
+    if len(values) < length:
+        values.extend([0.0] * (length - len(values)))
+    return np.asarray(values[:length], dtype=float)
 
 
 
