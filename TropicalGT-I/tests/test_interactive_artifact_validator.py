@@ -96,6 +96,21 @@ def _simplex_tree_poset_contract(
 ) -> dict[str, object]:
     cover_edges = displayed if cover_edges is None else cover_edges
     root_edges = min(displayed, cover_edges) if root_edges is None else root_edges
+    readability_contract = {
+        "schema_version": "tropicalgt.simplex_tree_readability.v1",
+        "summary_first_default": True,
+        "dimension_counts_panel": "annotation_and_contract_payload",
+        "filtration_histogram_panel": "annotation_and_contract_payload",
+        "representative_inclusions_visible_by_default": True,
+        "representative_cover_edge_count": min(cover_edges, 120),
+        "dense_face_to_coface_links_hidden_by_default": bool(cover_edges > 120),
+        "dense_face_to_coface_visibility_policy": "legendonly_when_actual_cover_edges_exceed_120",
+        "dense_face_to_coface_edge_count": cover_edges,
+        "dimension_count_rows": [{"dimension": "0", "count": displayed}],
+        "filtration_histogram": [{"lo": 0.0, "hi": 1.0, "count": displayed}],
+        "representative_inclusions": [{"face": "{root}", "coface": "{root,a}"}] if cover_edges else [],
+        "no_proxy_or_fallback": True,
+    }
     return {
         "schema_version": "tropicalgt.simplex_tree_poset.v1",
         "available": True,
@@ -120,6 +135,10 @@ def _simplex_tree_poset_contract(
         "primary_edges": "actual_face_to_coface_covers",
         "optional_prefix_links_visible": "legendonly",
         "position_source": "model_embedding_barycenters_with_dimension_and_filtration_lift",
+        "readability_contract": readability_contract,
+        "summary_first_default": True,
+        "representative_cover_edges_visible_by_default": True,
+        "dense_face_to_coface_links_hidden_by_default": bool(cover_edges > 120),
         "all_non_vertex_simplices_have_face_cover_edges": True,
     }
 
@@ -1863,6 +1882,20 @@ def test_validate_audit_root_rejects_missing_reasoning_step_simplex_tree_poset_c
     report = validator.validate_audit_root(audit, min_rows=1, min_candidates=4, min_depth=2)
     assert not report["ok"]
     assert any("simplex-tree poset contract" in err and "reasoning-step simplex tree 0" in err for err in report["errors"])
+
+
+def test_validate_audit_root_rejects_missing_simplex_tree_readability_contract(tmp_path: Path):
+    validator = _load_validator()
+    audit = tmp_path / "step_00000001" / "got_audit"
+    row = _row(audit, ".")
+    contract_path = row / "got_full_trajectory_simplex_tree_3d_simplex_tree_poset_contract.json"
+    payload = json.loads(contract_path.read_text(encoding="utf-8"))
+    payload.pop("readability_contract")
+    contract_path.write_text(json.dumps(payload), encoding="utf-8")
+    _write(audit / "codex_browser_index.html", _codex_browser_html(_browser_samples(audit, ["."])))
+    report = validator.validate_audit_root(audit, min_rows=1, min_candidates=4, min_depth=2)
+    assert not report["ok"]
+    assert any("simplex-tree readability contract" in err for err in report["errors"])
 
 
 def test_validate_audit_root_rejects_missing_reasoning_step_slider_summary(tmp_path: Path):

@@ -2861,7 +2861,10 @@ def _write_simplex_tree_3d_map(path: Path, obj: dict[str, object], title: str, s
                     f"<br>coface filtration={float(row.get('filtration', 0.0) or 0.0):.6g}",
                 )
             )
+    dense_hasse_hidden_by_default = len(hasse_pairs) > 120
+    representative_hasse_pairs = hasse_pairs[: min(len(hasse_pairs), 120)]
     hasse_x, hasse_y, hasse_z, hasse_hover = _edge_trace_data(hasse_pairs)
+    rep_hasse_x, rep_hasse_y, rep_hasse_z, rep_hasse_hover = _edge_trace_data(representative_hasse_pairs)
 
     prefix_pairs: list[tuple[tuple[str, ...], tuple[str, ...], str]] = []
     for key, row in simplex_rows.items():
@@ -2909,14 +2912,28 @@ def _write_simplex_tree_3d_map(path: Path, obj: dict[str, object], title: str, s
     fig = go.Figure()
     fig.add_trace(
         go.Scatter3d(
+            x=rep_hasse_x,
+            y=rep_hasse_y,
+            z=rep_hasse_z,
+            mode="lines",
+            line=dict(width=1.8, color="rgba(94,234,212,0.56)"),
+            hovertext=rep_hasse_hover,
+            hoverinfo="text",
+            name=f"representative face-to-coface covers ({len(representative_hasse_pairs)})",
+            visible=True,
+        )
+    )
+    fig.add_trace(
+        go.Scatter3d(
             x=hasse_x,
             y=hasse_y,
             z=hasse_z,
             mode="lines",
-            line=dict(width=1.65, color="rgba(94,234,212,0.46)"),
+            line=dict(width=1.15, color="rgba(94,234,212,0.28)"),
             hovertext=hasse_hover,
             hoverinfo="text",
             name=f"actual face-to-coface covers ({len(hasse_pairs)})",
+            visible="legendonly" if dense_hasse_hidden_by_default else True,
         )
     )
     if prefix_pairs:
@@ -2974,6 +2991,35 @@ def _write_simplex_tree_3d_map(path: Path, obj: dict[str, object], title: str, s
     for dim in node_dim:
         key = f"dim_{int(dim)}"
         dimension_counts[key] = int(dimension_counts.get(key, 0) + 1)
+    if node_filtration:
+        hist_counts, hist_edges = np.histogram(np.asarray(node_filtration, dtype=float), bins=min(8, max(1, len(set(node_filtration)))))
+        filtration_histogram = [
+            {"lo": float(hist_edges[i]), "hi": float(hist_edges[i + 1]), "count": int(hist_counts[i])}
+            for i in range(len(hist_counts))
+        ]
+    else:
+        filtration_histogram = []
+    dimension_count_rows = [{"dimension": key.replace("dim_", ""), "count": int(value)} for key, value in sorted(dimension_counts.items())]
+    representative_inclusions = [
+        {"face": _simplex_key(source), "coface": _simplex_key(target)}
+        for source, target, _label in representative_hasse_pairs[:24]
+        if source != root_key
+    ]
+    readability_contract = {
+        "schema_version": "tropicalgt.simplex_tree_readability.v1",
+        "summary_first_default": True,
+        "dimension_counts_panel": "annotation_and_contract_payload",
+        "filtration_histogram_panel": "annotation_and_contract_payload",
+        "representative_inclusions_visible_by_default": True,
+        "representative_cover_edge_count": int(len(representative_hasse_pairs)),
+        "dense_face_to_coface_links_hidden_by_default": bool(dense_hasse_hidden_by_default),
+        "dense_face_to_coface_visibility_policy": "legendonly_when_actual_cover_edges_exceed_120",
+        "dense_face_to_coface_edge_count": int(len(hasse_pairs)),
+        "dimension_count_rows": dimension_count_rows,
+        "filtration_histogram": filtration_histogram,
+        "representative_inclusions": representative_inclusions,
+        "no_proxy_or_fallback": True,
+    }
     simplex_tree_poset_contract = {
         "schema_version": "tropicalgt.simplex_tree_poset.v1",
         "available": True,
@@ -2998,6 +3044,10 @@ def _write_simplex_tree_3d_map(path: Path, obj: dict[str, object], title: str, s
         "primary_edges": "actual_face_to_coface_covers",
         "optional_prefix_links_visible": "legendonly",
         "position_source": "model_embedding_barycenters_with_dimension_and_filtration_lift",
+        "readability_contract": readability_contract,
+        "summary_first_default": True,
+        "representative_cover_edges_visible_by_default": True,
+        "dense_face_to_coface_links_hidden_by_default": bool(dense_hasse_hidden_by_default),
     }
     simplex_tree_poset_contract["all_non_vertex_simplices_have_face_cover_edges"] = all(
         any(target == key and source != root_key for source, target, _label in hasse_pairs)
@@ -3016,6 +3066,23 @@ def _write_simplex_tree_3d_map(path: Path, obj: dict[str, object], title: str, s
             simplex_tree_poset_contract["primary_edges"] == "actual_face_to_coface_covers",
             simplex_tree_poset_contract["all_non_vertex_simplices_have_face_cover_edges"],
         ]
+    )
+    dimension_summary = ", ".join(f"dim {row['dimension']}: {row['count']}" for row in dimension_count_rows) or "none"
+    histogram_summary = "; ".join(
+        f"[{row['lo']:.4g}, {row['hi']:.4g}]: {row['count']}" for row in filtration_histogram[:8]
+    ) or "none"
+    inclusion_summary = "; ".join(
+        f"{row['face']} -> {row['coface']}" for row in representative_inclusions[:6]
+    ) or "vertices only"
+    summary_text = (
+        "SimplexTree provenance summary<br>"
+        "GUDHI filtration certificate: source=gudhi_canonical_complex(filtered_simplicial_object).simplex_tree; "
+        f"backend={html.escape(str(tree.get('backend', 'json')))}; no proxy/fallback.<br>"
+        f"dimension counts: {html.escape(dimension_summary)}<br>"
+        f"filtration histogram bins: {html.escape(histogram_summary)}<br>"
+        f"representative inclusions: {html.escape(inclusion_summary)}<br>"
+        "face-to-coface links hidden by default when actual cover edges exceed 120; "
+        "open dense inclusion graph from the legend trace."
     )
     _write_simplex_tree_poset_contract(path, simplex_tree_poset_contract)
     fig.update_layout(
@@ -3038,7 +3105,24 @@ def _write_simplex_tree_3d_map(path: Path, obj: dict[str, object], title: str, s
             camera=dict(eye=dict(x=1.62, y=-1.7, z=1.24)),
         ),
         legend=dict(orientation="v", x=0.01, y=0.91, xanchor="left", yanchor="top", font=dict(size=10), bgcolor="rgba(2,6,23,0.72)", bordercolor="rgba(125,211,252,0.22)", borderwidth=1),
-        margin=dict(t=176, l=0, r=112, b=28),
+        annotations=[
+            dict(
+                text=summary_text,
+                x=0.01,
+                y=1.08,
+                xref="paper",
+                yref="paper",
+                xanchor="left",
+                yanchor="bottom",
+                align="left",
+                showarrow=False,
+                font=dict(size=11, color="#dbeafe"),
+                bgcolor="rgba(2,6,23,0.76)",
+                bordercolor="rgba(125,211,252,0.28)",
+                borderwidth=1,
+            )
+        ],
+        margin=dict(t=250, l=0, r=112, b=28),
     )
     _write_plotly_dark_html(path, fig, title)
 

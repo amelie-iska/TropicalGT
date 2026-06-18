@@ -510,9 +510,22 @@ assert "open dense inclusion graph" in html
 assert "GUDHI filtration certificate" in html
 ```
 
-- [ ] **Step 8.6: Redesign simplex-tree pages**
+- [x] **Step 8.6: Redesign simplex-tree pages**
 
 Default to a readable summary: dimension-count bars, filtration histogram, sample of representative inclusions, and provenance/certificate table. Keep the dense 3D Hasse diagram available behind a button or legend-only trace, not as the default visual.
+
+Implemented 2026-06-18: simplex-tree pages now emit and validate
+`tropicalgt.simplex_tree_readability.v1`, display a summary-first Plotly
+annotation with GUDHI provenance, no-proxy filtration certificate language,
+dimension counts, filtration histogram bins, representative face-to-coface
+inclusions, and a dense-inclusion policy. Representative cover links remain
+visible by default, while the full actual face-to-coface cover trace is switched
+to legend-only whenever actual cover edges exceed 120. Validator fixtures and
+negative tests reject missing readability contracts. CPU-only checks passed:
+focused simplex-tree visualization and validator tests, full
+`test_simplicial_visualization.py` (48 passed), full
+`test_interactive_artifact_validator.py` (37 passed), `py_compile`, and
+`git diff --check`.
 
 - [x] **Step 8.7: Replace static filtered-complex previews**
 

@@ -461,7 +461,19 @@ def test_simplex_tree_poset_contract_records_actual_face_coface_covers(tmp_path:
     assert '"optional_sorted_label_trie_prefix_edges":7' in compact
     assert '"primary_edges":"actual_face_to_coface_covers"' in compact
     assert '"optional_prefix_links_visible":"legendonly"' in compact
+    assert sidecar["readability_contract"]["schema_version"] == "tropicalgt.simplex_tree_readability.v1"
+    assert sidecar["readability_contract"]["summary_first_default"] is True
+    assert sidecar["readability_contract"]["representative_inclusions_visible_by_default"] is True
+    assert sidecar["readability_contract"]["dense_face_to_coface_visibility_policy"] == "legendonly_when_actual_cover_edges_exceed_120"
+    assert sidecar["readability_contract"]["representative_cover_edge_count"] == 12
+    assert sidecar["readability_contract"]["dense_face_to_coface_links_hidden_by_default"] is False
+    assert sidecar["readability_contract"]["dimension_count_rows"]
+    assert sidecar["readability_contract"]["filtration_histogram"]
+    assert sidecar["summary_first_default"] is True
+    assert "representative face-to-coface covers (12)" in html
     assert "actual face-to-coface covers (12)" in html
+    assert "SimplexTree provenance summary" in html
+    assert "filtration histogram bins" in html
     assert "optional sorted-label trie prefix links (7)" in html
     assert "not disconnected simplex columns" in html
 

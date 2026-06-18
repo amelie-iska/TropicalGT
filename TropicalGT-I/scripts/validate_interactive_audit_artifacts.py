@@ -216,6 +216,14 @@ def _validate_simplex_tree_poset_contract(
     _assert(payload.get("primary_edges") == "actual_face_to_coface_covers", errors, f"{label} simplex-tree poset primary edges are not face-to-coface covers")
     _assert(payload.get("optional_prefix_links_visible") == "legendonly", errors, f"{label} simplex-tree trie prefix links are not legend-only")
     _assert(payload.get("position_source") == "model_embedding_barycenters_with_dimension_and_filtration_lift", errors, f"{label} simplex-tree poset position source is wrong")
+    readability = payload.get("readability_contract", {}) if isinstance(payload.get("readability_contract"), dict) else {}
+    _assert(readability.get("schema_version") == "tropicalgt.simplex_tree_readability.v1", errors, f"{label} simplex-tree readability contract has wrong schema")
+    _assert(readability.get("summary_first_default") is True, errors, f"{label} simplex-tree readability contract is not summary-first")
+    _assert(readability.get("representative_inclusions_visible_by_default") is True, errors, f"{label} simplex-tree readability contract does not show representative inclusions")
+    _assert(readability.get("dense_face_to_coface_visibility_policy") == "legendonly_when_actual_cover_edges_exceed_120", errors, f"{label} simplex-tree readability contract has wrong dense-edge policy")
+    _assert(isinstance(readability.get("dimension_count_rows"), list) and bool(readability.get("dimension_count_rows")), errors, f"{label} simplex-tree readability contract lacks dimension counts")
+    _assert(isinstance(readability.get("filtration_histogram"), list), errors, f"{label} simplex-tree readability contract lacks filtration histogram")
+    _assert(readability.get("no_proxy_or_fallback") is True, errors, f"{label} simplex-tree readability contract lacks no-proxy flag")
     _assert(payload.get("all_non_vertex_simplices_have_face_cover_edges") is True, errors, f"{label} simplex-tree poset has non-vertex simplices without face-cover edges")
     return payload
 
