@@ -1024,3 +1024,20 @@ CUDA_VISIBLE_DEVICES="" python3 -m py_compile TropicalGT-I/src/tropicalgt/ablati
 CUDA_VISIBLE_DEVICES="" /home/iska/miniconda3/bin/conda run -n tokengt python -m pytest -q tests/test_bpb_ablation.py tests/test_bpb_ablation_grid.py tests/test_training_metrics.py
 # 19 passed in 5.20s
 ```
+
+## 2026-06-18 Advanced BPB Readiness Contract Strict Gates
+
+Advanced BPB config readiness now has explicit optional strict gates for the next high-rigor training iterations:
+
+- `require_graphcg_active_full_rank=true` adds `advanced_bpb_graphcg_active_directions_full_rank`, requiring active GraphCG directions to cover the embedding dimension rather than only requiring a positive active subset.
+- `require_nontrivial_bundle_toric_losses=true` adds gates for chart-bundle auxiliary enablement and nonzero bundle/toric loss weights across transport, cocycle, flat-rank, normal-fan, GraphCG-cell agreement, chart-BPB consistency, and atom-stability coefficients.
+- `advanced_bpb_max_visual_audit_interval` makes the visual-audit cadence gate configurable while preserving the default 250-step policy.
+
+Validation:
+
+```text
+CUDA_VISIBLE_DEVICES="" python3 -m py_compile TropicalGT-I/src/tropicalgt/readiness_contracts.py TropicalGT-I/tests/test_readiness_audit.py
+# passed
+CUDA_VISIBLE_DEVICES="" /home/iska/miniconda3/bin/conda run -n tokengt python -m pytest -q tests/test_readiness_audit.py tests/test_prepare_5k_review_bundle.py tests/test_parameter_golf_review_loop.py tests/test_training_resume.py
+# 45 passed in 2.96s
+```

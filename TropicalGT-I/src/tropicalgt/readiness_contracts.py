@@ -54,6 +54,18 @@ def advanced_bpb_contract_report(cfg: dict[str, Any]) -> tuple[dict[str, Any], l
     graphcg_num_directions = int_cfg(model_cfg, "graphcg_num_directions")
     graphcg_active_directions = int_cfg(model_cfg, "graphcg_active_directions")
     sequence_tropical_enabled = bool(model_cfg.get("use_sequence_tropical", model_cfg.get("sequence_tropical_enabled", False)))
+    max_visual_audit_interval = int_cfg(cfg, "advanced_bpb_max_visual_audit_interval", 250)
+    require_graphcg_active_full_rank = bool(cfg.get("require_graphcg_active_full_rank", False))
+    require_nontrivial_bundle_toric_losses = bool(cfg.get("require_nontrivial_bundle_toric_losses", False))
+    bundle_toric_weights = {
+        "bundle_transport_weight": float_cfg(model_cfg, "bundle_transport_weight"),
+        "bundle_cocycle_weight": float_cfg(model_cfg, "bundle_cocycle_weight"),
+        "bundle_flat_rank_weight": float_cfg(model_cfg, "bundle_flat_rank_weight"),
+        "toric_normal_fan_weight": float_cfg(model_cfg, "toric_normal_fan_weight"),
+        "graphcg_toric_cell_agreement_weight": float_cfg(model_cfg, "graphcg_toric_cell_agreement_weight"),
+        "chart_bpb_consistency_weight": float_cfg(model_cfg, "chart_bpb_consistency_weight"),
+        "bundle_atom_stability_weight": float_cfg(model_cfg, "bundle_atom_stability_weight"),
+    }
     memory_scalar_thresholds = {
         key: _optional_float(cfg.get(key))
         for key in (
@@ -95,6 +107,9 @@ def advanced_bpb_contract_report(cfg: dict[str, Any]) -> tuple[dict[str, Any], l
         "graphcg_dim": dim,
         "graphcg_num_directions": graphcg_num_directions,
         "graphcg_active_directions": graphcg_active_directions,
+        "require_graphcg_active_full_rank": require_graphcg_active_full_rank,
+        "require_nontrivial_bundle_toric_losses": require_nontrivial_bundle_toric_losses,
+        "bundle_toric_weights": bundle_toric_weights,
         "memory_quality_require_probability_complex": bool(cfg.get("memory_quality_require_probability_complex", False)),
         "memory_quality_require_topological_algebra": bool(cfg.get("memory_quality_require_topological_algebra", False)),
         "memory_quality_min_probability_vertices": memory_min_vertices,
@@ -105,6 +120,7 @@ def advanced_bpb_contract_report(cfg: dict[str, Any]) -> tuple[dict[str, Any], l
         "graph_bpb_side_weight": float_cfg(cfg, "graph_bpb_side_weight"),
         "validation_every_steps": int_cfg(cfg, "validation_every_steps"),
         "visualization_every_steps": int_cfg(cfg, "visualization_every_steps"),
+        "advanced_bpb_max_visual_audit_interval": max_visual_audit_interval,
         "periodic_interactive_artifacts_enabled": bool(cfg.get("periodic_interactive_artifacts_enabled", False)),
         "periodic_browser_publish": bool(cfg.get("periodic_browser_publish", False)),
         "meet_in_middle": {
@@ -158,6 +174,26 @@ def advanced_bpb_contract_report(cfg: dict[str, Any]) -> tuple[dict[str, Any], l
         f"directions={graphcg_num_directions} dim={dim}",
     )
     add_gate(gates, "advanced_bpb_graphcg_active_directions_positive", graphcg_active_directions > 0, str(graphcg_active_directions))
+    if require_graphcg_active_full_rank:
+        add_gate(
+            gates,
+            "advanced_bpb_graphcg_active_directions_full_rank",
+            dim > 0 and graphcg_active_directions >= dim,
+            f"active={graphcg_active_directions} dim={dim}",
+        )
+    if require_nontrivial_bundle_toric_losses:
+        add_gate(
+            gates,
+            "advanced_bpb_chart_bundle_auxiliary_enabled",
+            bool(model_cfg.get("enable_chart_bundle_auxiliary", False)),
+            str(model_cfg.get("enable_chart_bundle_auxiliary", False)),
+        )
+        add_gate(
+            gates,
+            "advanced_bpb_bundle_toric_losses_nonzero",
+            all(weight > 0.0 for weight in bundle_toric_weights.values()),
+            json.dumps(bundle_toric_weights, sort_keys=True),
+        )
     add_gate(
         gates,
         "advanced_bpb_memory_quality_probability_complex",
@@ -175,9 +211,15 @@ def advanced_bpb_contract_report(cfg: dict[str, Any]) -> tuple[dict[str, Any], l
     add_gate(gates, "advanced_bpb_graph_bpb_side_weight_positive", section["graph_bpb_side_weight"] > 0.0, str(section["graph_bpb_side_weight"]))
     add_gate(
         gates,
-        "advanced_bpb_visual_audit_cadence_250",
-        0 < section["validation_every_steps"] <= 250 and 0 < section["visualization_every_steps"] <= 250,
-        f"validation={section['validation_every_steps']} visualization={section['visualization_every_steps']}",
+        f"advanced_bpb_visual_audit_cadence_{max_visual_audit_interval}",
+        max_visual_audit_interval > 0
+        and 0 < section["validation_every_steps"] <= max_visual_audit_interval
+        and 0 < section["visualization_every_steps"] <= max_visual_audit_interval,
+        (
+            f"validation={section['validation_every_steps']} "
+            f"visualization={section['visualization_every_steps']} "
+            f"max={max_visual_audit_interval}"
+        ),
     )
     add_gate(gates, "advanced_bpb_periodic_interactive_artifacts", section["periodic_interactive_artifacts_enabled"], str(section["periodic_interactive_artifacts_enabled"]))
     add_gate(gates, "advanced_bpb_periodic_browser_publish", section["periodic_browser_publish"], str(section["periodic_browser_publish"]))

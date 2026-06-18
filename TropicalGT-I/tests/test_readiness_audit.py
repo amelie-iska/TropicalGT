@@ -73,6 +73,46 @@ def test_advanced_bpb_contract_blocks_mismatched_wandb_run_name():
     assert "advanced_bpb_wandb_run_name_matches_config" in failed
 
 
+def test_advanced_bpb_contract_optional_strict_graphcg_bundle_and_cadence_gates():
+    config_path = Path(__file__).resolve().parents[1] / "configs" / "train_full_dataset_pg_bpb_step0_full24b_b54_v10_bpb_5k_gate.json"
+    cfg = json.loads(config_path.read_text(encoding="utf-8"))
+
+    cfg["advanced_bpb_max_visual_audit_interval"] = 500
+    cfg["require_graphcg_active_full_rank"] = True
+    cfg["require_nontrivial_bundle_toric_losses"] = True
+
+    section, gates = advanced_bpb_contract_report(cfg)
+    failed = {gate["name"] for gate in gates if gate["status"] == "fail"}
+
+    assert section["advanced_bpb_max_visual_audit_interval"] == 500
+    assert section["require_graphcg_active_full_rank"] is True
+    assert section["require_nontrivial_bundle_toric_losses"] is True
+    assert "advanced_bpb_visual_audit_cadence_500" not in failed
+    assert "advanced_bpb_graphcg_active_directions_full_rank" in failed
+    assert "advanced_bpb_chart_bundle_auxiliary_enabled" in failed
+    assert "advanced_bpb_bundle_toric_losses_nonzero" in failed
+
+    cfg["model"]["graphcg_active_directions"] = cfg["model"]["dim"]
+    cfg["model"]["enable_chart_bundle_auxiliary"] = True
+    for key in (
+        "bundle_transport_weight",
+        "bundle_cocycle_weight",
+        "bundle_flat_rank_weight",
+        "toric_normal_fan_weight",
+        "graphcg_toric_cell_agreement_weight",
+        "chart_bpb_consistency_weight",
+        "bundle_atom_stability_weight",
+    ):
+        cfg["model"][key] = 0.0001
+
+    _, fixed_gates = advanced_bpb_contract_report(cfg)
+    fixed_failed = {gate["name"] for gate in fixed_gates if gate["status"] == "fail"}
+
+    assert "advanced_bpb_graphcg_active_directions_full_rank" not in fixed_failed
+    assert "advanced_bpb_chart_bundle_auxiliary_enabled" not in fixed_failed
+    assert "advanced_bpb_bundle_toric_losses_nonzero" not in fixed_failed
+
+
 def test_advanced_bpb_contract_blocks_disabled_advanced_methods():
     config_path = Path(__file__).resolve().parents[1] / "configs" / "train_full_dataset_pg_bpb_step0_full24b_b54_v10_bpb_5k_gate.json"
     cfg = json.loads(config_path.read_text(encoding="utf-8"))
