@@ -264,3 +264,12 @@ CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/t
 - Verified the signature-cosine separation already present in analogical pair pages and the top-k table: coarse signature cosine is displayed separately and is explicitly excluded from derived-equivalence or derived/algebraic claims.
 - Verified the analogical simplex-tree analogy artifact already present at `analogical_simplex_tree_analogy.html/json`: it renders finite simplex-tree Hasse rows from the stored probability-map certificate, marks preserved versus failed simplex rows, and includes preserved face-to-coface chain summaries.
 - Marked the corresponding Task 6 plan items complete; remaining analogical work moves from core no-proxy correctness to browser QA/regeneration when GPU/process constraints allow.
+
+
+## 2026-06-18 Visual Repair Checklist Reconciliation
+
+- Reconciled stale visual-repair checklist items against the current source/tests after the analogical repairs. The code already enforces per-step reasoning complex source contracts, unique step fingerprints, no global trajectory/probability proxy, radius slider first-frame vertex-only behavior, monotone edge/face growth, dotted causal/order overlays, and solid radius-edge semantics.
+- Verified the selected-complex panel is click-linked rather than a static duplicate preview; the tests reject static SVG fallback preview text while retaining the interactive selected-complex inspector.
+- Verified NLL/fitness visualization language and density-cloud contracts: sparse observed anchors are not mislabeled as dense landscapes, Gaussian support samples are interpolation-only and hidden as model states, and actual model anchors/trajectory edges remain separate.
+- Verified simplex-tree visualizations use actual face-to-coface cover edges from GUDHI SimplexTree poset contracts rather than disconnected vertical stripe columns.
+- Marked these already-implemented items complete in the plan. Browser-regeneration and live `sample_001`/`sample_002` inspection remain open because they require current artifact generation/serving and must not disturb GPU work.
