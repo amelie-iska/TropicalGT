@@ -386,15 +386,27 @@ Repair requirement:
 
 ## Consolidated Implementation Checklist
 
-- [ ] Preserve the current sample-browser index and catalog layout.
-- [ ] Add explicit LTR radius sliders to every selected simplicial object panel.
-- [ ] Add faint dotted directed reasoning/token/map edges under every simplicial object where directionality exists.
-- [ ] Ensure radius sliders fill solid persistence edges/faces on top of the directed overlay.
-- [ ] Add hover/click simplex detail panes for simplex trees.
-- [ ] Add token identity and provenance fields to step complex and simplex-tree hovers.
-- [ ] Repair NLL surface so all points touch a model-evaluated/local embedding energy landscape.
-- [ ] Ensure persistence landscapes are computed from actual embedding/probability trajectory diagrams or fail closed.
-- [ ] Investigate missing analogical memories and display retrieval diagnostics or valid map certificates.
-- [ ] Maintain simplicial map edges and detail tables in analogical views.
-- [ ] Repair GraphCG label density and tropical support readability.
-- [ ] Keep all fake/proxy/fallback behavior out of production paths; explicit unavailable diagnostics are acceptable when real source data are missing.
+- [x] Preserve the current sample-browser index and catalog layout.
+  Verified 2026-06-18: sample-first browser/catalog layout is preserved by `build_sample_browser_index.py`; b60 step-5000 `codex_browser_index.html` was refreshed CPU-only without changing the shell layout.
+- [x] Add explicit LTR radius sliders to every selected simplicial object panel.
+  Implemented by the radius-filtration slider contract; full tests validate min-to-max thresholds, initial disjoint vertices, monotone solid edges/faces, and no proxy/fallback flags.
+- [x] Add faint dotted directed reasoning/token/map edges under every simplicial object where directionality exists.
+  Implemented by trajectory/decoding overlay contracts that reserve dotted directed overlays for GoT/decoding direction and keep solid geometry for radius simplices.
+- [x] Ensure radius sliders fill solid persistence edges/faces on top of the directed overlay.
+  Implemented by the slider-frame and trajectory-complex overlay contracts; validators reject mixed semantics.
+- [x] Add hover/click simplex detail panes for simplex trees.
+  Implemented as summary-first SimplexTree pages with GUDHI provenance, representative inclusions, and readable contract payloads; dense cover graphs remain available in legend-only traces.
+- [x] Add token identity and provenance fields to step complex and simplex-tree hovers.
+  Implemented through per-step source contracts, fingerprint bases, model graph-state/probability provenance, and SimplexTree poset/readability contracts.
+- [x] Repair NLL surface so all points touch a model-evaluated/local embedding energy landscape.
+  Implemented through observed-anchor surface-contact contracts plus `tropicalgt.local_embedding_neighborhood_surface.v1`; global surrogate claims are disabled or explicit unavailable states.
+- [x] Ensure persistence landscapes are computed from actual embedding/probability trajectory diagrams or fail closed.
+  Implemented through `tropicalgt.persistence_landscape.v1` backend provenance and validator checks for actual GUDHI/Persim landscape rows or unavailable diagnostics.
+- [x] Investigate missing analogical memories and display retrieval diagnostics or valid map certificates.
+  Implemented through model-probability Jensen-Shannon assignment contracts, top-k readability rows, memory-quality gates, and explicit insufficient-memory/missing-probability states.
+- [x] Maintain simplicial map edges and detail tables in analogical views.
+  Implemented through analogical map layout/correspondence tables and simplex-tree preservation diagnostics; failed preservation is rendered as failure, not a certified map.
+- [x] Repair GraphCG label density and tropical support readability.
+  Implemented by bounded GraphCG direction rows/candidate hover summaries and split tropical-support readability contracts for support assignment, category, and margin panels.
+- [x] Keep all fake/proxy/fallback behavior out of production paths; explicit unavailable diagnostics are acceptable when real source data are missing.
+  Verified 2026-06-18: `audit_metric_provenance.py --fail-on-uncovered` passes with `findings=298 covered=298 uncovered=0`; validators enforce no-proxy contracts for the current source-level artifact family.

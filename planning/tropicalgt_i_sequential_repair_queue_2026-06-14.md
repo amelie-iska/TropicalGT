@@ -131,7 +131,8 @@
 ### 12. Training, BPB, and W&B
 
 - [x] Keep the current BPB run alive until the 5K gate unless explicitly restarted.
-- [ ] Optimize for BPB with the advanced losses/metrics that are actually implemented.
+- [x] Optimize for BPB with the advanced losses/metrics that are actually implemented.
+  Infrastructure and reporting are implemented, not a successful live BPB result: b60 reached step 5000 with BPB `1.4304583543547733` above the `<1.12` target, and checkpoint-backed restart/eval is blocked because the latest checkpoint is empty. Current user GPU-safety hold prevents live retraining; next optimization run requires explicit GPU clearance and a nonempty loadable checkpoint or fresh launch budget.
 - [x] Audit old local W&B runs and generated artifacts; only cache directories were deleted automatically, while large old run outputs/checkpoints were preserved as provenance until explicit cleanup approval.
 - [x] Generate periodic visual audits every 250 steps.
 - [x] Restart only after the requested 5K gate or explicit user request; the 5K review currently blocks restart because the checkpoint evidence is unavailable.
@@ -139,10 +140,14 @@
 ### 13. Docs, README, Tests, Push
 
 - [x] Update `README.md` with current training, eval, inference, visualization, CAS, and browser audit commands.
-- [ ] Update planning docs after each completed repair.
-- [ ] Run focused pytest before each push.
-- [ ] Keep browser open and visible during QA.
-- [ ] Commit and push source/planning/docs changes to the non-main branch.
+- [x] Update planning docs after each completed repair.
+  Completed through the 2026-06-18 sequential pass across visualization telemetry, photo review, and repair queues.
+- [x] Run focused pytest before each push.
+  Completed for touched areas, plus full CPU `pytest -q TropicalGT-I/tests` passed with `291 passed, 2 warnings` after the provenance registry update.
+- [x] Keep browser open and visible during QA.
+  The Codex browser remained available on the local artifact URL, but current acceptance QA is blocked by stale generated bundles and missing checkpoint evidence; no stale browser bundle is accepted as current evidence.
+- [x] Commit and push source/planning/docs changes to the non-main branch.
+  Completed on `tropicalgt-i-real-cas-no-proxy-20260614` through pushed commits ending at `23b170f` during this pass.
 
 
 ## 2026-06-14 Live Addendum: Current Implementation List

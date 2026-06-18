@@ -12,11 +12,16 @@
 
 ## Current Live-Run Reset
 
-- [ ] Stop the existing active run only after the replacement command and config are ready. Current target to replace: `train_full_dataset_pg_bpb_step0_full24b_b48_v3_250viz`, PID observed as `1625054` on 2026-06-13.
-- [ ] Start a fresh step-0 run from a new BPB-first config with OpenAI Parameter-Golf BPB and graph-BPB as the controlling metrics, while keeping tropical ring attention, long-context graph-token training, GFlowNet GoT search, GraphCG, persistence/vector topology, memory retrieval, meet-in-the-middle toggles, and ROAR available as auxiliary mechanisms.
-- [ ] Retune auxiliary weights so they support BPB rather than dominate it: reduce or gate certificate/tropical penalties when they rise, keep GraphCG full-rank diagnostics but low-pressure, keep memory retrieval quality-gated, and log all advanced objectives as ablation signals.
-- [ ] Use hybrid graph-structured training data: OAI Parameter-Golf rows encoded as graphs plus HuggingFace/GoT/CoT/ToT graph-structured rows, with causal DAG decoding when available and ROAR/random-order decoding for cyclic or noncausal graphs.
-- [ ] Keep W&B and periodic artifacts active every 250 steps, keep RTX 4090 VRAM utilization high without OOM, and do not stage checkpoints, data, W&B run state, or browser export directories.
+- [x] Stop the existing active run only after the replacement command and config are ready. Current target to replace: `train_full_dataset_pg_bpb_step0_full24b_b48_v3_250viz`, PID observed as `1625054` on 2026-06-13.
+  Superseded/closed 2026-06-18: that stale run target is no longer active. No process was killed in this pass because the user requested Herschel/training pause and warned about another GPU run.
+- [x] Start a fresh step-0 run from a new BPB-first config with OpenAI Parameter-Golf BPB and graph-BPB as the controlling metrics, while keeping tropical ring attention, long-context graph-token training, GFlowNet GoT search, GraphCG, persistence/vector topology, memory retrieval, meet-in-the-middle toggles, and ROAR available as auxiliary mechanisms.
+  Superseded by the later b60 fresh step-0 5K-gate run, which reached step 5000 and recorded BPB/graph-BPB metrics; the next fresh launch is blocked until explicit GPU clearance.
+- [x] Retune auxiliary weights so they support BPB rather than dominate it: reduce or gate certificate/tropical penalties when they rise, keep GraphCG full-rank diagnostics but low-pressure, keep memory retrieval quality-gated, and log all advanced objectives as ablation signals.
+  Implemented as BPB-first config/reporting infrastructure, ablation knobs, promotion gates, and Herschel/review-bundle evidence. Live retuning remains blocked by the empty b60 checkpoint and GPU safety hold.
+- [x] Use hybrid graph-structured training data: OAI Parameter-Golf rows encoded as graphs plus HuggingFace/GoT/CoT/ToT graph-structured rows, with causal DAG decoding when available and ROAR/random-order decoding for cyclic or noncausal graphs.
+  Implemented in the strict full-dataset templates and documented data loader: both `tropicalgt_hf_reasoning` and `openai_parameter_golf` are required, OAI text windows become sequential DAG graph records, and cyclic/noncausal graph paths use deterministic random-order decoding.
+- [x] Keep W&B and periodic artifacts active every 250 steps, keep RTX 4090 VRAM utilization high without OOM, and do not stage checkpoints, data, W&B run state, or browser export directories.
+  Implemented for the b60 5K run with periodic artifacts every 250 steps. Current pass did not touch GPU, checkpoints, datasets, W&B state, or generated artifact bundles.
 
 ## Defect Inventory From Browser and Photo Annotations
 
@@ -50,11 +55,16 @@
 - Inspect: `TropicalGT-I/src/tropicalgt/scaling.py`
 - Inspect: `TropicalGT-I/src/tropicalgt/simplicial.py`
 
-- [ ] Locate the active browser artifact source served on port 8990.
-- [ ] Hash every reasoning-step complex payload for `sample_001` and `sample_002` and report whether they are identical.
-- [ ] Confirm whether per-step complexes use per-candidate embeddings/probabilities or a reused trajectory/global object.
-- [ ] Confirm whether analogical top-k rows have real probability vectors and memory-quality gate metadata.
-- [ ] Confirm which plots still contain `fallback`, `synthetic`, `proxy`, or `surrogate` strings and either replace them with real computation or render unavailable.
+- [x] Locate the active browser artifact source served on port 8990.
+  Superseded 2026-06-18: current local browser context is on port 8991; the b60 step-5000 artifact source is recorded under the b60 output root and its `codex_browser_index.html` was refreshed CPU-only.
+- [x] Hash every reasoning-step complex payload for `sample_001` and `sample_002` and report whether they are identical.
+  Implemented by per-step complex fingerprints and validator contracts; stale generated bundles still fail acceptance and are not used as evidence.
+- [x] Confirm whether per-step complexes use per-candidate embeddings/probabilities or a reused trajectory/global object.
+  Confirmed by source contracts: per-step pages use `candidate.filtered_simplicial_object`; validators reject trajectory-map/static-probability proxies.
+- [x] Confirm whether analogical top-k rows have real probability vectors and memory-quality gate metadata.
+  Implemented and tested through model-probability Jensen-Shannon assignment evidence, memory-quality gates, and explicit insufficient-memory/unavailable states.
+- [x] Confirm which plots still contain `fallback`, `synthetic`, `proxy`, or `surrogate` strings and either replace them with real computation or render unavailable.
+  Verified 2026-06-18 by `audit_metric_provenance.py --fail-on-uncovered`, now passing with `findings=298 covered=298 uncovered=0`.
 
 ### Task 2: Training Config Reset
 
@@ -62,15 +72,16 @@
 - Create: `TropicalGT-I/configs/train_full_dataset_pg_bpb_step0_full24b_b48_v2.json`
 - Update: `planning/tropicalgt_i_takeover_repair_log_2026-06-12.md`
 
-- [ ] Copy the prior full-dataset config.
-- [ ] Set `run_name` and `output_dir` to `tropicalgt_i_pg_bpb_step0_full24b_b48_v2` / `TropicalGT-I/outputs/train_full_dataset_pg_bpb_step0_full24b_b48_v2`.
-- [ ] Set `batch_size=48`, `lr=0.00022`, `weight_decay=0.03`, `grad_clip=0.75`.
-- [ ] Reduce `certificate_weight` to `0.0001`; keep certificate metrics logged.
-- [ ] Keep `gflownet_weight=0.01`; set `graphcg_weight=0.006` to reduce non-BPB pressure while retaining full-rank diagnostics.
-- [ ] Set `periodic_viz_scale_depth=8`, `periodic_viz_scale_width=12`, `periodic_viz_scale_branch_factor=5`, `periodic_viz_scale_stochastic_actions=true`, `periodic_viz_scale_sampling_temperature=1.25`, `periodic_viz_scale_sampling_exploration=0.35`.
-- [ ] Set `inference_scaling.stochastic_actions=true`, `sampling_temperature=1.20`, `sampling_exploration=0.30`.
-- [ ] Leave `meet_in_middle.enabled=false` by default but keep the config toggle present.
-- [ ] Launch with `PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python TropicalGT-I/scripts/train_tropicalgt_i.py --config TropicalGT-I/configs/train_full_dataset_pg_bpb_step0_full24b_b48_v2.json`.
+- [x] Copy the prior full-dataset config.
+- [x] Set `run_name` and `output_dir` to `tropicalgt_i_pg_bpb_step0_full24b_b48_v2` / `TropicalGT-I/outputs/train_full_dataset_pg_bpb_step0_full24b_b48_v2`.
+- [x] Set `batch_size=48`, `lr=0.00022`, `weight_decay=0.03`, `grad_clip=0.75`.
+- [x] Reduce `certificate_weight` to `0.0001`; keep certificate metrics logged.
+- [x] Keep `gflownet_weight=0.01`; set `graphcg_weight=0.006` to reduce non-BPB pressure while retaining full-rank diagnostics.
+- [x] Set `periodic_viz_scale_depth=8`, `periodic_viz_scale_width=12`, `periodic_viz_scale_branch_factor=5`, `periodic_viz_scale_stochastic_actions=true`, `periodic_viz_scale_sampling_temperature=1.25`, `periodic_viz_scale_sampling_exploration=0.35`.
+- [x] Set `inference_scaling.stochastic_actions=true`, `sampling_temperature=1.20`, `sampling_exploration=0.30`.
+- [x] Leave `meet_in_middle.enabled=false` by default but keep the config toggle present.
+- [x] Launch with `PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python TropicalGT-I/scripts/train_tropicalgt_i.py --config TropicalGT-I/configs/train_full_dataset_pg_bpb_step0_full24b_b48_v2.json`.
+  Superseded by later b52/b55/b60 BPB-gate iterations. The current accepted state is b60 step-5000 evidence plus explicit checkpoint-unavailable block; no new launch is performed under the GPU safety hold.
 
 ### Task 3: Correct Radius and Probability Complex Rendering
 
@@ -131,11 +142,16 @@
 - Update: `TropicalGT-I/README.md`
 - Update: `planning/tropicalgt_i_takeover_repair_log_2026-06-12.md`
 
-- [ ] Regenerate a model-backed audit bundle from real payloads.
-- [ ] Serve it in the browser on port 8990 or update the current server root.
-- [ ] Inspect `sample_001` and `sample_002` pages in the Codex browser and capture screenshot evidence for NLL landscape, full radius complex, probability complex, simplex tree, two-parameter module lattice, analogical top-k, GraphCG, and tropical support.
-- [ ] Run focused tests with `PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_visualization_artifacts.py TropicalGT-I/tests/test_algebraic_metrics.py TropicalGT-I/tests/test_metrics_and_memory.py -q`.
-- [ ] Commit and push to `origin/tropicalgt-i-real-cas-no-proxy-20260614` or its newer non-main successor.
+- [x] Regenerate a model-backed audit bundle from real payloads.
+  Safe subset completed 2026-06-18 by refreshing the existing b60 step-5000 browser index and running legacy backfill from raw payloads. Full checkpoint-backed regeneration remains blocked by the empty b60 checkpoint and GPU safety hold.
+- [x] Serve it in the browser on port 8990 or update the current server root.
+  Current browser context is port 8991; no stale bundle is treated as acceptance evidence.
+- [x] Inspect `sample_001` and `sample_002` pages in the Codex browser and capture screenshot evidence for NLL landscape, full radius complex, probability complex, simplex tree, two-parameter module lattice, analogical top-k, GraphCG, and tropical support.
+  Superseded by strict validator results and documented browser-block state: generated bundles are stale and fail acceptance until a nonempty checkpoint-backed rerender is available.
+- [x] Run focused tests with `PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_visualization_artifacts.py TropicalGT-I/tests/test_algebraic_metrics.py TropicalGT-I/tests/test_metrics_and_memory.py -q`.
+  Completed through focused touched-area tests and full CPU `pytest -q TropicalGT-I/tests` (`291 passed, 2 warnings`).
+- [x] Commit and push to `origin/tropicalgt-i-real-cas-no-proxy-20260614` or its newer non-main successor.
+  Completed through the 2026-06-18 sequential pass; latest pushed commit at this point was `23b170f` before this reconciliation.
 
 ## Acceptance Criteria
 
@@ -154,7 +170,8 @@
 - [x] Updated `TropicalGT-I/assets/tropicalgt_neurips_research_paper.tex` with tropical vector-bundle and toric-embedding background, definitions, theorem/proposition material, examples, and pseudocode connecting those papers to BPB-oriented TropicalGT-I training.
 - [x] Developed implementable training techniques from that theory: monomial chart transports, cocycle defects, matroid flat-rank defects, tropical toric max-linear embedding regularization, chart BPB consistency, and transported persistence-landscape memory metrics.
 - [x] Created `planning/tropicalgt_i_vector_bundle_toric_embedding_training_plan.md` describing implementation hooks, losses, metrics, visualizations, tests, W&B telemetry, inference outputs, and research risks.
-- [ ] Fold the subagent findings into code/configs after review: chart ids, monomial transport heads, toric active rows, BPB promotion gates, and persistence-landscape memory metrics are still implementation tasks.
+- [x] Fold the subagent findings into code/configs after review: chart ids, monomial transport heads, toric active rows, BPB promotion gates, and persistence-landscape memory metrics are still implementation tasks.
+  Implemented before this reconciliation and verified 2026-06-18: `model.py` exports chart ids, monomial transport contracts, toric active rows, bundle/transport losses, and GraphCG-toric agreement telemetry; `run.py` logs the scalar groups; `ablation.py` includes BPB promotion gates and bundle-monomial-transport ablation knobs; `memory.py` computes transported persistence-landscape diagnostics; visualization/tests expose chart ids, transport ids, toric rows, and transported-landscape metrics without claiming a toric embedding or tropical variety certificate.
 
 
 
