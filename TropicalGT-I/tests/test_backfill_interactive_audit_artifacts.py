@@ -309,3 +309,90 @@ def test_backfill_regenerates_unavailable_analogical_contracts_without_proxy_map
     assert (audit / "analogical_memory_map_02.html").exists()
     dashboard = (audit / "inference_audit.html").read_text(encoding="utf-8")
     assert "analogical_simplex_tree_analogy.html" in dashboard
+
+
+def test_backfill_regenerates_tropical_support_contracts_from_stored_payload(tmp_path: Path):
+    module = _load_backfill()
+    audit = tmp_path / "got_audit"
+    audit.mkdir()
+    tokens = [
+        {
+            "index": 0,
+            "text": "graph root token",
+            "kind": "graph",
+            "node_type": "graph",
+            "active_support_index": 0,
+            "margin": 0.0004,
+            "active_support_probability": 0.91,
+            "support_probability_entropy_bits": 0.3,
+            "top_model_support_probabilities": [{"index": 0, "probability": 0.91}],
+            "support_probability_source": "model_tropical_support_probabilities",
+        },
+        {
+            "index": 1,
+            "text": "problem token",
+            "kind": "node",
+            "node_type": "problem",
+            "active_support_index": 0,
+            "margin": 0.004,
+            "active_support_probability": 0.81,
+            "support_probability_entropy_bits": 0.5,
+            "top_model_support_probabilities": [{"index": 0, "probability": 0.81}],
+            "support_probability_source": "model_tropical_support_probabilities",
+        },
+        {
+            "index": 2,
+            "text": "answer token",
+            "kind": "node",
+            "node_type": "answer",
+            "active_support_index": 2,
+            "margin": 0.12,
+            "active_support_probability": 0.72,
+            "support_probability_entropy_bits": 0.7,
+            "top_model_support_probabilities": [{"index": 2, "probability": 0.72}],
+            "support_probability_source": "model_tropical_support_probabilities",
+        },
+        {
+            "index": 3,
+            "text": "edge token",
+            "kind": "edge",
+            "edge_type": "reason",
+            "active_support_index": 2,
+            "margin": 0.2,
+            "active_support_probability": 0.64,
+            "support_probability_entropy_bits": 0.9,
+            "top_model_support_probabilities": [{"index": 2, "probability": 0.64}],
+            "support_probability_source": "model_tropical_support_probabilities",
+        },
+    ]
+    (audit / "tropical_support_payload.json").write_text(
+        json.dumps({"metrics": {"available": True, "token_count": len(tokens), "invalid_support_count": 0}, "tokens": tokens}),
+        encoding="utf-8",
+    )
+    (audit / "tropical_support_heatmap.html").write_text("static legacy tropical support page", encoding="utf-8")
+
+    report = module.backfill_audit_root(audit)
+
+    kinds = {row["kind"] for row in report["actions"]}
+    assert "tropical_support_contract_backfill" in kinds
+    payload = json.loads((audit / "tropical_support_payload.json").read_text(encoding="utf-8"))
+    render_contract = payload["tropical_support_render_contract"]
+    readability = payload["tropical_support_readability_contract"]
+    assert render_contract["schema_version"] == "tropicalgt.tropical_support_render.v1"
+    assert render_contract["no_proxy_or_fallback"] is True
+    assert render_contract["assignment_matrix_binary"] is True
+    assert render_contract["support_columns_policy"] == "observed_valid_active_support_indices_only"
+    assert render_contract["normal_fan_wall_crossing_certified"] is False
+    assert render_contract["token_count"] == len(tokens)
+    assert readability["schema_version"] == "tropicalgt.tropical_support_readability.v1"
+    assert readability["no_proxy_or_fallback"] is True
+    assert readability["panels_are_separate"] is True
+    assert readability["assignment_and_margin_panels_separated"] is True
+    assert payload["metrics"]["render_contract"].startswith("assignment_matrix is binary model argmax support")
+    assert len(payload["support_assignment_status_by_token"]) == len(tokens)
+    assert len(payload["support_flow_edges"]) == len(tokens)
+    html = (audit / "tropical_support_heatmap.html").read_text(encoding="utf-8")
+    assert "plotly.min.js" in html
+    assert "Plotly.newPlot" in html
+    assert "tropical_support_render_contract" in html
+    assert "tropical_support_readability_contract" in html

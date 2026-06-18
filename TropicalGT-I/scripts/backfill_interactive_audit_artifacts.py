@@ -18,6 +18,7 @@ from tropicalgt.visualization import (  # noqa: E402
     write_got_trajectory_visualization,
     write_toric_embedding_sidecar,
     write_tropical_fan_diagnostics,
+    write_tropical_support_heatmap,
     write_two_parameter_bifiltration_visualization,
 )
 
@@ -43,6 +44,75 @@ def _dashboard_artifact_paths(root: Path) -> dict[str, str]:
 
 
 
+
+
+def _tropical_support_contracts_need_backfill(root: Path) -> bool:
+    payload_path = root / "tropical_support_payload.json"
+    if not payload_path.exists():
+        return False
+    payload = _read_json(payload_path)
+    if not payload:
+        return False
+    metrics = payload.get("metrics", {}) if isinstance(payload.get("metrics"), dict) else {}
+    render_contract = payload.get("tropical_support_render_contract", {}) if isinstance(payload.get("tropical_support_render_contract"), dict) else {}
+    readability = payload.get("tropical_support_readability_contract", {}) if isinstance(payload.get("tropical_support_readability_contract"), dict) else {}
+    if render_contract.get("schema_version") != "tropicalgt.tropical_support_render.v1":
+        return True
+    if render_contract.get("no_proxy_or_fallback") is not True:
+        return True
+    if render_contract.get("support_columns_policy") != "observed_valid_active_support_indices_only":
+        return True
+    if render_contract.get("assignment_matrix_binary") is not True:
+        return True
+    if not str(render_contract.get("assignment_matrix_semantics", "")).startswith("binary argmax support-selection mask"):
+        return True
+    if render_contract.get("normal_fan_wall_crossing_certified") is not False:
+        return True
+    if render_contract.get("wall_margin_metric_scope") != "margin_threshold_audit_not_certified_normal_fan_wall_crossing":
+        return True
+    if int(render_contract.get("token_count", -1) or -1) != int(metrics.get("token_count", -2) or -2):
+        return True
+    if int(render_contract.get("invalid_support_count", -1) or -1) != int(metrics.get("invalid_support_count", -2) or -2):
+        return True
+    if readability.get("schema_version") != "tropicalgt.tropical_support_readability.v1":
+        return True
+    panel_roles = set(readability.get("panel_roles", [])) if isinstance(readability.get("panel_roles"), list) else set()
+    required_roles = set(readability.get("required_panel_roles", [])) if isinstance(readability.get("required_panel_roles"), list) else set()
+    if readability.get("no_proxy_or_fallback") is not True:
+        return True
+    if readability.get("panels_are_separate") is not True:
+        return True
+    if not required_roles or not required_roles.issubset(panel_roles):
+        return True
+    for key in (
+        "assignment_and_margin_panels_separated",
+        "support_strip_split_from_margin_profile",
+        "model_probability_summaries_separate_from_assignment_matrix",
+        "compact_tick_labels",
+        "full_token_text_preserved_in_hover_and_payload",
+        "exact_token_indices_preserved_in_payload",
+        "group_summaries_from_trace_fields",
+        "invalid_active_support_indices_not_fabricated",
+    ):
+        if readability.get(key) is not True:
+            return True
+    if readability.get("normal_fan_wall_crossing_certified") is not False:
+        return True
+    html_path = root / "tropical_support_heatmap.html"
+    if not html_path.exists():
+        return True
+    try:
+        html = html_path.read_text(encoding="utf-8")
+    except Exception:
+        return True
+    required_html_markers = (
+        "Plotly.newPlot",
+        "plotly.min.js",
+        "tropical_support_render_contract",
+        "tropical_support_readability_contract",
+        "No support-token proxies",
+    )
+    return any(marker not in html for marker in required_html_markers)
 
 
 def _analogical_contracts_need_backfill(root: Path) -> bool:
@@ -184,6 +254,39 @@ def backfill_audit_root(audit_root: str | Path, *, overwrite: bool = False) -> d
                 "paths": paths,
             }
         )
+
+
+    support_payload_path = root / "tropical_support_payload.json"
+    tropical_support_needed = overwrite or _tropical_support_contracts_need_backfill(root)
+    if tropical_support_needed and support_payload_path.exists():
+        payload = _read_json(support_payload_path)
+        tokens = payload.get("tokens", []) if isinstance(payload.get("tokens"), list) else []
+        metrics = payload.get("metrics", {}) if isinstance(payload.get("metrics"), dict) else {}
+        if tokens:
+            trace: dict[str, Any] = {"tokens": tokens}
+            if metrics:
+                trace["metrics"] = metrics
+            paths = write_tropical_support_heatmap({"graph_token_trace": trace, "metrics": metrics}, root)
+            refreshed = _read_json(root / "tropical_support_payload.json")
+            refreshed_metrics = refreshed.get("metrics", {}) if isinstance(refreshed.get("metrics"), dict) else {}
+            actions.append(
+                {
+                    "kind": "tropical_support_contract_backfill",
+                    "reason": "Regenerated tropical support heatmap, no-proxy render contract, readability contract, support assignment status rows, and flow edges from stored tropical_support_payload.json token rows only.",
+                    "token_count": int(refreshed_metrics.get("token_count", len(tokens)) or len(tokens)),
+                    "unique_support_count": int(refreshed_metrics.get("unique_support_count", 0) or 0),
+                    "invalid_support_count": int(refreshed_metrics.get("invalid_support_count", 0) or 0),
+                    "paths": paths,
+                }
+            )
+        else:
+            actions.append(
+                {
+                    "kind": "tropical_support_contract_unavailable",
+                    "reason": "Tropical support contracts were stale, but tropical_support_payload.json had no stored token rows; no support assignment matrix or margin evidence was fabricated.",
+                    "paths": {"tropical_support_payload": str(support_payload_path)},
+                }
+            )
 
 
     analogical_needed = overwrite or _analogical_contracts_need_backfill(root)

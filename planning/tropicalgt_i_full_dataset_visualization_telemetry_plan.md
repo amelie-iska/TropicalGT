@@ -884,3 +884,21 @@ for remaining non-analogical evidence, but the gap count decreased from `109` to
 tropical support `30`, persistence landscapes `17`, CAS resolution certificates
 `12`, GraphCG `6`, other `4`, trajectory overlay/radius `3`, missing artifact
 `1`, and row coverage `1`.
+
+Completed 2026-06-18 follow-up: legacy tropical-support backfill now detects
+stale payload/page contracts and regenerates the support heatmap from stored
+`tropical_support_payload.json` token rows only. It does not read the multi-GB
+full `inference_audit.json` and does not fabricate support assignments: missing
+tokens produce an explicit unavailable action. The regenerated payload includes
+the no-proxy render contract, readability contract, binary assignment mask,
+selected-margin matrix, support assignment status rows, query-to-support flow
+edges, wall-margin threshold scope, token category strip, and local Plotly HTML.
+
+Executed safe generated-artifact tropical-support backfill on the b60 step-5000
+`got_audit` bundle without staging generated outputs. It regenerated from `124`
+stored token rows with `3` observed support columns and `0` invalid support
+assignments. The strict validator still fails for remaining non-tropical
+evidence, but the gap count decreased from `74` to `44`; `tropical_support`
+decreased from `30` to `0`. Remaining categories are persistence landscapes
+`17`, CAS resolution certificates `12`, GraphCG `6`, other `4`, trajectory
+overlay/radius `3`, missing artifact `1`, and row coverage `1`.
