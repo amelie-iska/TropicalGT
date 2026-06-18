@@ -948,6 +948,13 @@ def validate_row(row_dir: Path, *, min_candidates: int = 8, min_depth: int = 2, 
                 _assert(int(_finite_float(card.get("quotient_basis_lattice_count"), -1.0)) == len(card.get("quotient_basis_lattice_points", [])), errors, f"trajectory bifiltration staircase card {index} quotient-basis count mismatch")
                 _assert(isinstance(card.get("hilbert_numerator_terms"), list), errors, f"trajectory bifiltration staircase card {index} lacks Hilbert numerator terms")
                 _assert(isinstance(card.get("adjacent_lcm_syzygies"), list), errors, f"trajectory bifiltration staircase card {index} lacks adjacent LCM syzygy terms")
+                hilbert_terms = card.get("hilbert_numerator_terms", []) if isinstance(card.get("hilbert_numerator_terms"), list) else []
+                adjacent_lcms = card.get("adjacent_lcm_syzygies", []) if isinstance(card.get("adjacent_lcm_syzygies"), list) else []
+                minimal_antichain = card.get("minimal_antichain", []) if isinstance(card.get("minimal_antichain"), list) else []
+                if card.get("resolution_available") is True:
+                    _assert(bool(hilbert_terms), errors, f"trajectory bifiltration staircase card {index} lacks exact Hilbert numerator terms for an available staircase resolution")
+                    if len(minimal_antichain) > 1:
+                        _assert(bool(adjacent_lcms), errors, f"trajectory bifiltration staircase card {index} lacks adjacent LCM syzygies for a nonprincipal two-variable staircase resolution")
                 _assert("not a full persistence-module free resolution" in str(card.get("theorem_scope", "")), errors, f"trajectory bifiltration staircase card {index} theorem scope lacks no-proxy resolution boundary")
         staircase_evidence = bifiltration_visual_payload.get("miller_sturmfels_staircase_evidence", {}) if isinstance(bifiltration_visual_payload.get("miller_sturmfels_staircase_evidence"), dict) else {}
         _assert(staircase_evidence.get("schema_version") == "tropicalgt.miller_sturmfels_staircase_evidence.v1", errors, "trajectory bifiltration visual payload lacks Miller-Sturmfels staircase evidence schema")
@@ -984,6 +991,8 @@ def validate_row(row_dir: Path, *, min_candidates: int = 8, min_depth: int = 2, 
         _assert(staircase_evidence.get("all_cards_have_generator_labels") is True, errors, "Miller-Sturmfels staircase evidence does not certify generator labels")
         _assert(staircase_evidence.get("all_cards_have_upward_closed_regions") is True, errors, "Miller-Sturmfels staircase evidence does not certify upward-closed regions")
         _assert(staircase_evidence.get("all_cards_have_quotient_basis_lattice_points") is True, errors, "Miller-Sturmfels staircase evidence does not certify quotient-basis lattice points")
+        _assert(staircase_evidence.get("all_cards_have_hilbert_numerator_terms") is True, errors, "Miller-Sturmfels staircase evidence does not certify Hilbert numerator terms")
+        _assert(staircase_evidence.get("all_cards_have_adjacent_lcm_syzygy_lists") is True, errors, "Miller-Sturmfels staircase evidence does not certify adjacent LCM syzygy lists")
         _assert(staircase_evidence.get("quotient_basis_counts_match_lattice_points") is True, errors, "Miller-Sturmfels staircase evidence quotient-basis counts do not match lattice points")
         _assert(staircase_evidence.get("theorem_scope_boundary_all_cards") is True, errors, "Miller-Sturmfels staircase evidence lacks theorem-scope no-proxy boundaries")
         _assert(staircase_evidence.get("coordinate_axes_are_one_dimensional_cones") is True, errors, "Miller-Sturmfels staircase evidence does not certify coordinate axes as one dimensional cones")

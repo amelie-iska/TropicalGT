@@ -1064,3 +1064,10 @@ CUDA_VISIBLE_DEVICES="" /home/iska/miniconda3/bin/conda run -n tokengt python -m
 - Verification passed: py-compile; focused CAS source-contract tests (`2 passed, 30 deselected`); full algebraic persistence tests (`32 passed`).
 - Live CAS smoke now asserts the same source-contract fields against the installed backend path, including certificate-summary source, Fitting/minor block names, exactness-required rendering, no derived-equivalence implication, and no proxy/fallback.
 - Verification passed: live CAS source-contract smoke (`1 passed`); full algebraic persistence tests (`32 passed`); metric provenance audit (`332 covered, 0 uncovered`).
+
+## 2026-06-18 Miller-Sturmfels Hilbert/LCM Validator Gate
+
+- The strict interactive-artifact validator now rejects two-parameter staircase cards that claim an available exact bivariate staircase resolution without exact Hilbert numerator terms.
+- For nonprincipal two-generator-or-more staircase cards, the validator now rejects missing adjacent-LCM syzygy rows instead of accepting an empty list merely because the field exists.
+- `miller_sturmfels_staircase_evidence` must certify `all_cards_have_hilbert_numerator_terms` and `all_cards_have_adjacent_lcm_syzygy_lists`, preserving the no-proxy boundary for the Miller-Sturmfels theorem surface.
+- Verification passed: py-compile; focused validator regressions (`3 passed, 45 deselected`); full interactive artifact validator (`48 passed`); metric provenance audit (`332 covered, 0 uncovered`).

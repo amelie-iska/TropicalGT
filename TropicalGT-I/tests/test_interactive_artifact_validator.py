@@ -2034,6 +2034,44 @@ def test_validate_audit_root_rejects_miller_sturmfels_staircase_aggregate_mismat
     assert any("quotient-basis aggregate" in err for err in report["errors"])
 
 
+def test_validate_audit_root_rejects_available_staircase_without_hilbert_terms(tmp_path: Path):
+    validator = _load_validator()
+    audit = tmp_path / "step_00000001" / "got_audit"
+    row = _row(audit, ".")
+    visual_path = row / "trajectory_persistence" / "two_parameter_bifiltration.json"
+    payload = json.loads(visual_path.read_text(encoding="utf-8"))
+    payload["staircase_cards"][0]["hilbert_numerator_terms"] = []
+    evidence = payload["miller_sturmfels_staircase_evidence"]
+    evidence["total_hilbert_numerator_term_count"] = 0
+    evidence["cards_with_hilbert_numerator_terms_count"] = 0
+    evidence["all_cards_have_hilbert_numerator_terms"] = False
+    evidence["per_card_counts"][0]["hilbert_numerator_term_count"] = 0
+    visual_path.write_text(json.dumps(payload), encoding="utf-8")
+    _write(audit / "codex_browser_index.html", _codex_browser_html(_browser_samples(audit, ["."])))
+    report = validator.validate_audit_root(audit, min_rows=1, min_candidates=4, min_depth=2)
+    assert not report["ok"]
+    assert any("Hilbert numerator terms" in err and "available staircase resolution" in err for err in report["errors"])
+
+
+def test_validate_audit_root_rejects_nonprincipal_staircase_without_adjacent_lcms(tmp_path: Path):
+    validator = _load_validator()
+    audit = tmp_path / "step_00000001" / "got_audit"
+    row = _row(audit, ".")
+    visual_path = row / "trajectory_persistence" / "two_parameter_bifiltration.json"
+    payload = json.loads(visual_path.read_text(encoding="utf-8"))
+    payload["staircase_cards"][0]["adjacent_lcm_syzygies"] = []
+    evidence = payload["miller_sturmfels_staircase_evidence"]
+    evidence["total_adjacent_lcm_syzygy_count"] = 0
+    evidence["cards_with_adjacent_lcm_syzygies_count"] = 0
+    evidence["all_cards_have_adjacent_lcm_syzygy_lists"] = False
+    evidence["per_card_counts"][0]["adjacent_lcm_syzygy_count"] = 0
+    visual_path.write_text(json.dumps(payload), encoding="utf-8")
+    _write(audit / "codex_browser_index.html", _codex_browser_html(_browser_samples(audit, ["."])))
+    report = validator.validate_audit_root(audit, min_rows=1, min_candidates=4, min_depth=2)
+    assert not report["ok"]
+    assert any("adjacent LCM syzygies" in err and "nonprincipal" in err for err in report["errors"])
+
+
 def test_validate_audit_root_rejects_absolute_analogical_pair_pages(tmp_path: Path):
     validator = _load_validator()
     audit = tmp_path / "step_00000001" / "got_audit"

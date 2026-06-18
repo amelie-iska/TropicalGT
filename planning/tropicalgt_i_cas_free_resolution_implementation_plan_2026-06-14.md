@@ -832,3 +832,16 @@ CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/t
 CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest -q TropicalGT-I/tests/test_algebraic_persistence.py
 # 32 passed
 ```
+
+## 2026-06-18 Miller-Sturmfels Hilbert/LCM Validator Gate
+
+Sequential two-parameter QA item completed:
+
+- The validator now requires available exact bivariate staircase-resolution cards to carry nonempty exact Hilbert numerator terms.
+- Nonprincipal two-variable staircase cards must carry adjacent LCM syzygy rows when the theorem surface reports an available resolution.
+- Aggregate Miller-Sturmfels evidence must explicitly certify Hilbert numerator terms and adjacent-LCM syzygy lists across all cards.
+- This closes the remaining validator gap for the user-facing requirements: x_radius horizontal, x_level vertical, upward-closed generated regions, quotient-basis lattice points, minimal antichain boundary, generator labels, exact Hilbert terms where available, adjacent-LCM syzygies where the two-variable theorem applies, and no 3D rank slab as the primary view.
+
+Validation: py-compile passed; focused validator regressions passed (`3 passed, 45 deselected`); full interactive artifact validator passed (`48 passed`); metric provenance audit passed (`332 covered, 0 uncovered`).
+
+Next linear item: continue through the simplex-tree/NLL/tropical-support repair queue and preserve actual-data-only browser/validator contracts.

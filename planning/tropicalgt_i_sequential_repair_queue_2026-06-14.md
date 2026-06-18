@@ -834,3 +834,11 @@ The live item-by-item repair inventory is maintained in `planning/tropicalgt_i_c
 - [x] Verification passed: py-compile; focused CAS source-contract tests (`2 passed, 30 deselected`); full algebraic persistence tests (`32 passed`).
 - [x] Live backend smoke now asserts the same source-contract fields on the installed CAS path: certificate-summary source, backend-specific Fitting/minor block names, exactness-required rendering, diagnostic-only Fitting/minor policy, no derived-equivalence implication, and no proxy/fallback.
 - [x] Verification passed: live CAS source-contract smoke (`1 passed`); full algebraic persistence tests (`32 passed`); metric provenance audit (`332 covered, 0 uncovered`).
+
+### Current Objective Update - Miller-Sturmfels Hilbert/LCM Validator Gate Pass
+
+- [x] Tightened the two-parameter bifiltration validator so available staircase-resolution cards must expose exact Hilbert numerator terms, not just a placeholder field.
+- [x] Tightened nonprincipal staircase cards so adjacent-LCM syzygy rows are required whenever the two-variable theorem surface claims an available resolution.
+- [x] Required the aggregate Miller-Sturmfels evidence flags `all_cards_have_hilbert_numerator_terms` and `all_cards_have_adjacent_lcm_syzygy_lists` to be true.
+- [x] Added regressions for missing Hilbert terms and missing adjacent LCM rows with aggregate counts adjusted to avoid false positive aggregate-mismatch-only failures.
+- [x] Verification passed: py-compile; focused validator regressions (`3 passed, 45 deselected`); full interactive artifact validator (`48 passed`); metric provenance audit (`332 covered, 0 uncovered`).
