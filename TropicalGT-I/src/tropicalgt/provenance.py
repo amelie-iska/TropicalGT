@@ -513,6 +513,19 @@ PROVENANCE_REGISTRY: tuple[ProvenanceEntry, ...] = (
         replacement_or_guardrail="Use SciPy linear-sum assignment when available; otherwise label the greedy probability assignment as non-optimal diagnostic evidence over real model probability vectors, not a proxy optimal map.",
         match_terms=("greedy_probability_assignment", "assignment_is_optimal", "optimal_assignment_backend_available"),
     ),
+    ProvenanceEntry(
+        name="analogical_query_context_conversion_contract",
+        kind="query_domain_guardrail_contract",
+        surface="analogical memory query-domain conversion",
+        optimize_directly=False,
+        description="Contract that accepts analogical query domains only from trajectory_probability_filtered_simplicial_object rows carrying real model probability vectors.",
+        replacement_or_guardrail="Reject probability_filtered_simplicial_object aliases and ordinary filtered_simplicial_object rows as query-domain sources; they may be recorded as rejected evidence but must not become fallback analogical map domains.",
+        match_terms=(
+            "analogical_query_context_conversion",
+            "non_trajectory_probability_complex_not_accepted_as_query_fallback",
+            "rejects_probability_filtered_simplicial_object_alias_as_fallback",
+        ),
+    ),
 )
 
 

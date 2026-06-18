@@ -1481,3 +1481,22 @@ CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src:TropicalGT-I/scripts /home/i
 CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src:TropicalGT-I/scripts /home/iska/miniconda3/envs/tokengt/bin/python -m pytest -q TropicalGT-I/tests/test_interactive_artifact_validator.py -k "tropical_fan_input_contract or toric_input_contract or accepts_three_interactive_rows"
 # 3 passed
 ```
+
+## 2026-06-18 Analogical Query Context Conversion Contract
+
+Sequential analogical-map no-proxy item completed after the tropical/toric CAS input contract pass:
+
+- The analogical memory writer now emits `tropicalgt.analogical_query_context_conversion.v1` for both available and unavailable outputs.
+- Query domains are accepted only from `trajectory_probability_filtered_simplicial_object` with real model probability vectors. The contract records `probability_filtered_simplicial_object` and `filtered_simplicial_object` as rejected query-context keys when present, including whether they had probability vertices and why they were not accepted.
+- The top-k contract embeds the query-context contract and the HTML contract panel now shows the query conversion status, selected source, probability-vertex count, and rejected keys.
+- Missing model-probability query domains remain explicit unavailable states; they do not trigger embedding-only assignment, alias conversion, pseudo maps, chain maps, persistence-module morphisms, or derived-category claims.
+- The success JSON payload keeps the accepted query source, derived signature, top-k contract, simplex-tree analogy contract, and query-context conversion contract together for downstream Herschel/report review.
+
+Validation:
+
+```text
+CUDA_VISIBLE_DEVICES="" /home/iska/miniconda3/envs/tokengt/bin/python -m py_compile TropicalGT-I/src/tropicalgt/visualization.py TropicalGT-I/tests/test_simplicial_visualization.py
+# passed
+CUDA_VISIBLE_DEVICES="" /home/iska/miniconda3/envs/tokengt/bin/pytest -q TropicalGT-I/tests/test_simplicial_visualization.py -k "analogical_memory_visualization or analogical_memory_without"
+# 6 passed, 44 deselected
+```

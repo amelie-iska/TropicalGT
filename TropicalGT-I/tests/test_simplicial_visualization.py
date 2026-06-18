@@ -2018,6 +2018,7 @@ def test_analogical_memory_visualization_renders_simplicial_maps(tmp_path: Path)
     assert "Analogical top-k probability correspondences" in index_html
     assert "Edge, face, and filtration preservation can fail" in index_html
     assert "Index readability contract" in index_html
+    assert "Query context conversion" in index_html
     assert "landscape L2 sim" in index_html
     assert "landscape cosine" in index_html
     assert "vector aggregate" in index_html
@@ -2057,6 +2058,20 @@ def test_analogical_memory_visualization_renders_simplicial_maps(tmp_path: Path)
     assert maps["topk_contract"]["qualified_model_probability_memory_count"] == 2
     assert maps["topk_contract"]["top_k_rendered"] == 2
     assert maps["topk_contract"]["query_complex_source"] == "trajectory_probability_filtered_simplicial_object"
+    query_contract = maps["query_context_contract"]
+    assert query_contract["schema_version"] == "tropicalgt.analogical_query_context_conversion.v1"
+    assert query_contract["actual_data_only"] is True
+    assert query_contract["no_proxy_or_fallback"] is True
+    assert query_contract["selected_query_complex_source"] == "trajectory_probability_filtered_simplicial_object"
+    assert query_contract["selected_query_complex_available"] is True
+    assert query_contract["selected_query_probability_vertex_count"] == 3
+    assert query_contract["query_topological_algebra_source"] == "topological_algebra"
+    assert query_contract["query_topological_algebra_available"] is True
+    assert query_contract["conversion_status"] == "valid_query_probability_trajectory_complex"
+    assert query_contract["embedding_only_assignment_allowed"] is False
+    assert query_contract["probability_assignment_metric_required"] == "jensen_shannon_distance_on_model_probability_vectors"
+    assert maps["topk_contract"]["query_context_contract_schema_version"] == "tropicalgt.analogical_query_context_conversion.v1"
+    assert maps["topk_contract"]["query_context_contract"] == query_contract
     assert maps["simplex_tree_analogy_contract"]["schema_version"] == "tropicalgt.analogical_simplex_tree_analogy.v1"
     assert maps["simplex_tree_analogy_path"] == "analogical_simplex_tree_analogy.html"
     readability = maps["topk_contract"]["readability_contract"]
@@ -2628,6 +2643,17 @@ def test_analogical_memory_visualization_rejects_non_trajectory_probability_fall
     assert maps["topk_contract"]["raw_retrieved_count"] == 1
     assert maps["topk_contract"]["qualified_model_probability_memory_count"] == 0
     assert maps["maps"] == []
+    query_contract = maps["query_context_contract"]
+    assert query_contract["schema_version"] == "tropicalgt.analogical_query_context_conversion.v1"
+    assert query_contract["selected_query_complex_available"] is False
+    assert query_contract["selected_query_complex_source"] == "unavailable"
+    assert query_contract["conversion_status"] == "missing_model_probability_query_complex"
+    assert query_contract["rejects_probability_filtered_simplicial_object_alias_as_fallback"] is True
+    rejected = query_contract["rejected_query_context_keys"]
+    assert rejected[0]["key"] == "probability_filtered_simplicial_object"
+    assert rejected[0]["has_real_probability_filtration"] is True
+    assert rejected[0]["probability_vertex_count"] == 2
+    assert maps["topk_contract"]["query_context_contract"] == query_contract
 
 
 def test_analogical_memory_without_retrieval_emits_unavailable_surfaces(tmp_path: Path):
@@ -2645,6 +2671,13 @@ def test_analogical_memory_without_retrieval_emits_unavailable_surfaces(tmp_path
     assert maps["topk_contract"]["readability_contract"]["schema_version"] == "tropicalgt.analogical_topk_readability.v1"
     assert maps["topk_contract"]["readability_contract"]["insufficient_memory_state_explicit"] is True
     assert maps["maps"] == []
+    query_contract = maps["query_context_contract"]
+    assert query_contract["schema_version"] == "tropicalgt.analogical_query_context_conversion.v1"
+    assert query_contract["observed_query_context_keys"] == []
+    assert query_contract["selected_query_complex_available"] is False
+    assert query_contract["conversion_status"] == "missing_model_probability_query_complex"
+    assert maps["topk_contract"]["query_context_contract_schema_version"] == "tropicalgt.analogical_query_context_conversion.v1"
+    assert maps["topk_contract"]["query_context_contract"] == query_contract
     assert "Analogical top-k probability correspondences" in index_html
     assert "Insufficient model-probability memory" in index_html
     assert "No retrieved memories" in index_html
@@ -2683,6 +2716,18 @@ def test_analogical_memory_without_query_probabilities_is_unavailable_not_fallba
     assert maps["topk_contract"]["raw_retrieved_count"] == 1
     assert maps["topk_contract"]["qualified_model_probability_memory_count"] == 0
     assert maps["maps"] == []
+    query_contract = maps["query_context_contract"]
+    assert query_contract["schema_version"] == "tropicalgt.analogical_query_context_conversion.v1"
+    assert query_contract["selected_query_complex_available"] is False
+    assert query_contract["selected_query_complex_source"] == "unavailable"
+    assert query_contract["query_topological_algebra_available"] is True
+    assert query_contract["conversion_path"] == "unavailable_fail_closed"
+    assert query_contract["rejects_filtered_simplicial_object_without_model_probabilities"] is True
+    rejected = query_contract["rejected_query_context_keys"]
+    assert rejected[0]["key"] == "filtered_simplicial_object"
+    assert rejected[0]["reason"] == "embedding_or_radius_complex_without_model_probability_trajectory_not_accepted"
+    assert rejected[0]["has_real_probability_filtration"] is False
+    assert maps["topk_contract"]["query_context_contract"] == query_contract
     assert "analogical_memory_topk_index_html" in paths
     assert "analogical_memory_map_02_html" in paths
     assert "No model probability filtered query trajectory complex was available" in html

@@ -784,3 +784,12 @@ The live item-by-item repair inventory is maintained in `planning/tropicalgt_i_c
 - [x] The strict interactive-artifact validator now rejects missing input contracts, proxy-permitting contracts, available sidecars without explicit CAS input evidence, and available sidecars without input hashes.
 - [x] Unavailable sidecars stay unavailable: explicit input presence alone is not enough to render a fan or toric certificate without the real backend certificate.
 - [x] Focused verification passed: tropical/toric visualization tests (`4 passed`) and validator input-contract tests (`3 passed`).
+
+### Current Objective Update - Analogical Query Context Conversion Contract Pass
+
+- [x] Added `tropicalgt.analogical_query_context_conversion.v1` to the analogical memory visualization path.
+- [x] Query domains are accepted only from `query_context.trajectory_probability_filtered_simplicial_object` with real model probability vectors; `probability_filtered_simplicial_object` aliases and ordinary `filtered_simplicial_object` rows are recorded as rejected keys, not converted into fallback domains.
+- [x] Success payloads, top-k contracts, and unavailable JSON payloads now carry the query context conversion contract, including observed keys, selected source, probability vertex count, topological-algebra availability, rejected key reasons, and the Jensen-Shannon probability-vector assignment requirement.
+- [x] The top-k browser contract panel exposes the query conversion status so reviews can distinguish insufficient memory from an invalid query-domain source.
+- [x] Missing query-probability evidence fails closed before any vertex assignment, filtered-complex map, chain map, or persistence-module morphism is rendered.
+- [x] Focused verification passed: analogical memory visualization tests (`6 passed`).

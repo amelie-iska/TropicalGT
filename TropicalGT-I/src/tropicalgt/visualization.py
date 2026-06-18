@@ -9568,6 +9568,71 @@ def write_graphcg_trajectory_visualization(scaling_report: dict[str, object], ou
     return {"graphcg_direction_cosines": str(path), "graphcg_direction_cosines_payload": str(payload_path)}
 
 
+_ANALOGICAL_QUERY_CONTEXT_CONTRACT_SCHEMA = "tropicalgt.analogical_query_context_conversion.v1"
+
+
+def _probability_vertex_count_for_contract(obj: object) -> int:
+    if not isinstance(obj, dict):
+        return 0
+    count = 0
+    for simplex in obj.get("simplices", []):
+        if not isinstance(simplex, dict):
+            continue
+        try:
+            dimension = int(simplex.get("dimension", -1))
+        except Exception:
+            dimension = -1
+        if dimension == 0 and _probability_feature_vector(simplex) is not None:
+            count += 1
+    return count
+
+
+def _analogical_query_context_selection(query: Mapping[str, object] | None) -> tuple[dict[str, object], str, dict[str, object]]:
+    query = query if isinstance(query, Mapping) else {}
+    accepted_key = "trajectory_probability_filtered_simplicial_object"
+    rejected_keys = []
+    for key, reason in (
+        ("probability_filtered_simplicial_object", "non_trajectory_probability_complex_not_accepted_as_query_fallback"),
+        ("filtered_simplicial_object", "embedding_or_radius_complex_without_model_probability_trajectory_not_accepted"),
+    ):
+        value = query.get(key)
+        if value is not None:
+            rejected_keys.append(
+                {
+                    "key": key,
+                    "reason": reason,
+                    "has_real_probability_filtration": bool(_has_real_probability_filtration(value)),
+                    "probability_vertex_count": _probability_vertex_count_for_contract(value),
+                }
+            )
+    selected = query.get(accepted_key)
+    selected_valid = _has_real_probability_filtration(selected)
+    selected_complex = selected if isinstance(selected, dict) and selected_valid else {}
+    selected_source = accepted_key if selected_valid else "unavailable"
+    topology = query.get("topological_algebra") if isinstance(query.get("topological_algebra"), dict) else {}
+    contract = {
+        "schema_version": _ANALOGICAL_QUERY_CONTEXT_CONTRACT_SCHEMA,
+        "actual_data_only": True,
+        "no_proxy_or_fallback": True,
+        "observed_query_context_keys": sorted(str(key) for key in query.keys()),
+        "accepted_query_complex_keys": [accepted_key],
+        "selected_query_complex_source": selected_source,
+        "selected_query_complex_available": bool(selected_valid),
+        "selected_query_probability_vertex_count": _probability_vertex_count_for_contract(selected_complex),
+        "query_topological_algebra_source": "topological_algebra" if topology else "unavailable",
+        "query_topological_algebra_available": bool(topology),
+        "rejected_query_context_keys": rejected_keys,
+        "rejects_probability_filtered_simplicial_object_alias_as_fallback": True,
+        "rejects_filtered_simplicial_object_without_model_probabilities": True,
+        "conversion_path": f"query_context.{accepted_key}" if selected_valid else "unavailable_fail_closed",
+        "conversion_status": "valid_query_probability_trajectory_complex" if selected_valid else "missing_model_probability_query_complex",
+        "fail_closed_reason": None if selected_valid else "No model probability filtered query trajectory complex was available; non-trajectory or embedding-only query complexes are not converted into analogical map domains.",
+        "embedding_only_assignment_allowed": False,
+        "probability_assignment_metric_required": "jensen_shannon_distance_on_model_probability_vectors",
+    }
+    return selected_complex, selected_source, contract
+
+
 def write_analogical_memory_visualization(
     memory: dict[str, object],
     output_dir: str | Path,
@@ -9576,6 +9641,9 @@ def write_analogical_memory_visualization(
     output_dir = Path(output_dir)
     path = output_dir / "analogical_memory_retrieval.html"
     map_path = output_dir / "analogical_simplicial_maps.json"
+    query = query_context if isinstance(query_context, dict) else {}
+    query_complex, query_complex_source, query_context_contract = _analogical_query_context_selection(query)
+    query_topology = query.get("topological_algebra") if isinstance(query.get("topological_algebra"), dict) else {}
     rows = [row for row in memory.get("retrieved", []) if isinstance(row, dict)]
     if not rows:
         reason = "No non-self model-probability analogical memories retrieved; no analogical correspondence certificate is rendered."
@@ -9588,18 +9656,13 @@ def write_analogical_memory_visualization(
             memory=memory,
             raw_retrieved_count=len(rows),
             qualified_memory_count=0,
+            query_complex_source=query_complex_source,
+            query_context_contract=query_context_contract,
         )
     bank_records = _load_memory_bank_records(memory.get("bank_path", ""))
     enriched = [_enrich_memory_row(row, bank_records) for row in rows]
-    query = query_context if isinstance(query_context, dict) else {}
-    query_complex_source = ""
-    query_complex: dict[str, object] = {}
-    if _has_real_probability_filtration(query.get("trajectory_probability_filtered_simplicial_object")):
-        query_complex = query["trajectory_probability_filtered_simplicial_object"]
-        query_complex_source = "trajectory_probability_filtered_simplicial_object"
-    query_topology = query.get("topological_algebra") if isinstance(query.get("topological_algebra"), dict) else {}
     if not query_complex:
-        reason = "No model probability filtered query trajectory complex was available; analogical maps are not rendered without model probabilities."
+        reason = str(query_context_contract.get("fail_closed_reason") or "No model probability filtered query trajectory complex was available; analogical maps are not rendered without model probabilities.")
         return _write_analogical_unavailable_outputs(
             output_dir,
             path,
@@ -9609,6 +9672,8 @@ def write_analogical_memory_visualization(
             memory=memory,
             raw_retrieved_count=len(rows),
             qualified_memory_count=0,
+            query_complex_source=query_complex_source,
+            query_context_contract=query_context_contract,
         )
 
     enriched = [
@@ -9628,6 +9693,7 @@ def write_analogical_memory_visualization(
             memory=memory,
             raw_retrieved_count=len(rows),
             qualified_memory_count=0,
+            query_context_contract=query_context_contract,
         )
 
     pair_pages: list[dict[str, object]] = []
@@ -9661,6 +9727,7 @@ def write_analogical_memory_visualization(
         top_k_rendered=len(map_reports),
         status="available",
         query_complex_source=query_complex_source,
+        query_context_contract=query_context_contract,
     )
     _write_analogical_topk_index(index_path, pair_pages, map_reports, contract=topk_contract)
     simplex_tree_path = output_dir / "analogical_simplex_tree_analogy.html"
@@ -9680,6 +9747,7 @@ def write_analogical_memory_visualization(
                 "query_summary": query_complex.get("summary", {}) if isinstance(query_complex, dict) else {},
                 "query_complex_source": query_complex_source,
                 "query_derived_signature": query_topology.get("derived_equivalence_signature", {}) if isinstance(query_topology, dict) else {},
+                "query_context_contract": query_context_contract,
                 "topk_contract": topk_contract,
                 "simplex_tree_analogy_contract": simplex_tree_analogy.get("contract", {}),
                 "simplex_tree_analogy_path": simplex_tree_path.name,
@@ -10303,6 +10371,7 @@ def _write_analogical_unavailable_outputs(
     *,
     query_complex_source: str = "",
     memory: Mapping[str, object] | None = None,
+    query_context_contract: Mapping[str, object] | None = None,
     raw_retrieved_count: int = 0,
     qualified_memory_count: int = 0,
 ) -> dict[str, str]:
@@ -10316,6 +10385,7 @@ def _write_analogical_unavailable_outputs(
         status=status,
         unavailable_reason=reason,
         query_complex_source=query_complex_source,
+        query_context_contract=query_context_contract,
     )
     _write_analogical_topk_index(index_path, [], [], contract=contract)
     map02_path = output_dir / "analogical_memory_map_02.html"
@@ -10343,6 +10413,8 @@ def _write_analogical_unavailable_outputs(
     }
     if query_complex_source:
         payload["query_complex_source"] = query_complex_source
+    if isinstance(query_context_contract, Mapping):
+        payload["query_context_contract"] = dict(query_context_contract)
     simplex_tree_path = output_dir / "analogical_simplex_tree_analogy.html"
     simplex_tree_payload_path = output_dir / "analogical_simplex_tree_analogy.json"
     simplex_tree_analogy = _write_analogical_simplex_tree_analogy(
@@ -10673,6 +10745,7 @@ def _analogical_topk_contract(
     status: str,
     unavailable_reason: str = "",
     query_complex_source: str = "",
+    query_context_contract: Mapping[str, object] | None = None,
 ) -> dict[str, object]:
     memory = memory if isinstance(memory, Mapping) else {}
     requested = memory.get("top_k", memory.get("retrieval_limit", memory.get("k")))
@@ -10691,6 +10764,8 @@ def _analogical_topk_contract(
         "chain_map_claim_requires": "certified_filtered_simplicial_map",
         "persistence_module_morphism_claim_requires": "certified_filtered_simplicial_map",
         "query_complex_source": query_complex_source or "unavailable",
+        "query_context_contract_schema_version": query_context_contract.get("schema_version") if isinstance(query_context_contract, Mapping) else "unavailable",
+        "query_context_contract": dict(query_context_contract) if isinstance(query_context_contract, Mapping) else {},
         "raw_retrieved_count": int(raw_retrieved_count),
         "qualified_model_probability_memory_count": int(qualified_memory_count),
         "rejected_retrieved_count": int(max(raw_retrieved_count - qualified_memory_count, 0)),
@@ -10707,6 +10782,11 @@ def _analogical_contract_panel(contract: Mapping[str, object] | None) -> str:
         return ""
     reason = str(contract.get("reason_detail") or "")
     reason_html = f"<p><strong>Unavailable reason:</strong> {html.escape(reason)}</p>" if reason else ""
+    query_context = contract.get("query_context_contract") if isinstance(contract.get("query_context_contract"), Mapping) else {}
+    query_context_html = ""
+    if query_context:
+        rejected = ", ".join(str(row.get("key", "")) for row in query_context.get("rejected_query_context_keys", []) if isinstance(row, Mapping)) or "none"
+        query_context_html = f"<p><strong>Query context conversion:</strong> {html.escape(str(query_context.get('conversion_status', 'unknown')))}; selected {html.escape(str(query_context.get('selected_query_complex_source', 'unavailable')))} with {html.escape(str(query_context.get('selected_query_probability_vertex_count', 0)))} probability vertices; rejected keys: {html.escape(rejected)}.</p>"
     return (
         "<aside class='contract'>"
         "<div><span class='badge'>no proxy</span><span class='badge'>model probabilities only</span><span class='badge'>trajectory complexes required</span></div>"
@@ -10721,6 +10801,7 @@ def _analogical_contract_panel(contract: Mapping[str, object] | None) -> str:
         "<p><strong>Index readability contract:</strong> readable top-k table with one linked map view per rendered rank; "
         "retrieval, probability-JS assignment, topology, algebra, map-claim, simplex-tree, and edge-certificate evidence remain separate columns.</p>"
         f"{reason_html}"
+        f"{query_context_html}"
         "</aside>"
     )
 
