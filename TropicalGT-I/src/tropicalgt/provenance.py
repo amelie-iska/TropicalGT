@@ -578,6 +578,7 @@ PROVENANCE_REGISTRY: tuple[ProvenanceEntry, ...] = (
             "missing_chain_presentation_no_proxy_guard",
             "missing_toric_embedding_no_proxy_contract",
             "missing_tropical_fan_no_proxy_contract",
+            "missing_certificate_indexed_no_proxy_contract",
             "rejected_proxy_sources",
         ),
     ),

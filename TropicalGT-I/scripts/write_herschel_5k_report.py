@@ -2566,6 +2566,125 @@ def _topological_algebra_evidence(sidecar_paths: list[str]) -> dict[str, Any]:
     }
 
 
+def _cas_certificate_indexed_evidence(sidecar_paths: list[str]) -> dict[str, Any]:
+    sources: list[dict[str, Any]] = []
+    status_counts: dict[str, int] = {}
+    unavailable_reason_counts: dict[str, int] = {}
+    block_available_counts: dict[str, int] = {}
+    total_evidence_block_count = 0
+    exactness_certified_count = 0
+    minimality_certified_count = 0
+    safe_real_resolution_count = 0
+    safe_multigraded_count = 0
+    safe_total_graded_count = 0
+
+    def _count(mapping: dict[str, int], key: str) -> None:
+        mapping[key] = mapping.get(key, 0) + 1
+
+    for raw_path in sidecar_paths:
+        lower = raw_path.lower()
+        if "certificate_indexed" not in lower or not lower.endswith(".json"):
+            continue
+        resolved = _resolve_output_path(Path(raw_path))
+        source: dict[str, Any] = {"path": _project_path(resolved), "available": False}
+        if not resolved.exists():
+            source["reason"] = "certificate_indexed_sidecar_missing"
+            _count(unavailable_reason_counts, source["reason"])
+            sources.append(source)
+            continue
+        try:
+            payload = json.loads(resolved.read_text(encoding="utf-8"))
+        except Exception as exc:  # pragma: no cover - platform-specific parser text
+            source["reason"] = f"certificate_indexed_parse_error:{exc}"
+            _count(unavailable_reason_counts, "certificate_indexed_parse_error")
+            sources.append(source)
+            continue
+        if not isinstance(payload, dict):
+            source["reason"] = "certificate_indexed_payload_not_object"
+            _count(unavailable_reason_counts, source["reason"])
+            sources.append(source)
+            continue
+        evidence = payload
+        if evidence.get("schema_version") != "tropicalgt.cas_certificate_indexed_evidence.v1":
+            nested = payload.get("certificate_indexed_cas_evidence") if isinstance(payload.get("certificate_indexed_cas_evidence"), dict) else payload.get("certificate_indexed_evidence")
+            evidence = nested if isinstance(nested, dict) else payload
+        schema_ok = evidence.get("schema_version") == "tropicalgt.cas_certificate_indexed_evidence.v1"
+        contract = evidence.get("evidence_source_contract") if isinstance(evidence.get("evidence_source_contract"), dict) else {}
+        blocks = evidence.get("evidence_blocks") if isinstance(evidence.get("evidence_blocks"), dict) else {}
+        no_proxy_ok = bool(evidence.get("no_proxy_or_fallback") is True and contract.get("no_proxy_or_fallback") is True)
+        available = bool(schema_ok and evidence.get("available") is True and no_proxy_ok and evidence.get("exactness_certified") is True)
+        status = "certificate_indexed_available" if available else "certificate_indexed_unavailable"
+        _count(status_counts, status)
+        block_names = []
+        for name, block in sorted(blocks.items()):
+            if not isinstance(block, dict):
+                continue
+            total_evidence_block_count += 1
+            block_names.append(str(name))
+            if bool(block.get("available")):
+                _count(block_available_counts, str(name))
+        if available:
+            exactness_certified_count += 1 if bool(evidence.get("exactness_certified")) else 0
+            minimality_certified_count += 1 if bool(evidence.get("minimality_certified")) else 0
+            safe_real_resolution_count += 1 if bool(evidence.get("safe_to_render_as_real_free_resolution")) else 0
+            safe_multigraded_count += 1 if bool(evidence.get("safe_to_render_as_multigraded_free_resolution")) else 0
+            safe_total_graded_count += 1 if bool(evidence.get("safe_to_render_as_total_graded_resolution")) else 0
+        source.update({
+            "available": available,
+            "schema_version": evidence.get("schema_version", "unavailable"),
+            "status": status,
+            "backend": evidence.get("backend", "unavailable"),
+            "coefficient_ring": evidence.get("coefficient_ring", "unavailable"),
+            "input_sha256": evidence.get("input_sha256"),
+            "certificate_type": evidence.get("certificate_type", ""),
+            "exactness_certified": bool(evidence.get("exactness_certified")),
+            "minimality_certified": bool(evidence.get("minimality_certified")),
+            "safe_to_render_as_real_free_resolution": bool(evidence.get("safe_to_render_as_real_free_resolution")),
+            "safe_to_render_as_total_graded_resolution": bool(evidence.get("safe_to_render_as_total_graded_resolution")),
+            "safe_to_render_as_multigraded_free_resolution": bool(evidence.get("safe_to_render_as_multigraded_free_resolution")),
+            "evidence_source_contract_schema_version": contract.get("schema_version", "unavailable"),
+            "source_contract_no_proxy": bool(contract.get("no_proxy_or_fallback")),
+            "fitting_and_minors_do_not_imply_multipliers": bool(contract.get("fitting_and_minors_do_not_imply_multipliers")),
+            "diagnostics_do_not_certify_resolution_or_derived_equivalence": bool(contract.get("diagnostics_do_not_certify_resolution_or_derived_equivalence")),
+            "derived_category_claim_requires_chain_map_or_resolution_comparison": bool(evidence.get("derived_category_claim_requires_chain_map_or_resolution_comparison")),
+            "no_proxy_or_fallback": no_proxy_ok,
+            "evidence_block_count": len(block_names),
+            "available_evidence_block_count": sum(1 for name in block_names if isinstance(blocks.get(name), dict) and blocks[name].get("available")),
+            "evidence_block_names": block_names,
+        })
+        if not available:
+            reasons = []
+            if not schema_ok:
+                reasons.append("missing_cas_certificate_indexed_evidence_schema")
+            if evidence.get("available") is not True:
+                reasons.append("certificate_indexed_evidence_unavailable")
+            if evidence.get("exactness_certified") is not True:
+                reasons.append("exactness_certificate_unavailable")
+            if not no_proxy_ok:
+                reasons.append("missing_certificate_indexed_no_proxy_contract")
+            source["reason"] = ";".join(reasons) or "certificate_indexed_evidence_unavailable"
+            for reason in reasons or [source["reason"]]:
+                _count(unavailable_reason_counts, reason)
+        sources.append(source)
+    available_sources = [row for row in sources if row.get("available")]
+    return {
+        "schema_version": "tropicalgt.herschel_cas_certificate_indexed_evidence.v1",
+        "available": bool(available_sources),
+        "source_count": len(sources),
+        "available_source_count": len(available_sources),
+        "exactness_certified_source_count": exactness_certified_count,
+        "minimality_certified_source_count": minimality_certified_count,
+        "safe_real_resolution_source_count": safe_real_resolution_count,
+        "safe_multigraded_source_count": safe_multigraded_count,
+        "safe_total_graded_source_count": safe_total_graded_count,
+        "total_evidence_block_count": total_evidence_block_count,
+        "block_available_counts": {key: block_available_counts[key] for key in sorted(block_available_counts)},
+        "status_counts": {key: status_counts[key] for key in sorted(status_counts)},
+        "unavailable_reason_counts": {key: unavailable_reason_counts[key] for key in sorted(unavailable_reason_counts)},
+        "sources": sources,
+        "policy": "Herschel reports certificate-indexed CAS evidence only from real tropicalgt.cas_certificate_indexed_evidence.v1 sidecars. Fitting ideals, minors, Buchsbaum-Eisenbud rows, grade/depth diagnostics, multipliers, and syzygies remain tied to the exact CAS certificate and do not independently certify a free resolution or derived equivalence.",
+    }
+
 def summarize_bundle(bundle: dict[str, Any], *, bundle_path: Path | None = None) -> dict[str, Any]:
     decision = bundle.get("decision") if isinstance(bundle.get("decision"), dict) else {}
     gate = bundle.get("restart_evidence_gate") if isinstance(bundle.get("restart_evidence_gate"), dict) else {}
@@ -2634,6 +2753,7 @@ def summarize_bundle(bundle: dict[str, Any], *, bundle_path: Path | None = None)
             "bivariate_module_evidence": _bivariate_module_evidence(sidecars),
             "persistence_landscape_evidence": _persistence_landscape_evidence(sidecars),
             "toric_tropical_cas_evidence": _toric_tropical_cas_evidence(sidecars),
+            "cas_certificate_indexed_evidence": _cas_certificate_indexed_evidence(sidecars),
             "analogical_query_context_evidence": _analogical_query_context_evidence(sidecars),
             "analogical_memory_evidence": _analogical_memory_evidence(sidecars),
             "simplicial_complex_evidence": _simplicial_complex_evidence(sidecars),
@@ -2984,6 +3104,7 @@ def render_markdown(summary: dict[str, Any]) -> str:
         if source.get("reason"):
             lines.append(f"  - reason: `{source.get('reason')}`")
     toric_tropical_cas = artifacts.get("toric_tropical_cas_evidence", {}) if isinstance(artifacts.get("toric_tropical_cas_evidence"), dict) else {}
+    cas_certificate_indexed = artifacts.get("cas_certificate_indexed_evidence", {}) if isinstance(artifacts.get("cas_certificate_indexed_evidence"), dict) else {}
     lines.extend(
         [
             "## Toric/Tropical CAS Evidence",
@@ -3010,6 +3131,29 @@ def render_markdown(summary: dict[str, Any]) -> str:
             f"toric_ideal=`{source.get('toric_ideal_certified', False)}` fan=`{source.get('fan_diagnostics_certified', False)}` "
             f"rays=`{source.get('ray_count', 0)}` optional_methods=`{source.get('optional_method_count', 0)}` "
             f"optional_available=`{source.get('optional_method_available_count', 0)}`"
+        )
+        if source.get("reason"):
+            lines.append(f"  - reason: `{source.get('reason')}`")
+    lines.extend([
+        "## Certificate-Indexed CAS Evidence",
+        "",
+        f"- Available: `{cas_certificate_indexed.get('available', False)}`",
+        f"- Sources: `{cas_certificate_indexed.get('source_count', 0)}`",
+        f"- Exactness-certified sources: `{cas_certificate_indexed.get('exactness_certified_source_count', 0)}`",
+        f"- Safe multigraded sources: `{cas_certificate_indexed.get('safe_multigraded_source_count', 0)}`",
+        "",
+        "```json",
+        json.dumps(cas_certificate_indexed.get("block_available_counts", {}), indent=2),
+        "```",
+        "",
+    ])
+    for source in cas_certificate_indexed.get("sources", []) if isinstance(cas_certificate_indexed.get("sources"), list) else []:
+        if not isinstance(source, dict):
+            continue
+        lines.append(
+            f"- `{source.get('path', '')}` available=`{source.get('available')}` backend=`{source.get('backend', 'unavailable')}` "
+            f"exact=`{source.get('exactness_certified')}` minimal=`{source.get('minimality_certified')}` "
+            f"blocks=`{source.get('available_evidence_block_count', 0)}/{source.get('evidence_block_count', 0)}`"
         )
         if source.get("reason"):
             lines.append(f"  - reason: `{source.get('reason')}`")
@@ -3250,6 +3394,7 @@ def render_html(summary: dict[str, Any]) -> str:
     two_parameter_bifiltration = artifacts.get("two_parameter_bifiltration_visual_evidence", {}) if isinstance(artifacts.get("two_parameter_bifiltration_visual_evidence"), dict) else {}
     persistence_landscape = artifacts.get("persistence_landscape_evidence", {}) if isinstance(artifacts.get("persistence_landscape_evidence"), dict) else {}
     toric_tropical_cas = artifacts.get("toric_tropical_cas_evidence", {}) if isinstance(artifacts.get("toric_tropical_cas_evidence"), dict) else {}
+    cas_certificate_indexed = artifacts.get("cas_certificate_indexed_evidence", {}) if isinstance(artifacts.get("cas_certificate_indexed_evidence"), dict) else {}
     analogical_query_context = artifacts.get("analogical_query_context_evidence", {}) if isinstance(artifacts.get("analogical_query_context_evidence"), dict) else {}
     analogical_memory = artifacts.get("analogical_memory_evidence", {}) if isinstance(artifacts.get("analogical_memory_evidence"), dict) else {}
     simplicial_complex = artifacts.get("simplicial_complex_evidence", {}) if isinstance(artifacts.get("simplicial_complex_evidence"), dict) else {}
@@ -3496,6 +3641,25 @@ def render_html(summary: dict[str, Any]) -> str:
         )
     if not toric_tropical_rows:
         toric_tropical_rows.append("<tr><td colspan='11' class='muted'>No toric/tropical CAS sidecar paths recorded.</td></tr>")
+    cas_certificate_indexed_rows = []
+    for source in cas_certificate_indexed.get("sources", []) if isinstance(cas_certificate_indexed.get("sources"), list) else []:
+        if not isinstance(source, dict):
+            continue
+        cas_certificate_indexed_rows.append(
+            "<tr>"
+            f"<td>{html.escape(str(source.get('path', '')))}</td>"
+            f"<td>{html.escape(str(source.get('available')))}</td>"
+            f"<td>{html.escape(str(source.get('backend', 'unavailable')))}</td>"
+            f"<td>{html.escape(str(source.get('coefficient_ring', 'unavailable')))}</td>"
+            f"<td>{html.escape(str(source.get('exactness_certified')))}</td>"
+            f"<td>{html.escape(str(source.get('minimality_certified')))}</td>"
+            f"<td>{html.escape(str(source.get('safe_to_render_as_multigraded_free_resolution')))}</td>"
+            f"<td>{html.escape(str(source.get('available_evidence_block_count', 0)))}/{html.escape(str(source.get('evidence_block_count', 0)))}</td>"
+            f"<td>{html.escape(str(source.get('reason', '')))}</td>"
+            "</tr>"
+        )
+    if not cas_certificate_indexed_rows:
+        cas_certificate_indexed_rows.append("<tr><td colspan='9' class='muted'>No certificate-indexed CAS evidence sidecar paths recorded.</td></tr>")
     analogical_query_rows = []
     for source in analogical_query_context.get("sources", []) if isinstance(analogical_query_context.get("sources"), list) else []:
         if not isinstance(source, dict):
@@ -3622,6 +3786,7 @@ code {{ white-space:break-spaces; }}
 <span class="badge {'ok' if persistence_landscape.get('available') else 'warn'}">persistence_landscape_evidence={html.escape(str(bool(persistence_landscape.get('available'))))}</span>
 <span class="badge {'ok' if chart_bundle_transport.get('available') else 'warn'}">chart_bundle_evidence={html.escape(str(bool(chart_bundle_transport.get('available'))))}</span>
 <span class="badge {'ok' if toric_tropical_cas.get('available') else 'warn'}">toric_tropical_cas_evidence={html.escape(str(bool(toric_tropical_cas.get('available'))))}</span>
+<span class="badge {'ok' if cas_certificate_indexed.get('available') else 'warn'}">cas_certificate_indexed_evidence={html.escape(str(bool(cas_certificate_indexed.get('available'))))}</span>
 <span class="badge {'ok' if analogical_memory.get('available') else 'warn'}">analogical_memory_evidence={html.escape(str(bool(analogical_memory.get('available'))))}</span>
 <span class="badge {'ok' if simplicial_complex.get('available') else 'warn'}">simplicial_complex_evidence={html.escape(str(bool(simplicial_complex.get('available'))))}</span>
 <span class="badge {'ok' if topological_algebra.get('available') else 'warn'}">topological_algebra_evidence={html.escape(str(bool(topological_algebra.get('available'))))}</span>
@@ -3664,6 +3829,7 @@ code {{ white-space:break-spaces; }}
 <section class="panel"><h2>Persistence Landscape Evidence</h2><table><thead><tr><th>Sidecar</th><th>Available</th><th>Verified unavailable</th><th>Backend</th><th>Rows</th><th>Curves</th><th>Finite intervals</th><th>Unavailable reasons</th><th>Reason</th></tr></thead><tbody>{''.join(persistence_landscape_rows)}</tbody></table></section>
 <section class="panel"><h2>Chart/Vector-Bundle Evidence</h2><table><thead><tr><th>Sidecar</th><th>Available</th><th>Completeness tier</th><th>Paper-ready telemetry</th><th>Charts</th><th>Transports</th><th>Missing groups</th><th>Reason</th></tr></thead><tbody>{''.join(chart_bundle_rows)}</tbody></table></section>
 <section class="panel"><h2>Toric/Tropical CAS Evidence</h2><table><thead><tr><th>Sidecar</th><th>Kind</th><th>Available</th><th>Status</th><th>Backend</th><th>Finite toric ideal</th><th>Tropical fan</th><th>Rays</th><th>Optional methods</th><th>Optional available</th><th>Reason</th></tr></thead><tbody>{''.join(toric_tropical_rows)}</tbody></table></section>
+<section class="panel"><h2>Certificate-Indexed CAS Evidence</h2><table><thead><tr><th>Sidecar</th><th>Available</th><th>Backend</th><th>Ring</th><th>Exactness</th><th>Minimality</th><th>Multigraded</th><th>Available blocks</th><th>Reason</th></tr></thead><tbody>{''.join(cas_certificate_indexed_rows)}</tbody></table></section>
 <section class="panel"><h2>Analogical Query Context Evidence</h2><table><thead><tr><th>Sidecar</th><th>Available</th><th>Selected source</th><th>Status</th><th>Probability vertices</th><th>Rejected keys</th><th>Reason</th></tr></thead><tbody>{''.join(analogical_query_rows)}</tbody></table></section>
 <section class="panel"><h2>Analogical Memory Evidence</h2><table><thead><tr><th>Sidecar</th><th>Kind</th><th>Available</th><th>Status</th><th>Retrieved</th><th>Qualified</th><th>Top-k rendered</th><th>Pairs</th><th>Insufficient memory</th><th>Reason</th></tr></thead><tbody>{''.join(analogical_memory_rows)}</tbody></table></section>
 <section class="panel"><h2>Simplicial Complex And Simplex-Tree Evidence</h2><table><thead><tr><th>Sidecar</th><th>Kind</th><th>Available</th><th>Status</th><th>Views/steps</th><th>Thresholds/sliders</th><th>Simplices</th><th>No proxy</th><th>Reason</th></tr></thead><tbody>{''.join(simplicial_complex_rows)}</tbody></table></section>

@@ -893,3 +893,24 @@ CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/scripts:TropicalGT-I/src /home/i
 ```
 
 Next linear item: continue real CAS wrapper expansion and source contracts for certified resolutions, Fitting/minor evidence, BEMultipliers post-certificate diagnostics, and derived/analogical comparisons without proxy substitutions.
+
+## 2026-06-18 Herschel Certificate-Indexed CAS Evidence Section
+
+Sequential CAS/reporting item completed:
+
+- Herschel now emits `tropicalgt.herschel_cas_certificate_indexed_evidence.v1` for recorded `certificate_indexed` JSON sidecars.
+- The report summarizes exactness-certified, minimality-certified, safe real-resolution, safe multigraded, and safe total-graded source counts.
+- Evidence blocks are counted by availability for Fitting ideals, determinantal minors, ideal diagnostics, Buchsbaum-Eisenbud rank conditions, grade/depth diagnostics, BEMultipliers multiplier output, and syzygy diagnostics.
+- The Markdown and HTML reports now include a dedicated Certificate-Indexed CAS Evidence section and badge.
+- The extraction remains no-proxy: the source contract must carry `no_proxy_or_fallback`, exactness must be certified before availability is true, and Fitting/minor/BE/grade-depth/multiplier/syzygy blocks are diagnostic evidence tied to the exact CAS certificate rather than independent free-resolution or derived-equivalence certificates.
+
+Validation:
+
+```text
+CUDA_VISIBLE_DEVICES="" /home/iska/miniconda3/envs/tokengt/bin/python -m py_compile TropicalGT-I/scripts/write_herschel_5k_report.py TropicalGT-I/tests/test_herschel_5k_report.py
+# passed
+CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/scripts:TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest -q TropicalGT-I/tests/test_herschel_5k_report.py
+# 2 passed
+```
+
+Next linear item: continue CAS evidence coverage into review-bundle validation and any remaining source contracts, then move to the next visual/math repair item once the report consumes all currently emitted CAS sidecars.

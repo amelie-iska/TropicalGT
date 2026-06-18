@@ -670,3 +670,13 @@ Status: implemented for browser artifacts, Herschel JSON, Markdown, and HTML rep
 - Focused CPU-only verification passed for py-compile, tropical fan visualization tests, and the Herschel/review-bundle tests.
 
 Next sequential item: proceed to the real CAS wrapper/certificate queue, preserving unavailable states and certificate-indexed evidence only from actual backend output.
+
+## 2026-06-18 Herschel Certificate-Indexed CAS Evidence Section
+
+Status: implemented for Herschel JSON, Markdown, and HTML reports.
+
+- `certificate_indexed` CAS sidecars now become a first-class Herschel evidence family instead of being counted only in the generic CAS sidecar group.
+- The summary records exactness/minimality/safe-render counts and available diagnostic block counts while preserving the rule that diagnostic Fitting/minor/BE/multiplier/syzygy rows do not independently certify free resolutions or derived equivalence.
+- The test fixture now includes a real `tropicalgt.cas_certificate_indexed_evidence.v1` sidecar with Macaulay2, `F2[x_level,x_radius]`, certified exactness/minimality, and mixed available/unavailable diagnostic blocks.
+
+Next sequential item: finish any remaining CAS report-side validation, then continue to the next actual-data-only visual/math repair slice.

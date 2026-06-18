@@ -899,6 +899,47 @@ def test_write_herschel_report_preserves_blockers_and_sidecar_groups(tmp_path: P
         ),
         encoding="utf-8",
     )
+    certificate_indexed_path = tmp_path / "certificate_indexed_cas_evidence.json"
+    certificate_indexed_path.write_text(
+        json.dumps(
+            {
+                "schema_version": "tropicalgt.cas_certificate_indexed_evidence.v1",
+                "available": True,
+                "backend": "Macaulay2",
+                "coefficient_ring": "F2[x_level,x_radius]",
+                "module_schema_version": "tropicalgt.cas_free_resolution_input.v1",
+                "input_sha256": "cert-input-sha",
+                "presentation_shape": [2, 3],
+                "certificate_type": "Macaulay2 res coker presentation over multigraded F2 polynomial ring",
+                "exactness_certified": True,
+                "minimality_certified": True,
+                "free_resolution_summary_available": True,
+                "safe_to_render_as_real_free_resolution": True,
+                "safe_to_render_as_total_graded_resolution": False,
+                "safe_to_render_as_multigraded_free_resolution": True,
+                "evidence_source_contract": {
+                    "schema_version": "tropicalgt.cas_certificate_indexed_source_contract.v1",
+                    "requires_exactness_certificate_before_rendering": True,
+                    "fitting_and_minors_do_not_imply_multipliers": True,
+                    "diagnostics_do_not_certify_resolution_or_derived_equivalence": True,
+                    "no_proxy_or_fallback": True,
+                },
+                "evidence_blocks": {
+                    "fitting_ideals": {"available": True, "count": 2, "diagnostic_only": True},
+                    "determinantal_minors": {"available": True, "count": 3, "diagnostic_only": True},
+                    "ideal_diagnostics": {"available": True, "fitting_invariant_count": 2, "minor_count": 3, "diagnostic_only": True},
+                    "buchsbaum_eisenbud_rank_conditions": {"available": True, "diagnostic_only": True, "is_independent_certificate": False},
+                    "buchsbaum_eisenbud_multipliers": {"available": False, "diagnostic_only": True, "safe_to_substitute_for_resolution": False},
+                    "syzygy_diagnostics": {"available": True, "diagnostic_only": False, "requires_certified_macaulay2_resolution_maps": True},
+                },
+                "derived_category_claim_requires_chain_map_or_resolution_comparison": True,
+                "no_proxy_or_fallback": True,
+                "render_rule": "Diagnostic blocks annotate the certified result but do not independently certify a free resolution or derived equivalence.",
+            }
+        ),
+        encoding="utf-8",
+    )
+
     topological_report = {
         "enabled": True,
         "audit_level": "full",
@@ -1000,7 +1041,7 @@ def test_write_herschel_report_preserves_blockers_and_sidecar_groups(tmp_path: P
                 str(tropical_fan_path),
                 str(toric_sidecar_path),
                 "got_audit/betti_table.json",
-                "got_audit/certificate_indexed_cas_evidence.json",
+                str(certificate_indexed_path),
                 str(trajectory_payload_path),
                 str(embedding_payload_path),
                 str(inference_audit_path),
@@ -1245,6 +1286,25 @@ def test_write_herschel_report_preserves_blockers_and_sidecar_groups(tmp_path: P
     assert toric_tropical["status_counts"] == {"toric_embedding_sidecar:certified": 1, "tropical_fan_diagnostics:certified": 1}
     assert toric_tropical["sources"][0]["no_proxy_or_fallback"] is True
     assert toric_tropical["sources"][1]["no_proxy_or_fallback"] is True
+    cas_indexed = summary["artifact_evidence"]["cas_certificate_indexed_evidence"]
+    assert cas_indexed["schema_version"] == "tropicalgt.herschel_cas_certificate_indexed_evidence.v1"
+    assert cas_indexed["available"] is True
+    assert cas_indexed["source_count"] == 1
+    assert cas_indexed["available_source_count"] == 1
+    assert cas_indexed["exactness_certified_source_count"] == 1
+    assert cas_indexed["minimality_certified_source_count"] == 1
+    assert cas_indexed["safe_multigraded_source_count"] == 1
+    assert cas_indexed["total_evidence_block_count"] == 6
+    assert cas_indexed["block_available_counts"] == {
+        "buchsbaum_eisenbud_rank_conditions": 1,
+        "determinantal_minors": 1,
+        "fitting_ideals": 1,
+        "ideal_diagnostics": 1,
+        "syzygy_diagnostics": 1,
+    }
+    assert cas_indexed["sources"][0]["fitting_and_minors_do_not_imply_multipliers"] is True
+    assert cas_indexed["sources"][0]["diagnostics_do_not_certify_resolution_or_derived_equivalence"] is True
+    assert cas_indexed["sources"][0]["derived_category_claim_requires_chain_map_or_resolution_comparison"] is True
     tropical_source = next(row for row in toric_tropical["sources"] if row["kind"] == "tropical_fan_diagnostics")
     assert tropical_source["optional_method_count"] == 2
     assert tropical_source["optional_method_available_count"] == 1
@@ -1400,6 +1460,8 @@ def test_write_herschel_report_preserves_blockers_and_sidecar_groups(tmp_path: P
     assert "paper_ready" in html
     assert "Toric/Tropical CAS Evidence" in html
     assert "Optional methods" in html
+    assert "Certificate-Indexed CAS Evidence" in html
+    assert "cas_certificate_indexed_evidence=True" in html
     assert "data-chart='toric-tropical-cas-statuses'" in html
     assert "toric_embedding_sidecar" in html
     assert "Analogical Query Context Evidence" in html
