@@ -8496,6 +8496,23 @@ def write_graphcg_trajectory_visualization(scaling_report: dict[str, object], ou
     sorted_order = np.argsort(mean_abs)[::-1]
     sorted_activity = mean_abs[sorted_order]
     sorted_signed = signed_mean[sorted_order]
+    top_active_direction_limit = int(min(max(8, visible_direction_tick_label_limit), direction_count))
+    top_active_direction_indices = sorted_order[:top_active_direction_limit]
+    top_active_direction_rows = [
+        {
+            "rank": int(rank + 1),
+            "direction_id": int(direction_idx),
+            "label": f"d{int(direction_idx)}",
+            "mean_abs_cosine": float(mean_abs[int(direction_idx)]),
+            "signed_mean_cosine": float(signed_mean[int(direction_idx)]),
+            "source": "candidate.graphcg_projection.all_direction_cosines",
+            "rendered_in_top_active_direction_panel": True,
+            "exact_direction_id_preserved": True,
+            "no_proxy_or_fallback": True,
+        }
+        for rank, direction_idx in enumerate(top_active_direction_indices.tolist())
+    ]
+    top_active_direction_ids = {int(row["direction_id"]) for row in top_active_direction_rows}
     basis_source_counts = {basis: int(basis_sources.count(basis)) for basis in sorted(set(basis_sources))}
     projection_basis = sorted(set(basis_sources))[0] if len(set(basis_sources)) == 1 else "mixed"
     activity_rank_by_direction = {int(direction): int(rank + 1) for rank, direction in enumerate(sorted_order.tolist())}
@@ -8510,6 +8527,7 @@ def write_graphcg_trajectory_visualization(scaling_report: dict[str, object], ou
             "rendered_in_all_direction_heatmap": True,
             "rendered_in_full_rank_activity_spectrum": True,
             "rendered_in_signed_bias_panel": True,
+            "rendered_in_top_active_direction_panel": bool(int(direction_idx) in top_active_direction_ids),
             "exact_direction_id_preserved": True,
             "no_proxy_or_fallback": True,
         }
@@ -8526,6 +8544,8 @@ def write_graphcg_trajectory_visualization(scaling_report: dict[str, object], ou
         "all_directions_rendered_in_heatmap": all(row["rendered_in_all_direction_heatmap"] for row in direction_rows),
         "all_directions_rendered_in_activity_spectrum": all(row["rendered_in_full_rank_activity_spectrum"] for row in direction_rows),
         "all_directions_rendered_in_signed_bias_panel": all(row["rendered_in_signed_bias_panel"] for row in direction_rows),
+        "top_active_direction_panel_count": int(len(top_active_direction_rows)),
+        "top_active_direction_panel_source": "top directions by mean_abs_cosine over observed candidate GraphCG projections",
         "mean_abs_source": "mean absolute cosine over observed candidate GraphCG projections",
         "signed_mean_source": "signed mean cosine over observed candidate GraphCG projections",
         "activity_rank_source": "descending order of mean_abs_cosine across every model-derived direction",
@@ -8554,10 +8574,12 @@ def write_graphcg_trajectory_visualization(scaling_report: dict[str, object], ou
         "panels_are_separate": True,
         "required_panels": [
             "all_direction_heatmap",
+            "top_active_direction_panel",
             "full_rank_activity_spectrum",
             "candidate_activity_by_observed_got_state",
             "direction_signed_bias",
         ],
+        "top_active_direction_source": "ranked subset by mean_abs_cosine over observed candidate GraphCG projections; exact direction ids preserved in hover and payload",
         "full_rank_spectrum_source": "mean absolute cosine over every model-derived GraphCG direction",
         "candidate_activity_source": "per-candidate absolute GraphCG projection cosines from observed GoT states",
         "signed_bias_source": "signed mean GraphCG projection cosine per direction",
@@ -8574,18 +8596,20 @@ def write_graphcg_trajectory_visualization(scaling_report: dict[str, object], ou
                 "display_count": int(display_count),
                 "displayed_direction_indices": [int(idx) for idx in top_idx.tolist()],
                 "display_policy": "all_model_graphcg_directions_no_sampling",
-                "readability_contract": "four coordinated panels render all model GraphCG directions: all-direction heatmap, full-rank activity spectrum, candidate activity by observed GoT state, and signed-bias scatter; visible tick labels are bounded while hover and payload preserve exact ids",
+                "readability_contract": "five coordinated panels render all model GraphCG directions plus a readable top-active direction excerpt: all-direction heatmap, top-active direction panel, full-rank activity spectrum, candidate activity by observed GoT state, and signed-bias scatter; visible tick labels are bounded while hover and payload preserve exact ids",
                 "graphcg_readability_contract": graphcg_readability_contract,
                 "graphcg_direction_evidence_contract": direction_evidence_contract,
                 "direction_rows": direction_rows,
                 "panel_names": [
                     "all_direction_heatmap",
+                    "top_active_direction_panel",
                     "full_rank_activity_spectrum",
                     "candidate_activity_by_observed_got_state",
                     "direction_signed_bias",
                 ],
-                "panel_count": 4,
+                "panel_count": 5,
                 "all_direction_heatmap_available": True,
+                "top_active_direction_panel_available": True,
                 "direction_spectrum_panel_available": True,
                 "candidate_activity_panel_available": True,
                 "direction_signed_bias_panel_available": True,
@@ -8606,6 +8630,8 @@ def write_graphcg_trajectory_visualization(scaling_report: dict[str, object], ou
                 "candidate_active_direction_count": [int(v) for v in candidate_active_counts.tolist()],
                 "direction_activity_sorted": [float(v) for v in sorted_activity.tolist()],
                 "direction_signed_mean_sorted": [float(v) for v in sorted_signed.tolist()],
+                "top_active_direction_limit": int(top_active_direction_limit),
+                "top_active_direction_rows": top_active_direction_rows,
                 "activity_threshold_p90": active_floor,
                 "visible_direction_tick_label_limit": int(visible_direction_tick_label_limit),
                 "visible_candidate_tick_label_limit": int(visible_candidate_tick_label_limit),
@@ -8619,15 +8645,16 @@ def write_graphcg_trajectory_visualization(scaling_report: dict[str, object], ou
         ),
         encoding="utf-8",
     )
-    graphcg_height = int(max(1380, 940 + 32 * len(compact_labels)))
+    graphcg_height = int(max(1560, 1080 + 34 * len(compact_labels)))
     fig = make_subplots(
-        rows=4,
+        rows=5,
         cols=1,
-        specs=[[{"type": "heatmap"}], [{"type": "scatter"}], [{"type": "scatter"}], [{"type": "scatter"}]],
-        row_heights=[0.46, 0.18, 0.18, 0.18],
-        vertical_spacing=0.09,
+        specs=[[{"type": "heatmap"}], [{"type": "bar"}], [{"type": "scatter"}], [{"type": "scatter"}], [{"type": "scatter"}]],
+        row_heights=[0.36, 0.16, 0.16, 0.16, 0.16],
+        vertical_spacing=0.075,
         subplot_titles=(
             "Readable full-rank heatmap: every model GraphCG direction",
+            "Top active GraphCG directions by mean |cos|",
             "Full-rank activity spectrum",
             "Candidate activity by observed GoT state",
             "Signed bias for every direction",
@@ -8648,6 +8675,32 @@ def write_graphcg_trajectory_visualization(scaling_report: dict[str, object], ou
         row=1,
         col=1,
     )
+    top_activity_values = [float(row["mean_abs_cosine"]) for row in top_active_direction_rows]
+    top_signed_values = [float(row["signed_mean_cosine"]) for row in top_active_direction_rows]
+    signed_scale = max(max([abs(value) for value in top_signed_values] or [1.0]), 1e-12)
+    fig.add_trace(
+        go.Bar(
+            x=[str(row["label"]) for row in top_active_direction_rows],
+            y=top_activity_values,
+            marker=dict(
+                color=top_signed_values,
+                colorscale="RdBu",
+                cmin=-signed_scale,
+                cmax=signed_scale,
+                line=dict(color="#e8eef8", width=0.7),
+                colorbar=dict(title="signed mean", x=1.02, y=0.62, len=0.14),
+            ),
+            customdata=[
+                f"rank={row['rank']}<br>direction={row['direction_id']}<br>mean |cos|={row['mean_abs_cosine']:.5f}<br>signed mean={row['signed_mean_cosine']:.5f}<br>source={html.escape(str(row['source']))}"
+                for row in top_active_direction_rows
+            ],
+            hovertemplate="%{customdata}<extra></extra>",
+            name="top active directions",
+            showlegend=False,
+        ),
+        row=2,
+        col=1,
+    )
     fig.add_trace(
         go.Scatter(
             x=np.arange(direction_count),
@@ -8659,7 +8712,7 @@ def write_graphcg_trajectory_visualization(scaling_report: dict[str, object], ou
             hovertemplate="rank=%{x}<br>mean |cos|=%{y:.5f}<extra></extra>",
             name="full-rank spectrum",
         ),
-        row=2,
+        row=3,
         col=1,
     )
     fig.add_trace(
@@ -8686,7 +8739,7 @@ def write_graphcg_trajectory_visualization(scaling_report: dict[str, object], ou
             hovertemplate="%{customdata}<extra></extra>",
             name="candidate activity",
         ),
-        row=3,
+        row=4,
         col=1,
     )
     fig.add_trace(
@@ -8706,7 +8759,7 @@ def write_graphcg_trajectory_visualization(scaling_report: dict[str, object], ou
             hovertemplate="direction=%{customdata}<br>mean |cos|=%{x:.5f}<br>signed mean=%{y:.5f}<extra></extra>",
             name="direction signed bias",
         ),
-        row=4,
+        row=5,
         col=1,
     )
     fig.update_layout(
@@ -8715,7 +8768,7 @@ def write_graphcg_trajectory_visualization(scaling_report: dict[str, object], ou
             "GraphCG full-rank direction audit"
             f"<br><sup>heatmap shows all {direction_count} model-derived directions; basis={html.escape(projection_basis)}; active nonzero rank={active_rank}; exact ids in hover/payload.</sup>"
         ),
-        margin=dict(t=150, l=118, r=96, b=120),
+        margin=dict(t=156, l=118, r=118, b=124),
         height=graphcg_height,
     )
     x_labels = [f"d{int(idx)}" for idx in top_idx]
@@ -8725,12 +8778,14 @@ def write_graphcg_trajectory_visualization(scaling_report: dict[str, object], ou
     y_tickvals = [label for pos, label in enumerate(compact_labels) if pos % y_step == 0 or pos == len(compact_labels) - 1]
     fig.update_xaxes(title_text="GraphCG direction (bounded visible ticks; hover for exact direction)", tickangle=-35, tickmode="array", tickvals=x_tickvals, ticktext=x_tickvals, tickfont=dict(size=9), row=1, col=1)
     fig.update_yaxes(title_text="GoT state index (hover for path)", tickmode="array", tickvals=y_tickvals, ticktext=y_tickvals, row=1, col=1, tickfont=dict(size=10))
-    fig.update_xaxes(title_text="direction rank by activity", row=2, col=1)
+    fig.update_xaxes(title_text="top active direction id", tickangle=-20, row=2, col=1)
     fig.update_yaxes(title_text="mean absolute cosine", row=2, col=1)
-    fig.update_xaxes(title_text="GoT candidate index", row=3, col=1)
-    fig.update_yaxes(title_text="candidate mean |cos|", row=3, col=1)
-    fig.update_xaxes(title_text="direction mean |cos|", row=4, col=1)
-    fig.update_yaxes(title_text="direction signed mean", row=4, col=1)
+    fig.update_xaxes(title_text="direction rank by activity", row=3, col=1)
+    fig.update_yaxes(title_text="mean absolute cosine", row=3, col=1)
+    fig.update_xaxes(title_text="GoT candidate index", row=4, col=1)
+    fig.update_yaxes(title_text="candidate mean |cos|", row=4, col=1)
+    fig.update_xaxes(title_text="direction mean |cos|", row=5, col=1)
+    fig.update_yaxes(title_text="direction signed mean", row=5, col=1)
     _write_plotly_dark_html(path, fig, "GraphCG direction cosines along GoT candidates")
     return {"graphcg_direction_cosines": str(path), "graphcg_direction_cosines_payload": str(payload_path)}
 

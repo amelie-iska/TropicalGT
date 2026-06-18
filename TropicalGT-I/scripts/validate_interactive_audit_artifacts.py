@@ -1134,8 +1134,12 @@ def validate_row(row_dir: Path, *, min_candidates: int = 8, min_depth: int = 2, 
             _assert(readability.get("all_model_directions_rendered") is True, errors, "GraphCG readability contract does not render all directions")
             _assert(readability.get("directions_sampled_for_heatmap") is False, errors, "GraphCG heatmap must not sample directions")
             _assert(readability.get("panels_are_separate") is True, errors, "GraphCG readability contract must separate panels")
-            required = {"all_direction_heatmap", "full_rank_activity_spectrum", "candidate_activity_by_observed_got_state", "direction_signed_bias"}
-            _assert(required.issubset(set(readability.get("required_panels", []))), errors, "GraphCG readability contract is missing required panels")
+            required = {"all_direction_heatmap", "top_active_direction_panel", "full_rank_activity_spectrum", "candidate_activity_by_observed_got_state", "direction_signed_bias"}
+            required_panels = set(readability.get("required_panels", []))
+            panel_names = set(graphcg_payload.get("panel_names", [])) if isinstance(graphcg_payload.get("panel_names"), list) else set()
+            _assert(required.issubset(required_panels), errors, "GraphCG readability contract is missing required panels")
+            _assert(required.issubset(panel_names), errors, "GraphCG payload panel_names are missing required panels")
+            _assert(graphcg_payload.get("top_active_direction_panel_available") is True, errors, "GraphCG payload is missing top-active direction panel")
             _assert(readability.get("exact_direction_ids_preserved_in_hover_and_payload") is True, errors, "GraphCG readability contract does not preserve exact direction ids")
             _assert(readability.get("candidate_path_action_text_preserved_in_hover_and_payload") is True, errors, "GraphCG readability contract does not preserve candidate path/action text")
         direction_rows = graphcg_payload.get("direction_rows") if isinstance(graphcg_payload.get("direction_rows"), list) else []
@@ -1153,6 +1157,18 @@ def validate_row(row_dir: Path, *, min_candidates: int = 8, min_depth: int = 2, 
             _assert(direction_evidence.get("all_directions_rendered_in_activity_spectrum") is True, errors, "GraphCG direction evidence says activity spectrum omits directions")
             _assert(direction_evidence.get("all_directions_rendered_in_signed_bias_panel") is True, errors, "GraphCG direction evidence says signed-bias panel omits directions")
             _assert(direction_evidence.get("safe_to_render_full_rank_direction_evidence") is True, errors, "GraphCG direction evidence contract is unsafe")
+        top_active_rows = graphcg_payload.get("top_active_direction_rows") if isinstance(graphcg_payload.get("top_active_direction_rows"), list) else []
+        _assert(top_active_rows and len(top_active_rows) <= matrix_width, errors, "GraphCG payload is missing bounded top-active direction rows")
+        for idx, row in enumerate(top_active_rows):
+            if not isinstance(row, dict):
+                errors.append(f"GraphCG top-active direction row {idx} is not an object")
+                continue
+            _assert(row.get("source") == "candidate.graphcg_projection.all_direction_cosines", errors, f"GraphCG top-active direction row {idx} has wrong source")
+            _assert(row.get("no_proxy_or_fallback") is True, errors, f"GraphCG top-active direction row {idx} allows proxy/fallback data")
+            _assert(row.get("exact_direction_id_preserved") is True, errors, f"GraphCG top-active direction row {idx} does not preserve exact id")
+            _assert(row.get("rendered_in_top_active_direction_panel") is True, errors, f"GraphCG top-active direction row {idx} missing top-panel flag")
+            _assert(math.isfinite(_finite_float(row.get("mean_abs_cosine"))), errors, f"GraphCG top-active direction row {idx} missing finite mean_abs_cosine")
+            _assert(math.isfinite(_finite_float(row.get("signed_mean_cosine"))), errors, f"GraphCG top-active direction row {idx} missing finite signed_mean_cosine")
         _assert(len(direction_rows) == matrix_width, errors, "GraphCG direction rows do not cover every model direction")
         seen_direction_ids = set()
         for idx, row in enumerate(direction_rows):

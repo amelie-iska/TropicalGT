@@ -313,3 +313,21 @@ CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/t
 CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m py_compile TropicalGT-I/src/tropicalgt/visualization.py TropicalGT-I/scripts/validate_interactive_audit_artifacts.py TropicalGT-I/tests/test_simplicial_visualization.py
 git diff --check
 ```
+
+## 2026-06-18 GraphCG Five-Panel Direction Repair
+
+- Reworked `graphcg_direction_cosines.html/json` from a four-panel layout to five coordinated panels: all-direction heatmap, top-active direction panel, full-rank activity spectrum, candidate activity by observed GoT state, and signed-bias scatter.
+- Added `top_active_direction_rows` with exact direction ids, activity rank, mean absolute cosine, signed mean cosine, source path, and no-proxy flags; the all-direction rows now state whether a direction is included in the top-active panel.
+- Tightened the GraphCG readability/evidence validator so archived artifacts must list the five required panels, expose a top-active panel, preserve candidate path/action hover rows, and keep every direction row sourced from `candidate.graphcg_projection.all_direction_cosines`.
+- Updated interactive-audit fixtures and writer regressions to reject stale four-panel GraphCG contracts.
+
+Verification:
+
+```bash
+CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_simplicial_visualization.py -k "graphcg" -q
+CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_interactive_artifact_validator.py -k "graphcg" -q
+CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_interactive_artifact_validator.py -q
+CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_simplicial_visualization.py -q
+CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m py_compile TropicalGT-I/src/tropicalgt/visualization.py TropicalGT-I/scripts/validate_interactive_audit_artifacts.py TropicalGT-I/tests/test_simplicial_visualization.py TropicalGT-I/tests/test_interactive_artifact_validator.py
+git diff --check
+```

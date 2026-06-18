@@ -915,11 +915,34 @@ def _row(root: Path, name: str) -> Path:
                         "rendered_in_all_direction_heatmap": True,
                         "rendered_in_full_rank_activity_spectrum": True,
                         "rendered_in_signed_bias_panel": True,
+                        "rendered_in_top_active_direction_panel": idx < 4,
                         "exact_direction_id_preserved": True,
                         "no_proxy_or_fallback": True,
                     }
                     for idx in range(8)
                 ],
+                "top_active_direction_rows": [
+                    {
+                        "rank": idx + 1,
+                        "direction_id": idx,
+                        "label": f"d{idx}",
+                        "mean_abs_cosine": 0.2,
+                        "signed_mean_cosine": 0.05,
+                        "source": "candidate.graphcg_projection.all_direction_cosines",
+                        "rendered_in_top_active_direction_panel": True,
+                        "exact_direction_id_preserved": True,
+                        "no_proxy_or_fallback": True,
+                    }
+                    for idx in range(4)
+                ],
+                "panel_names": [
+                    "all_direction_heatmap",
+                    "top_active_direction_panel",
+                    "full_rank_activity_spectrum",
+                    "candidate_activity_by_observed_got_state",
+                    "direction_signed_bias",
+                ],
+                "top_active_direction_panel_available": True,
                 "graphcg_direction_evidence_contract": {
                     "schema_version": "tropicalgt.graphcg_direction_evidence.v1",
                     "source": "candidate.graphcg_projection.all_direction_cosines",
@@ -931,6 +954,8 @@ def _row(root: Path, name: str) -> Path:
                     "all_directions_rendered_in_heatmap": True,
                     "all_directions_rendered_in_activity_spectrum": True,
                     "all_directions_rendered_in_signed_bias_panel": True,
+                    "top_active_direction_panel_count": 4,
+                    "top_active_direction_panel_source": "top directions by mean_abs_cosine over observed candidate GraphCG projections",
                     "mean_abs_source": "mean absolute cosine over observed candidate GraphCG projections",
                     "signed_mean_source": "signed mean cosine over observed candidate GraphCG projections",
                     "activity_rank_source": "descending order of mean_abs_cosine across every model-derived direction",
@@ -945,6 +970,7 @@ def _row(root: Path, name: str) -> Path:
                     "panels_are_separate": True,
                     "required_panels": [
                         "all_direction_heatmap",
+                        "top_active_direction_panel",
                         "full_rank_activity_spectrum",
                         "candidate_activity_by_observed_got_state",
                         "direction_signed_bias",

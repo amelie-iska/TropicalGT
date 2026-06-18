@@ -1637,7 +1637,7 @@ def test_graphcg_visualization_preserves_projection_basis_certificate(tmp_path: 
     assert cert["max_abs_offdiag_cosine_max"] > 0.0
     assert payload["visible_direction_tick_label_limit"] == 8
     assert payload["exact_direction_labels_available_in_hover_and_payload"] is True
-    assert payload["readability_contract"].startswith("four coordinated panels render all model GraphCG directions")
+    assert payload["readability_contract"].startswith("five coordinated panels render all model GraphCG directions")
     contract = payload["graphcg_readability_contract"]
     assert contract["schema_version"] == "tropicalgt.graphcg_direction_readability.v1"
     assert contract["all_model_directions_rendered"] is True
@@ -1647,6 +1647,7 @@ def test_graphcg_visualization_preserves_projection_basis_certificate(tmp_path: 
     assert contract["candidate_path_action_text_preserved_in_hover_and_payload"] is True
     assert set(contract["required_panels"]) == {
         "all_direction_heatmap",
+        "top_active_direction_panel",
         "full_rank_activity_spectrum",
         "candidate_activity_by_observed_got_state",
         "direction_signed_bias",
@@ -1668,16 +1669,24 @@ def test_graphcg_visualization_preserves_projection_basis_certificate(tmp_path: 
     assert all("mean_abs_cosine" in row and "signed_mean_cosine" in row for row in payload["direction_rows"])
     assert payload["panel_names"] == [
         "all_direction_heatmap",
+        "top_active_direction_panel",
         "full_rank_activity_spectrum",
         "candidate_activity_by_observed_got_state",
         "direction_signed_bias",
     ]
-    assert payload["panel_count"] == 4
+    assert payload["panel_count"] == 5
     assert payload["directions_sampled_for_heatmap"] is False
     assert payload["all_direction_heatmap_available"] is True
+    assert payload["top_active_direction_panel_available"] is True
     assert payload["direction_spectrum_panel_available"] is True
     assert payload["candidate_activity_panel_available"] is True
     assert payload["direction_signed_bias_panel_available"] is True
+    assert len(payload["top_active_direction_rows"]) == 4
+    assert payload["top_active_direction_rows"][0]["direction_id"] == 0
+    assert payload["top_active_direction_rows"][0]["rendered_in_top_active_direction_panel"] is True
+    assert payload["top_active_direction_rows"][0]["source"] == "candidate.graphcg_projection.all_direction_cosines"
+    assert any(row["rendered_in_top_active_direction_panel"] is True for row in payload["direction_rows"])
+    assert payload["graphcg_direction_evidence_contract"]["top_active_direction_panel_count"] == 4
     assert len(payload["candidate_effective_direction_count"]) == 3
     assert len(payload["candidate_hover_rows"]) == 3
     assert "path=[&quot;expand&quot;, &quot;0&quot;]" in payload["candidate_hover_rows"][0]
