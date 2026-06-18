@@ -793,3 +793,11 @@ The live item-by-item repair inventory is maintained in `planning/tropicalgt_i_c
 - [x] The top-k browser contract panel exposes the query conversion status so reviews can distinguish insufficient memory from an invalid query-domain source.
 - [x] Missing query-probability evidence fails closed before any vertex assignment, filtered-complex map, chain map, or persistence-module morphism is rendered.
 - [x] Focused verification passed: analogical memory visualization tests (`6 passed`).
+
+### Current Objective Update - Analogical Query Context Validator Gate Pass
+
+- [x] Extended the strict interactive-audit validator to require `tropicalgt.analogical_query_context_conversion.v1` in `analogical_simplicial_maps.json` and inside the embedded top-k contract.
+- [x] The validator now rejects missing query-context contracts, proxy/fallback-permitting contracts, alias-selected query domains, malformed rejected-key rows, and available maps without trajectory-probability query vertices.
+- [x] Unavailable missing-query states must now fail closed with `selected_query_complex_source=unavailable`; no-memory states can still remain unavailable without fabricating a query-domain map.
+- [x] Updated the validator fixture to include a rejected `probability_filtered_simplicial_object` alias row while selecting only `trajectory_probability_filtered_simplicial_object`.
+- [x] Focused verification passed: analogical query-context validator tests (`5 passed`).

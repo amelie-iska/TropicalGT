@@ -731,6 +731,33 @@ def _row(root: Path, name: str) -> Path:
             "edge certificate",
         ],
     }
+    analogical_query_context_contract = {
+        "schema_version": "tropicalgt.analogical_query_context_conversion.v1",
+        "actual_data_only": True,
+        "no_proxy_or_fallback": True,
+        "observed_query_context_keys": ["topological_algebra", "trajectory_probability_filtered_simplicial_object"],
+        "accepted_query_complex_keys": ["trajectory_probability_filtered_simplicial_object"],
+        "selected_query_complex_source": "trajectory_probability_filtered_simplicial_object",
+        "selected_query_complex_available": True,
+        "selected_query_probability_vertex_count": 2,
+        "query_topological_algebra_source": "topological_algebra",
+        "query_topological_algebra_available": True,
+        "rejected_query_context_keys": [
+            {
+                "key": "probability_filtered_simplicial_object",
+                "reason": "non_trajectory_probability_complex_not_accepted_as_query_fallback",
+                "has_real_probability_filtration": True,
+                "probability_vertex_count": 2,
+            }
+        ],
+        "rejects_probability_filtered_simplicial_object_alias_as_fallback": True,
+        "rejects_filtered_simplicial_object_without_model_probabilities": True,
+        "conversion_path": "query_context.trajectory_probability_filtered_simplicial_object",
+        "conversion_status": "valid_query_probability_trajectory_complex",
+        "fail_closed_reason": None,
+        "embedding_only_assignment_allowed": False,
+        "probability_assignment_metric_required": "jensen_shannon_distance_on_model_probability_vectors",
+    }
     analogical_topk_contract = {
         "schema_version": "tropicalgt.analogical_topk.v1",
         "available": True,
@@ -746,6 +773,8 @@ def _row(root: Path, name: str) -> Path:
         "chain_map_claim_requires": "certified_filtered_simplicial_map",
         "persistence_module_morphism_claim_requires": "certified_filtered_simplicial_map",
         "query_complex_source": "trajectory_probability_filtered_simplicial_object",
+        "query_context_contract_schema_version": "tropicalgt.analogical_query_context_conversion.v1",
+        "query_context_contract": analogical_query_context_contract,
         "raw_retrieved_count": 2,
         "qualified_model_probability_memory_count": 2,
         "rejected_retrieved_count": 0,
@@ -755,7 +784,12 @@ def _row(root: Path, name: str) -> Path:
         "bank_path": "",
         "readability_contract": analogical_topk_readability_contract,
     }
-    _write(row / "analogical_simplicial_maps.json", json.dumps({"topk_contract": analogical_topk_contract, "maps": [
+    _write(row / "analogical_simplicial_maps.json", json.dumps({
+        "available": True,
+        "query_complex_source": "trajectory_probability_filtered_simplicial_object",
+        "query_context_contract": analogical_query_context_contract,
+        "topk_contract": analogical_topk_contract,
+        "maps": [
         {
             "query_complex_source": "trajectory_probability_filtered_simplicial_object",
             "codomain_complex_source": "trajectory_probability_filtered_simplicial_object",
@@ -2203,6 +2237,36 @@ def test_validate_audit_root_rejects_missing_analogical_topk_readability_contrac
     assert not report["ok"]
     assert any("analogical top-k readability contract" in err for err in report["errors"])
 
+
+def test_validate_audit_root_rejects_missing_analogical_query_context_contract(tmp_path: Path):
+    validator = _load_validator()
+    audit = tmp_path / "step_00000001" / "got_audit"
+    row = _row(audit, ".")
+    maps_path = row / "analogical_simplicial_maps.json"
+    payload = json.loads(maps_path.read_text(encoding="utf-8"))
+    payload.pop("query_context_contract")
+    payload["topk_contract"].pop("query_context_contract")
+    payload["topk_contract"].pop("query_context_contract_schema_version")
+    maps_path.write_text(json.dumps(payload), encoding="utf-8")
+    _write(audit / "codex_browser_index.html", _codex_browser_html(_browser_samples(audit, ["."])))
+    report = validator.validate_audit_root(audit, min_rows=1, min_candidates=4, min_depth=2)
+    assert not report["ok"]
+    assert any("analogical query context conversion contract" in err for err in report["errors"])
+
+
+def test_validate_audit_root_rejects_alias_analogical_query_context_contract(tmp_path: Path):
+    validator = _load_validator()
+    audit = tmp_path / "step_00000001" / "got_audit"
+    row = _row(audit, ".")
+    maps_path = row / "analogical_simplicial_maps.json"
+    payload = json.loads(maps_path.read_text(encoding="utf-8"))
+    payload["query_context_contract"]["selected_query_complex_source"] = "probability_filtered_simplicial_object"
+    payload["topk_contract"]["query_context_contract"] = payload["query_context_contract"]
+    maps_path.write_text(json.dumps(payload), encoding="utf-8")
+    _write(audit / "codex_browser_index.html", _codex_browser_html(_browser_samples(audit, ["."])))
+    report = validator.validate_audit_root(audit, min_rows=1, min_candidates=4, min_depth=2)
+    assert not report["ok"]
+    assert any("trajectory probability query context" in err for err in report["errors"])
 
 def test_validate_audit_root_rejects_missing_graphcg_basis_certificate(tmp_path: Path):
     validator = _load_validator()

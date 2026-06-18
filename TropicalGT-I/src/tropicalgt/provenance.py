@@ -524,6 +524,7 @@ PROVENANCE_REGISTRY: tuple[ProvenanceEntry, ...] = (
             "analogical_query_context_conversion",
             "non_trajectory_probability_complex_not_accepted_as_query_fallback",
             "rejects_probability_filtered_simplicial_object_alias_as_fallback",
+            "non-probability filtered query fallback",
         ),
     ),
 )

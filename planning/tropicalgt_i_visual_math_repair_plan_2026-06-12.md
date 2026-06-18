@@ -1500,3 +1500,20 @@ CUDA_VISIBLE_DEVICES="" /home/iska/miniconda3/envs/tokengt/bin/python -m py_comp
 CUDA_VISIBLE_DEVICES="" /home/iska/miniconda3/envs/tokengt/bin/pytest -q TropicalGT-I/tests/test_simplicial_visualization.py -k "analogical_memory_visualization or analogical_memory_without"
 # 6 passed, 44 deselected
 ```
+
+## 2026-06-18 Analogical Query Context Validator Gate
+
+Sequential validator hardening item completed after the analogical query-context writer pass:
+
+- `validate_interactive_audit_artifacts.py` now requires `tropicalgt.analogical_query_context_conversion.v1` for analogical map payloads.
+- The validator checks actual-data/no-proxy flags, accepted query keys, rejected-key row shape, alias-fallback rejection flags, embedding-only rejection, and the Jensen-Shannon model-probability assignment metric.
+- Available analogical maps must select `trajectory_probability_filtered_simplicial_object` and report positive query probability-vertex counts.
+- Missing-query unavailable payloads must keep `selected_query_complex_available=false` and `selected_query_complex_source=unavailable`.
+- The fixture includes a rejected alias row so validation preserves the distinction between recording rejected evidence and selecting an alias as a query domain.
+
+Validation:
+
+```text
+CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src:TropicalGT-I/scripts /home/iska/miniconda3/envs/tokengt/bin/pytest -q TropicalGT-I/tests/test_interactive_artifact_validator.py -k "analogical_query_context or analogical_topk_readability or analogical_simplex_tree_analogy or accepts_three_interactive_rows"
+# 5 passed, 40 deselected
+```

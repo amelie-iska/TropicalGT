@@ -1605,6 +1605,7 @@ def validate_row(row_dir: Path, *, min_candidates: int = 8, min_depth: int = 2, 
             _assert(analogy_contract.get("persistence_module_morphism_claim_requires_certified_filtered_simplicial_map") is True, errors, "analogical simplex-tree analogy permits uncertified persistence-module morphisms")
             _assert(str(analogy_contract.get("source", "")) == "probability_simplicial_map.simplex_tree_map.rows", errors, "analogical simplex-tree analogy has wrong source rows")
         topk_contract = map_payload.get("topk_contract", {}) if isinstance(map_payload, dict) else {}
+        query_context_contract = map_payload.get("query_context_contract", {}) if isinstance(map_payload, dict) and isinstance(map_payload.get("query_context_contract"), dict) else {}
         topk_readability = topk_contract.get("readability_contract", {}) if isinstance(topk_contract, dict) else {}
         _assert(isinstance(topk_contract, dict) and topk_contract.get("schema_version") == "tropicalgt.analogical_topk.v1", errors, "analogical top-k contract is missing or has wrong schema")
         if isinstance(topk_contract, dict):
@@ -1614,6 +1615,7 @@ def validate_row(row_dir: Path, *, min_candidates: int = 8, min_depth: int = 2, 
             _assert(topk_contract.get("assignment_metric") == "jensen_shannon_distance_on_model_probability_vectors", errors, "analogical top-k contract has wrong assignment metric")
             _assert(topk_contract.get("query_complex_required") == "trajectory_probability_filtered_simplicial_object", errors, "analogical top-k contract has wrong query complex requirement")
             _assert(topk_contract.get("codomain_complex_required") == "trajectory_probability_filtered_simplicial_object", errors, "analogical top-k contract has wrong codomain complex requirement")
+            _assert(topk_contract.get("query_context_contract_schema_version") == "tropicalgt.analogical_query_context_conversion.v1", errors, "analogical top-k contract lacks query-context conversion schema")
             _assert(
                 isinstance(topk_readability, dict) and topk_readability.get("schema_version") == "tropicalgt.analogical_topk_readability.v1",
                 errors,
@@ -1636,14 +1638,40 @@ def validate_row(row_dir: Path, *, min_candidates: int = 8, min_depth: int = 2, 
                 _assert(expected_columns.issubset(required_columns), errors, "analogical top-k readability contract lacks required table columns")
                 _assert("coarse signature" in str(topk_readability.get("signature_cosine_column_policy", "")), errors, "analogical top-k readability contract does not separate coarse signature cosine")
                 _assert("cannot substitute" in str(topk_readability.get("derived_algebraic_column_policy", "")), errors, "analogical top-k readability contract does not clamp derived/algebraic overclaims")
+        _assert(
+            isinstance(query_context_contract, dict)
+            and query_context_contract.get("schema_version") == "tropicalgt.analogical_query_context_conversion.v1",
+            errors,
+            "analogical query context conversion contract is missing or has wrong schema",
+        )
+        if isinstance(query_context_contract, dict):
+            accepted_keys = set(query_context_contract.get("accepted_query_complex_keys", [])) if isinstance(query_context_contract.get("accepted_query_complex_keys"), list) else set()
+            rejected_keys = query_context_contract.get("rejected_query_context_keys", []) if isinstance(query_context_contract.get("rejected_query_context_keys"), list) else []
+            _assert(query_context_contract.get("actual_data_only") is True, errors, "analogical query context conversion contract is not actual-data-only")
+            _assert(query_context_contract.get("no_proxy_or_fallback") is True, errors, "analogical query context conversion contract allows proxy/fallback data")
+            _assert("trajectory_probability_filtered_simplicial_object" in accepted_keys, errors, "analogical query context conversion contract lacks trajectory probability accepted key")
+            _assert(query_context_contract.get("rejects_probability_filtered_simplicial_object_alias_as_fallback") is True, errors, "analogical query context conversion contract allows probability-filtered alias fallback")
+            _assert(query_context_contract.get("rejects_filtered_simplicial_object_without_model_probabilities") is True, errors, "analogical query context conversion contract allows non-probability filtered query fallback")
+            _assert(query_context_contract.get("embedding_only_assignment_allowed") is False, errors, "analogical query context conversion contract allows embedding-only assignment")
+            _assert(query_context_contract.get("probability_assignment_metric_required") == "jensen_shannon_distance_on_model_probability_vectors", errors, "analogical query context conversion contract has wrong assignment metric")
+            _assert(all(isinstance(row, dict) and "key" in row and "reason" in row for row in rejected_keys), errors, "analogical query context conversion rejected-key rows are malformed")
+            if isinstance(topk_contract, dict):
+                _assert(topk_contract.get("query_context_contract") == query_context_contract, errors, "analogical top-k contract does not embed the query context conversion contract")
         if map_payload.get("available") is False:
             _assert(map_payload.get("reason") in {"missing_model_probability_query_complex", "missing_model_probability_codomain_complex", "no_non_self_model_memory"}, errors, "analogical maps are unavailable for an unrecognized reason")
             if isinstance(topk_contract, dict):
                 _assert(int(_finite_float(topk_contract.get("top_k_rendered"), -1.0)) == 0, errors, "unavailable analogical top-k contract renders map rows")
             if isinstance(analogy_contract, dict):
                 _assert(analogy_contract.get("available") is False and int(_finite_float(analogy_contract.get("pair_count"), -1.0)) == 0, errors, "unavailable analogical simplex-tree analogy renders pair rows")
+            if isinstance(query_context_contract, dict) and map_payload.get("reason") == "missing_model_probability_query_complex":
+                _assert(query_context_contract.get("selected_query_complex_available") is False, errors, "missing-query analogical unavailable state has an available query context")
+                _assert(query_context_contract.get("selected_query_complex_source") == "unavailable", errors, "missing-query analogical unavailable state does not fail closed on query source")
         else:
             allowed_sources = {"trajectory_probability_filtered_simplicial_object"}
+            if isinstance(query_context_contract, dict):
+                _assert(query_context_contract.get("selected_query_complex_available") is True, errors, "available analogical maps lack an available query context")
+                _assert(query_context_contract.get("selected_query_complex_source") in allowed_sources, errors, "available analogical maps are not using a trajectory probability query context")
+                _assert(_finite_float(query_context_contract.get("selected_query_probability_vertex_count"), 0.0) > 0, errors, "available analogical query context has no probability vertices")
             _assert(bool(maps), errors, "analogical_simplicial_maps.json contains no maps")
             _assert(isinstance(analogy_pairs, list) and len(analogy_pairs) == len(maps), errors, "analogical simplex-tree analogy pair count does not match maps")
             if isinstance(analogy_contract, dict):
