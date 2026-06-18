@@ -489,6 +489,7 @@ PROVENANCE_REGISTRY: tuple[ProvenanceEntry, ...] = (
             "no-proxy analogical contract",
             "finite toric-ideal sidecar diagnostics rather than",
             "no resolution certificate was fabricated",
+            "no-proxy evidence rows were preserved",
         ),
     ),
     ProvenanceEntry(

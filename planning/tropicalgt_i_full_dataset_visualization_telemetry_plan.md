@@ -941,3 +941,21 @@ non-CAS evidence, but the gap count decreased from `27` to `15`; `CAS
 resolution certificates` decreased from `12` to `0`. Remaining categories are
 GraphCG `6`, other `4`, trajectory overlay/radius `3`, missing artifact `1`,
 and row coverage `1`.
+
+Completed 2026-06-18 follow-up: legacy GraphCG direction-audit payloads now
+rerender from stored `inference_scaling_tree.json` candidate
+`graphcg_projection.all_direction_cosines` arrays. The backfill requires real
+per-candidate all-direction cosines and regenerates the full-rank all-direction
+heatmap, top-active direction panel, full activity spectrum, candidate activity
+panel, signed-bias panel, exact contiguous direction rows, bounded top-active
+rows, candidate hover rows, readability contract, direction-evidence contract,
+and projection-basis certificate. If those stored cosines are absent, it records
+an explicit unavailable action and fabricates no direction rows or heatmap.
+
+Executed safe generated-artifact GraphCG backfill on the b60 step-5000
+`got_audit` bundle without staging generated outputs. It replayed `12` stored
+candidate projection rows over all `1760` model-derived GraphCG directions and
+rebuilt the local dashboard. The strict validator still fails for remaining
+non-GraphCG evidence, but the gap count decreased from `15` to `9`; GraphCG
+`6` decreased to `0`. Remaining categories are other `4`, trajectory
+overlay/radius `3`, missing artifact `1`, and row coverage `1`.

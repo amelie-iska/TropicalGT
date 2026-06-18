@@ -17,6 +17,7 @@ from tropicalgt.visualization import (  # noqa: E402
     _write_reasoning_step_complex_maps,
     write_analogical_memory_visualization,
     write_got_trajectory_visualization,
+    write_graphcg_trajectory_visualization,
     write_persistence_visualizations,
     write_toric_embedding_sidecar,
     write_tropical_fan_diagnostics,
@@ -115,6 +116,99 @@ def _tropical_support_contracts_need_backfill(root: Path) -> bool:
         "No support-token proxies",
     )
     return any(marker not in html for marker in required_html_markers)
+
+
+
+def _graphcg_contracts_need_backfill(root: Path) -> bool:
+    payload_path = root / "graphcg_direction_cosines_payload.json"
+    html_path = root / "graphcg_direction_cosines.html"
+    if not (payload_path.exists() and html_path.exists()):
+        return True
+    payload = _read_json(payload_path)
+    if payload.get("available") is not True:
+        return False
+    matrix_shape = payload.get("matrix_shape") if isinstance(payload.get("matrix_shape"), list) else []
+    if len(matrix_shape) != 2:
+        return True
+    try:
+        direction_count = int(matrix_shape[1])
+    except (TypeError, ValueError):
+        return True
+    if direction_count <= 0:
+        return True
+    readability = payload.get("graphcg_readability_contract") if isinstance(payload.get("graphcg_readability_contract"), dict) else {}
+    if readability.get("schema_version") != "tropicalgt.graphcg_direction_readability.v1":
+        return True
+    if readability.get("all_model_directions_rendered") is not True:
+        return True
+    if readability.get("directions_sampled_for_heatmap") is not False:
+        return True
+    if readability.get("panels_are_separate") is not True:
+        return True
+    required_panels = {
+        "all_direction_heatmap",
+        "top_active_direction_panel",
+        "full_rank_activity_spectrum",
+        "candidate_activity_by_observed_got_state",
+        "direction_signed_bias",
+    }
+    panel_names = set(payload.get("panel_names", [])) if isinstance(payload.get("panel_names"), list) else set()
+    if not required_panels.issubset(set(readability.get("required_panels", [])) if isinstance(readability.get("required_panels"), list) else set()):
+        return True
+    if not required_panels.issubset(panel_names):
+        return True
+    evidence = payload.get("graphcg_direction_evidence_contract") if isinstance(payload.get("graphcg_direction_evidence_contract"), dict) else {}
+    if evidence.get("schema_version") != "tropicalgt.graphcg_direction_evidence.v1":
+        return True
+    if evidence.get("source") != "candidate.graphcg_projection.all_direction_cosines":
+        return True
+    if evidence.get("no_proxy_or_fallback") is not True:
+        return True
+    if evidence.get("safe_to_render_full_rank_direction_evidence") is not True:
+        return True
+    if int(evidence.get("direction_count", -1) or -1) != direction_count:
+        return True
+    direction_rows = payload.get("direction_rows") if isinstance(payload.get("direction_rows"), list) else []
+    if len(direction_rows) != direction_count:
+        return True
+    seen = set()
+    for row in direction_rows:
+        if not isinstance(row, dict):
+            return True
+        try:
+            direction_id = int(row.get("direction_id"))
+        except (TypeError, ValueError):
+            return True
+        seen.add(direction_id)
+        for key in (
+            "rendered_in_all_direction_heatmap",
+            "rendered_in_full_rank_activity_spectrum",
+            "rendered_in_signed_bias_panel",
+            "exact_direction_id_preserved",
+            "no_proxy_or_fallback",
+        ):
+            if row.get(key) is not True:
+                return True
+    if seen != set(range(direction_count)):
+        return True
+    top_rows = payload.get("top_active_direction_rows") if isinstance(payload.get("top_active_direction_rows"), list) else []
+    if not top_rows or len(top_rows) > direction_count:
+        return True
+    hover_rows = payload.get("candidate_hover_rows") if isinstance(payload.get("candidate_hover_rows"), list) else []
+    candidate_labels = payload.get("candidate_labels") if isinstance(payload.get("candidate_labels"), list) else []
+    if len(hover_rows) < len(candidate_labels):
+        return True
+    try:
+        html = html_path.read_text(encoding="utf-8")
+    except Exception:
+        return True
+    required_markers = (
+        "Plotly.newPlot",
+        "plotly.min.js",
+        "GraphCG full-rank direction audit",
+        "Readable full-rank heatmap",
+    )
+    return any(marker not in html for marker in required_markers)
 
 
 def _analogical_contracts_need_backfill(root: Path) -> bool:
@@ -336,6 +430,42 @@ def backfill_audit_root(audit_root: str | Path, *, overwrite: bool = False) -> d
             )
 
 
+    scaling_path = root / "inference_scaling_tree.json"
+    graphcg_needed = overwrite or _graphcg_contracts_need_backfill(root)
+    if graphcg_needed and scaling_path.exists():
+        scaling = _read_json(scaling_path)
+        candidates = scaling.get("candidates", []) if isinstance(scaling.get("candidates"), list) else []
+        candidates_with_graphcg = [
+            row
+            for row in candidates
+            if isinstance(row, dict)
+            and isinstance(row.get("graphcg_projection"), dict)
+            and isinstance(row["graphcg_projection"].get("all_direction_cosines"), list)
+            and row["graphcg_projection"].get("all_direction_cosines")
+        ]
+        if candidates_with_graphcg:
+            paths = write_graphcg_trajectory_visualization(scaling, root)
+            refreshed = _read_json(root / "graphcg_direction_cosines_payload.json")
+            matrix_shape = refreshed.get("matrix_shape") if isinstance(refreshed.get("matrix_shape"), list) else [0, 0]
+            actions.append(
+                {
+                    "kind": "graphcg_direction_contract_backfill",
+                    "reason": "Regenerated GraphCG full-rank direction HTML and payload contracts from stored inference_scaling_tree.json candidate.graphcg_projection.all_direction_cosines only; exact direction ids, top-active rows, candidate hover rows, and no-proxy evidence rows were preserved.",
+                    "candidate_count": len(candidates_with_graphcg),
+                    "direction_count": int(matrix_shape[1]) if len(matrix_shape) == 2 else 0,
+                    "paths": paths,
+                }
+            )
+        else:
+            actions.append(
+                {
+                    "kind": "graphcg_direction_contract_unavailable",
+                    "reason": "GraphCG direction contracts were stale, but inference_scaling_tree.json had no stored candidate.graphcg_projection.all_direction_cosines arrays; no direction rows or heatmap were fabricated.",
+                    "paths": {"inference_scaling_tree": str(scaling_path)},
+                }
+            )
+
+
     analogical_needed = overwrite or _analogical_contracts_need_backfill(root)
     analogical_memory_path = root / "analogical_memory_retrieval.json"
     if analogical_needed and analogical_memory_path.exists():
@@ -357,7 +487,6 @@ def backfill_audit_root(audit_root: str | Path, *, overwrite: bool = False) -> d
             }
         )
 
-    scaling_path = root / "inference_scaling_tree.json"
     got_needed = overwrite or _got_trajectory_contracts_need_backfill(root)
     if got_needed and scaling_path.exists():
         scaling = _read_json(scaling_path)

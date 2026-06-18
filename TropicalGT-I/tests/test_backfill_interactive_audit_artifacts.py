@@ -513,3 +513,85 @@ def test_backfill_hydrates_stale_unavailable_cas_resolution_guard(tmp_path: Path
     assert real["unavailable_diagnostic"]["safe_to_render_only_as_unavailable"] is True
     assert "Do not substitute chain diagnostics" in real["unavailable_diagnostic"]["no_proxy_policy"]
     assert module._real_resolution_guard_needs_backfill(real) is False
+
+
+def test_backfill_regenerates_stale_graphcg_direction_contracts_from_scaling_tree(tmp_path: Path):
+    module = _load_backfill()
+    audit = tmp_path / "got_audit"
+    audit.mkdir()
+    (audit / "inference_scaling_tree.json").write_text(
+        json.dumps(
+            {
+                "candidates": [
+                    {
+                        "record_id": "q0",
+                        "level": 0,
+                        "path": ["root"],
+                        "score": 0.2,
+                        "nll": 1.0,
+                        "graphcg_projection": {
+                            "basis": "effective_full_rank_qr",
+                            "all_direction_cosines": [0.1, -0.2, 0.3],
+                            "mean_abs_offdiag_cosine": 0.01,
+                            "max_abs_offdiag_cosine": 0.02,
+                        },
+                    },
+                    {
+                        "record_id": "q1",
+                        "level": 1,
+                        "path": ["root", "accept"],
+                        "score": 0.4,
+                        "nll": 0.8,
+                        "graphcg_projection": {
+                            "basis": "effective_full_rank_qr",
+                            "all_direction_cosines": [0.4, 0.0, -0.5],
+                            "mean_abs_offdiag_cosine": 0.03,
+                            "max_abs_offdiag_cosine": 0.04,
+                        },
+                    },
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+    (audit / "graphcg_direction_cosines_payload.json").write_text(
+        json.dumps(
+            {
+                "available": True,
+                "matrix_shape": [2, 3],
+                "mean_abs": [0.25, 0.1, 0.4],
+                "signed_mean": [0.25, -0.1, -0.1],
+            }
+        ),
+        encoding="utf-8",
+    )
+    (audit / "graphcg_direction_cosines.html").write_text("<html>legacy static graphcg</html>", encoding="utf-8")
+
+    assert module._graphcg_contracts_need_backfill(audit) is True
+    report = module.backfill_audit_root(audit)
+
+    kinds = {row["kind"] for row in report["actions"]}
+    assert "graphcg_direction_contract_backfill" in kinds
+    payload = json.loads((audit / "graphcg_direction_cosines_payload.json").read_text(encoding="utf-8"))
+    assert payload["graphcg_readability_contract"]["schema_version"] == "tropicalgt.graphcg_direction_readability.v1"
+    assert payload["graphcg_readability_contract"]["all_model_directions_rendered"] is True
+    assert payload["graphcg_readability_contract"]["directions_sampled_for_heatmap"] is False
+    evidence = payload["graphcg_direction_evidence_contract"]
+    assert evidence["schema_version"] == "tropicalgt.graphcg_direction_evidence.v1"
+    assert evidence["source"] == "candidate.graphcg_projection.all_direction_cosines"
+    assert evidence["no_proxy_or_fallback"] is True
+    assert evidence["direction_count"] == 3
+    assert evidence["direction_row_count"] == 3
+    assert evidence["safe_to_render_full_rank_direction_evidence"] is True
+    assert [row["direction_id"] for row in payload["direction_rows"]] == [0, 1, 2]
+    assert all(row["rendered_in_all_direction_heatmap"] for row in payload["direction_rows"])
+    assert all(row["rendered_in_full_rank_activity_spectrum"] for row in payload["direction_rows"])
+    assert all(row["rendered_in_signed_bias_panel"] for row in payload["direction_rows"])
+    assert payload["top_active_direction_rows"]
+    assert len(payload["candidate_hover_rows"]) == 2
+    html = (audit / "graphcg_direction_cosines.html").read_text(encoding="utf-8")
+    assert "Plotly.newPlot" in html
+    assert "plotly.min.js" in html
+    assert "GraphCG full-rank direction audit" in html
+    assert "Readable full-rank heatmap" in html
+    assert module._graphcg_contracts_need_backfill(audit) is False
