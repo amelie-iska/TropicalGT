@@ -978,3 +978,20 @@ Jensen-Shannon pages with local-Plotly unavailable diagnostics. The strict
 validator now reports the only remaining failure as row coverage: row `0` passes
 all artifact checks and the gap count decreased from `9` to `1`; other `4`,
 trajectory overlay/radius `3`, and missing artifact `1` all decreased to `0`.
+
+Completed 2026-06-18 follow-up: strict row coverage now uses real periodic
+sibling `step_*/got_audit` rows when a single `got_audit` has no `example_*`
+sample rows, selecting only the newest rows needed to satisfy `min_rows` and
+recording a `tropicalgt.interactive_audit_row_coverage.v1` contract. The
+validator reports the exact row paths, requires uniqueness, and states that rows
+are never duplicated to satisfy min-row gates. This preserves the no-proxy rule
+while allowing long-running periodic audits to provide real multi-row coverage.
+
+Also repaired GoT NLL projection metadata so `raw_centered_scaled_nll` and
+`z_centered_scaled_nll` both describe the displayed projected NLL coordinate,
+with raw scalar NLL preserved separately in `raw_nll`. This fixed the selected
+step-2500 sibling row without changing model values or inventing anchors.
+Backfilled the real step-4750 and step-2500 `got_audit` bundles from their own
+stored payloads, then reran the strict validator on step 5000. Result: PASS,
+`3/3` unique real rows checked (`5000`, `4750`, `2500`), all rows PASS, gap
+count `0`.

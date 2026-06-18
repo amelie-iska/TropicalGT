@@ -1555,6 +1555,31 @@ def test_validate_audit_root_accepts_three_interactive_rows(tmp_path: Path):
     assert all(row["step_complex_maps"] == 4 for row in report["row_reports"])
 
 
+def test_validate_audit_root_uses_real_periodic_sibling_rows_without_duplication(tmp_path: Path):
+    validator = _load_validator()
+    periodic = tmp_path / "run" / "periodic"
+    current = periodic / "step_00005000" / "got_audit"
+    previous = periodic / "step_00004750" / "got_audit"
+    older = periodic / "step_00002500" / "got_audit"
+    _row(current, ".")
+    _row(previous, ".")
+    _row(older, ".")
+    _write(periodic / "step_00005000" / "validation_report.json", json.dumps({"bpb": 1.4, "graph_bpb": 2.4, "invalid_graph_rate": 0.0}))
+
+    report = validator.validate_audit_root(current, min_rows=3, min_candidates=4, min_depth=2)
+
+    assert report["ok"], report["errors"]
+    assert report["rows_checked"] == 3
+    coverage = report["row_coverage"]
+    assert coverage["schema_version"] == "tropicalgt.interactive_audit_row_coverage.v1"
+    assert coverage["actual_data_only"] is True
+    assert coverage["no_proxy_or_fallback"] is True
+    assert coverage["unique_row_paths"] is True
+    assert coverage["satisfies_min_rows"] is True
+    assert coverage["row_paths"] == [str(current.resolve()), str(previous.resolve()), str(older.resolve())]
+    assert "Never duplicate rows" in coverage["row_source_policy"]
+
+
 
 def test_validate_audit_root_rejects_chart_bundle_sidecar_proxy_claim(tmp_path: Path):
     validator = _load_validator()

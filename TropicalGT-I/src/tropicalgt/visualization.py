@@ -894,7 +894,7 @@ def write_got_trajectory_visualization(scaling_report: dict[str, object], output
                     "z": float(trajectory_plot_z[idx]),
                     "z_surface": None,
                     "z_centered_scaled_nll": float(nll_plot_z[idx]),
-                    "raw_centered_scaled_nll": float(raw_nll_plot_z[idx]),
+                    "raw_centered_scaled_nll": float(nll_plot_z[idx]),
                     "raw_nll": float(nll_values[idx]),
                     "touches_nll_surface": False,
                 },

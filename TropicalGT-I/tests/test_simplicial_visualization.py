@@ -757,6 +757,7 @@ def test_got_trajectory_visualization_renders_simplicial_panel_and_nll_surface(t
         assert abs(node["plot"]["z_centered_scaled_nll"] - projected_by_id[rid]) < 1e-9
         assert node["plot"]["z"] == node["pca"]["pc3"]
         assert "raw_centered_scaled_nll" in node["plot"]
+        assert node["plot"]["raw_centered_scaled_nll"] == node["plot"]["z_centered_scaled_nll"]
         assert node["reasoning_step_index"] == idx
         assert node["step_complex_href"] == f"reasoning_step_complex_maps/reasoning_step_{idx:03d}.html"
         assert node["step_simplex_tree_href"] == f"reasoning_step_complex_maps/reasoning_step_{idx:03d}_simplex_tree.html"
