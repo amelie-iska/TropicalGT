@@ -722,9 +722,11 @@ Validation so far:
 - Modify: `TropicalGT-I/README.md`
 - Possibly modify: `TropicalGT-I/scripts/validate_interactive_audit_artifacts.py`
 
-- [ ] **Step 9.1: Update docs**
+- [x] **Step 9.1: Update docs**
 
 Document fresh step-0 Parameter-Golf BPB run config, scalar-only W&B default, opt-in local interactive artifacts, opt-in W&B media upload, inference artifact flags, single catalog, browser QA, and provenance rules.
+
+Implemented 2026-06-18: `README.md` and `TropicalGT-I/README.md` now document the b60 step-0 5K-gate run, BPB `<1.12` target, zero-byte checkpoint block, current GPU-safety hold, scalar-first W&B default, opt-in HTML/media upload, nonempty-checkpoint requirement for restart/eval, sample-first browser catalog, and the current no-proxy visualization contracts for local NLL, analogical maps, persistence landscapes, embedding trajectory identity, and SimplexTree readability.
 
 - [ ] **Step 9.2: Regenerate browser bundle**
 

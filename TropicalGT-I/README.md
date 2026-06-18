@@ -19,7 +19,9 @@ The graph structural byte budget is derived from the actual TokenGT graph tuple:
 
 All training records are graph structured. The moved TropicalGT reasoning shards carry graph JSON and also receive deterministic sequential text path graphs. The OpenAI Parameter-Golf FineWeb stream is loaded from `external/oai-parameter-golf/data/datasets/fineweb10B_sp1024` and decoded with `external/oai-parameter-golf/data/tokenizers/fineweb_1024_bpe.model`; `train_full_dataset_active.json` keeps the older `external/parameter-golf` checkout as a compatibility fallback. Every selected token window becomes a causal sequential DAG before TokenGT tokenization. Graphs with causal DAG structure are decoded autoregressively in topological order. Cyclic or explicitly non-causal graphs use deterministic seeded random autoregressive order.
 
-The current fresh step-0 full-dataset Parameter-Golf BPB repair run uses `configs/train_full_dataset_pg_bpb_step0_full24b_b44.json`. It requires both the moved Hugging Face reasoning shards and the full OpenAI Parameter-Golf SP1024 cache. The active shape is `seq_len: 1024`, `batch_size: 44`, `max_steps: 537083`, for `24,198,811,648` configured token slots against `24,198,796,288` audited available train token slots. This is the current path for BPB optimization and should use roughly 18-20GB VRAM on an RTX 4090 while leaving headroom for implementation tests and browser/inference probes.
+The latest completed fresh step-0 full-dataset Parameter-Golf BPB repair run is the b60 5K-gate run, launched from `outputs/launch_configs/tropicalgt_i_pg_bpb_step0_full24b_b60_20260616T053631Z_fresh_bpb112_casrows_5k_gate.json`. It required both the moved Hugging Face reasoning shards and the full OpenAI Parameter-Golf SP1024 cache, used `seq_len: 1024`, `batch_size: 54`, and stopped at the requested `5000` step boundary. The recorded step-5000 metrics are BPB `1.4304583543547733`, graph-BPB `20.122144813809587`, graph-conditioned BPB without side cost `1.2576335315794374`, NLL `0.9915181752294302`, and invalid graph rate `0.0`. The target remains BPB `< 1.12`, but the b60 latest checkpoint is unavailable because `checkpoints/tropicalgt_i_pg_bpb_step0_full24b_b60_20260616T053631Z_fresh_bpb112_casrows_5k_gate.latest.pt` is zero bytes; checkpoint-backed analysis or restart execution must fail closed until a nonempty loadable checkpoint exists.
+
+Current execution status as of 2026-06-18: training/Herschel is intentionally paused under the user GPU-safety hold. Do not restart, kill, resume, or run GPU inspections for TropicalGT-I until explicit GPU clearance or a declared safe GPU budget is provided. Existing JSON/HTML sidecars may be analyzed CPU-only, but missing checkpoint evidence must be rendered unavailable rather than substituted.
 
 The older full-dataset run path uses `configs/train_full_dataset_active.json`. It also requires both real data sources, but its shape is `seq_len: 1024`, `batch_size: 4`, `checkpoint_every: 1000`, `validation_every_steps: 500`, `visualization_every_steps: 10000`, and `max_steps: 2500000`, which schedules `10,240,000,000` sequence-token slots. Treat it as historical unless explicitly relaunched.
 
@@ -94,12 +96,12 @@ TropicalGT-I/scripts/parameter_golf_codex_review_loop.py \
 --config TropicalGT-I/configs/train.json \
 --python python \
 --review-every-steps 5000 \
---target-bpb 1.18 \
+--target-bpb 1.12 \
 --max-total-steps 20000 \
 --restart-policy beginning
 ```
 
-Each boundary writes `active_training_contract_step_*.json/.md` with the active metrics, hyperparameters, losses, objectives, regularizers, dataset rates, VRAM/throughput, and restart decision. If `eval.bpb` is absent or above `1.18`, the generated Codex prompt requests a single-agent review of metrics, losses, hyperparameters, BPB behavior, and restart strategy.
+Each boundary writes `active_training_contract_step_*.json/.md` with the active metrics, hyperparameters, losses, objectives, regularizers, dataset rates, VRAM/throughput, and restart decision. For the current Parameter-Golf gate, use target BPB `1.12`; if `eval.bpb` is absent or above target, the generated Codex prompt requests a single-agent review of metrics, losses, hyperparameters, BPB behavior, and restart strategy. Restart execution still requires a nonempty loadable checkpoint and explicit GPU clearance.
 
 The active full-dataset config validates every `500` steps and renders heavier browser/topology artifacts every `10000` steps. Each periodic validation round writes a step-local bundle under `TropicalGT-I/outputs/train_full_dataset_active/periodic/step_XXXXXXXX/`:
 
@@ -115,6 +117,8 @@ The active full-dataset config validates every `500` steps and renders heavier b
 The rolling manifest is `TropicalGT-I/outputs/train_full_dataset_active/periodic/manifest.jsonl`. W&B logs scalar validation metrics at the same step. Periodic HTML remains local unless W&B interactive artifact upload is separately enabled with `wandb.log_interactive_artifacts: true` and a positive `wandb.html_artifact_limit`.
 
 The visualization renderer is intentionally audit-oriented rather than decorative. Graph-of-thought trajectories are rendered from model `graph_state` embeddings and graph-of-thought candidate records. In the NLL landscape, every rendered trajectory marker and every edge endpoint uses the displayed surface z-value (plot.z equal to plot.z_surface); the raw centered/scaled NLL remains in the payload for audit, but markers are projected onto the single displayed NLL mesh so they visibly touch it. Microstep interpolation markers and global surrogate NLL surfaces are disabled; unavailable model outputs write explicit `available: false` diagnostics instead of substitute geometry. Filtered simplicial objects are rendered as dark SVG/Plotly side-panel views with a scalar filtration-radius slider and multiparameter persistence data retained in the JSON payload. GraphCG direction pages preserve the per-candidate projection-basis certificate from `graphcg_projection`, including basis source counts and off-diagonal cosine diagnostics, so the heatmap cannot erase whether the directions came from the full-rank QR basis. Long causal text-path complexes wrap into lanes for legibility.
+
+The current browser-audit contract set rejects proxy/fallback geometry. Local NLL sheets use `tropicalgt.local_embedding_neighborhood_surface.v1` and only interpolate observed model-evaluated anchors. Analogical pages use `tropicalgt.analogical_map_layout.v1`, model probability vectors, Jensen-Shannon assignment evidence, explicit correspondence rows, and unavailable states when query or memory probability complexes are missing. Persistence landscapes record backend provenance for the actual GUDHI/Persim function source. Embedding maps include `tropicalgt.embedding_trajectory_identity.v1` with branch/depth metadata and GoT parent-child transition rows. Simplex-tree pages include `tropicalgt.simplex_tree_readability.v1`: a summary-first panel with GUDHI provenance, dimension counts, filtration histogram bins, representative inclusions, and a dense-cover policy that keeps the full actual face-to-coface graph available but legend-only above the readability threshold.
 
 The full GoT audit bundle now separates Euclidean embedding-radius and model-probability filtrations. The primary trajectory complex is `got_full_trajectory_complex.html`; its simplex-tree inclusion poset is `got_full_trajectory_simplex_tree_3d.html`. The Jensen-Shannon probability complex is `got_full_trajectory_complex_jensen_shannon.html`; its simplex tree is `got_full_trajectory_simplex_tree_3d_jensen_shannon.html`. Each observed model-evaluated reasoning state also receives both `reasoning_step_###.html` and `reasoning_step_###_simplex_tree.html`. All radius sliders start at the disjoint 0-simplex cloud and grow min-to-max by true filtration threshold.
 
@@ -180,8 +184,8 @@ expansion from model action probabilities:
 ```bash
 PYTHONPATH=TropicalGT-I/src:TropicalGT-I/scripts \
 python TropicalGT-I/scripts/run_multi_inference_audits.py \
---config TropicalGT-I/configs/train_full_dataset_pg_bpb_step0_full24b_b44.json \
---checkpoint TropicalGT-I/checkpoints/tropicalgt_i_pg_bpb_step0_full24b_b44.latest.pt \
+--config TropicalGT-I/outputs/launch_configs/tropicalgt_i_pg_bpb_step0_full24b_b60_20260616T053631Z_fresh_bpb112_casrows_5k_gate.json \
+--checkpoint TropicalGT-I/checkpoints/<nonempty-loadable-checkpoint>.pt \
 --output-root TropicalGT-I/outputs/multi_sample_browser/full_audit_deepwide \
 --samples 1 \
 --audit-preset full \
