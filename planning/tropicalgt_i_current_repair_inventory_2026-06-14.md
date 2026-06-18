@@ -464,3 +464,18 @@ Verification:
 - `git diff --check` passed.
 
 Operational note: the live b59 resume is already running from the step-2250 checkpoint under PID `334581` with watcher PID `334852`; this source change is for subsequent launches/restarts.
+
+## 2026-06-18 GFlowNet Action Selection Contract Pass
+
+Status: implemented and focused-tested.
+
+Changes made:
+- Deterministic and stochastic GFlowNet/GoT branch selections now carry an explicit action-selection contract sourced from real `gflownet_action_probs`.
+- The contract makes the audit-score and sampling policy visible while stating that selected branches are not policy-quality certificates and are not proxy/fallback evidence.
+- Provenance tracking now keys this surface as `gflownet_action_selection_contract`.
+
+Verification:
+- `PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_scaling.py TropicalGT-I/tests/test_metric_provenance.py -q` -> `12 passed`.
+- `PYTHONPATH=TropicalGT-I/src:TropicalGT-I/scripts /home/iska/miniconda3/envs/tokengt/bin/python TropicalGT-I/scripts/audit_metric_provenance.py --fail-on-uncovered` -> `333 covered, 0 uncovered`.
+
+Next sequential item: continue source-side no-proxy contract expansion and browser/report QA without launching or interrupting GPU training.

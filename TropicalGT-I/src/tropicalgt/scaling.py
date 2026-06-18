@@ -691,6 +691,42 @@ def _action_probs(row: torch.Tensor) -> list[dict[str, Any]]:
     ]
 
 
+def _action_selection_contract(
+    *,
+    policy: str,
+    branch_factor: int,
+    ranked_candidate_count: int,
+    selected_action_count: int,
+    allow_stop: bool,
+    diverse_actions: bool,
+    stochastic: bool,
+    temperature: float,
+    exploration: float,
+) -> dict[str, Any]:
+    return {
+        "schema_version": "tropicalgt.gflownet_action_selection_contract.v1",
+        "source": "gflownet_action_probs",
+        "probability_source": "TropicalGTModel.gfn(graph_state).softmax",
+        "audit_selection_score_source": "model_probability_minus_repeat_penalty",
+        "selection_policy": policy,
+        "branch_factor_requested": int(branch_factor),
+        "ranked_candidate_count": int(ranked_candidate_count),
+        "selected_action_count": int(selected_action_count),
+        "allow_stop": bool(allow_stop),
+        "diverse_actions": bool(diverse_actions),
+        "stochastic": bool(stochastic),
+        "temperature": float(temperature),
+        "exploration": float(exploration),
+        "selected_from_real_model_action_probabilities": True,
+        "not_a_policy_quality_certificate": True,
+        "no_proxy_or_fallback": True,
+    }
+
+
+def _attach_action_selection_contract(rows: list[dict[str, Any]], contract: dict[str, Any]) -> list[dict[str, Any]]:
+    return [{**row, "action_selection_contract": dict(contract)} for row in rows]
+
+
 def _select_branch_actions(
     action_probs: list[dict[str, Any]],
     branch_factor: int,
@@ -716,15 +752,43 @@ def _select_branch_actions(
         return []
     ranked = sorted(candidates, key=lambda item: float(item.get("audit_selection_score", 0.0)), reverse=True)
     if stochastic:
-        return _sample_branch_actions(
+        sampled = _sample_branch_actions(
             ranked,
             branch_factor=branch_factor,
             temperature=temperature,
             exploration=exploration,
             seed=seed,
         )
+        return _attach_action_selection_contract(
+            sampled,
+            _action_selection_contract(
+                policy="stochastic_without_replacement",
+                branch_factor=branch_factor,
+                ranked_candidate_count=len(ranked),
+                selected_action_count=len(sampled),
+                allow_stop=allow_stop,
+                diverse_actions=diverse_actions,
+                stochastic=True,
+                temperature=temperature,
+                exploration=exploration,
+            ),
+        )
     if not diverse_actions:
-        return ranked[:branch_factor]
+        selected_ranked = ranked[:branch_factor]
+        return _attach_action_selection_contract(
+            selected_ranked,
+            _action_selection_contract(
+                policy="ranked_top_k",
+                branch_factor=branch_factor,
+                ranked_candidate_count=len(ranked),
+                selected_action_count=len(selected_ranked),
+                allow_stop=allow_stop,
+                diverse_actions=False,
+                stochastic=False,
+                temperature=temperature,
+                exploration=exploration,
+            ),
+        )
     selected: list[dict[str, Any]] = []
     seen: set[str] = set()
 
@@ -742,7 +806,21 @@ def _select_branch_actions(
         add_action(action_name)
     for row in ranked:
         add_action(str(row.get("action", "")))
-    return selected[:branch_factor] or ranked[:branch_factor]
+    selected_ranked = selected[:branch_factor] or ranked[:branch_factor]
+    return _attach_action_selection_contract(
+        selected_ranked,
+        _action_selection_contract(
+            policy="ranked_diverse_action_sweep",
+            branch_factor=branch_factor,
+            ranked_candidate_count=len(ranked),
+            selected_action_count=len(selected_ranked),
+            allow_stop=allow_stop,
+            diverse_actions=True,
+            stochastic=False,
+            temperature=temperature,
+            exploration=exploration,
+        ),
+    )
 
 
 def _sample_branch_actions(

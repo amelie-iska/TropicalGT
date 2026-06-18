@@ -842,3 +842,11 @@ The live item-by-item repair inventory is maintained in `planning/tropicalgt_i_c
 - [x] Required the aggregate Miller-Sturmfels evidence flags `all_cards_have_hilbert_numerator_terms` and `all_cards_have_adjacent_lcm_syzygy_lists` to be true.
 - [x] Added regressions for missing Hilbert terms and missing adjacent LCM rows with aggregate counts adjusted to avoid false positive aggregate-mismatch-only failures.
 - [x] Verification passed: py-compile; focused validator regressions (`3 passed, 45 deselected`); full interactive artifact validator (`48 passed`); metric provenance audit (`332 covered, 0 uncovered`).
+
+### Current Objective Update - GFlowNet Action Selection Contract Pass
+
+- [x] Added `tropicalgt.gflownet_action_selection_contract.v1` to selected GFlowNet/GoT action branches.
+- [x] Covered deterministic diverse sweeps, ranked top-k branch selection, and stochastic without-replacement sampling over real model action probabilities.
+- [x] Contract rows record probability source, audit-selection score source, selected-action count, requested branch factor, stop/diversity/stochastic controls, and no-proxy/no-fallback status.
+- [x] Updated provenance from the old control-flow fallback wording to the explicit action-selection contract and added registry coverage.
+- [x] Verification passed: py-compile; focused scaling/provenance tests (`12 passed`); metric provenance audit (`333 covered, 0 uncovered`).

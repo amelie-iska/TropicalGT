@@ -74,6 +74,14 @@ def test_select_branch_actions_filters_stop_and_preserves_diversity():
     selected = _select_branch_actions(probs, branch_factor=3, allow_stop=False, diverse_actions=True)
     actions = [row["action"] for row in selected]
     assert actions == ["merge", "expand", "verify"]
+    contracts = [row["action_selection_contract"] for row in selected]
+    assert {contract["schema_version"] for contract in contracts} == {"tropicalgt.gflownet_action_selection_contract.v1"}
+    assert {contract["selection_policy"] for contract in contracts} == {"ranked_diverse_action_sweep"}
+    assert all(contract["source"] == "gflownet_action_probs" for contract in contracts)
+    assert all(contract["selected_from_real_model_action_probabilities"] is True for contract in contracts)
+    assert all(contract["not_a_policy_quality_certificate"] is True for contract in contracts)
+    assert all(contract["no_proxy_or_fallback"] is True for contract in contracts)
+    assert all(contract["selected_action_count"] == len(selected) for contract in contracts)
 
 
 def test_select_branch_actions_supports_reproducible_stochastic_sampling():
@@ -107,3 +115,12 @@ def test_select_branch_actions_supports_reproducible_stochastic_sampling():
     assert [row["action"] for row in sampled_a] == [row["action"] for row in sampled_b]
     assert all("sampling_weight" in row for row in sampled_a)
     assert len({row["action"] for row in sampled_a}) == 3
+    stochastic_contract = sampled_a[0]["action_selection_contract"]
+    assert stochastic_contract["schema_version"] == "tropicalgt.gflownet_action_selection_contract.v1"
+    assert stochastic_contract["selection_policy"] == "stochastic_without_replacement"
+    assert stochastic_contract["stochastic"] is True
+    assert stochastic_contract["temperature"] == 2.0
+    assert stochastic_contract["exploration"] == 0.35
+    assert stochastic_contract["selected_from_real_model_action_probabilities"] is True
+    assert stochastic_contract["no_proxy_or_fallback"] is True
+    assert all(row["action_selection_contract"] == stochastic_contract for row in sampled_a)

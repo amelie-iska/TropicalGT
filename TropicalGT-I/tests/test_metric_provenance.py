@@ -26,6 +26,7 @@ def test_metric_provenance_registry_covers_current_risky_terms(tmp_path: Path):
         "analogical_query_context_conversion_contract",
         "training_data_budget_estimate",
         "config_default_fallback",
+        "gflownet_action_selection_contract",
         "wandb_uncategorized_metric_namespace",
         "multipers_optional_signed_measure_backend",
         "browser_same_data_static_preview_rendering",

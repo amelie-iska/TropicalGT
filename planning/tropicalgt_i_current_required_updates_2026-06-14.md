@@ -1071,3 +1071,10 @@ CUDA_VISIBLE_DEVICES="" /home/iska/miniconda3/bin/conda run -n tokengt python -m
 - For nonprincipal two-generator-or-more staircase cards, the validator now rejects missing adjacent-LCM syzygy rows instead of accepting an empty list merely because the field exists.
 - `miller_sturmfels_staircase_evidence` must certify `all_cards_have_hilbert_numerator_terms` and `all_cards_have_adjacent_lcm_syzygy_lists`, preserving the no-proxy boundary for the Miller-Sturmfels theorem surface.
 - Verification passed: py-compile; focused validator regressions (`3 passed, 45 deselected`); full interactive artifact validator (`48 passed`); metric provenance audit (`332 covered, 0 uncovered`).
+
+## 2026-06-18 GFlowNet Action Selection Contract
+
+- `_select_branch_actions()` now attaches `tropicalgt.gflownet_action_selection_contract.v1` to deterministic diverse sweeps, ranked top-k selection, and stochastic without-replacement samples.
+- The contract records the exact source (`gflownet_action_probs`), probability source, audit-score source, selection policy, requested branch factor, ranked candidate count, selected action count, stop/diversity/stochastic settings, sampling temperature, exploration, and no-proxy/no-fallback status.
+- The contract explicitly marks selected branches as real model action-probability selections and not learned policy-quality certificates, closing the old control-flow fallback/proxy ambiguity without changing sampler behavior.
+- Verification passed: py-compile; focused scaling/provenance tests (`12 passed`); metric provenance audit (`333 covered, 0 uncovered`).

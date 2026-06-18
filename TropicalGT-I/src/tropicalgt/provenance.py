@@ -300,13 +300,18 @@ PROVENANCE_REGISTRY: tuple[ProvenanceEntry, ...] = (
         ),
     ),
     ProvenanceEntry(
-        name="action_selection_fallback",
-        kind="control_flow_fallback",
+        name="gflownet_action_selection_contract",
+        kind="control_flow_contract",
         surface="GFlowNet/GoT sampler",
         optimize_directly=False,
-        description="Control-flow fallback used when action sampling would otherwise return only stop/invalid actions.",
-        replacement_or_guardrail="Track action entropy and sampled actions; do not treat fallback branches as learned policy quality.",
-        match_terms=("fallback = next((row for row in action_probs", "audit_selection_score", "action_probs"),
+        description="Action branch selection contract for deterministic diverse sweeps and stochastic sampling over real GFlowNet action probabilities.",
+        replacement_or_guardrail="Attach a no-proxy action-selection contract to sampled branches; do not treat branch selection as a learned policy-quality certificate.",
+        match_terms=(
+            "tropicalgt.gflownet_action_selection_contract.v1",
+            "action_selection_contract",
+            "audit_selection_score_source",
+            "selected_from_real_model_action_probabilities",
+        ),
     ),
     ProvenanceEntry(
         name="wandb_uncategorized_metric_namespace",
