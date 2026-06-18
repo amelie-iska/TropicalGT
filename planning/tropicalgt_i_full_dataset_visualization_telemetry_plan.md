@@ -865,3 +865,22 @@ Status: implemented and under test. Analogical memory retrieval now compares the
 
 This keeps both overloaded “landscape” meanings separate: persistence landscapes `lambda_k(t)` are topological vector features; NLL/fitness landscapes or density clouds are model-evaluation visualizations over projected embeddings.
 
+Completed 2026-06-18 follow-up: legacy analogical-memory backfill now detects
+stale or static `analogical_simplex_tree_analogy.html` pages even when the JSON
+schemas look current. It regenerates analogical top-k, unavailable-map, and
+simplex-tree analogy contracts from stored `analogical_memory_retrieval.json`
+and stored trajectory probability complexes only; zero retrieved memories remain
+an explicit unavailable state with no vertex assignment, chain map, persistence
+module morphism, or proxy map fabricated. The simplex-tree analogy page now uses
+the shared local Plotly asset and includes the validator-required finite
+simplex-tree row / preserved face-to-coface chain markers.
+
+Executed safe generated-artifact analogical backfill on the b60 step-5000
+`got_audit` bundle without staging generated outputs. It recorded
+`raw_retrieved_count=0`, `query_probability_complex_available=true`, rebuilt the
+local dashboard, and reran the strict validator. The strict validator still fails
+for remaining non-analogical evidence, but the gap count decreased from `109` to
+`74`; `analogical_memory` decreased from `35` to `0`. Remaining categories are
+tropical support `30`, persistence landscapes `17`, CAS resolution certificates
+`12`, GraphCG `6`, other `4`, trajectory overlay/radius `3`, missing artifact
+`1`, and row coverage `1`.

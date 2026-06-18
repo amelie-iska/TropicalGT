@@ -233,3 +233,79 @@ def test_backfill_regenerates_got_trajectory_contracts_from_stored_scaling_tree(
     assert (audit / "got_full_trajectory_complex_slider_contract.json").exists()
     manifest = json.loads((audit / "reasoning_step_complex_maps" / "manifest.json").read_text(encoding="utf-8"))
     assert manifest["contract"]["schema_version"] == "tropicalgt.reasoning_step_complex_maps.v1"
+
+
+
+def test_backfill_regenerates_unavailable_analogical_contracts_without_proxy_maps(tmp_path: Path):
+    module = _load_backfill()
+    audit = tmp_path / "got_audit"
+    audit.mkdir()
+    (audit / "analogical_memory_retrieval.json").write_text(
+        json.dumps(
+            {
+                "bank_path": "",
+                "bank_size": 0,
+                "quality_gate": {"min_quality": 0.8},
+                "top_k": 5,
+                "retrieved": [],
+            }
+        ),
+        encoding="utf-8",
+    )
+    stale_topk = {
+        "schema_version": "tropicalgt.analogical_topk.v1",
+        "readability_contract": {"schema_version": "tropicalgt.analogical_topk_readability.v1"},
+    }
+    stale_analogy_contract = {
+        "schema_version": "tropicalgt.analogical_simplex_tree_analogy.v1",
+        "available": False,
+        "pair_count": 0,
+        "no_proxy_or_fallback": True,
+    }
+    (audit / "analogical_simplicial_maps.json").write_text(
+        json.dumps(
+            {
+                "available": False,
+                "reason": "legacy",
+                "topk_contract": stale_topk,
+                "simplex_tree_analogy_contract": stale_analogy_contract,
+            }
+        ),
+        encoding="utf-8",
+    )
+    (audit / "analogical_simplex_tree_analogy.json").write_text(json.dumps({"contract": stale_analogy_contract, "pairs": []}), encoding="utf-8")
+    for stale_name in (
+        "analogical_memory_retrieval.html",
+        "analogical_memory_topk_index.html",
+        "analogical_memory_map_02.html",
+        "analogical_simplex_tree_analogy.html",
+    ):
+        (audit / stale_name).write_text("static legacy html without local plotly asset", encoding="utf-8")
+
+    report = module.backfill_audit_root(audit)
+
+    kinds = {row["kind"] for row in report["actions"]}
+    assert "analogical_memory_contract_backfill" in kinds
+    maps = json.loads((audit / "analogical_simplicial_maps.json").read_text(encoding="utf-8"))
+    assert maps["available"] is False
+    assert maps["reason"] == "no_non_self_model_memory"
+    assert maps["topk_contract"]["schema_version"] == "tropicalgt.analogical_topk.v1"
+    assert maps["topk_contract"]["no_proxy_or_fallback"] is True
+    assert maps["topk_contract"]["top_k_rendered"] == 0
+    assert maps["topk_contract"]["readability_contract"]["schema_version"] == "tropicalgt.analogical_topk_readability.v1"
+    analogy = json.loads((audit / "analogical_simplex_tree_analogy.json").read_text(encoding="utf-8"))
+    assert analogy["contract"]["schema_version"] == "tropicalgt.analogical_simplex_tree_analogy.v1"
+    assert analogy["contract"]["available"] is False
+    assert analogy["contract"]["pair_count"] == 0
+    assert analogy["contract"]["no_proxy_or_fallback"] is True
+    assert analogy["contract"]["renders_interactive_plotly_table"] is True
+    analogy_html = (audit / "analogical_simplex_tree_analogy.html").read_text(encoding="utf-8")
+    assert "script src" in analogy_html
+    assert "plotly.min.js" in analogy_html
+    assert "Plotly.newPlot" in analogy_html
+    assert "finite simplex-tree rows" in analogy_html
+    assert "preserved face-to-coface chains" in analogy_html
+    assert (audit / "analogical_memory_topk_index.html").exists()
+    assert (audit / "analogical_memory_map_02.html").exists()
+    dashboard = (audit / "inference_audit.html").read_text(encoding="utf-8")
+    assert "analogical_simplex_tree_analogy.html" in dashboard

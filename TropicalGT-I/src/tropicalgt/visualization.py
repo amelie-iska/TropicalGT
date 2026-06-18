@@ -10216,20 +10216,32 @@ def _write_analogical_simplex_tree_analogy(
         "pair_count": int(len(pair_payloads)),
         "total_checked_simplices": int(total_checked),
         "total_preserved_simplices": int(total_preserved),
+        "renders_interactive_plotly_table": True,
+        "local_plotly_asset_required": True,
         "topk_contract_schema": (topk_contract or {}).get("schema_version") if isinstance(topk_contract, Mapping) else None,
     }
     payload = {"contract": contract, "pairs": pair_payloads}
     payload_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
 
+    table_rows: list[dict[str, object]] = []
     if pair_payloads:
-        rows_html: list[str] = []
         for pair in pair_payloads:
-            rows_html.append(
-                "<tr class='pair-head'>"
-                f"<td colspan='9'>rank {int(pair.get('rank', 0))}: <a href='{html.escape(str(pair.get('pair_page', '')))}'>{html.escape(str(pair.get('memory_id', 'memory')))}</a> | "
-                f"claim={html.escape(str(pair.get('map_render_claim', 'unavailable')))} | "
-                f"simplex-tree preservation={int(pair.get('preserved_simplices', 0))}/{int(pair.get('checked_simplices', 0))} = {float(pair.get('preservation_rate', 0.0)):.4f}</td>"
-                "</tr>"
+            table_rows.append(
+                {
+                    "rank": int(pair.get("rank", 0)),
+                    "dimension": "summary",
+                    "domain_simplex": str(pair.get("pair_page", "")),
+                    "image_simplex": str(pair.get("memory_id", "memory")),
+                    "domain_filtration": "-",
+                    "codomain_filtration": "-",
+                    "distortion": "-",
+                    "status": (
+                        f"{pair.get('map_render_claim', 'unavailable')}; "
+                        f"{int(pair.get('preserved_simplices', 0))}/{int(pair.get('checked_simplices', 0))} "
+                        f"preserved ({float(pair.get('preservation_rate', 0.0)):.4f})"
+                    ),
+                    "face_chain": "pair summary",
+                }
             )
             simplex_rows = pair.get("simplex_rows", []) if isinstance(pair.get("simplex_rows"), list) else []
             chain_by_domain = {
@@ -10246,66 +10258,101 @@ def _write_analogical_simplex_tree_analogy(
                 face_count = len(chain.get("boundary_faces", [])) if isinstance(chain, dict) and isinstance(chain.get("boundary_faces"), list) else 0
                 chain_status = "boundary preserved" if chain and chain.get("all_boundary_faces_present_and_preserved") else ("boundary failed/unavailable" if chain else "vertex row")
                 preserved = bool(row.get("preserved_in_simplex_tree"))
-                rows_html.append(
-                    f"<tr class={'preserved' if preserved else 'failed'}>"
-                    f"<td>{int(pair.get('rank', 0))}</td>"
-                    f"<td>{int(row.get('dimension', 0) or 0)}</td>"
-                    f"<td>{html.escape(_analogical_simplex_key(domain))}</td>"
-                    f"<td>{html.escape(_analogical_simplex_key(image))}</td>"
-                    f"<td>{float(row.get('domain_filtration', 0.0) or 0.0):.5g}</td>"
-                    f"<td>{html.escape(str(row.get('codomain_filtration')))}</td>"
-                    f"<td>{html.escape(str(row.get('signed_filtration_distortion')))}</td>"
-                    f"<td>{'preserved' if preserved else html.escape(str(row.get('failure_reason') or 'failed'))}</td>"
-                    f"<td>{html.escape(chain_status)} ({face_count} faces)</td>"
-                    "</tr>"
+                table_rows.append(
+                    {
+                        "rank": int(pair.get("rank", 0)),
+                        "dimension": int(row.get("dimension", 0) or 0),
+                        "domain_simplex": _analogical_simplex_key(domain),
+                        "image_simplex": _analogical_simplex_key(image),
+                        "domain_filtration": f"{float(row.get('domain_filtration', 0.0) or 0.0):.5g}",
+                        "codomain_filtration": str(row.get("codomain_filtration")),
+                        "distortion": str(row.get("signed_filtration_distortion")),
+                        "status": "preserved" if preserved else str(row.get("failure_reason") or "failed"),
+                        "face_chain": f"{chain_status} ({face_count} faces)",
+                    }
                 )
-        body = "\n".join(rows_html)
     else:
-        body = (
-            "<tr class='failed'><td colspan='9'><strong>Simplex-tree analogy unavailable.</strong> "
-            f"{html.escape(unavailable_reason or 'No qualified model-probability memories were rendered.')} "
-            "No Hasse rows, chain maps, or persistence-module morphisms are fabricated.</td></tr>"
+        table_rows.append(
+            {
+                "rank": "unavailable",
+                "dimension": "-",
+                "domain_simplex": "no qualified query-memory pair",
+                "image_simplex": "no qualified model-probability memory",
+                "domain_filtration": "-",
+                "codomain_filtration": "-",
+                "distortion": "-",
+                "status": unavailable_reason or "No qualified model-probability memories were rendered.",
+                "face_chain": "No Hasse rows, chain maps, or persistence-module morphisms are fabricated.",
+            }
         )
-    path.write_text(
-        f"""<!doctype html>
-<html>
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Analogical simplex-tree analogy</title>
-  <style>
-    :root {{ color-scheme: dark; }}
-    body {{ margin: 0; background: #090b12; color: #e8eef8; font-family: Inter, ui-sans-serif, system-ui, sans-serif; }}
-    main {{ max-width: 1180px; margin: 0 auto; padding: 32px 24px; }}
-    h1 {{ font-size: 23px; margin: 0 0 8px; }}
-    p {{ color: #a8b3c7; line-height: 1.55; }}
-    table {{ width: 100%; border-collapse: collapse; margin-top: 18px; border: 1px solid rgba(148,163,184,0.26); background: #0f172a; }}
-    th, td {{ padding: 8px 10px; border-bottom: 1px solid rgba(148,163,184,0.16); text-align: left; font-size: 12px; vertical-align: top; }}
-    th {{ color: #99f6e4; font-weight: 650; }}
-    a {{ color: #7dd3fc; text-decoration: none; }}
-    a:hover {{ text-decoration: underline; }}
-    .contract {{ border: 1px solid rgba(125,211,252,0.28); background: #0d1626; padding: 14px 16px; margin-top: 18px; }}
-    .badge {{ display: inline-block; margin: 0 8px 8px 0; padding: 3px 8px; border: 1px solid rgba(153,246,228,0.35); color: #99f6e4; font-size: 11px; text-transform: uppercase; letter-spacing: 0; }}
-    tr.pair-head td {{ background: #111827; color: #e0f2fe; font-weight: 650; }}
-    tr.preserved td {{ color: #d1fae5; }}
-    tr.failed td {{ color: #fecdd3; background: rgba(127,29,29,0.16); }}
-  </style>
-</head>
-<body>
-  <main>
-    <h1>Analogical simplex-tree analogy</h1>
-    <p>This view compares query and memory GUDHI SimplexTree finite Hasse rows using the stored model-probability Jensen-Shannon vertex assignment. Preserved rows are actual domain simplex to image simplex checks from the certificate; failed rows remain correspondences and are not called chain maps or persistence-module morphisms.</p>
-    <aside class="contract"><span class="badge">no proxy</span><span class="badge">finite simplex-tree rows</span><span class="badge">preserved face-to-coface chains</span><p><strong>Contract:</strong> {html.escape(contract['schema_version'])}; source {html.escape(str(contract['source']))}; checked {int(total_checked)} simplices, preserved {int(total_preserved)}. Chain and module morphism claims require a certified filtered simplicial map.</p></aside>
-    <table>
-      <thead><tr><th>rank</th><th>dim</th><th>domain simplex</th><th>image simplex</th><th>domain filtration</th><th>codomain filtration</th><th>distortion</th><th>simplex-tree status</th><th>face-to-coface chain</th></tr></thead>
-      <tbody>{body}</tbody>
-    </table>
-  </main>
-</body>
-</html>
-""",
-        encoding="utf-8",
+
+    headers = [
+        "rank",
+        "dim",
+        "domain simplex",
+        "image simplex",
+        "domain filtration",
+        "codomain filtration",
+        "distortion",
+        "simplex-tree status",
+        "face-to-coface chain",
+    ]
+    field_names = [
+        "rank",
+        "dimension",
+        "domain_simplex",
+        "image_simplex",
+        "domain_filtration",
+        "codomain_filtration",
+        "distortion",
+        "status",
+        "face_chain",
+    ]
+    cell_values = [[html.escape(str(row.get(field, ""))) for row in table_rows] for field in field_names]
+    fig = go.Figure(
+        data=[
+            go.Table(
+                header=dict(
+                    values=headers,
+                    fill_color="#0f172a",
+                    font=dict(color="#99f6e4", size=12),
+                    align="left",
+                    height=30,
+                ),
+                cells=dict(
+                    values=cell_values,
+                    fill_color="#111827" if pair_payloads else "#1f1118",
+                    font=dict(color="#e8eef8" if pair_payloads else "#fecdd3", size=11),
+                    align="left",
+                    height=28,
+                ),
+                columnwidth=[42, 34, 120, 120, 70, 70, 70, 150, 150],
+            )
+        ]
     )
+    fig.update_layout(
+        title=(
+            "Analogical simplex-tree analogy"
+            "<br><sup>finite simplex-tree rows and preserved face-to-coface chains from model-probability Jensen-Shannon assignments; "
+            "unavailable states remain explicit and no chain/module morphism is fabricated.</sup>"
+        ),
+        height=max(520, 270 + 30 * min(len(table_rows), 80)),
+        margin=dict(t=118, l=22, r=22, b=42),
+    )
+    fig.add_annotation(
+        text=(
+            f"contract={html.escape(contract['schema_version'])}; checked={int(total_checked)}, preserved={int(total_preserved)}; "
+            "local Plotly asset; no proxy or fallback"
+        ),
+        x=0,
+        y=1.08,
+        xref="paper",
+        yref="paper",
+        showarrow=False,
+        align="left",
+        font=dict(size=12, color="#a8b3c7"),
+    )
+    _write_plotly_dark_html(path, fig, "Analogical simplex-tree analogy")
     return payload
 
 

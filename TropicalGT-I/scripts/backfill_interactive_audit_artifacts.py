@@ -14,6 +14,7 @@ if str(ROOT / "src") not in sys.path:
 from tropicalgt.visualization import (  # noqa: E402
     _write_inference_dashboard,
     _write_reasoning_step_complex_maps,
+    write_analogical_memory_visualization,
     write_got_trajectory_visualization,
     write_toric_embedding_sidecar,
     write_tropical_fan_diagnostics,
@@ -41,6 +42,44 @@ def _dashboard_artifact_paths(root: Path) -> dict[str, str]:
     return paths
 
 
+
+
+
+def _analogical_contracts_need_backfill(root: Path) -> bool:
+    maps_payload = _read_json(root / "analogical_simplicial_maps.json")
+    topk_contract = maps_payload.get("topk_contract", {}) if isinstance(maps_payload.get("topk_contract"), dict) else {}
+    if topk_contract.get("schema_version") != "tropicalgt.analogical_topk.v1":
+        return True
+    readability = topk_contract.get("readability_contract", {}) if isinstance(topk_contract.get("readability_contract"), dict) else {}
+    if readability.get("schema_version") != "tropicalgt.analogical_topk_readability.v1":
+        return True
+    analogy_path = root / "analogical_simplex_tree_analogy.json"
+    analogy_payload = _read_json(analogy_path)
+    analogy_contract = analogy_payload.get("contract", {}) if isinstance(analogy_payload.get("contract"), dict) else {}
+    if analogy_contract.get("schema_version") != "tropicalgt.analogical_simplex_tree_analogy.v1":
+        return True
+    if analogy_contract.get("renders_interactive_plotly_table") is not True:
+        return True
+    if analogy_contract.get("local_plotly_asset_required") is not True:
+        return True
+    required = (
+        root / "analogical_memory_retrieval.html",
+        root / "analogical_memory_topk_index.html",
+        root / "analogical_memory_map_02.html",
+        root / "analogical_simplex_tree_analogy.html",
+        analogy_path,
+    )
+    if any(not path.exists() for path in required):
+        return True
+    analogy_html = (root / "analogical_simplex_tree_analogy.html").read_text(encoding="utf-8")
+    required_markers = (
+        "script src",
+        "plotly.min.js",
+        "Plotly.newPlot",
+        "finite simplex-tree rows",
+        "preserved face-to-coface chains",
+    )
+    return any(marker not in analogy_html for marker in required_markers)
 
 
 def _got_trajectory_contracts_need_backfill(root: Path) -> bool:
@@ -147,6 +186,27 @@ def backfill_audit_root(audit_root: str | Path, *, overwrite: bool = False) -> d
         )
 
 
+    analogical_needed = overwrite or _analogical_contracts_need_backfill(root)
+    analogical_memory_path = root / "analogical_memory_retrieval.json"
+    if analogical_needed and analogical_memory_path.exists():
+        memory = _read_json(analogical_memory_path)
+        scaling_for_query = _read_json(root / "inference_scaling_tree.json")
+        query_context: dict[str, Any] = {}
+        if isinstance(scaling_for_query.get("trajectory_probability_filtered_simplicial_object"), dict):
+            query_context["trajectory_probability_filtered_simplicial_object"] = scaling_for_query["trajectory_probability_filtered_simplicial_object"]
+        if isinstance(scaling_for_query.get("trajectory_probability_topological_algebra"), dict):
+            query_context["topological_algebra"] = scaling_for_query["trajectory_probability_topological_algebra"]
+        paths = write_analogical_memory_visualization(memory, root, query_context=query_context)
+        actions.append(
+            {
+                "kind": "analogical_memory_contract_backfill",
+                "reason": "Regenerated analogical top-k, unavailable/map, and simplex-tree analogy contracts from stored analogical_memory_retrieval.json plus stored trajectory probability complex evidence when available.",
+                "raw_retrieved_count": len(memory.get("retrieved", [])) if isinstance(memory.get("retrieved"), list) else 0,
+                "query_probability_complex_available": isinstance(query_context.get("trajectory_probability_filtered_simplicial_object"), dict),
+                "paths": paths,
+            }
+        )
+
     scaling_path = root / "inference_scaling_tree.json"
     got_needed = overwrite or _got_trajectory_contracts_need_backfill(root)
     if got_needed and scaling_path.exists():
@@ -233,6 +293,8 @@ def backfill_audit_root(audit_root: str | Path, *, overwrite: bool = False) -> d
             "toric_embedding_sidecar.html",
             "trajectory_persistence/two_parameter_bifiltration.html",
             "reasoning_step_complex_maps/manifest.json",
+            "analogical_memory_topk_index.html",
+            "analogical_simplex_tree_analogy.html",
         ),
     )
     if actions or overwrite or dashboard_needs_refresh:
