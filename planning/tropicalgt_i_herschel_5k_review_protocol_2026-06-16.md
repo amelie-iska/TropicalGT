@@ -233,3 +233,11 @@ Herschel now treats `trajectory_topological_algebra.json`, `trajectory_growth_to
 The report summarizes growth rows, ordinary and probability-filtered topology report counts, persistence interval counts, finite interval counts, chain-group rank entries, boundary-map counts, multiparameter fiber/rank-sample counts, chain-module generator counts, per-source statuses, and explicit unavailable states. Empty `inference_algebra.json` payloads are rendered as `inference_algebra_empty_unavailable`; they are not substituted for chain complexes, persistence intervals, multiparameter modules, CAS certificates, derived-equivalence evidence, BPB evidence, or restart permission.
 
 Validation: py-compile passed for touched scripts/source/tests; focused Herschel/bundle tests passed (`11 passed`); broader Herschel/bundle/review-loop/provenance tests passed (`36 passed`); metric provenance audit passed (`findings=423 covered=423 uncovered=0`).
+
+## 2026-06-18 Two-Parameter Bifiltration Visual Evidence Follow-Up
+
+Herschel now treats `trajectory_persistence/two_parameter_bifiltration.json` as a Herschel-required recorded GoT audit sidecar when it exists in the latest `got_audit` directory. `write_herschel_5k_report.py` exposes `tropicalgt.herschel_two_parameter_bifiltration_visual_evidence.v1`, sourced only from the recorded visual contract payload.
+
+Availability requires the `tropicalgt.two_parameter_bifiltration_visual.v1` schema, `miller_sturmfels_bivariate_staircase` as the primary view, `F2[x_level,x_radius]`, x_radius horizontal and x_level vertical axes, coordinate one dimensional cones, actual-data/no-proxy contracts, primary structure-map evidence, the module staircase visual contract, Miller-Sturmfels staircase evidence, staircase card contracts, quotient-basis lattice points, Hilbert numerator terms, adjacent LCM syzygy lists, and an explicit theorem-scope boundary saying scoped staircase resolutions are not full persistence-module free resolutions without CAS certification. Rank surfaces remain secondary diagnostics only.
+
+Validation: py-compile passed for touched scripts/source/tests; focused Herschel/bundle tests passed (`11 passed`); broader Herschel/bundle/review-loop/provenance tests passed (`36 passed`); metric provenance audit passed after adding the new registry guardrail (`434 covered`).

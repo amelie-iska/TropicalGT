@@ -837,6 +837,253 @@ def _chart_bundle_transport_evidence(sidecar_paths: list[str]) -> dict[str, Any]
     }
 
 
+
+def _two_parameter_bifiltration_visual_evidence(sidecar_paths: list[str]) -> dict[str, Any]:
+    sources: list[dict[str, Any]] = []
+    status_counts: dict[str, int] = {}
+    unavailable_reason_counts: dict[str, int] = {}
+    total_cards = 0
+    total_primary_cards = 0
+    total_actual_generators = 0
+    total_minimal_antichain = 0
+    total_generator_labels = 0
+    total_upward_regions = 0
+    total_quotient_basis = 0
+    total_hilbert_terms = 0
+    total_adjacent_lcm_syzygies = 0
+    total_structure_maps = 0
+    total_rank_invariant_samples = 0
+    total_grid_fibers = 0
+
+    def _count(bucket: dict[str, int], key: str) -> None:
+        if key:
+            bucket[key] = bucket.get(key, 0) + 1
+
+    for raw_path in sidecar_paths:
+        lower = raw_path.lower()
+        if not lower.endswith("trajectory_persistence/two_parameter_bifiltration.json"):
+            continue
+        resolved = _resolve_output_path(Path(raw_path))
+        source: dict[str, Any] = {"path": _project_path(resolved), "available": False}
+        if not resolved.exists():
+            source["reason"] = "two_parameter_bifiltration_visual_sidecar_missing"
+            _count(unavailable_reason_counts, source["reason"])
+            sources.append(source)
+            continue
+        try:
+            payload = json.loads(resolved.read_text(encoding="utf-8"))
+        except Exception as exc:  # pragma: no cover - parser message is platform-dependent
+            source["reason"] = f"two_parameter_bifiltration_visual_sidecar_parse_error:{exc}"
+            _count(unavailable_reason_counts, "two_parameter_bifiltration_visual_sidecar_parse_error")
+            sources.append(source)
+            continue
+        if not isinstance(payload, dict):
+            source["reason"] = "two_parameter_bifiltration_visual_sidecar_not_object"
+            _count(unavailable_reason_counts, source["reason"])
+            sources.append(source)
+            continue
+        axes = payload.get("axes") if isinstance(payload.get("axes"), dict) else {}
+        module_contract = payload.get("module_visual_contract") if isinstance(payload.get("module_visual_contract"), dict) else {}
+        structure = payload.get("structure_map_summary") if isinstance(payload.get("structure_map_summary"), dict) else {}
+        primary_structure = payload.get("primary_structure_map_evidence") if isinstance(payload.get("primary_structure_map_evidence"), dict) else {}
+        staircase = payload.get("miller_sturmfels_staircase_evidence") if isinstance(payload.get("miller_sturmfels_staircase_evidence"), dict) else {}
+        cas_indexed = payload.get("certificate_indexed_cas_evidence") if isinstance(payload.get("certificate_indexed_cas_evidence"), dict) else {}
+        grid = payload.get("grid") if isinstance(payload.get("grid"), dict) else {}
+        chain_summary = payload.get("chain_generator_summary") if isinstance(payload.get("chain_generator_summary"), dict) else {}
+        cards = payload.get("staircase_cards") if isinstance(payload.get("staircase_cards"), list) else []
+        valid_cards = [card for card in cards if isinstance(card, dict)]
+        direction_counts = structure.get("direction_counts") if isinstance(structure.get("direction_counts"), dict) else {}
+        coordinate_cones = axes.get("coordinate_one_dimensional_cones") if isinstance(axes.get("coordinate_one_dimensional_cones"), list) else []
+        schema_ok = payload.get("schema_version") == "tropicalgt.two_parameter_bifiltration_visual.v1"
+        primary_view_ok = payload.get("primary_view") == "miller_sturmfels_bivariate_staircase"
+        ring_ok = payload.get("coefficient_ring") == "F2[x_level,x_radius]" and staircase.get("coefficient_ring") == "F2[x_level,x_radius]"
+        axes_ok = bool(
+            axes.get("horizontal") == "x_radius"
+            and axes.get("vertical") == "x_level"
+            and "rho_x_radius" in coordinate_cones
+            and "rho_x_level" in coordinate_cones
+            and staircase.get("coordinate_axes_are_one_dimensional_cones") is True
+        )
+        no_proxy_ok = bool(
+            payload.get("actual_data_only") is True
+            and payload.get("no_proxy_resolution_claim") is True
+            and module_contract.get("no_proxy_or_fallback") is True
+            and structure.get("no_proxy_or_fallback") is True
+            and primary_structure.get("no_proxy_or_fallback") is True
+            and staircase.get("actual_data_only") is True
+            and staircase.get("no_proxy_or_fallback") is True
+            and cas_indexed.get("no_proxy_or_fallback") is True
+        )
+        module_ok = bool(
+            module_contract.get("schema_version") == "tropicalgt.two_parameter_module_staircase_contract.v1"
+            and module_contract.get("primary_view") == "miller_sturmfels_bivariate_staircase"
+            and module_contract.get("rank_slabs_removed_as_primary_view") is True
+            and module_contract.get("secondary_rank_diagnostics_labeled") is True
+            and module_contract.get("x_radius_horizontal") is True
+            and module_contract.get("x_level_vertical") is True
+            and module_contract.get("shaded_regions_are_upward_closed_generated_submodules") is True
+            and module_contract.get("white_points_are_displayed_quotient_basis_lattice_points") is True
+            and module_contract.get("structure_map_summary_required") is True
+            and module_contract.get("primary_structure_map_evidence_required") is True
+            and "chain-presentation diagnostics are never substituted" in str(module_contract.get("safe_resolution_policy", ""))
+        )
+        structure_count = _optional_int(structure.get("actual_adjacent_map_count")) or 0
+        valid_grade_count = _optional_int(structure.get("valid_grade_edge_count")) or 0
+        structure_ok = bool(
+            structure.get("schema_version") == "tropicalgt.two_parameter_structure_maps.v1"
+            and structure.get("coefficient_ring") == "F2[x_level,x_radius]"
+            and structure_count > 0
+            and valid_grade_count == structure_count
+            and structure.get("east_north_structure_maps_present") is True
+            and int(direction_counts.get("x_level", 0) or 0) > 0
+            and int(direction_counts.get("x_radius", 0) or 0) > 0
+        )
+        primary_structure_ok = bool(
+            primary_structure.get("schema_version") == "tropicalgt.primary_structure_map_evidence.v1"
+            and primary_structure.get("available") is True
+            and primary_structure.get("source") == "bifiltration.structure_maps"
+            and set(str(item) for item in primary_structure.get("directions_rendered", [])) == {"x_level", "x_radius"}
+            and (_optional_int(primary_structure.get("primary_table_rows")) or 0) == structure_count
+        )
+        card_count = _optional_int(staircase.get("card_count")) or 0
+        primary_card_count = _optional_int(staircase.get("primary_card_count")) or 0
+        staircase_ok = bool(
+            staircase.get("schema_version") == "tropicalgt.miller_sturmfels_staircase_evidence.v1"
+            and staircase.get("source") == "staircase_cards_from_bifiltration.chain_module_generators[*].multidegree"
+            and staircase.get("primary_view") == "miller_sturmfels_bivariate_staircase"
+            and staircase.get("safe_to_render_miller_sturmfels_staircase") is True
+            and card_count == len(valid_cards)
+            and card_count > 0
+            and primary_card_count == 1
+            and staircase.get("all_cards_have_generator_labels") is True
+            and staircase.get("all_cards_have_upward_closed_regions") is True
+            and staircase.get("all_cards_have_quotient_basis_lattice_points") is True
+            and staircase.get("all_cards_have_hilbert_numerator_terms") is True
+            and staircase.get("all_cards_have_adjacent_lcm_syzygy_lists") is True
+            and staircase.get("quotient_basis_counts_match_lattice_points") is True
+            and staircase.get("theorem_scope_boundary_all_cards") is True
+        )
+        card_contract_ok = bool(
+            valid_cards
+            and all(
+                card.get("schema_version") == "tropicalgt.two_parameter_staircase_card.v1"
+                and card.get("x_radius_horizontal") is True
+                and card.get("x_level_vertical") is True
+                and card.get("shaded_regions_are_upward_closed_generated_submodules") is True
+                and card.get("white_points_are_displayed_quotient_basis_lattice_points") is True
+                and isinstance(card.get("generator_labels"), list)
+                and isinstance(card.get("upward_closed_regions"), list)
+                and isinstance(card.get("quotient_basis_lattice_points"), list)
+                and isinstance(card.get("hilbert_numerator_terms"), list)
+                and isinstance(card.get("adjacent_lcm_syzygies"), list)
+                and "not a full persistence-module free resolution" in str(card.get("theorem_scope", ""))
+                for card in valid_cards
+            )
+        )
+        rank_policy_ok = bool(payload.get("rank_surface_primary") is False and "secondary" in str(payload.get("rank_surface_policy", "")).lower())
+        cas_safe_ok = bool(cas_indexed.get("schema_version") == "tropicalgt.cas_certificate_indexed_evidence.v1" and cas_indexed.get("safe_unavailable_render") in (True, None))
+        available = bool(schema_ok and primary_view_ok and ring_ok and axes_ok and no_proxy_ok and module_ok and structure_ok and primary_structure_ok and staircase_ok and card_contract_ok and rank_policy_ok and cas_safe_ok)
+        status = "two_parameter_bifiltration_visual_available" if available else "two_parameter_bifiltration_visual_unavailable"
+        _count(status_counts, status)
+        if available:
+            total_cards += card_count
+            total_primary_cards += primary_card_count
+            total_actual_generators += _optional_int(staircase.get("total_actual_generator_bidegree_count")) or 0
+            total_minimal_antichain += _optional_int(staircase.get("total_minimal_antichain_count")) or 0
+            total_generator_labels += _optional_int(staircase.get("total_generator_label_count")) or 0
+            total_upward_regions += _optional_int(staircase.get("total_upward_closed_region_count")) or 0
+            total_quotient_basis += _optional_int(staircase.get("total_quotient_basis_lattice_count")) or 0
+            total_hilbert_terms += _optional_int(staircase.get("total_hilbert_numerator_term_count")) or 0
+            total_adjacent_lcm_syzygies += _optional_int(staircase.get("total_adjacent_lcm_syzygy_count")) or 0
+            total_structure_maps += structure_count
+            total_rank_invariant_samples += _optional_int(payload.get("rank_invariant_sample_count")) or 0
+            total_grid_fibers += _optional_int(grid.get("fiber_row_count")) or 0
+        source.update(
+            {
+                "available": available,
+                "status": status,
+                "schema_version": payload.get("schema_version", "unavailable"),
+                "primary_view": payload.get("primary_view", "unavailable"),
+                "coefficient_ring": payload.get("coefficient_ring", "unavailable"),
+                "axes_horizontal": axes.get("horizontal", "unavailable"),
+                "axes_vertical": axes.get("vertical", "unavailable"),
+                "coordinate_one_dimensional_cones": coordinate_cones,
+                "rank_surface_primary": payload.get("rank_surface_primary"),
+                "module_visual_contract_schema": module_contract.get("schema_version", "unavailable"),
+                "structure_map_summary_schema": structure.get("schema_version", "unavailable"),
+                "primary_structure_map_evidence_schema": primary_structure.get("schema_version", "unavailable"),
+                "staircase_evidence_schema": staircase.get("schema_version", "unavailable"),
+                "cas_certificate_indexed_schema": cas_indexed.get("schema_version", "unavailable"),
+                "staircase_card_count": card_count,
+                "primary_staircase_card_count": primary_card_count,
+                "actual_generator_bidegree_count": _optional_int(staircase.get("total_actual_generator_bidegree_count")) or 0,
+                "minimal_antichain_count": _optional_int(staircase.get("total_minimal_antichain_count")) or 0,
+                "generator_label_count": _optional_int(staircase.get("total_generator_label_count")) or 0,
+                "upward_closed_region_count": _optional_int(staircase.get("total_upward_closed_region_count")) or 0,
+                "quotient_basis_lattice_count": _optional_int(staircase.get("total_quotient_basis_lattice_count")) or 0,
+                "hilbert_numerator_term_count": _optional_int(staircase.get("total_hilbert_numerator_term_count")) or 0,
+                "adjacent_lcm_syzygy_count": _optional_int(staircase.get("total_adjacent_lcm_syzygy_count")) or 0,
+                "structure_map_count": structure_count,
+                "rank_invariant_sample_count": _optional_int(payload.get("rank_invariant_sample_count")) or 0,
+                "grid_fiber_row_count": _optional_int(grid.get("fiber_row_count")) or 0,
+                "chain_generator_total_count": _optional_int(chain_summary.get("total_generator_count")) or 0,
+                "no_proxy_or_fallback": no_proxy_ok,
+            }
+        )
+        if not available:
+            reasons = []
+            if not schema_ok:
+                reasons.append("missing_two_parameter_bifiltration_visual_schema")
+            if not primary_view_ok:
+                reasons.append("primary_view_not_miller_sturmfels_staircase")
+            if not ring_ok:
+                reasons.append("wrong_two_parameter_coefficient_ring")
+            if not axes_ok:
+                reasons.append("missing_x_radius_x_level_axes_or_coordinate_cones")
+            if not no_proxy_ok:
+                reasons.append("missing_two_parameter_no_proxy_contract")
+            if not module_ok:
+                reasons.append("missing_two_parameter_module_visual_contract")
+            if not structure_ok:
+                reasons.append("missing_two_parameter_structure_map_summary")
+            if not primary_structure_ok:
+                reasons.append("missing_primary_structure_map_evidence")
+            if not staircase_ok:
+                reasons.append("missing_miller_sturmfels_staircase_evidence")
+            if not card_contract_ok:
+                reasons.append("missing_staircase_card_contracts")
+            if not rank_policy_ok:
+                reasons.append("rank_surface_still_marked_primary")
+            if not cas_safe_ok:
+                reasons.append("unsafe_certificate_indexed_cas_state")
+            source["reason"] = ";".join(reasons) or "two_parameter_bifiltration_visual_evidence_unavailable"
+            for reason in reasons or [source["reason"]]:
+                _count(unavailable_reason_counts, reason)
+        sources.append(source)
+    available_sources = [row for row in sources if row.get("available")]
+    return {
+        "schema_version": "tropicalgt.herschel_two_parameter_bifiltration_visual_evidence.v1",
+        "available": bool(available_sources),
+        "source_count": len(sources),
+        "available_source_count": len(available_sources),
+        "total_staircase_card_count": total_cards,
+        "total_primary_staircase_card_count": total_primary_cards,
+        "total_actual_generator_bidegree_count": total_actual_generators,
+        "total_minimal_antichain_count": total_minimal_antichain,
+        "total_generator_label_count": total_generator_labels,
+        "total_upward_closed_region_count": total_upward_regions,
+        "total_quotient_basis_lattice_count": total_quotient_basis,
+        "total_hilbert_numerator_term_count": total_hilbert_terms,
+        "total_adjacent_lcm_syzygy_count": total_adjacent_lcm_syzygies,
+        "total_structure_map_count": total_structure_maps,
+        "total_rank_invariant_sample_count": total_rank_invariant_samples,
+        "total_grid_fiber_row_count": total_grid_fibers,
+        "status_counts": {key: status_counts[key] for key in sorted(status_counts)},
+        "unavailable_reason_counts": {key: unavailable_reason_counts[key] for key in sorted(unavailable_reason_counts)},
+        "sources": sources,
+        "policy": "Herschel reports two-parameter bifiltration visuals only from recorded tropicalgt.two_parameter_bifiltration_visual.v1 payloads whose primary view is the Miller-Sturmfels bivariate staircase over F2[x_level,x_radius]. Rank surfaces remain secondary diagnostics, and scoped adjacent-LCM staircase resolutions are not promoted to full persistence-module free resolutions or CAS certificates.",
+    }
+
 def _bivariate_module_evidence(sidecar_paths: list[str]) -> dict[str, Any]:
     sources: list[dict[str, Any]] = []
     resolution_status_counts: dict[str, int] = {}
@@ -2000,6 +2247,7 @@ def summarize_bundle(bundle: dict[str, Any], *, bundle_path: Path | None = None)
             "graphcg_direction_evidence": _graphcg_direction_evidence(sidecars),
             "nll_density_evidence": _nll_density_evidence(sidecars),
             "chart_bundle_transport_evidence": _chart_bundle_transport_evidence(sidecars),
+            "two_parameter_bifiltration_visual_evidence": _two_parameter_bifiltration_visual_evidence(sidecars),
             "bivariate_module_evidence": _bivariate_module_evidence(sidecars),
             "persistence_landscape_evidence": _persistence_landscape_evidence(sidecars),
             "toric_tropical_cas_evidence": _toric_tropical_cas_evidence(sidecars),
@@ -2207,6 +2455,36 @@ def render_markdown(summary: dict[str, Any]) -> str:
             f"- `{source.get('path', '')}` module_available=`{source.get('available')}` ring=`{source.get('coefficient_ring', 'unavailable')}` "
             f"fibers=`{source.get('fiber_rank_profile_count', 0)}` maps=`{source.get('structure_map_count', 0)}` "
             f"real_resolution=`{source.get('real_free_resolution_certified')}` status=`{source.get('real_free_resolution_status', 'unavailable')}`"
+        )
+        if source.get("reason"):
+            lines.append(f"  - reason: `{source.get('reason')}`")
+    two_parameter_bifiltration = artifacts.get("two_parameter_bifiltration_visual_evidence", {}) if isinstance(artifacts.get("two_parameter_bifiltration_visual_evidence"), dict) else {}
+    lines.extend(
+        [
+            "## Two-Parameter Bifiltration Visual Evidence",
+            "",
+            f"- Available: `{two_parameter_bifiltration.get('available', False)}`",
+            f"- Sources: `{two_parameter_bifiltration.get('source_count', 0)}`",
+            f"- Staircase cards / primary cards: `{two_parameter_bifiltration.get('total_staircase_card_count', 0)}` / `{two_parameter_bifiltration.get('total_primary_staircase_card_count', 0)}`",
+            f"- Actual generators / minimal antichain / labels: `{two_parameter_bifiltration.get('total_actual_generator_bidegree_count', 0)}` / `{two_parameter_bifiltration.get('total_minimal_antichain_count', 0)}` / `{two_parameter_bifiltration.get('total_generator_label_count', 0)}`",
+            f"- Upward regions / quotient basis points: `{two_parameter_bifiltration.get('total_upward_closed_region_count', 0)}` / `{two_parameter_bifiltration.get('total_quotient_basis_lattice_count', 0)}`",
+            f"- Hilbert numerator terms / adjacent LCM syzygies: `{two_parameter_bifiltration.get('total_hilbert_numerator_term_count', 0)}` / `{two_parameter_bifiltration.get('total_adjacent_lcm_syzygy_count', 0)}`",
+            f"- Structure maps / rank samples / grid fibers: `{two_parameter_bifiltration.get('total_structure_map_count', 0)}` / `{two_parameter_bifiltration.get('total_rank_invariant_sample_count', 0)}` / `{two_parameter_bifiltration.get('total_grid_fiber_row_count', 0)}`",
+            "",
+            "```json",
+            json.dumps(two_parameter_bifiltration.get("status_counts", {}), indent=2),
+            "```",
+            "",
+        ]
+    )
+    for source in two_parameter_bifiltration.get("sources", []) if isinstance(two_parameter_bifiltration.get("sources"), list) else []:
+        if not isinstance(source, dict):
+            continue
+        lines.append(
+            f"- `{source.get('path', '')}` available=`{source.get('available')}` view=`{source.get('primary_view', 'unavailable')}` "
+            f"ring=`{source.get('coefficient_ring', 'unavailable')}` cards=`{source.get('staircase_card_count', 0)}` "
+            f"quotient_basis=`{source.get('quotient_basis_lattice_count', 0)}` hilbert=`{source.get('hilbert_numerator_term_count', 0)}` "
+            f"lcm_syzygies=`{source.get('adjacent_lcm_syzygy_count', 0)}` maps=`{source.get('structure_map_count', 0)}`"
         )
         if source.get("reason"):
             lines.append(f"  - reason: `{source.get('reason')}`")
@@ -2524,6 +2802,7 @@ def render_html(summary: dict[str, Any]) -> str:
     nll_density = artifacts.get("nll_density_evidence", {}) if isinstance(artifacts.get("nll_density_evidence"), dict) else {}
     chart_bundle_transport = artifacts.get("chart_bundle_transport_evidence", {}) if isinstance(artifacts.get("chart_bundle_transport_evidence"), dict) else {}
     bivariate_module = artifacts.get("bivariate_module_evidence", {}) if isinstance(artifacts.get("bivariate_module_evidence"), dict) else {}
+    two_parameter_bifiltration = artifacts.get("two_parameter_bifiltration_visual_evidence", {}) if isinstance(artifacts.get("two_parameter_bifiltration_visual_evidence"), dict) else {}
     persistence_landscape = artifacts.get("persistence_landscape_evidence", {}) if isinstance(artifacts.get("persistence_landscape_evidence"), dict) else {}
     toric_tropical_cas = artifacts.get("toric_tropical_cas_evidence", {}) if isinstance(artifacts.get("toric_tropical_cas_evidence"), dict) else {}
     analogical_query_context = artifacts.get("analogical_query_context_evidence", {}) if isinstance(artifacts.get("analogical_query_context_evidence"), dict) else {}
@@ -2656,6 +2935,26 @@ def render_html(summary: dict[str, Any]) -> str:
         )
     if not bivariate_module_rows:
         bivariate_module_rows.append("<tr><td colspan='10' class='muted'>No bivariate module sidecar paths recorded.</td></tr>")
+    two_parameter_bifiltration_rows = []
+    for source in two_parameter_bifiltration.get("sources", []) if isinstance(two_parameter_bifiltration.get("sources"), list) else []:
+        if not isinstance(source, dict):
+            continue
+        two_parameter_bifiltration_rows.append(
+            "<tr>"
+            f"<td>{html.escape(str(source.get('path', '')))}</td>"
+            f"<td>{html.escape(str(source.get('available')))}</td>"
+            f"<td>{html.escape(str(source.get('primary_view', 'unavailable')))}</td>"
+            f"<td>{html.escape(str(source.get('axes_horizontal', 'unavailable')))} / {html.escape(str(source.get('axes_vertical', 'unavailable')))}</td>"
+            f"<td>{html.escape(str(source.get('staircase_card_count', 0)))}</td>"
+            f"<td>{html.escape(str(source.get('quotient_basis_lattice_count', 0)))}</td>"
+            f"<td>{html.escape(str(source.get('hilbert_numerator_term_count', 0)))}</td>"
+            f"<td>{html.escape(str(source.get('adjacent_lcm_syzygy_count', 0)))}</td>"
+            f"<td>{html.escape(str(source.get('structure_map_count', 0)))}</td>"
+            f"<td>{html.escape(str(source.get('reason', '')))}</td>"
+            "</tr>"
+        )
+    if not two_parameter_bifiltration_rows:
+        two_parameter_bifiltration_rows.append("<tr><td colspan='10' class='muted'>No two-parameter bifiltration visual sidecar paths recorded.</td></tr>")
     persistence_landscape_rows = []
     for source in persistence_landscape.get("sources", []) if isinstance(persistence_landscape.get("sources"), list) else []:
         if not isinstance(source, dict):
@@ -2832,6 +3131,7 @@ code {{ white-space:break-spaces; }}
 <span class="badge {'ok' if graphcg_direction.get('available') else 'warn'}">graphcg_direction_evidence={html.escape(str(bool(graphcg_direction.get('available'))))}</span>
 <span class="badge {'ok' if nll_density.get('available') else 'warn'}">nll_density_evidence={html.escape(str(bool(nll_density.get('available'))))}</span>
 <span class="badge {'ok' if bivariate_module.get('available') else 'warn'}">bivariate_module_evidence={html.escape(str(bool(bivariate_module.get('available'))))}</span>
+<span class="badge {'ok' if two_parameter_bifiltration.get('available') else 'warn'}">two_parameter_bifiltration_visual_evidence={html.escape(str(bool(two_parameter_bifiltration.get('available'))))}</span>
 <span class="badge {'ok' if persistence_landscape.get('available') else 'warn'}">persistence_landscape_evidence={html.escape(str(bool(persistence_landscape.get('available'))))}</span>
 <span class="badge {'ok' if chart_bundle_transport.get('available') else 'warn'}">chart_bundle_evidence={html.escape(str(bool(chart_bundle_transport.get('available'))))}</span>
 <span class="badge {'ok' if toric_tropical_cas.get('available') else 'warn'}">toric_tropical_cas_evidence={html.escape(str(bool(toric_tropical_cas.get('available'))))}</span>
@@ -2854,6 +3154,7 @@ code {{ white-space:break-spaces; }}
 {_bar_chart_svg(graphcg_direction.get('basis_source_counts', {}) if isinstance(graphcg_direction, dict) else {}, title='GraphCG Projection Basis Sources', chart_id='graphcg-projection-basis-sources')}
 {_bar_chart_svg(nll_density.get('visible_density_layer_counts', {}) if isinstance(nll_density, dict) else {}, title='NLL Density Visible Layers', chart_id='nll-density-visible-layers')}
 {_bar_chart_svg(bivariate_module.get('resolution_status_counts', {}) if isinstance(bivariate_module, dict) else {}, title='Bivariate Module Real-Resolution Statuses', chart_id='bivariate-module-resolution-statuses')}
+{_bar_chart_svg(two_parameter_bifiltration.get('status_counts', {}) if isinstance(two_parameter_bifiltration, dict) else {}, title='Two-Parameter Bifiltration Visual Statuses', chart_id='two-parameter-bifiltration-visual-statuses')}
 {_bar_chart_svg(persistence_landscape.get('backend_counts', {}) or persistence_landscape.get('unavailable_reason_counts', {}) if isinstance(persistence_landscape, dict) else {}, title='Persistence Landscape Backends Or Unavailable Reasons', chart_id='persistence-landscape-backends')}
 {_bar_chart_svg(chart_bundle_transport.get('completeness_tier_counts', {}) if isinstance(chart_bundle_transport, dict) else {}, title='Chart/Vector-Bundle Completeness Tiers', chart_id='chart-vector-bundle-completeness-tiers')}
 {_bar_chart_svg(toric_tropical_cas.get('status_counts', {}) if isinstance(toric_tropical_cas, dict) else {}, title='Toric/Tropical CAS Statuses', chart_id='toric-tropical-cas-statuses')}
@@ -2867,6 +3168,7 @@ code {{ white-space:break-spaces; }}
 <section class="panel"><h2>GraphCG Direction Evidence</h2><table><thead><tr><th>Sidecar</th><th>Available</th><th>Basis</th><th>Directions</th><th>Candidates</th><th>Active nonzero</th><th>Mean |cos| p90</th><th>Reason</th></tr></thead><tbody>{''.join(graphcg_direction_rows)}</tbody></table></section>
 <section class="panel"><h2>NLL Density Evidence</h2><table><thead><tr><th>Sidecar</th><th>Available</th><th>Anchors</th><th>Support samples</th><th>Kernel bandwidth</th><th>NLL span</th><th>Support visibility</th><th>Reason</th></tr></thead><tbody>{''.join(nll_density_rows)}</tbody></table></section>
 <section class="panel"><h2>Bivariate Module Evidence</h2><table><thead><tr><th>Sidecar</th><th>Module available</th><th>Ring</th><th>Fibers</th><th>Structure maps</th><th>Chain only</th><th>Real free resolution</th><th>Safe unavailable</th><th>Status</th><th>Reason</th></tr></thead><tbody>{''.join(bivariate_module_rows)}</tbody></table></section>
+<section class="panel"><h2>Two-Parameter Bifiltration Visual Evidence</h2><table><thead><tr><th>Sidecar</th><th>Available</th><th>Primary view</th><th>Axes</th><th>Cards</th><th>Quotient basis</th><th>Hilbert terms</th><th>LCM syzygies</th><th>Structure maps</th><th>Reason</th></tr></thead><tbody>{''.join(two_parameter_bifiltration_rows)}</tbody></table></section>
 <section class="panel"><h2>Persistence Landscape Evidence</h2><table><thead><tr><th>Sidecar</th><th>Available</th><th>Verified unavailable</th><th>Backend</th><th>Rows</th><th>Curves</th><th>Finite intervals</th><th>Unavailable reasons</th><th>Reason</th></tr></thead><tbody>{''.join(persistence_landscape_rows)}</tbody></table></section>
 <section class="panel"><h2>Chart/Vector-Bundle Evidence</h2><table><thead><tr><th>Sidecar</th><th>Available</th><th>Completeness tier</th><th>Paper-ready telemetry</th><th>Charts</th><th>Transports</th><th>Missing groups</th><th>Reason</th></tr></thead><tbody>{''.join(chart_bundle_rows)}</tbody></table></section>
 <section class="panel"><h2>Toric/Tropical CAS Evidence</h2><table><thead><tr><th>Sidecar</th><th>Kind</th><th>Available</th><th>Status</th><th>Backend</th><th>Finite toric ideal</th><th>Tropical fan</th><th>Rays</th><th>Reason</th></tr></thead><tbody>{''.join(toric_tropical_rows)}</tbody></table></section>

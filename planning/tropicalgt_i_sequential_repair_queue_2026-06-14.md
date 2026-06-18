@@ -963,3 +963,18 @@ Verification:
 - Metric provenance audit passed: `findings=423 covered=423 uncovered=0`.
 
 Next sequential item: inspect the remaining implemented sidecar families that Herschel still does not summarize, then either add the next evidence slice or return to the ranked visual/math repair queue.
+
+## 2026-06-18 Herschel Two-Parameter Bifiltration Visual Evidence Pass
+
+Status: implemented for the current sequential item.
+
+Changes made:
+- The 5K review bundle now discovers `trajectory_persistence/two_parameter_bifiltration.json` from the latest recorded GoT audit directory when present.
+- Herschel's report summary now includes `tropicalgt.herschel_two_parameter_bifiltration_visual_evidence.v1` with Miller-Sturmfels staircase, structure-map, quotient-basis, Hilbert numerator, adjacent-LCM, and no-proxy contract fields.
+- The report keeps rank surfaces secondary and explicitly preserves the boundary between scoped two-variable monomial staircase resolutions and full persistence-module/CAS certificates.
+
+Verification so far:
+- py-compile passed for touched scripts/source/tests.
+- Focused Herschel/bundle tests passed: `11 passed`.
+
+Next sequential item: after broader verification and push, inspect remaining unsummarized real sidecars (`got_trajectory_payloads.json`, `got_embedding_map_payloads.json`, `inference_audit.json`, and backfill reports) and select the next evidence slice.

@@ -586,6 +586,100 @@ def test_prepare_review_bundle_defaults_to_periodic_validation_artifacts(tmp_pat
         encoding="utf-8",
     )
     (periodic_dir / "got_audit" / "trajectory_persistence").mkdir(parents=True, exist_ok=True)
+    (periodic_dir / "got_audit" / "trajectory_persistence" / "two_parameter_bifiltration.json").write_text(
+        json.dumps(
+            {
+                "schema_version": "tropicalgt.two_parameter_bifiltration_visual.v1",
+                "actual_data_only": True,
+                "coefficient_ring": "F2[x_level,x_radius]",
+                "primary_view": "miller_sturmfels_bivariate_staircase",
+                "rank_surface_primary": False,
+                "rank_surface_policy": "3D fiber-rank displays are secondary diagnostics only.",
+                "no_proxy_resolution_claim": True,
+                "rank_invariant_sample_count": 3,
+                "axes": {"horizontal": "x_radius", "vertical": "x_level", "coordinate_one_dimensional_cones": ["rho_x_radius", "rho_x_level"]},
+                "grid": {"fiber_row_count": 5},
+                "chain_generator_summary": {"total_generator_count": 7},
+                "module_visual_contract": {
+                    "schema_version": "tropicalgt.two_parameter_module_staircase_contract.v1",
+                    "no_proxy_or_fallback": True,
+                    "primary_view": "miller_sturmfels_bivariate_staircase",
+                    "rank_slabs_removed_as_primary_view": True,
+                    "secondary_rank_diagnostics_labeled": True,
+                    "x_radius_horizontal": True,
+                    "x_level_vertical": True,
+                    "shaded_regions_are_upward_closed_generated_submodules": True,
+                    "white_points_are_displayed_quotient_basis_lattice_points": True,
+                    "structure_map_summary_required": True,
+                    "primary_structure_map_evidence_required": True,
+                    "safe_resolution_policy": "Only scoped two-variable monomial staircase resolutions or certified CAS free resolutions may be rendered; chain-presentation diagnostics are never substituted as a free resolution.",
+                },
+                "structure_map_summary": {
+                    "schema_version": "tropicalgt.two_parameter_structure_maps.v1",
+                    "coefficient_ring": "F2[x_level,x_radius]",
+                    "actual_adjacent_map_count": 3,
+                    "valid_grade_edge_count": 3,
+                    "direction_counts": {"x_level": 1, "x_radius": 2},
+                    "east_north_structure_maps_present": True,
+                    "no_proxy_or_fallback": True,
+                },
+                "primary_structure_map_evidence": {
+                    "schema_version": "tropicalgt.primary_structure_map_evidence.v1",
+                    "available": True,
+                    "source": "bifiltration.structure_maps",
+                    "directions_rendered": ["x_level", "x_radius"],
+                    "primary_table_rows": 3,
+                    "module_lattice_overlay_trace_names": ["actual x_level structure maps over F2", "actual x_radius structure maps over F2"],
+                    "no_proxy_or_fallback": True,
+                },
+                "miller_sturmfels_staircase_evidence": {
+                    "schema_version": "tropicalgt.miller_sturmfels_staircase_evidence.v1",
+                    "coefficient_ring": "F2[x_level,x_radius]",
+                    "source": "staircase_cards_from_bifiltration.chain_module_generators[*].multidegree",
+                    "actual_data_only": True,
+                    "no_proxy_or_fallback": True,
+                    "primary_view": "miller_sturmfels_bivariate_staircase",
+                    "axes": {"horizontal": "x_radius", "vertical": "x_level", "coordinate_one_dimensional_cones": ["rho_x_radius", "rho_x_level"]},
+                    "card_count": 1,
+                    "primary_card_count": 1,
+                    "primary_card_index": 0,
+                    "total_actual_generator_bidegree_count": 2,
+                    "total_minimal_antichain_count": 1,
+                    "total_generator_label_count": 1,
+                    "total_upward_closed_region_count": 1,
+                    "total_quotient_basis_lattice_count": 2,
+                    "total_hilbert_numerator_term_count": 2,
+                    "total_adjacent_lcm_syzygy_count": 0,
+                    "all_cards_have_generator_labels": True,
+                    "all_cards_have_upward_closed_regions": True,
+                    "all_cards_have_quotient_basis_lattice_points": True,
+                    "all_cards_have_hilbert_numerator_terms": True,
+                    "all_cards_have_adjacent_lcm_syzygy_lists": True,
+                    "quotient_basis_counts_match_lattice_points": True,
+                    "theorem_scope_boundary_all_cards": True,
+                    "coordinate_axes_are_one_dimensional_cones": True,
+                    "safe_to_render_miller_sturmfels_staircase": True,
+                },
+                "certificate_indexed_cas_evidence": {"schema_version": "tropicalgt.cas_certificate_indexed_evidence.v1", "available": False, "safe_unavailable_render": True, "no_proxy_or_fallback": True},
+                "staircase_cards": [
+                    {
+                        "schema_version": "tropicalgt.two_parameter_staircase_card.v1",
+                        "x_radius_horizontal": True,
+                        "x_level_vertical": True,
+                        "shaded_regions_are_upward_closed_generated_submodules": True,
+                        "white_points_are_displayed_quotient_basis_lattice_points": True,
+                        "generator_labels": [{"label": "g1", "bidegree": [0, 0]}],
+                        "upward_closed_regions": [{"generator_label": "g1"}],
+                        "quotient_basis_lattice_points": [[0, 0], [0, 1]],
+                        "hilbert_numerator_terms": ["1", "-x_level"],
+                        "adjacent_lcm_syzygies": [],
+                        "theorem_scope": "exact two-variable monomial-ideal staircase resolution when adjacent-LCM theorem applies; not a full persistence-module free resolution without CAS certification",
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
     (periodic_dir / "got_audit" / "trajectory_persistence" / "persistence_landscapes.json").write_text(
         json.dumps(
             {
@@ -806,6 +900,7 @@ def test_prepare_review_bundle_defaults_to_periodic_validation_artifacts(tmp_pat
     assert any(path.endswith("periodic/step_00005000/got_audit/got_nll_density_cloud_payload.json") for path in sidecars)
     assert any(path.endswith("periodic/step_00005000/got_audit/chart_bundle_transport_sidecar.json") for path in sidecars)
     assert any(path.endswith("periodic/step_00005000/got_audit/trajectory_persistence/persistence_landscapes.json") for path in sidecars)
+    assert any(path.endswith("periodic/step_00005000/got_audit/trajectory_persistence/two_parameter_bifiltration.json") for path in sidecars)
     assert any(path.endswith("periodic/step_00005000/got_audit/trajectory_level_radius_bifiltration.json") for path in sidecars)
     assert any(path.endswith("periodic/step_00005000/got_audit/trajectory_topological_algebra.json") for path in sidecars)
     assert any(path.endswith("periodic/step_00005000/got_audit/trajectory_growth_topology.json") for path in sidecars)
@@ -853,6 +948,10 @@ def test_prepare_review_bundle_defaults_to_periodic_validation_artifacts(tmp_pat
     )
     assert any(
         path.endswith("periodic/step_00005000/got_audit/trajectory_persistence/persistence_landscapes.json")
+        for path in persisted_contract["artifact_inventory"]["advanced_sidecars_tail"]
+    )
+    assert any(
+        path.endswith("periodic/step_00005000/got_audit/trajectory_persistence/two_parameter_bifiltration.json")
         for path in persisted_contract["artifact_inventory"]["advanced_sidecars_tail"]
     )
     assert any(
@@ -918,6 +1017,15 @@ def test_prepare_review_bundle_defaults_to_periodic_validation_artifacts(tmp_pat
     assert bivariate_module["safe_unavailable_real_free_resolution_source_count"] == 1
     assert bivariate_module["resolution_status_counts"] == {"certificate_failed": 1}
     assert bivariate_module["sources"][0]["real_free_resolution_certified"] is False
+    two_parameter_visual = bundle["herschel_report_summary"]["artifact_evidence"]["two_parameter_bifiltration_visual_evidence"]
+    assert two_parameter_visual["available"] is True
+    assert two_parameter_visual["source_count"] == 1
+    assert two_parameter_visual["available_source_count"] == 1
+    assert two_parameter_visual["total_staircase_card_count"] == 1
+    assert two_parameter_visual["total_quotient_basis_lattice_count"] == 2
+    assert two_parameter_visual["total_hilbert_numerator_term_count"] == 2
+    assert two_parameter_visual["total_structure_map_count"] == 3
+    assert two_parameter_visual["status_counts"] == {"two_parameter_bifiltration_visual_available": 1}
     chart_bundle = bundle["herschel_report_summary"]["artifact_evidence"]["chart_bundle_transport_evidence"]
     assert chart_bundle["available"] is True
     assert chart_bundle["paper_ready_source_count"] == 0

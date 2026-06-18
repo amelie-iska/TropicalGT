@@ -1193,3 +1193,12 @@ Verification passed: py-compile for touched source/tests; focused Herschel/bundl
 - [x] Verification passed: py-compile; focused Herschel/bundle tests (`11 passed`); broader Herschel/bundle/review-loop/provenance tests (`36 passed`); metric provenance audit (`423 covered, 0 uncovered`).
 
 Next sequential item: continue the Herschel evidence family queue by surfacing any remaining implemented 5K sidecars not yet summarized, then move back into source-side visual/math repairs only after the current report evidence layer is complete.
+
+### Current Objective Update - Herschel Two-Parameter Bifiltration Visual Evidence Pass
+
+- [x] Added `trajectory_persistence/two_parameter_bifiltration.json` to the Herschel-required audit sidecar inventory when present in the latest recorded `got_audit` directory.
+- [x] Added `tropicalgt.herschel_two_parameter_bifiltration_visual_evidence.v1` to the Herschel 5K summary, sourced only from recorded `tropicalgt.two_parameter_bifiltration_visual.v1` payloads.
+- [x] Herschel now reports the Miller-Sturmfels primary view contract, x_radius/x_level axes, coordinate one dimensional cones, staircase card counts, primary card counts, actual generator bidegrees, minimal antichains, generator labels, upward-closed regions, quotient-basis lattice points, Hilbert numerator terms, adjacent LCM syzygies, structure-map counts, rank samples, and grid fiber rows.
+- [x] Availability requires actual-data/no-proxy contracts and theorem-scope boundaries; secondary rank surfaces and scoped adjacent-LCM staircase resolutions are not promoted to full persistence-module free resolutions or CAS certificates.
+- [x] Markdown and HTML reports now expose `Two-Parameter Bifiltration Visual Evidence` plus a status chart for post-5K review.
+- [x] Focused Herschel/bundle verification passed (`11 passed`); broader verification follows before commit.

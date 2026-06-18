@@ -619,3 +619,12 @@ Status: complete for the Herschel 5K report and bundle contract layer.
 - The report summarizes real topology/algebra sidecar evidence without synthesizing chain complexes, persistence intervals, multiparameter modules, or CAS certificates.
 - Empty `inference_algebra.json` files and incomplete topology reports remain explicit unavailable states.
 - Verification passed: py-compile; focused Herschel/bundle tests (`11 passed`); broader Herschel/bundle/review-loop/provenance tests (`36 passed`); metric provenance audit (`423 covered, 0 uncovered`).
+
+## 2026-06-18 Herschel Two-Parameter Bifiltration Visual Evidence Pass
+
+Status: complete for the Herschel 5K report and bundle contract layer, pending final broad verification in the current commit cycle.
+
+- `prepare_5k_review_bundle.py` now carries `trajectory_persistence/two_parameter_bifiltration.json` into `advanced_sidecars_tail` when present.
+- `write_herschel_5k_report.py` now emits `tropicalgt.herschel_two_parameter_bifiltration_visual_evidence.v1` under `artifact_evidence`.
+- The report summarizes Miller-Sturmfels staircase evidence, x_radius/x_level axes, coordinate one dimensional cones, structure maps, staircase cards, quotient-basis lattice points, Hilbert numerator terms, and adjacent LCM syzygies from the recorded payload only.
+- Rank surfaces stay secondary diagnostics; unavailable CAS certificate-indexed evidence remains unavailable.

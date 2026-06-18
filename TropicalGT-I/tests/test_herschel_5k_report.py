@@ -493,6 +493,127 @@ def test_write_herschel_report_preserves_blockers_and_sidecar_groups(tmp_path: P
         ),
         encoding="utf-8",
     )
+    two_parameter_visual_path = tmp_path / "trajectory_persistence" / "two_parameter_bifiltration.json"
+    two_parameter_visual_path.parent.mkdir()
+    two_parameter_visual_path.write_text(
+        json.dumps(
+            {
+                "schema_version": "tropicalgt.two_parameter_bifiltration_visual.v1",
+                "actual_data_only": True,
+                "coefficient_ring": "F2[x_level,x_radius]",
+                "primary_view": "miller_sturmfels_bivariate_staircase",
+                "rank_surface_primary": False,
+                "rank_surface_policy": "3D fiber-rank displays are secondary diagnostics only.",
+                "no_proxy_resolution_claim": True,
+                "rank_invariant_sample_count": 2,
+                "axes": {"horizontal": "x_radius", "vertical": "x_level", "coordinate_one_dimensional_cones": ["rho_x_radius", "rho_x_level"]},
+                "grid": {"fiber_row_count": 4, "x_level_grades": [0, 1], "x_radius_grades": [0, 1]},
+                "chain_generator_summary": {"total_generator_count": 6, "homological_dimensions": [0, 1], "minimal_antichain": [[0, 0]]},
+                "module_visual_contract": {
+                    "schema_version": "tropicalgt.two_parameter_module_staircase_contract.v1",
+                    "no_proxy_or_fallback": True,
+                    "primary_view": "miller_sturmfels_bivariate_staircase",
+                    "rank_slabs_removed_as_primary_view": True,
+                    "secondary_rank_diagnostics_labeled": True,
+                    "x_radius_horizontal": True,
+                    "x_level_vertical": True,
+                    "shaded_regions_are_upward_closed_generated_submodules": True,
+                    "white_points_are_displayed_quotient_basis_lattice_points": True,
+                    "structure_map_summary_required": True,
+                    "primary_structure_map_evidence_required": True,
+                    "safe_resolution_policy": "Only scoped two-variable monomial staircase resolutions or certified CAS free resolutions may be rendered; chain-presentation diagnostics are never substituted as a free resolution.",
+                },
+                "structure_map_summary": {
+                    "schema_version": "tropicalgt.two_parameter_structure_maps.v1",
+                    "coefficient_ring": "F2[x_level,x_radius]",
+                    "actual_adjacent_map_count": 2,
+                    "valid_grade_edge_count": 2,
+                    "direction_counts": {"x_level": 1, "x_radius": 1},
+                    "east_north_structure_maps_present": True,
+                    "no_proxy_or_fallback": True,
+                },
+                "primary_structure_map_evidence": {
+                    "schema_version": "tropicalgt.primary_structure_map_evidence.v1",
+                    "available": True,
+                    "source": "bifiltration.structure_maps",
+                    "directions_rendered": ["x_level", "x_radius"],
+                    "primary_table_rows": 2,
+                    "module_lattice_overlay_trace_names": ["actual x_level structure maps over F2", "actual x_radius structure maps over F2"],
+                    "no_proxy_or_fallback": True,
+                },
+                "miller_sturmfels_staircase_evidence": {
+                    "schema_version": "tropicalgt.miller_sturmfels_staircase_evidence.v1",
+                    "coefficient_ring": "F2[x_level,x_radius]",
+                    "source": "staircase_cards_from_bifiltration.chain_module_generators[*].multidegree",
+                    "actual_data_only": True,
+                    "no_proxy_or_fallback": True,
+                    "primary_view": "miller_sturmfels_bivariate_staircase",
+                    "axes": {"horizontal": "x_radius", "vertical": "x_level", "coordinate_one_dimensional_cones": ["rho_x_radius", "rho_x_level"]},
+                    "card_count": 2,
+                    "primary_card_count": 1,
+                    "primary_card_index": 0,
+                    "primary_homological_degree": 1,
+                    "total_actual_generator_bidegree_count": 3,
+                    "total_minimal_antichain_count": 2,
+                    "total_generator_label_count": 2,
+                    "total_upward_closed_region_count": 2,
+                    "total_quotient_basis_lattice_count": 5,
+                    "total_hilbert_numerator_term_count": 4,
+                    "total_adjacent_lcm_syzygy_count": 1,
+                    "all_cards_have_generator_labels": True,
+                    "all_cards_have_upward_closed_regions": True,
+                    "all_cards_have_quotient_basis_lattice_points": True,
+                    "all_cards_have_hilbert_numerator_terms": True,
+                    "all_cards_have_adjacent_lcm_syzygy_lists": True,
+                    "quotient_basis_counts_match_lattice_points": True,
+                    "theorem_scope_boundary_all_cards": True,
+                    "coordinate_axes_are_one_dimensional_cones": True,
+                    "safe_to_render_miller_sturmfels_staircase": True,
+                },
+                "certificate_indexed_cas_evidence": {
+                    "schema_version": "tropicalgt.cas_certificate_indexed_evidence.v1",
+                    "available": False,
+                    "safe_unavailable_render": True,
+                    "no_proxy_or_fallback": True,
+                },
+                "staircase_cards": [
+                    {
+                        "schema_version": "tropicalgt.two_parameter_staircase_card.v1",
+                        "homological_degree": 1,
+                        "primary_card": True,
+                        "x_radius_horizontal": True,
+                        "x_level_vertical": True,
+                        "shaded_regions_are_upward_closed_generated_submodules": True,
+                        "white_points_are_displayed_quotient_basis_lattice_points": True,
+                        "generator_labels": [{"label": "g1", "bidegree": [1, 0]}, {"label": "g2", "bidegree": [0, 2]}],
+                        "upward_closed_regions": [{"generator_label": "g1"}, {"generator_label": "g2"}],
+                        "quotient_basis_lattice_points": [[0, 0], [0, 1]],
+                        "quotient_basis_lattice_count": 2,
+                        "hilbert_numerator_terms": ["1", "-x_level"],
+                        "adjacent_lcm_syzygies": [{"lcm_bidegree": [1, 2]}],
+                        "theorem_scope": "exact two-variable monomial-ideal staircase resolution when adjacent-LCM theorem applies; not a full persistence-module free resolution without CAS certification",
+                    },
+                    {
+                        "schema_version": "tropicalgt.two_parameter_staircase_card.v1",
+                        "homological_degree": 0,
+                        "primary_card": False,
+                        "x_radius_horizontal": True,
+                        "x_level_vertical": True,
+                        "shaded_regions_are_upward_closed_generated_submodules": True,
+                        "white_points_are_displayed_quotient_basis_lattice_points": True,
+                        "generator_labels": [],
+                        "upward_closed_regions": [],
+                        "quotient_basis_lattice_points": [],
+                        "quotient_basis_lattice_count": 0,
+                        "hilbert_numerator_terms": ["1", "-x_radius"],
+                        "adjacent_lcm_syzygies": [],
+                        "theorem_scope": "exact two-variable monomial-ideal staircase resolution when adjacent-LCM theorem applies; not a full persistence-module free resolution without CAS certification",
+                    },
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
     persistence_landscape_path = tmp_path / "persistence_landscapes.json"
     persistence_landscape_path.write_text(
         json.dumps(
@@ -761,6 +882,7 @@ def test_write_herschel_report_preserves_blockers_and_sidecar_groups(tmp_path: P
                 "got_audit/betti_table.json",
                 "got_audit/certificate_indexed_cas_evidence.json",
                 str(bivariate_module_path),
+                str(two_parameter_visual_path),
                 str(persistence_landscape_path),
                 "got_audit/analogical_memory_report.json",
                 str(analogical_maps_path),
@@ -820,7 +942,7 @@ def test_write_herschel_report_preserves_blockers_and_sidecar_groups(tmp_path: P
     assert "checkpoint_file_is_empty" in " ".join(summary["restart_decision"]["blockers"])
     groups = summary["artifact_evidence"]["sidecar_groups"]
     assert groups["cas_algebra"] == 2
-    assert groups["topology_persistence"] == 8
+    assert groups["topology_persistence"] == 9
     assert groups["analogical_memory"] == 4
     assert groups["tropical_toric"] == 3
     assert groups["graphcg"] == 1
@@ -913,6 +1035,27 @@ def test_write_herschel_report_preserves_blockers_and_sidecar_groups(tmp_path: P
     assert bivariate_module["sources"][0]["chain_presentation_not_a_free_resolution"] is True
     assert bivariate_module["sources"][0]["real_free_resolution_certified"] is False
     assert bivariate_module["sources"][0]["safe_unavailable_real_free_resolution"] is True
+    two_parameter_visual = summary["artifact_evidence"]["two_parameter_bifiltration_visual_evidence"]
+    assert two_parameter_visual["schema_version"] == "tropicalgt.herschel_two_parameter_bifiltration_visual_evidence.v1"
+    assert two_parameter_visual["available"] is True
+    assert two_parameter_visual["source_count"] == 1
+    assert two_parameter_visual["available_source_count"] == 1
+    assert two_parameter_visual["total_staircase_card_count"] == 2
+    assert two_parameter_visual["total_primary_staircase_card_count"] == 1
+    assert two_parameter_visual["total_actual_generator_bidegree_count"] == 3
+    assert two_parameter_visual["total_minimal_antichain_count"] == 2
+    assert two_parameter_visual["total_generator_label_count"] == 2
+    assert two_parameter_visual["total_upward_closed_region_count"] == 2
+    assert two_parameter_visual["total_quotient_basis_lattice_count"] == 5
+    assert two_parameter_visual["total_hilbert_numerator_term_count"] == 4
+    assert two_parameter_visual["total_adjacent_lcm_syzygy_count"] == 1
+    assert two_parameter_visual["total_structure_map_count"] == 2
+    assert two_parameter_visual["total_rank_invariant_sample_count"] == 2
+    assert two_parameter_visual["total_grid_fiber_row_count"] == 4
+    assert two_parameter_visual["status_counts"] == {"two_parameter_bifiltration_visual_available": 1}
+    assert two_parameter_visual["sources"][0]["axes_horizontal"] == "x_radius"
+    assert two_parameter_visual["sources"][0]["axes_vertical"] == "x_level"
+    assert two_parameter_visual["sources"][0]["no_proxy_or_fallback"] is True
     chart_bundle = summary["artifact_evidence"]["chart_bundle_transport_evidence"]
     assert chart_bundle["schema_version"] == "tropicalgt.herschel_chart_bundle_transport_evidence.v1"
     assert chart_bundle["available"] is True
@@ -1029,6 +1172,8 @@ def test_write_herschel_report_preserves_blockers_and_sidecar_groups(tmp_path: P
     assert "density_volume" in markdown
     assert "## Bivariate Module Evidence" in markdown
     assert "certificate_failed" in markdown
+    assert "## Two-Parameter Bifiltration Visual Evidence" in markdown
+    assert "two_parameter_bifiltration_visual_available" in markdown
     assert "## Persistence Landscape Evidence" in markdown
     assert "gudhi.representations.Landscape" in markdown
     assert "## Chart/Vector-Bundle Evidence" in markdown
@@ -1067,6 +1212,9 @@ def test_write_herschel_report_preserves_blockers_and_sidecar_groups(tmp_path: P
     assert "Bivariate Module Evidence" in html
     assert "data-chart='bivariate-module-resolution-statuses'" in html
     assert "certificate_failed" in html
+    assert "Two-Parameter Bifiltration Visual Evidence" in html
+    assert "data-chart='two-parameter-bifiltration-visual-statuses'" in html
+    assert "two_parameter_bifiltration_visual_available" in html
     assert "Persistence Landscape Evidence" in html
     assert "data-chart='persistence-landscape-backends'" in html
     assert "gudhi.representations.Landscape" in html
