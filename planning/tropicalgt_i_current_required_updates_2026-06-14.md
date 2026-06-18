@@ -1093,3 +1093,12 @@ CUDA_VISIBLE_DEVICES="" /home/iska/miniconda3/bin/conda run -n tokengt python -m
 - Markdown and HTML reports now include a `GFlowNet Branch Selection Evidence` section plus a branch-selection policy chart, so Herschel can review action-selection policies and selected-action counts while deciding post-5K restart configs.
 - Missing, unparsable, or unsafe branch-selection sidecars remain unavailable and cannot justify a restart or artifact promotion.
 - Verification passed: py-compile; focused Herschel/bundle tests (`11 passed`); broader Herschel/bundle/review-loop/provenance tests (`36 passed`); metric provenance audit (`339 covered, 0 uncovered`); metric provenance tests (`7 passed`).
+
+### Current Objective Update - Herschel Tropical Support Evidence Pass
+
+- [x] Added `tropical_support_payload.json` to the Herschel-required audit sidecar inventory when it exists in the latest recorded `got_audit` directory.
+- [x] Added `tropicalgt.herschel_tropical_support_evidence.v1` to the Herschel 5K summary, sourced only from recorded tropical support payload sidecars.
+- [x] Availability now requires the real tropical support render/readability contracts, `model_tropical_support_probabilities` provenance, observed support assignments, strict/near wall-margin rates, and no-proxy/no-fallback flags.
+- [x] Markdown and HTML reports now expose a `Tropical Support Evidence` section and a probability-source chart while preserving the distinction between model margin-threshold audits and certified normal-fan wall-crossing counts.
+- [x] Missing, unparsable, stale, or unsafe tropical support sidecars remain unavailable and cannot justify a restart, artifact promotion, or hyperparameter change.
+- [x] Verification passed: py-compile; focused Herschel/bundle tests (`11 passed`); broader Herschel/bundle/review-loop/provenance tests (`36 passed`); metric provenance audit (`348 covered, 0 uncovered`); metric provenance tests included in the broader slice.

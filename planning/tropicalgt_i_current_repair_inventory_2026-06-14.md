@@ -510,3 +510,12 @@ Verification:
 - `audit_metric_provenance.py --fail-on-uncovered` -> `339 covered, 0 uncovered`.
 
 Next sequential item: continue post-5K evidence/report surfacing and validator/backfill coverage without launching or interrupting GPU work.
+
+### Current Objective Update - Herschel Tropical Support Evidence Pass
+
+- [x] Added `tropical_support_payload.json` to the Herschel-required audit sidecar inventory when it exists in the latest recorded `got_audit` directory.
+- [x] Added `tropicalgt.herschel_tropical_support_evidence.v1` to the Herschel 5K summary, sourced only from recorded tropical support payload sidecars.
+- [x] Availability now requires the real tropical support render/readability contracts, `model_tropical_support_probabilities` provenance, observed support assignments, strict/near wall-margin rates, and no-proxy/no-fallback flags.
+- [x] Markdown and HTML reports now expose a `Tropical Support Evidence` section and a probability-source chart while preserving the distinction between model margin-threshold audits and certified normal-fan wall-crossing counts.
+- [x] Missing, unparsable, stale, or unsafe tropical support sidecars remain unavailable and cannot justify a restart, artifact promotion, or hyperparameter change.
+- [x] Verification passed: py-compile; focused Herschel/bundle tests (`11 passed`); broader Herschel/bundle/review-loop/provenance tests (`36 passed`); metric provenance audit (`348 covered, 0 uncovered`); metric provenance tests included in the broader slice.

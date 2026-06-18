@@ -111,3 +111,16 @@ CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src:TropicalGT-I/scripts /home/i
 CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src:TropicalGT-I/scripts /home/iska/miniconda3/envs/tokengt/bin/python TropicalGT-I/scripts/audit_metric_provenance.py --fail-on-uncovered
 # findings=331 covered=331 uncovered=0
 ```
+
+2026-06-18 tropical-support evidence follow-up: Herschel now treats `tropical_support_payload.json` as a required recorded GoT audit sidecar when the latest `got_audit` directory contains it. `write_herschel_5k_report.py` exposes `tropicalgt.herschel_tropical_support_evidence.v1` under `artifact_evidence`, but marks it available only when the sidecar carries the real `tropicalgt.tropical_support_render.v1` and `tropicalgt.tropical_support_readability.v1` contracts, `model_tropical_support_probabilities` provenance, observed support assignments, wall-margin rates, and no-proxy/no-fallback flags. Markdown and HTML reports now include `Tropical Support Evidence` plus a probability-source chart. The reported strict/near wall rates are explicitly model tropical-margin threshold audits, not certified normal-fan wall-crossing counts; missing or unsafe payloads remain unavailable and cannot justify restart or hyperparameter promotion.
+
+2026-06-18 tropical-support evidence validation:
+
+```text
+CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src:TropicalGT-I/scripts /home/iska/miniconda3/envs/tokengt/bin/python -m pytest -q TropicalGT-I/tests/test_herschel_5k_report.py TropicalGT-I/tests/test_prepare_5k_review_bundle.py
+# 11 passed
+CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src:TropicalGT-I/scripts /home/iska/miniconda3/envs/tokengt/bin/python -m pytest -q TropicalGT-I/tests/test_herschel_5k_report.py TropicalGT-I/tests/test_prepare_5k_review_bundle.py TropicalGT-I/tests/test_parameter_golf_review_loop.py TropicalGT-I/tests/test_metric_provenance.py
+# 36 passed
+CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src:TropicalGT-I/scripts /home/iska/miniconda3/envs/tokengt/bin/python TropicalGT-I/scripts/audit_metric_provenance.py --fail-on-uncovered
+# findings=348 covered=348 uncovered=0
+```

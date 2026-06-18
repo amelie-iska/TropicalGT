@@ -36,6 +36,20 @@ def _fmt(value: Any) -> str:
     return str(value)
 
 
+def _optional_float(value: Any) -> float | None:
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _optional_int(value: Any) -> int | None:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
 
 def _json_output_paths(command: str) -> list[Path]:
     try:
@@ -320,6 +334,124 @@ def _gflownet_branch_selection_evidence(sidecar_paths: list[str]) -> dict[str, A
     }
 
 
+def _tropical_support_evidence(sidecar_paths: list[str]) -> dict[str, Any]:
+    sources: list[dict[str, Any]] = []
+    support_probability_source_counts: dict[str, int] = {}
+    interpretation_status_counts: dict[str, int] = {}
+    total_token_count = 0
+    total_valid_assignments = 0
+    total_invalid_assignments = 0
+    for raw_path in sidecar_paths:
+        if "tropical_support_payload" not in raw_path.lower():
+            continue
+        resolved = _resolve_output_path(Path(raw_path))
+        source: dict[str, Any] = {"path": _project_path(resolved), "available": False}
+        if not resolved.exists():
+            source["reason"] = "tropical_support_sidecar_missing"
+            sources.append(source)
+            continue
+        try:
+            payload = json.loads(resolved.read_text(encoding="utf-8"))
+        except Exception as exc:  # pragma: no cover - parse message is platform-dependent
+            source["reason"] = f"tropical_support_sidecar_parse_error:{exc}"
+            sources.append(source)
+            continue
+        if not isinstance(payload, dict):
+            source["reason"] = "tropical_support_sidecar_not_object"
+            sources.append(source)
+            continue
+        metrics = payload.get("metrics") if isinstance(payload.get("metrics"), dict) else {}
+        render_contract = payload.get("tropical_support_render_contract") if isinstance(payload.get("tropical_support_render_contract"), dict) else {}
+        readability_contract = payload.get("tropical_support_readability_contract") if isinstance(payload.get("tropical_support_readability_contract"), dict) else {}
+        wall_audit = metrics.get("wall_margin_audit") if isinstance(metrics.get("wall_margin_audit"), dict) else {}
+        render_schema = str(render_contract.get("schema_version") or metrics.get("render_contract_schema_version") or "unavailable")
+        readability_schema = str(readability_contract.get("schema_version") or metrics.get("readability_contract_schema_version") or "unavailable")
+        support_probability_source = str(render_contract.get("support_probability_source") or metrics.get("support_probability_source") or "unavailable")
+        token_count = _optional_int(render_contract.get("token_count", metrics.get("token_count")))
+        observed_support_count = _optional_int(render_contract.get("observed_support_count", metrics.get("unique_support_count")))
+        valid_assignments = _optional_int(render_contract.get("valid_support_assignment_count", metrics.get("valid_support_assignment_count")))
+        invalid_assignments = _optional_int(render_contract.get("invalid_support_count", metrics.get("invalid_support_count")))
+        strict_wall_hit_rate = _optional_float(metrics.get("strict_wall_hit_rate", wall_audit.get("strict_wall_hit_rate")))
+        near_wall_hit_rate = _optional_float(metrics.get("near_wall_hit_rate", wall_audit.get("near_wall_hit_rate")))
+        near_wall_only_rate = _optional_float(metrics.get("near_wall_only_rate", wall_audit.get("near_wall_only_rate")))
+        low_strict_status = str(wall_audit.get("low_strict_wall_interpretation_status") or "unavailable")
+        no_proxy_ok = bool(
+            metrics.get("no_proxy_or_fallback") is True
+            and render_contract.get("no_proxy_or_fallback") is True
+            and readability_contract.get("no_proxy_or_fallback") is True
+        )
+        schema_ok = render_schema == "tropicalgt.tropical_support_render.v1"
+        readability_ok = readability_schema == "tropicalgt.tropical_support_readability.v1"
+        probability_ok = support_probability_source == "model_tropical_support_probabilities"
+        wall_rates_ok = strict_wall_hit_rate is not None and near_wall_hit_rate is not None
+        assignment_ok = bool((token_count or 0) > 0 and (valid_assignments or 0) > 0)
+        available = bool(schema_ok and readability_ok and no_proxy_ok and probability_ok and wall_rates_ok and assignment_ok)
+        if available:
+            support_probability_source_counts[support_probability_source] = support_probability_source_counts.get(support_probability_source, 0) + 1
+            interpretation_status_counts[low_strict_status] = interpretation_status_counts.get(low_strict_status, 0) + 1
+            total_token_count += int(token_count or 0)
+            total_valid_assignments += int(valid_assignments or 0)
+            total_invalid_assignments += int(invalid_assignments or 0)
+        source.update(
+            {
+                "available": available,
+                "render_contract_schema_version": render_schema,
+                "readability_contract_schema_version": readability_schema,
+                "support_probability_source": support_probability_source,
+                "token_count": token_count,
+                "observed_support_count": observed_support_count,
+                "valid_support_assignment_count": valid_assignments,
+                "invalid_support_count": invalid_assignments,
+                "top_support_collapse_rate": _optional_float(metrics.get("top_support_collapse_rate")),
+                "effective_supports": _optional_float(metrics.get("effective_supports")),
+                "support_entropy_bits": _optional_float(metrics.get("support_entropy_bits")),
+                "strict_wall_hit_rate": strict_wall_hit_rate,
+                "near_wall_hit_rate": near_wall_hit_rate,
+                "near_wall_only_rate": near_wall_only_rate,
+                "wall_margin_threshold": _optional_float(metrics.get("wall_margin_threshold", wall_audit.get("wall_margin_threshold"))),
+                "near_wall_margin_threshold": _optional_float(metrics.get("near_wall_margin_threshold", wall_audit.get("near_wall_margin_threshold"))),
+                "wall_margin_metric_scope": str(render_contract.get("wall_margin_metric_scope") or wall_audit.get("metric_scope") or "unavailable"),
+                "low_strict_wall_interpretation_status": low_strict_status,
+                "normal_fan_wall_crossing_certified": bool(
+                    render_contract.get("normal_fan_wall_crossing_certified", metrics.get("normal_fan_wall_crossing_certified", False))
+                ),
+                "no_proxy_or_fallback": no_proxy_ok,
+            }
+        )
+        if not available:
+            reasons = []
+            if not schema_ok:
+                reasons.append("missing_tropical_support_render_contract_schema")
+            if not readability_ok:
+                reasons.append("missing_tropical_support_readability_contract_schema")
+            if not no_proxy_ok:
+                reasons.append("missing_tropical_support_no_proxy_contract")
+            if not probability_ok:
+                reasons.append("missing_model_tropical_support_probability_provenance")
+            if not wall_rates_ok:
+                reasons.append("missing_wall_margin_rates")
+            if not assignment_ok:
+                reasons.append("missing_observed_support_assignments")
+            source["reason"] = ";".join(reasons) or "tropical_support_contract_unavailable"
+        sources.append(source)
+    available_sources = [row for row in sources if row.get("available")]
+    return {
+        "schema_version": "tropicalgt.herschel_tropical_support_evidence.v1",
+        "available": bool(available_sources),
+        "source_count": len(sources),
+        "available_source_count": len(available_sources),
+        "required_render_contract_schema": "tropicalgt.tropical_support_render.v1",
+        "required_readability_contract_schema": "tropicalgt.tropical_support_readability.v1",
+        "total_token_count": total_token_count,
+        "total_valid_support_assignment_count": total_valid_assignments,
+        "total_invalid_support_count": total_invalid_assignments,
+        "support_probability_source_counts": {key: support_probability_source_counts[key] for key in sorted(support_probability_source_counts)},
+        "low_strict_wall_interpretation_status_counts": {key: interpretation_status_counts[key] for key in sorted(interpretation_status_counts)},
+        "sources": sources,
+        "policy": "Herschel reports tropical support only from recorded tropical_support_payload sidecars with the render/readability contracts, model_tropical_support_probabilities provenance, wall-margin rates, observed support assignments, and no-proxy flags. These rates are model tropical-margin threshold audits, not certified normal-fan wall-crossing counts.",
+    }
+
+
 def _analogical_query_context_evidence(sidecar_paths: list[str]) -> dict[str, Any]:
     sources: list[dict[str, Any]] = []
     for raw_path in sidecar_paths:
@@ -443,6 +575,7 @@ def summarize_bundle(bundle: dict[str, Any], *, bundle_path: Path | None = None)
             "advanced_sidecars_tail": sidecars[:120],
             "validator_gap_evidence": validator_gap_evidence,
             "gflownet_branch_selection_evidence": _gflownet_branch_selection_evidence(sidecars),
+            "tropical_support_evidence": _tropical_support_evidence(sidecars),
             "analogical_query_context_evidence": _analogical_query_context_evidence(sidecars),
         },
         "restart_decision": {
@@ -539,6 +672,32 @@ def render_markdown(summary: dict[str, Any]) -> str:
         lines.append(
             f"- `{source.get('path', '')}` available=`{source.get('available')}` rows=`{source.get('valid_branch_selection_row_count', 0)}` "
             f"actions=`{source.get('selected_action_count', 0)}` policies=`{source.get('policy_counts', {})}`"
+        )
+        if source.get("reason"):
+            lines.append(f"  - reason: `{source.get('reason')}`")
+    tropical_support = artifacts.get("tropical_support_evidence", {}) if isinstance(artifacts.get("tropical_support_evidence"), dict) else {}
+    lines.extend(
+        [
+            "## Tropical Support Evidence",
+            "",
+            f"- Available: `{tropical_support.get('available', False)}`",
+            f"- Sources: `{tropical_support.get('source_count', 0)}`",
+            f"- Total tokens: `{tropical_support.get('total_token_count', 0)}`",
+            f"- Valid support assignments: `{tropical_support.get('total_valid_support_assignment_count', 0)}`",
+            "",
+            "```json",
+            json.dumps(tropical_support.get("support_probability_source_counts", {}), indent=2),
+            "```",
+            "",
+        ]
+    )
+    for source in tropical_support.get("sources", []) if isinstance(tropical_support.get("sources"), list) else []:
+        if not isinstance(source, dict):
+            continue
+        lines.append(
+            f"- `{source.get('path', '')}` available=`{source.get('available')}` source=`{source.get('support_probability_source', 'unavailable')}` "
+            f"tokens=`{source.get('token_count')}` strict=`{_fmt(source.get('strict_wall_hit_rate'))}` near=`{_fmt(source.get('near_wall_hit_rate'))}` "
+            f"status=`{source.get('low_strict_wall_interpretation_status', 'unavailable')}`"
         )
         if source.get("reason"):
             lines.append(f"  - reason: `{source.get('reason')}`")
@@ -679,6 +838,7 @@ def render_html(summary: dict[str, Any]) -> str:
     sidecar_groups = artifacts.get("sidecar_groups", {}) if isinstance(artifacts.get("sidecar_groups"), dict) else {}
     validator_counts = validator_gaps.get("combined_category_counts", {}) if isinstance(validator_gaps.get("combined_category_counts"), dict) else {}
     gflownet_branch = artifacts.get("gflownet_branch_selection_evidence", {}) if isinstance(artifacts.get("gflownet_branch_selection_evidence"), dict) else {}
+    tropical_support = artifacts.get("tropical_support_evidence", {}) if isinstance(artifacts.get("tropical_support_evidence"), dict) else {}
     analogical_query_context = artifacts.get("analogical_query_context_evidence", {}) if isinstance(artifacts.get("analogical_query_context_evidence"), dict) else {}
     validator_sources = validator_gaps.get("sources", []) if isinstance(validator_gaps.get("sources"), list) else []
     sidecars = [str(path) for path in artifacts.get("advanced_sidecars_tail", [])]
@@ -732,6 +892,24 @@ def render_html(summary: dict[str, Any]) -> str:
         )
     if not gflownet_branch_rows:
         gflownet_branch_rows.append("<tr><td colspan='6' class='muted'>No inference-scaling branch-selection sidecar paths recorded.</td></tr>")
+    tropical_support_rows = []
+    for source in tropical_support.get("sources", []) if isinstance(tropical_support.get("sources"), list) else []:
+        if not isinstance(source, dict):
+            continue
+        tropical_support_rows.append(
+            "<tr>"
+            f"<td>{html.escape(str(source.get('path', '')))}</td>"
+            f"<td>{html.escape(str(source.get('available')))}</td>"
+            f"<td>{html.escape(str(source.get('support_probability_source', 'unavailable')))}</td>"
+            f"<td>{html.escape(str(source.get('token_count')))}</td>"
+            f"<td>{html.escape(_fmt(source.get('strict_wall_hit_rate')))}</td>"
+            f"<td>{html.escape(_fmt(source.get('near_wall_hit_rate')))}</td>"
+            f"<td>{html.escape(str(source.get('low_strict_wall_interpretation_status', 'unavailable')))}</td>"
+            f"<td>{html.escape(str(source.get('reason', '')))}</td>"
+            "</tr>"
+        )
+    if not tropical_support_rows:
+        tropical_support_rows.append("<tr><td colspan='8' class='muted'>No tropical support payload sidecar paths recorded.</td></tr>")
     analogical_query_rows = []
     for source in analogical_query_context.get("sources", []) if isinstance(analogical_query_context.get("sources"), list) else []:
         if not isinstance(source, dict):
@@ -786,6 +964,7 @@ code {{ white-space:break-spaces; }}
 <p class="muted">Generated {html.escape(str(summary.get('generated_at')))} from <code>{html.escape(str(summary.get('bundle_path')))}</code>. Evidence-only rendering: no training, validation, checkpoint loading, browser control, or GPU command is executed by this report.</p>
 <span class="badge {'ok' if restart_safe else 'warn'}">restart_safe={html.escape(str(bool(restart_safe)))}</span>
 <span class="badge {'ok' if validator_gaps.get('available') else 'warn'}">validator_gap_evidence={html.escape(str(bool(validator_gaps.get('available'))))}</span>
+<span class="badge {'ok' if tropical_support.get('available') else 'warn'}">tropical_support_evidence={html.escape(str(bool(tropical_support.get('available'))))}</span>
 </header>
 <main>
 <section class="grid">
@@ -798,9 +977,11 @@ code {{ white-space:break-spaces; }}
 {_bar_chart_svg(sidecar_groups, title='Advanced Sidecar Groups', chart_id='sidecar-groups')}
 {_bar_chart_svg(validator_counts, title='Strict Validator Evidence Gaps', chart_id='validator-gap-counts')}
 {_bar_chart_svg(gflownet_branch.get('policy_counts', {}) if isinstance(gflownet_branch, dict) else {}, title='GFlowNet Branch Selection Policies', chart_id='gflownet-branch-selection-policies')}
+{_bar_chart_svg(tropical_support.get('support_probability_source_counts', {}) if isinstance(tropical_support, dict) else {}, title='Tropical Support Probability Sources', chart_id='tropical-support-probability-sources')}
 <section class="panel"><h2>Validator Sources</h2><table><thead><tr><th>Name</th><th>JSON path</th><th>Available</th><th>Gaps</th><th>Reason</th></tr></thead><tbody>{''.join(source_rows)}</tbody></table></section>
 <section class="panel"><h2>Validator Gap Actions</h2><table><thead><tr><th>Category</th><th>Count</th><th>Required action</th><th>Examples</th></tr></thead><tbody>{''.join(action_rows)}</tbody></table></section>
 <section class="panel"><h2>GFlowNet Branch Selection Evidence</h2><table><thead><tr><th>Sidecar</th><th>Available</th><th>Valid rows</th><th>Selected actions</th><th>Policies</th><th>Reason</th></tr></thead><tbody>{''.join(gflownet_branch_rows)}</tbody></table></section>
+<section class="panel"><h2>Tropical Support Evidence</h2><table><thead><tr><th>Sidecar</th><th>Available</th><th>Probability source</th><th>Tokens</th><th>Strict wall rate</th><th>Near wall rate</th><th>Status</th><th>Reason</th></tr></thead><tbody>{''.join(tropical_support_rows)}</tbody></table></section>
 <section class="panel"><h2>Analogical Query Context Evidence</h2><table><thead><tr><th>Sidecar</th><th>Available</th><th>Selected source</th><th>Status</th><th>Probability vertices</th><th>Rejected keys</th><th>Reason</th></tr></thead><tbody>{''.join(analogical_query_rows)}</tbody></table></section>
 <section class="panel"><h2>Blockers And Warnings</h2><div class="grid"><div><h3>Checkpoint</h3><ul>{_html_list(checkpoint.get('warnings', []))}</ul></div><div><h3>Execution</h3><ul>{_html_list(execution.get('issues', []))}</ul></div><div><h3>Advanced BPB</h3><ul>{_html_list(advanced.get('failed_gates', []))}</ul></div><div><h3>Restart</h3><ul>{_html_list(restart.get('blockers', []))}</ul></div></div></section>
 <section class="panel"><h2>Advanced Sidecars Tail</h2><input id="sidecar-filter" type="search" placeholder="Filter sidecar paths"><ul id="sidecar-list">{sidecar_items}</ul></section>

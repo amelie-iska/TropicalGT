@@ -104,6 +104,61 @@ def test_write_herschel_report_preserves_blockers_and_sidecar_groups(tmp_path: P
         ),
         encoding="utf-8",
     )
+    tropical_support_path = tmp_path / "tropical_support_payload.json"
+    tropical_support_path.write_text(
+        json.dumps(
+            {
+                "metrics": {
+                    "available": True,
+                    "token_count": 5,
+                    "unique_support_count": 2,
+                    "effective_supports": 1.8,
+                    "support_entropy_bits": 0.72,
+                    "top_support_collapse_rate": 0.6,
+                    "valid_support_assignment_count": 5,
+                    "invalid_support_count": 0,
+                    "support_probability_source": "model_tropical_support_probabilities",
+                    "wall_margin_audit": {
+                        "wall_margin_threshold": 0.001,
+                        "near_wall_margin_threshold": 0.01,
+                        "strict_wall_hit_count": 1,
+                        "near_wall_hit_count": 2,
+                        "near_wall_only_count": 1,
+                        "strict_wall_hit_rate": 0.2,
+                        "near_wall_hit_rate": 0.4,
+                        "near_wall_only_rate": 0.2,
+                        "metric_scope": "margin_threshold_audit_not_certified_normal_fan_wall_crossing",
+                        "low_strict_wall_interpretation_status": "strict_wall_margin_events_observed",
+                    },
+                    "strict_wall_hit_rate": 0.2,
+                    "near_wall_hit_rate": 0.4,
+                    "near_wall_only_rate": 0.2,
+                    "wall_margin_threshold": 0.001,
+                    "near_wall_margin_threshold": 0.01,
+                    "normal_fan_wall_crossing_certified": False,
+                    "render_contract_schema_version": "tropicalgt.tropical_support_render.v1",
+                    "readability_contract_schema_version": "tropicalgt.tropical_support_readability.v1",
+                    "no_proxy_or_fallback": True,
+                },
+                "tropical_support_render_contract": {
+                    "schema_version": "tropicalgt.tropical_support_render.v1",
+                    "support_probability_source": "model_tropical_support_probabilities",
+                    "observed_support_count": 2,
+                    "token_count": 5,
+                    "valid_support_assignment_count": 5,
+                    "invalid_support_count": 0,
+                    "normal_fan_wall_crossing_certified": False,
+                    "wall_margin_metric_scope": "margin_threshold_audit_not_certified_normal_fan_wall_crossing",
+                    "no_proxy_or_fallback": True,
+                },
+                "tropical_support_readability_contract": {
+                    "schema_version": "tropicalgt.tropical_support_readability.v1",
+                    "no_proxy_or_fallback": True,
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
     validator_json = tmp_path / "interactive_validator.json"
     validator_json.write_text(
         json.dumps(
@@ -184,6 +239,7 @@ def test_write_herschel_report_preserves_blockers_and_sidecar_groups(tmp_path: P
                 "got_audit/analogical_memory_report.json",
                 str(analogical_maps_path),
                 str(inference_scaling_tree_path),
+                str(tropical_support_path),
                 "got_audit/graphcg_report.json",
                 "got_audit/nll_density_grid.json",
                 "got_audit/chart_bundle_metrics.json",
@@ -228,7 +284,7 @@ def test_write_herschel_report_preserves_blockers_and_sidecar_groups(tmp_path: P
     assert groups["cas_algebra"] == 2
     assert groups["topology_persistence"] == 1
     assert groups["analogical_memory"] == 2
-    assert groups["tropical_toric"] == 1
+    assert groups["tropical_toric"] == 2
     assert groups["graphcg"] == 1
     assert groups["gflownet"] == 1
     assert groups["nll_density"] == 1
@@ -257,6 +313,19 @@ def test_write_herschel_report_preserves_blockers_and_sidecar_groups(tmp_path: P
     assert gflownet_branch["policy_counts"] == {"ranked_diverse_action_sweep": 1}
     assert gflownet_branch["sources"][0]["no_proxy_or_fallback"] is True
     assert gflownet_branch["sources"][0]["valid_branch_selection_row_count"] == 1
+    tropical_support = summary["artifact_evidence"]["tropical_support_evidence"]
+    assert tropical_support["schema_version"] == "tropicalgt.herschel_tropical_support_evidence.v1"
+    assert tropical_support["available"] is True
+    assert tropical_support["source_count"] == 1
+    assert tropical_support["available_source_count"] == 1
+    assert tropical_support["total_token_count"] == 5
+    assert tropical_support["total_valid_support_assignment_count"] == 5
+    assert tropical_support["support_probability_source_counts"] == {"model_tropical_support_probabilities": 1}
+    assert tropical_support["low_strict_wall_interpretation_status_counts"] == {"strict_wall_margin_events_observed": 1}
+    assert tropical_support["sources"][0]["strict_wall_hit_rate"] == 0.2
+    assert tropical_support["sources"][0]["near_wall_hit_rate"] == 0.4
+    assert tropical_support["sources"][0]["normal_fan_wall_crossing_certified"] is False
+    assert tropical_support["sources"][0]["no_proxy_or_fallback"] is True
     analogical_query = summary["artifact_evidence"]["analogical_query_context_evidence"]
     assert analogical_query["schema_version"] == "tropicalgt.herschel_analogical_query_context_evidence.v1"
     assert analogical_query["available"] is True
@@ -281,6 +350,9 @@ def test_write_herschel_report_preserves_blockers_and_sidecar_groups(tmp_path: P
     assert "regenerate analogical memory sidecars" in markdown
     assert "## GFlowNet Branch Selection Evidence" in markdown
     assert "ranked_diverse_action_sweep" in markdown
+    assert "## Tropical Support Evidence" in markdown
+    assert "model_tropical_support_probabilities" in markdown
+    assert "strict_wall_margin_events_observed" in markdown
     assert "## Analogical Query Context Evidence" in markdown
     assert "trajectory_probability_filtered_simplicial_object" in markdown
     assert "probability_filtered_simplicial_object" in markdown
@@ -295,6 +367,9 @@ def test_write_herschel_report_preserves_blockers_and_sidecar_groups(tmp_path: P
     assert "GFlowNet Branch Selection Evidence" in html
     assert "data-chart='gflownet-branch-selection-policies'" in html
     assert "ranked_diverse_action_sweep" in html
+    assert "Tropical Support Evidence" in html
+    assert "data-chart='tropical-support-probability-sources'" in html
+    assert "strict_wall_margin_events_observed" in html
     assert "Analogical Query Context Evidence" in html
     assert "valid_query_probability_trajectory_complex" in html
     assert "row 0 missing json analogical_simplex_tree_analogy.json" in html

@@ -211,6 +211,60 @@ def test_prepare_review_bundle_defaults_to_periodic_validation_artifacts(tmp_pat
         ),
         encoding="utf-8",
     )
+    (periodic_dir / "got_audit" / "tropical_support_payload.json").write_text(
+        json.dumps(
+            {
+                "metrics": {
+                    "available": True,
+                    "token_count": 6,
+                    "unique_support_count": 2,
+                    "effective_supports": 1.7,
+                    "support_entropy_bits": 0.68,
+                    "top_support_collapse_rate": 0.5,
+                    "valid_support_assignment_count": 6,
+                    "invalid_support_count": 0,
+                    "support_probability_source": "model_tropical_support_probabilities",
+                    "wall_margin_audit": {
+                        "wall_margin_threshold": 0.001,
+                        "near_wall_margin_threshold": 0.01,
+                        "strict_wall_hit_count": 0,
+                        "near_wall_hit_count": 1,
+                        "near_wall_only_count": 1,
+                        "strict_wall_hit_rate": 0.0,
+                        "near_wall_hit_rate": 0.1666666667,
+                        "near_wall_only_rate": 0.1666666667,
+                        "metric_scope": "margin_threshold_audit_not_certified_normal_fan_wall_crossing",
+                        "low_strict_wall_interpretation_status": "low_strict_expected_near_wall_ambiguity",
+                    },
+                    "strict_wall_hit_rate": 0.0,
+                    "near_wall_hit_rate": 0.1666666667,
+                    "near_wall_only_rate": 0.1666666667,
+                    "wall_margin_threshold": 0.001,
+                    "near_wall_margin_threshold": 0.01,
+                    "normal_fan_wall_crossing_certified": False,
+                    "render_contract_schema_version": "tropicalgt.tropical_support_render.v1",
+                    "readability_contract_schema_version": "tropicalgt.tropical_support_readability.v1",
+                    "no_proxy_or_fallback": True,
+                },
+                "tropical_support_render_contract": {
+                    "schema_version": "tropicalgt.tropical_support_render.v1",
+                    "support_probability_source": "model_tropical_support_probabilities",
+                    "observed_support_count": 2,
+                    "token_count": 6,
+                    "valid_support_assignment_count": 6,
+                    "invalid_support_count": 0,
+                    "normal_fan_wall_crossing_certified": False,
+                    "wall_margin_metric_scope": "margin_threshold_audit_not_certified_normal_fan_wall_crossing",
+                    "no_proxy_or_fallback": True,
+                },
+                "tropical_support_readability_contract": {
+                    "schema_version": "tropicalgt.tropical_support_readability.v1",
+                    "no_proxy_or_fallback": True,
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
     cfg_path = tmp_path / "config.json"
     cfg_path.write_text(
         json.dumps(
@@ -256,16 +310,27 @@ def test_prepare_review_bundle_defaults_to_periodic_validation_artifacts(tmp_pat
     sidecars = bundle["artifact_inventory"]["advanced_sidecars_tail"]
     assert any(path.endswith("periodic/step_00005000/got_audit/analogical_simplicial_maps.json") for path in sidecars)
     assert any(path.endswith("periodic/step_00005000/got_audit/inference_scaling_tree.json") for path in sidecars)
+    assert any(path.endswith("periodic/step_00005000/got_audit/tropical_support_payload.json") for path in sidecars)
     assert bundle["artifact_inventory"]["herschel_required_sidecars_present"]
     persisted_contract = json.loads((module.ROOT / bundle["artifacts"]["contract_json"]).read_text(encoding="utf-8"))
     assert any(
         path.endswith("periodic/step_00005000/got_audit/analogical_simplicial_maps.json")
         for path in persisted_contract["artifact_inventory"]["advanced_sidecars_tail"]
     )
+    assert any(
+        path.endswith("periodic/step_00005000/got_audit/tropical_support_payload.json")
+        for path in persisted_contract["artifact_inventory"]["advanced_sidecars_tail"]
+    )
     gflownet_branch = bundle["herschel_report_summary"]["artifact_evidence"]["gflownet_branch_selection_evidence"]
     assert gflownet_branch["available"] is True
     assert gflownet_branch["policy_counts"] == {"ranked_diverse_action_sweep": 1}
     assert gflownet_branch["total_selected_actions"] == 2
+    tropical_support = bundle["herschel_report_summary"]["artifact_evidence"]["tropical_support_evidence"]
+    assert tropical_support["available"] is True
+    assert tropical_support["support_probability_source_counts"] == {"model_tropical_support_probabilities": 1}
+    assert tropical_support["total_token_count"] == 6
+    assert tropical_support["total_valid_support_assignment_count"] == 6
+    assert tropical_support["low_strict_wall_interpretation_status_counts"] == {"low_strict_expected_near_wall_ambiguity": 1}
     analogical_query = bundle["herschel_report_summary"]["artifact_evidence"]["analogical_query_context_evidence"]
     assert analogical_query["available"] is True
     assert analogical_query["sources"][0]["selected_query_complex_source"] == "trajectory_probability_filtered_simplicial_object"
