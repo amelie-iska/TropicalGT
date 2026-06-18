@@ -331,3 +331,19 @@ CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/t
 CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m py_compile TropicalGT-I/src/tropicalgt/visualization.py TropicalGT-I/scripts/validate_interactive_audit_artifacts.py TropicalGT-I/tests/test_simplicial_visualization.py TropicalGT-I/tests/test_interactive_artifact_validator.py
 git diff --check
 ```
+
+## 2026-06-18 Vector-Bundle BPB Ablation Matrix Repair
+
+- Added a named `vector_bundle_matrix` expansion to `run_bpb_ablation_grid.py` covering the required variants: zero auxiliary, telemetry-only, transport-only, matroid/one-dimensional-cone only, toric/GraphCG-only, memory-landscape-only, chart-BPB-only, and full-stack.
+- The ablation manifest now records a `tropicalgt.vector_bundle_ablation_matrix.v1` section with required, emitted, and missing matrix variants, plus the BPB/graph-BPB-first promotion policy.
+- Extended existing chart-bundle variants to include real monomial-transport and flat-incidence coefficients instead of silently omitting those active model knobs.
+- Tightened promotion-key detection so monomial transport, flat incidence, and memory retrieval landscape/vector/probability/CAS weights cannot bypass matched eval BPB/eval graph-BPB and certificate/tropical-wall guardrails.
+
+Verification:
+
+```bash
+CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_bpb_ablation_grid.py TropicalGT-I/tests/test_bpb_ablation.py -q
+CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_bpb_ablation_grid.py TropicalGT-I/tests/test_bpb_ablation.py TropicalGT-I/tests/test_prepare_5k_review_bundle.py -q
+CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m py_compile TropicalGT-I/scripts/run_bpb_ablation_grid.py TropicalGT-I/src/tropicalgt/ablation.py TropicalGT-I/tests/test_bpb_ablation_grid.py TropicalGT-I/tests/test_bpb_ablation.py
+git diff --check
+```

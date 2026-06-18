@@ -19,12 +19,18 @@ ADVANCED_AUXILIARY_COEFFICIENT_KEYS = (
     "certificate_weight",
     "sequence_tropical_weight",
     "bundle_transport_weight",
+    "bundle_monomial_transport_weight",
     "bundle_cocycle_weight",
     "bundle_flat_rank_weight",
+    "bundle_flat_incidence_weight",
     "toric_normal_fan_weight",
     "graphcg_toric_cell_agreement_weight",
     "chart_bpb_consistency_weight",
     "bundle_atom_stability_weight",
+    "memory_retrieval_landscape_weight",
+    "memory_retrieval_vector_weight",
+    "memory_retrieval_probability_map_weight",
+    "memory_retrieval_certified_cas_weight",
 )
 PROMOTION_GUARDRAIL_GROUPS = {
     "certificate": (

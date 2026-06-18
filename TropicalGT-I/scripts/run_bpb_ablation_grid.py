@@ -18,6 +18,47 @@ from tropicalgt.readiness_contracts import advanced_bpb_contract_report
 from tropicalgt.run import load_config, train
 
 
+CORE_AUX_ZERO_OVERRIDES: dict[str, Any] = {
+    "model.gflownet_weight": 0.0,
+    "model.graphcg_weight": 0.0,
+    "model.margin_weight": 0.0,
+    "model.entropy_weight": 0.0,
+    "model.certificate_weight": 0.0,
+    "model.sequence_tropical_weight": 0.0,
+}
+
+CHART_BUNDLE_ZERO_OVERRIDES: dict[str, Any] = {
+    "model.enable_chart_bundle_auxiliary": True,
+    "model.bundle_transport_weight": 0.0,
+    "model.bundle_monomial_transport_weight": 0.0,
+    "model.bundle_cocycle_weight": 0.0,
+    "model.bundle_flat_rank_weight": 0.0,
+    "model.bundle_flat_incidence_weight": 0.0,
+    "model.toric_normal_fan_weight": 0.0,
+    "model.graphcg_toric_cell_agreement_weight": 0.0,
+    "model.chart_bpb_consistency_weight": 0.0,
+    "model.bundle_atom_stability_weight": 0.0,
+}
+
+MEMORY_RETRIEVAL_ZERO_OVERRIDES: dict[str, Any] = {
+    "memory_retrieval_landscape_weight": 0.0,
+    "memory_retrieval_vector_weight": 0.0,
+    "memory_retrieval_probability_map_weight": 0.0,
+    "memory_retrieval_certified_cas_weight": 0.0,
+}
+
+VECTOR_BUNDLE_ABLATION_MATRIX = (
+    "zero_auxiliary",
+    "vector_bundle_telemetry_only",
+    "vector_bundle_transport_only",
+    "matroid_cone_only",
+    "toric_graphcg_only",
+    "memory_landscape_only",
+    "chart_bpb_only",
+    "vector_bundle_full_stack",
+)
+
+
 VARIANTS: dict[str, dict[str, Any]] = {
     "baseline": {},
     "aux_0p5x": {
@@ -71,21 +112,14 @@ VARIANTS: dict[str, dict[str, Any]] = {
         "model.certificate_weight": 0.0,
     },
     "no_memory_bank": {"memory_bank_path": ""},
-    "chart_bundle_telemetry": {
-        "model.enable_chart_bundle_auxiliary": True,
-        "model.bundle_transport_weight": 0.0,
-        "model.bundle_cocycle_weight": 0.0,
-        "model.bundle_flat_rank_weight": 0.0,
-        "model.toric_normal_fan_weight": 0.0,
-        "model.graphcg_toric_cell_agreement_weight": 0.0,
-        "model.chart_bpb_consistency_weight": 0.0,
-        "model.bundle_atom_stability_weight": 0.0,
-    },
+    "chart_bundle_telemetry": dict(CHART_BUNDLE_ZERO_OVERRIDES),
     "chart_bundle_toric_0p1x": {
         "model.enable_chart_bundle_auxiliary": True,
         "model.bundle_transport_weight": 0.0001,
+        "model.bundle_monomial_transport_weight": 0.0001,
         "model.bundle_cocycle_weight": 0.0001,
         "model.bundle_flat_rank_weight": 0.0001,
+        "model.bundle_flat_incidence_weight": 0.0001,
         "model.toric_normal_fan_weight": 0.0001,
         "model.graphcg_toric_cell_agreement_weight": 0.0001,
         "model.chart_bpb_consistency_weight": 0.0001,
@@ -94,13 +128,88 @@ VARIANTS: dict[str, dict[str, Any]] = {
     "no_chart_bundle_toric": {
         "model.enable_chart_bundle_auxiliary": False,
         "model.bundle_transport_weight": 0.0,
+        "model.bundle_monomial_transport_weight": 0.0,
         "model.bundle_cocycle_weight": 0.0,
         "model.bundle_flat_rank_weight": 0.0,
+        "model.bundle_flat_incidence_weight": 0.0,
         "model.toric_normal_fan_weight": 0.0,
         "model.graphcg_toric_cell_agreement_weight": 0.0,
         "model.chart_bpb_consistency_weight": 0.0,
         "model.bundle_atom_stability_weight": 0.0,
     },
+    "zero_auxiliary": {
+        **CORE_AUX_ZERO_OVERRIDES,
+        "model.enable_chart_bundle_auxiliary": False,
+        **{key: value for key, value in CHART_BUNDLE_ZERO_OVERRIDES.items() if key != "model.enable_chart_bundle_auxiliary"},
+        **MEMORY_RETRIEVAL_ZERO_OVERRIDES,
+    },
+    "vector_bundle_telemetry_only": {
+        **CORE_AUX_ZERO_OVERRIDES,
+        **CHART_BUNDLE_ZERO_OVERRIDES,
+        **MEMORY_RETRIEVAL_ZERO_OVERRIDES,
+    },
+    "vector_bundle_transport_only": {
+        **CORE_AUX_ZERO_OVERRIDES,
+        **CHART_BUNDLE_ZERO_OVERRIDES,
+        "model.bundle_transport_weight": 0.0001,
+        "model.bundle_monomial_transport_weight": 0.0001,
+        **MEMORY_RETRIEVAL_ZERO_OVERRIDES,
+    },
+    "matroid_cone_only": {
+        **CORE_AUX_ZERO_OVERRIDES,
+        **CHART_BUNDLE_ZERO_OVERRIDES,
+        "model.bundle_flat_rank_weight": 0.0001,
+        "model.bundle_flat_incidence_weight": 0.0001,
+        "model.toric_normal_fan_weight": 0.0001,
+        **MEMORY_RETRIEVAL_ZERO_OVERRIDES,
+    },
+    "toric_graphcg_only": {
+        **CORE_AUX_ZERO_OVERRIDES,
+        **CHART_BUNDLE_ZERO_OVERRIDES,
+        "model.graphcg_weight": 0.005,
+        "model.toric_normal_fan_weight": 0.0001,
+        "model.graphcg_toric_cell_agreement_weight": 0.0001,
+        **MEMORY_RETRIEVAL_ZERO_OVERRIDES,
+    },
+    "memory_landscape_only": {
+        **CORE_AUX_ZERO_OVERRIDES,
+        "model.enable_chart_bundle_auxiliary": False,
+        **{key: value for key, value in CHART_BUNDLE_ZERO_OVERRIDES.items() if key != "model.enable_chart_bundle_auxiliary"},
+        **MEMORY_RETRIEVAL_ZERO_OVERRIDES,
+        "memory_retrieval_landscape_weight": 0.08,
+    },
+    "chart_bpb_only": {
+        **CORE_AUX_ZERO_OVERRIDES,
+        **CHART_BUNDLE_ZERO_OVERRIDES,
+        "model.chart_bpb_consistency_weight": 0.0001,
+        **MEMORY_RETRIEVAL_ZERO_OVERRIDES,
+    },
+    "vector_bundle_full_stack": {
+        "model.enable_chart_bundle_auxiliary": True,
+        "model.gflownet_weight": 0.005,
+        "model.graphcg_weight": 0.005,
+        "model.margin_weight": 0.0005,
+        "model.entropy_weight": 0.00025,
+        "model.certificate_weight": 0.00025,
+        "model.sequence_tropical_weight": 0.0625,
+        "model.bundle_transport_weight": 0.0001,
+        "model.bundle_monomial_transport_weight": 0.0001,
+        "model.bundle_cocycle_weight": 0.0001,
+        "model.bundle_flat_rank_weight": 0.0001,
+        "model.bundle_flat_incidence_weight": 0.0001,
+        "model.toric_normal_fan_weight": 0.0001,
+        "model.graphcg_toric_cell_agreement_weight": 0.0001,
+        "model.chart_bpb_consistency_weight": 0.0001,
+        "model.bundle_atom_stability_weight": 0.0001,
+        "memory_retrieval_landscape_weight": 0.08,
+        "memory_retrieval_vector_weight": 0.18,
+        "memory_retrieval_probability_map_weight": 0.20,
+        "memory_retrieval_certified_cas_weight": 0.14,
+    },
+}
+
+VARIANT_GROUPS: dict[str, tuple[str, ...]] = {
+    "vector_bundle_matrix": VECTOR_BUNDLE_ABLATION_MATRIX,
 }
 
 
@@ -108,7 +217,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Generate and optionally run matched TropicalGT-I BPB ablations")
     parser.add_argument("--config", default=str(ROOT / "configs" / "gpu_smoke.json"))
     parser.add_argument("--output-dir", default=str(ROOT / "outputs" / "bpb_ablation_grid"))
-    parser.add_argument("--variants", default="baseline,chart_bundle_telemetry,chart_bundle_toric_0p1x,no_graphcg,no_gflownet,no_certificate,no_tropical_regularizers,no_auxiliary")
+    parser.add_argument("--variants", default="baseline,vector_bundle_matrix,no_graphcg,no_gflownet,no_certificate,no_tropical_regularizers,no_auxiliary")
     parser.add_argument("--max-steps", type=int, default=None, help="Override training steps for quick tests; omitted configs use --boundary-steps.")
     parser.add_argument("--boundary-steps", type=int, default=5000, help="Matched ablation boundary step; defaults to the 5K gate.")
     parser.add_argument("--seed", type=int, default=None)
@@ -126,7 +235,7 @@ def main() -> None:
     args = parser.parse_args()
 
     base = load_config(args.config)
-    variant_names = [name.strip() for name in args.variants.split(",") if name.strip()]
+    variant_names = _expand_variant_names([name.strip() for name in args.variants.split(",") if name.strip()])
     unknown = [name for name in variant_names if name not in VARIANTS]
     if unknown:
         raise SystemExit(f"unknown variants: {', '.join(unknown)}; known={', '.join(sorted(VARIANTS))}")
@@ -208,6 +317,13 @@ def main() -> None:
             "variant_count": len(configs),
             "policy": "Matched BPB ablations must share seed, boundary, requested steps, data identity, graph BPB side weight, and base config fingerprint before any advanced auxiliary coefficient can be promoted.",
         },
+        "vector_bundle_ablation_matrix": {
+            "schema_version": "tropicalgt.vector_bundle_ablation_matrix.v1",
+            "required_variants": list(VECTOR_BUNDLE_ABLATION_MATRIX),
+            "emitted_variants": [name for name in variant_names if name in VECTOR_BUNDLE_ABLATION_MATRIX],
+            "missing_variants": [name for name in VECTOR_BUNDLE_ABLATION_MATRIX if name not in variant_names],
+            "policy": "Each matrix variant is config-only until matched 5K eval BPB and eval graph-BPB improve with certificate/tropical-wall guardrails; no advanced coefficient is promoted from telemetry or missing evidence.",
+        },
         "variants": configs,
         "reports": report_paths,
     }
@@ -230,6 +346,19 @@ def main() -> None:
             }
         )
     print(json.dumps(paths, indent=2))
+
+
+def _expand_variant_names(names: list[str]) -> list[str]:
+    expanded: list[str] = []
+    seen: set[str] = set()
+    for name in names:
+        group = VARIANT_GROUPS.get(name)
+        items = group if group is not None else (name,)
+        for item in items:
+            if item not in seen:
+                expanded.append(item)
+                seen.add(item)
+    return expanded
 
 
 def _variant_config(

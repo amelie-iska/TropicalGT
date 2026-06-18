@@ -1,7 +1,7 @@
 import json
 from pathlib import Path
 
-from tropicalgt.ablation import build_bpb_ablation_report, write_bpb_ablation_artifacts
+from tropicalgt.ablation import _nonzero_advanced_auxiliary_coefficients, build_bpb_ablation_report, write_bpb_ablation_artifacts
 
 
 def _write_report(
@@ -173,3 +173,27 @@ def test_bpb_ablation_artifacts_write_json_markdown_and_html(tmp_path: Path):
     html = Path(paths["html"]).read_text(encoding="utf-8")
     assert "color-scheme: dark" in html
     assert "BPB/graph-BPB metric correlation screen" in html
+
+def test_promotion_gate_recognizes_vector_bundle_and_memory_coefficients():
+    coeffs = _nonzero_advanced_auxiliary_coefficients(
+        {
+            "ablation_overrides": {
+                "model.bundle_monomial_transport_weight": 0.0001,
+                "model.bundle_flat_incidence_weight": 0.0002,
+                "memory_retrieval_landscape_weight": 0.08,
+                "memory_retrieval_vector_weight": 0.18,
+                "memory_retrieval_probability_map_weight": 0.20,
+                "memory_retrieval_certified_cas_weight": 0.14,
+                "model.bundle_transport_weight": 0.0,
+                "unrelated_debug_knob": 7.0,
+            }
+        }
+    )
+    assert coeffs == {
+        "model.bundle_monomial_transport_weight": 0.0001,
+        "model.bundle_flat_incidence_weight": 0.0002,
+        "memory_retrieval_landscape_weight": 0.08,
+        "memory_retrieval_vector_weight": 0.18,
+        "memory_retrieval_probability_map_weight": 0.20,
+        "memory_retrieval_certified_cas_weight": 0.14,
+    }
