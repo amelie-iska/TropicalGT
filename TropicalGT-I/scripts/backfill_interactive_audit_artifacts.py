@@ -13,6 +13,7 @@ if str(ROOT / "src") not in sys.path:
 
 from tropicalgt.visualization import (  # noqa: E402
     _write_inference_dashboard,
+    _write_reasoning_step_complex_maps,
     write_toric_embedding_sidecar,
     write_tropical_fan_diagnostics,
     write_two_parameter_bifiltration_visualization,
@@ -37,6 +38,37 @@ def _dashboard_artifact_paths(root: Path) -> dict[str, str]:
         key = path.relative_to(root).as_posix().replace("/", "_").replace(".", "_")
         paths[key] = str(path)
     return paths
+
+
+
+def _reasoning_step_contracts_need_backfill(root: Path) -> bool:
+    manifest_path = root / "reasoning_step_complex_maps" / "manifest.json"
+    if not manifest_path.exists():
+        return True
+    manifest = _read_json(manifest_path)
+    contract = manifest.get("contract", {}) if isinstance(manifest.get("contract"), dict) else {}
+    if contract.get("schema_version") != "tropicalgt.reasoning_step_complex_maps.v1":
+        return True
+    steps = manifest.get("steps", []) if isinstance(manifest.get("steps"), list) else []
+    if not steps:
+        return True
+    directory = root / "reasoning_step_complex_maps"
+    for index, step in enumerate(steps):
+        if not isinstance(step, dict):
+            return True
+        if step.get("step_complex_source_contract", {}).get("schema_version") != "tropicalgt.reasoning_step_complex_source_contract.v1":
+            return True
+        if step.get("radius_slider_contract", {}).get("schema_version") != "tropicalgt.reasoning_step_radius_slider_summary.v1":
+            return True
+        if step.get("simplex_tree_poset_contract", {}).get("schema_version") != "tropicalgt.simplex_tree_poset.v1":
+            return True
+        step_file = directory / str(step.get("file", f"reasoning_step_{index:03d}.html"))
+        slider_file = directory / str(step.get("slider_contract_file") or f"{step_file.stem}_slider_contract.json")
+        tree_file = directory / str(step.get("simplex_tree_file", f"reasoning_step_{index:03d}_simplex_tree.html"))
+        poset_file = directory / str(step.get("simplex_tree_poset_contract_file") or f"{tree_file.stem}_simplex_tree_poset_contract.json")
+        if not (step_file.exists() and slider_file.exists() and tree_file.exists() and poset_file.exists()):
+            return True
+    return False
 
 
 def _dashboard_missing_links(root: Path, required_names: tuple[str, ...]) -> bool:
@@ -88,6 +120,32 @@ def backfill_audit_root(audit_root: str | Path, *, overwrite: bool = False) -> d
             }
         )
 
+
+    reasoning_needed = overwrite or _reasoning_step_contracts_need_backfill(root)
+    scaling_path = root / "inference_scaling_tree.json"
+    if reasoning_needed and scaling_path.exists():
+        scaling = _read_json(scaling_path)
+        candidates = scaling.get("candidates", []) if isinstance(scaling.get("candidates"), list) else []
+        candidates_with_complex = [row for row in candidates if isinstance(row, dict) and isinstance(row.get("filtered_simplicial_object"), dict)]
+        if candidates_with_complex:
+            paths = _write_reasoning_step_complex_maps(candidates_with_complex, root)
+            actions.append(
+                {
+                    "kind": "reasoning_step_complex_contract_backfill",
+                    "reason": "Regenerated per-step complex pages, radius-slider contracts, SimplexTree poset contracts, source contracts, fingerprints, and manifest from stored inference_scaling_tree.json candidate filtered_simplicial_object payloads.",
+                    "candidate_count": len(candidates_with_complex),
+                    "paths": paths,
+                }
+            )
+        else:
+            actions.append(
+                {
+                    "kind": "reasoning_step_complex_contract_unavailable",
+                    "reason": "Reasoning-step contracts were missing or stale, but inference_scaling_tree.json had no candidates with stored filtered_simplicial_object payloads; no per-step contracts were fabricated.",
+                    "paths": {"inference_scaling_tree": str(scaling_path)},
+                }
+            )
+
     bif_raw = root / "trajectory_level_radius_bifiltration.json"
     bif_html = root / "trajectory_persistence" / "two_parameter_bifiltration.html"
     bif_sidecar = bif_html.with_suffix(".json")
@@ -125,6 +183,7 @@ def backfill_audit_root(audit_root: str | Path, *, overwrite: bool = False) -> d
             "tropical_fan_diagnostics.html",
             "toric_embedding_sidecar.html",
             "trajectory_persistence/two_parameter_bifiltration.html",
+            "reasoning_step_complex_maps/manifest.json",
         ),
     )
     if actions or overwrite or dashboard_needs_refresh:

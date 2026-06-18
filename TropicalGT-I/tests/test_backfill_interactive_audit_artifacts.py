@@ -2,6 +2,8 @@ import importlib.util
 import json
 from pathlib import Path
 
+from tropicalgt.simplicial import build_embedding_radius_simplicial_object
+
 
 def _load_backfill():
     path = Path(__file__).resolve().parents[1] / "scripts" / "backfill_interactive_audit_artifacts.py"
@@ -82,3 +84,61 @@ def test_backfill_rebuilds_stale_dashboard_when_sidecars_already_exist(tmp_path:
     dashboard = (audit / "inference_audit.html").read_text(encoding="utf-8")
     assert "tropical_fan_diagnostics.html" in dashboard
     assert "toric_embedding_sidecar.html" in dashboard
+
+
+
+def test_backfill_regenerates_reasoning_step_contracts_from_stored_candidate_complexes(tmp_path: Path):
+    module = _load_backfill()
+    audit = tmp_path / "got_audit"
+    audit.mkdir()
+    descriptors = [
+        {"kind": "state", "index": 0, "text": "root"},
+        {"kind": "reasoning", "index": 1, "text": "expand"},
+        {"kind": "output", "index": 2, "text": "answer"},
+    ]
+    record = type("Record", (), {"record_id": "q0"})()
+    simplicial = build_embedding_radius_simplicial_object(
+        record,
+        descriptors,
+        [[0.0, 0.0, 0.0], [0.5, 0.1, 0.0], [0.2, 0.4, 0.1]],
+        metric="euclidean",
+    )
+    (audit / "inference_scaling_tree.json").write_text(
+        json.dumps(
+            {
+                "candidates": [
+                    {
+                        "record_id": "q0",
+                        "level": 0,
+                        "path": [],
+                        "embedding": [0.0, 0.0, 0.0],
+                        "filtered_simplicial_object": simplicial,
+                    }
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+    stale_dir = audit / "reasoning_step_complex_maps"
+    stale_dir.mkdir()
+    (stale_dir / "manifest.json").write_text(json.dumps({"steps": [{"file": "reasoning_step_000.html"}]}), encoding="utf-8")
+
+    report = module.backfill_audit_root(audit)
+
+    kinds = {row["kind"] for row in report["actions"]}
+    assert "reasoning_step_complex_contract_backfill" in kinds
+    manifest = json.loads((stale_dir / "manifest.json").read_text(encoding="utf-8"))
+    assert manifest["contract"]["schema_version"] == "tropicalgt.reasoning_step_complex_maps.v1"
+    assert manifest["contract"]["all_steps_have_source_contracts"] is True
+    assert manifest["contract"]["all_steps_have_radius_slider_contracts"] is True
+    assert manifest["contract"]["all_steps_have_simplex_tree_poset_contracts"] is True
+    step = manifest["steps"][0]
+    assert step["step_complex_source_contract"]["schema_version"] == "tropicalgt.reasoning_step_complex_source_contract.v1"
+    assert step["step_complex_source_contract"]["no_proxy_or_fallback"] is True
+    assert step["radius_slider_contract"]["safe_to_render_radius_filtration"] is True
+    assert step["simplex_tree_poset_contract"]["schema_version"] == "tropicalgt.simplex_tree_poset.v1"
+    assert step["simplex_tree_poset_contract"]["no_proxy_or_fallback"] is True
+    assert (stale_dir / "reasoning_step_000_slider_contract.json").exists()
+    assert (stale_dir / "reasoning_step_000_simplex_tree_simplex_tree_poset_contract.json").exists()
+    dashboard = (audit / "inference_audit.html").read_text(encoding="utf-8")
+    assert "reasoning_step_complex_maps/manifest.json" in dashboard

@@ -785,6 +785,15 @@ surface/density `5`, other `2`, SimplexTree poset `2`, and row coverage `1`.
 This is reporting evidence for repair planning only; it does not make stale
 artifacts pass acceptance.
 
+Completed 2026-06-18 follow-up: legacy audit backfill now also detects stale or
+missing `reasoning_step_complex_maps/manifest.json` contracts and, when the
+stored `inference_scaling_tree.json` contains candidates with actual
+`filtered_simplicial_object` payloads, reruns the current reasoning-step
+renderer to regenerate per-step complex pages, radius-slider sidecars,
+SimplexTree poset sidecars, source contracts, fingerprints, and the manifest.
+If those stored candidate complexes are unavailable, the helper records an
+explicit unavailable action instead of fabricating per-step contracts.
+
 - [x] **Step 9.4: Push**
 
 Stage only intended files, exclude unrelated files, commit, push `tropicalgt-i-implementation`.
