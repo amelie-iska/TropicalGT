@@ -794,6 +794,16 @@ SimplexTree poset sidecars, source contracts, fingerprints, and the manifest.
 If those stored candidate complexes are unavailable, the helper records an
 explicit unavailable action instead of fabricating per-step contracts.
 
+Executed safe generated-artifact backfill on the b60 step-5000 `got_audit`
+bundle without staging generated outputs. It regenerated reasoning-step contracts
+for `12` stored candidate complexes and rebuilt `inference_audit.html`. The
+strict validator still fails, as required for stale/missing non-reasoning-step
+evidence, but the gap count decreased from `319` to `175`; the remaining top
+categories are embedding-map identity `55`, analogical memory `35`, tropical
+support `30`, persistence landscapes `17`, CAS resolution certificates `12`,
+trajectory overlay/radius `10`, GraphCG `6`, NLL surface/density `5`, other `2`,
+SimplexTree poset `2`, and row coverage `1`.
+
 - [x] **Step 9.4: Push**
 
 Stage only intended files, exclude unrelated files, commit, push `tropicalgt-i-implementation`.
