@@ -5728,6 +5728,7 @@ def _cas_real_resolution_display(real: Mapping[str, Any]) -> Dict[str, Any]:
     be_artifacts = artifacts.get("buchsbaum_eisenbud_diagnostics") if isinstance(artifacts.get("buchsbaum_eisenbud_diagnostics"), Mapping) else {}
     be_rank_conditions = artifacts.get("buchsbaum_eisenbud_rank_conditions") if isinstance(artifacts.get("buchsbaum_eisenbud_rank_conditions"), Mapping) else summary.get("buchsbaum_eisenbud_rank_conditions", {})
     grade_depth_regular = artifacts.get("grade_depth_regular_diagnostics") if isinstance(artifacts.get("grade_depth_regular_diagnostics"), Mapping) else summary.get("grade_depth_regular_diagnostics", {})
+    syzygies = artifacts.get("syzygies") if isinstance(artifacts.get("syzygies"), Mapping) else summary.get("syzygy_diagnostics", {})
     certificate_summary = artifacts.get("certificate_summary") if isinstance(artifacts.get("certificate_summary"), Mapping) else {}
     return {
         "available": bool(modules),
@@ -5743,6 +5744,7 @@ def _cas_real_resolution_display(real: Mapping[str, Any]) -> Dict[str, Any]:
         "ideal_diagnostics": dict(ideal_diagnostics) if isinstance(ideal_diagnostics, Mapping) else {},
         "buchsbaum_eisenbud_rank_conditions": dict(be_rank_conditions) if isinstance(be_rank_conditions, Mapping) else {},
         "grade_depth_regular_diagnostics": dict(grade_depth_regular) if isinstance(grade_depth_regular, Mapping) else {},
+        "syzygies": dict(syzygies) if isinstance(syzygies, Mapping) else {},
         "certificate_summary": dict(certificate_summary) if isinstance(certificate_summary, Mapping) else {},
         "buchsbaum_eisenbud_diagnostics": {
             "minimality_certified": bool(real.get("minimality_certified")),
@@ -5904,6 +5906,37 @@ def _m2_differential_columns(m2: Mapping[str, Any], max_rows: int = 18) -> Tuple
     return ["map", "shape", "rank", "matrix preview"], [maps, shapes, ranks, previews]
 
 
+
+def _m2_syzygy_columns(m2: Mapping[str, Any], max_rows: int = 18) -> Tuple[List[str], List[List[str]]]:
+    resolution = _m2_selected_staircase_resolution(m2)
+    syzygies = resolution.get("syzygies") if isinstance(resolution.get("syzygies"), Mapping) else {}
+    rows = syzygies.get("syzygy_generators") if isinstance(syzygies.get("syzygy_generators"), list) else []
+    rows = [row for row in rows if isinstance(row, Mapping)][:max_rows]
+    if not rows:
+        reason = "no certified Macaulay2 syzygy diagnostics; adjacent LCM staircase syzygies remain scoped monomial-ideal theorem data, not CAS syzygy output"
+        if isinstance(syzygies, Mapping) and syzygies.get("reason"):
+            reason = str(syzygies.get("reason"))
+        return ["order", "differential", "multidegree", "source", "no-proxy policy"], [["unavailable"], [""], [""], [""], [reason]]
+    orders: list[str] = []
+    differentials: list[str] = []
+    multidegrees: list[str] = []
+    sources: list[str] = []
+    policies: list[str] = []
+    policy = str(syzygies.get("no_proxy_policy", "Syzygies are rendered only from certified Macaulay2 resolution maps."))
+    for row in rows:
+        md = row.get("multidegree", [])
+        if isinstance(md, Sequence) and not isinstance(md, (str, bytes)):
+            md_text = "(" + ",".join(str(int(v)) for v in list(md)[:2]) + ")"
+        else:
+            md_text = str(row.get("shift_display", ""))
+        orders.append(str(row.get("syzygy_order", "")))
+        differentials.append(str(row.get("differential", row.get("source_free_module", ""))))
+        multidegrees.append(md_text)
+        sources.append(str(row.get("source", "macaulay2_resolution_differential_source_degrees")))
+        policies.append(policy)
+    return ["order", "differential", "multidegree", "source", "no-proxy policy"], [orders, differentials, multidegrees, sources, policies]
+
+
 def _m2_ideal_diagnostic_columns(m2: Mapping[str, Any]) -> Tuple[List[str], List[List[str]]]:
     resolution = _m2_selected_staircase_resolution(m2)
     if not resolution:
@@ -6004,6 +6037,7 @@ def _m2_certificate_columns(m2: Mapping[str, Any], bifiltration: Mapping[str, An
     be_rank = resolution.get("buchsbaum_eisenbud_rank_conditions", {}) if isinstance(resolution.get("buchsbaum_eisenbud_rank_conditions"), Mapping) else {}
     grade_depth = resolution.get("grade_depth_regular_diagnostics", {}) if isinstance(resolution.get("grade_depth_regular_diagnostics"), Mapping) else {}
     cert_summary = resolution.get("certificate_summary", {}) if isinstance(resolution.get("certificate_summary"), Mapping) else {}
+    syzygies = resolution.get("syzygies", {}) if isinstance(resolution.get("syzygies"), Mapping) else {}
     items = [
         ("ring", resolution.get("ring", m2.get("ring", bifiltration.get("module_ring", "F2[x_level,x_radius]")))),
         ("field", m2.get("field", "F2")),
@@ -6033,6 +6067,7 @@ def _m2_certificate_columns(m2: Mapping[str, Any], bifiltration: Mapping[str, An
         ("Buchsbaum-Eisenbud exactness", be.get("passes_exactness_necessary_checks", False)),
         ("CAS Fitting ideals", _json_clip(resolution.get("fitting_ideals", {}), 260)),
         ("CAS minors", _json_clip(resolution.get("minors", {}), 260)),
+        ("CAS syzygy diagnostics", _json_clip(syzygies, 360)),
         ("rank invariant samples", rank_inv.get("num_samples", 0)),
         ("radius grade policy", bifiltration.get("radius_grade_policy", "")),
     ]
@@ -6986,6 +7021,7 @@ def _write_two_parameter_bifiltration_staircase_html(
     betti_h, betti_c = _m2_betti_columns(m2)
     free_h, free_c = _m2_free_module_columns(m2)
     diff_h, diff_c = _m2_differential_columns(m2)
+    syz_h, syz_c = _m2_syzygy_columns(m2)
     cert_h, cert_c = _m2_certificate_columns(m2, bifiltration)
     ideal_h, ideal_c = _m2_ideal_diagnostic_columns(m2)
     be_h, be_c = _m2_be_diagnostic_columns(m2)
@@ -7046,7 +7082,7 @@ td {{ background:#07111f; color:#d7e8ff; }}
 <div class='callout'><b>Computed bifiltration:</b> {html.escape(rank_note)}<br>This section is an exponent-lattice module diagram in the sense of the two-variable monomial-ideal staircase picture: the coordinate axes are the x_radius and x_level one dimensional cone(s). The large gold/cyan/blue boundary points are minimal antichain generators; smaller dim-colored points are dominated observed bidegrees and are not treated as additional generators. White lattice points are displayed quotient-basis complements, colored cells/points are actual H1 fiber ranks. Adjacent structure maps persisted={len(bifiltration.get("structure_maps", [])) if isinstance(bifiltration, Mapping) else 0}. Staircase cards render exact two-variable monomial-ideal resolutions when the Miller-Sturmfels adjacent-LCM theorem applies. Lower CAS tables render only certified CAS output under its actual grading; diagnostic chain data is not substituted for a free resolution.</div>
 <section class='panel'><h2>Miller-Sturmfels bivariate module staircases from actual multidegree generators</h2><div class='staircase-grid'>{staircase_svgs}</div><div class='card-grid'>{_table_html(structure_h, structure_c, 'Adjacent F2 structure maps from raw bifiltration')}</div></section>
 <details class='secondary-disclosure'><summary>Secondary fiber-rank diagnostics</summary><section class='panel'><h2>F2[x_level,x_radius] support and homology fiber ranks</h2>{chart1}</section><section class='panel'><h2>Fiber-rank lattice with H0/H1 layer offsets</h2>{chart2}</section><div class='card-grid'>{_table_html(rank_h, rank_c, 'Rank-invariant samples over F2[x_level,x_radius]')}</div></details>
-<details class='secondary-disclosure'><summary>Certified algebra tables and CAS certificates</summary><div class='card-grid'>{_table_html(betti_h, betti_c, 'Betti-style diagnostics')}{_table_html(free_h, free_c, 'Free chain modules / certified free modules')}{_table_html(diff_h, diff_c, 'Differentials / boundary maps')}{_table_html(ideal_h, ideal_c, 'Certified Fitting ideals and determinantal minors')}{_table_html(be_h, be_c, 'Buchsbaum-Eisenbud rank and multiplier diagnostics')}{_table_html(cert_h, cert_c, 'CAS certificate summary')}</div></details>
+<details class='secondary-disclosure'><summary>Certified algebra tables and CAS certificates</summary><div class='card-grid'>{_table_html(betti_h, betti_c, 'Betti-style diagnostics')}{_table_html(free_h, free_c, 'Free chain modules / certified free modules')}{_table_html(diff_h, diff_c, 'Differentials / boundary maps')}{_table_html(syz_h, syz_c, 'Certified Macaulay2 syzygy generators')}{_table_html(ideal_h, ideal_c, 'Certified Fitting ideals and determinantal minors')}{_table_html(be_h, be_c, 'Buchsbaum-Eisenbud rank and multiplier diagnostics')}{_table_html(cert_h, cert_c, 'CAS certificate summary')}</div></details>
 </main>
 </body>
 </html>
@@ -7056,7 +7092,7 @@ td {{ background:#07111f; color:#d7e8ff; }}
         "coefficient_ring": "F2[x_level,x_radius]",
         "primary_view": "miller_sturmfels_bivariate_staircase",
         "primary_view_contract": "The primary view is an exponent-lattice staircase over F2[x_level,x_radius]: x_radius is horizontal, x_level is vertical, shaded regions are upward-closed generated submodules, and white lattice points are displayed quotient-basis complements from actual bifiltration chain-generator bidegrees.",
-        "secondary_views": ["fiber_rank_heatmap", "fiber_rank_lattice_3d", "structure_map_lattice_overlay", "rank_invariant_samples_table", "certified_algebra_tables", "certified_fitting_minor_tables", "buchsbaum_eisenbud_diagnostic_tables"],
+        "secondary_views": ["fiber_rank_heatmap", "fiber_rank_lattice_3d", "structure_map_lattice_overlay", "rank_invariant_samples_table", "certified_algebra_tables", "certified_syzygy_tables", "certified_fitting_minor_tables", "buchsbaum_eisenbud_diagnostic_tables"],
         "rank_invariant_sample_count": len(rank_inv_rows),
         "rank_surface_primary": False,
         "rank_surface_policy": "3D fiber-rank displays are secondary diagnostics only and are not rendered as the primary module view.",

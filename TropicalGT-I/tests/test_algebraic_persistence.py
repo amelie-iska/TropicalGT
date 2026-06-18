@@ -1361,6 +1361,7 @@ def test_level_radius_bifiltration_reports_scoped_real_staircase_resolution(tmp_
     }
     assert "structure_map_lattice_overlay" in visual_payload["secondary_views"]
     assert "rank_invariant_samples_table" in visual_payload["secondary_views"]
+    assert "certified_syzygy_tables" in visual_payload["secondary_views"]
     assert "certified_fitting_minor_tables" in visual_payload["secondary_views"]
     assert "buchsbaum_eisenbud_diagnostic_tables" in visual_payload["secondary_views"]
     assert visual_payload["rank_invariant_sample_count"] == len(report["rank_invariant_samples"])
@@ -1419,6 +1420,9 @@ def test_level_radius_bifiltration_reports_scoped_real_staircase_resolution(tmp_
     assert "diagnostic chain data is not substituted for a free resolution" in html
     assert "Rank-invariant samples over F2[x_level,x_radius]" in html
     assert "source monomial" in html and "target monomial" in html
+    assert "Certified Macaulay2 syzygy generators" in html
+    assert "no certified syzygy generators" in html or "macaulay2_resolution_differential_source_degrees" in html
+    assert "CAS syzygy diagnostics" in html
     assert "Certified Fitting ideals and determinantal minors" in html
     assert "Buchsbaum-Eisenbud rank and multiplier diagnostics" in html
     assert "x_radius exponent" in html and "radius grade" in html
