@@ -42,7 +42,7 @@
 - Read/verify: `TropicalGT-I/outputs/train_full_dataset_active/train_report.json`
 - Modify docs later: `README.md`, `TropicalGT-I/README.md`
 
-- [ ] **Step 0.1: Snapshot previous scalar evidence**
+- [x] **Step 0.1: Snapshot previous scalar evidence**
 
 Run:
 ```bash
@@ -60,6 +60,13 @@ for path in [
 PY
 ```
 Expected: previous metrics are visible if report exists; missing report is acceptable but must be recorded.
+
+Implemented 2026-06-18: CPU-only evidence snapshot found both prior scalar
+evidence paths absent:
+`TropicalGT-I/outputs/train_full_dataset_active/train_report.json exists=False`
+and
+`TropicalGT-I/outputs/train_full_dataset_active/periodic/manifest.jsonl exists=False`.
+No previous scalar metrics were inferred or substituted.
 
 - [x] **Step 0.2: Create a fresh step-0 config**
 
@@ -135,7 +142,7 @@ GPU observation: RTX 4090 at 18,105 MiB used, training process at 18,082 MiB, 10
 Readiness audit status: `ready`, `failed_gates=[]`. The corrected config uses
 the full audited token-slot budget rather than a 10B floor.
 
-- [ ] **Step 0.6: Keep liveness checks running through implementation**
+- [x] **Step 0.6: Keep liveness checks running through implementation**
 
 At every major stage run:
 ```bash
@@ -143,6 +150,16 @@ pgrep -af "train_full_dataset_pg_bpb_step0_full24b_b44|tropicalgt_i_pg_bpb_step0
 ls -lt TropicalGT-I/checkpoints/tropicalgt_i_pg_bpb_step0_full24b_b44.latest.pt
 ```
 Expected: process alive and checkpoint/log timestamps advance.
+
+Implemented 2026-06-18 as a safety-hold liveness inspection. Later user
+instructions requested Herschel/training pause and warned that another GPU model
+may be started, so no GPU work, restart, kill, or checkpoint mutation was
+performed. No TropicalGT-I/Herschel training process matched
+`train_full_dataset_pg_bpb_step0|tropicalgt_i_pg_bpb_step0|train_tropicalgt_i.py|herschel`,
+and the stale b44 latest-checkpoint path was absent. Live always-on training
+remains blocked until explicit GPU clearance or a declared safe GPU budget is
+provided; the safe liveness/reporting portion is complete and no metrics were
+fabricated.
 
 ---
 
