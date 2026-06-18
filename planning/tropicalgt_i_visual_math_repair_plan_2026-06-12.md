@@ -1438,3 +1438,25 @@ CUDA_VISIBLE_DEVICES="" /home/iska/miniconda3/envs/tokengt/bin/python -m py_comp
 ```
 
 Next linear item: continue two-parameter and analogical-map repair without weakening actual-data-only, simplex-tree, or CAS no-proxy contracts.
+
+## 2026-06-18 Vector-Bundle Paper Sidecar Completeness Tiers
+
+Sequential vector-bundle/browser validation item completed after the Herschel validator-action pass:
+
+- `_build_vector_bundle_paper_sidecar` now emits `tropicalgt.vector_bundle_paper_sidecar_completeness.v1` alongside `tropicalgt.vector_bundle_paper_sidecar.v1`.
+- The completeness contract distinguishes `unavailable`, `telemetry_partial`, and `paper_ready` tiers. Basic chart-bundle telemetry can be available without being safe as paper-ready vector-bundle evidence.
+- `paper_ready` requires all actual-data groups: chart/monomial-transport ids, configured toric active rows, flat-incidence diagnostics, GraphCG-toric agreement, and transported persistence-landscape metrics.
+- Browser HTML exposes the completeness tier, paper-ready flag, and structured contract in the chart-bundle sidecar table.
+- The strict interactive-artifact validator now rejects missing completeness contracts, invalid tiers, paper-ready flag disagreements, and paper-ready claims with missing required groups.
+- Certificate boundaries remain unchanged: the sidecar still cannot claim a vector-bundle theorem certificate, toric/tropical embedding certificate, normal-fan certificate, scheme/sheaf construction, or CAS-backed proof.
+
+Validation:
+
+```text
+CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src:TropicalGT-I/scripts /home/iska/miniconda3/envs/tokengt/bin/python -m py_compile TropicalGT-I/src/tropicalgt/visualization.py TropicalGT-I/scripts/validate_interactive_audit_artifacts.py TropicalGT-I/tests/test_simplicial_visualization.py TropicalGT-I/tests/test_interactive_artifact_validator.py
+# passed
+CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src:TropicalGT-I/scripts /home/iska/miniconda3/envs/tokengt/bin/python -m pytest -q TropicalGT-I/tests/test_simplicial_visualization.py -k "chart_bundle_transport_sidecar"
+# 3 passed
+CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src:TropicalGT-I/scripts /home/iska/miniconda3/envs/tokengt/bin/python -m pytest -q TropicalGT-I/tests/test_interactive_artifact_validator.py -k "chart_bundle or vector_bundle"
+# 2 passed
+```

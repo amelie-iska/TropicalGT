@@ -1620,6 +1620,89 @@ def test_validate_audit_root_rejects_chart_bundle_sidecar_proxy_claim(tmp_path: 
     assert any("chart-bundle" in err for err in report["errors"])
 
 
+def test_validate_audit_root_rejects_vector_bundle_paper_ready_with_missing_groups(tmp_path: Path):
+    validator = _load_validator()
+    audit = tmp_path / "step_00000001" / "got_audit"
+    row = _row(audit, ".")
+    completeness = {
+        "schema_version": "tropicalgt.vector_bundle_paper_sidecar_completeness.v1",
+        "tier": "paper_ready",
+        "paper_ready": True,
+        "basic_telemetry_available": True,
+        "required_groups": {
+            "chart_and_monomial_transport_ids": True,
+            "configured_toric_active_rows": True,
+            "flat_incidence_diagnostics": True,
+            "graphcg_toric_agreement": False,
+            "transported_persistence_landscapes": True,
+        },
+        "missing_required_groups": ["graphcg_toric_agreement"],
+        "unavailable_fields": [],
+        "actual_data_only": True,
+        "no_proxy_or_fallback": True,
+    }
+    paper_sidecar = {
+        "schema_version": "tropicalgt.vector_bundle_paper_sidecar.v1",
+        "available": True,
+        "actual_data_only": True,
+        "no_proxy_or_fallback": True,
+        "chart_ids": ["chart_00"],
+        "monomial_transport_ids": ["chart_00__to__chart_00"],
+        "toric_active_rows": {"available": True, "actual_data_only": True, "no_proxy_or_fallback": True, "value": [{"row_id": "toric_row_00"}]},
+        "toric_active_row_count": {"available": True, "value": 1},
+        "one_dimensional_cone_filtration_flat_defects": {
+            "available": True,
+            "actual_data_only": True,
+            "no_proxy_or_fallback": True,
+            "coordinate_one_dimensional_cones": [{"name": "rho_chart"}],
+            "metrics": {},
+        },
+        "graphcg_toric_agreement": {"available": True, "actual_data_only": True, "no_proxy_or_fallback": True},
+        "transported_persistence_landscape_metrics": {"available": True, "actual_data_only": True, "no_proxy_or_fallback": True},
+        "unavailable_fields": [],
+        "completeness_tier": "paper_ready",
+        "completeness_contract": completeness,
+        "safe_to_use_as_vector_bundle_paper_ready_evidence": True,
+        "safe_to_use_as_vector_bundle_theorem_certificate": False,
+        "safe_to_use_as_toric_or_tropical_embedding_certificate": False,
+        "paper_claim_scope": {
+            "actual_tropical_toric_variety_constructed": False,
+            "actual_tropical_scheme_constructed": False,
+            "no_proxy_or_fallback": True,
+            "monomial_transports": "regularizer telemetry only",
+        },
+        "render_contract": "paper telemetry only; no proxies",
+    }
+    _write(
+        row / "chart_bundle_transport_sidecar.json",
+        json.dumps(
+            {
+                "schema_version": "tropicalgt.chart_bundle_transport_sidecar.v1",
+                "available": True,
+                "source_path": "test",
+                "metadata": {"schema_version": "tropicalgt.chart_bundle_transport_metadata.v1", "available": True, "chart_ids": ["chart_00"], "overlap_pairs": [], "overlap_triples": []},
+                "chart_ids": ["chart_00"],
+                "overlap_pair_count": 0,
+                "overlap_triple_count": 0,
+                "monomial_transport_contract": {"actual_data_only": True, "no_proxy_or_fallback": True},
+                "bundle_matroid_contract": {"actual_data_only": True, "no_proxy_or_fallback": True},
+                "vector_bundle_paper_sidecar": paper_sidecar,
+                "actual_data_only": True,
+                "no_proxy_or_fallback": True,
+                "safe_to_render_as_toric_embedding_certificate": False,
+                "safe_to_render_as_tropical_variety_embedding": False,
+                "safe_to_render_as_global_toric_variety_embedding": False,
+                "safe_to_use_as_normal_fan_certificate": False,
+                "render_contract": "chart bundle sidecar; not a toric embedding; no proxies",
+            }
+        ),
+    )
+    _write(audit / "codex_browser_index.html", _codex_browser_html(_browser_samples(audit, ["."])))
+    report = validator.validate_audit_root(audit, min_rows=1, min_candidates=4, min_depth=2)
+    assert not report["ok"]
+    assert any("vector-bundle paper-ready evidence still has missing required groups" in err for err in report["errors"])
+
+
 def test_validate_audit_root_rejects_missing_trajectory_overlay_contract(tmp_path: Path):
     validator = _load_validator()
     audit = tmp_path / "step_00000001" / "got_audit"

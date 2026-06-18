@@ -1268,6 +1268,15 @@ def test_chart_bundle_transport_sidecar_unavailable_without_metadata(tmp_path: P
     assert paper["safe_to_use_as_vector_bundle_theorem_certificate"] is False
     assert paper["paper_claim_scope"]["actual_tropical_toric_variety_constructed"] is False
     assert paper["paper_claim_scope"]["actual_tropical_scheme_constructed"] is False
+    completeness = paper["completeness_contract"]
+    assert paper["completeness_tier"] == "unavailable"
+    assert paper["safe_to_use_as_vector_bundle_paper_ready_evidence"] is False
+    assert completeness["schema_version"] == "tropicalgt.vector_bundle_paper_sidecar_completeness.v1"
+    assert completeness["paper_ready"] is False
+    assert completeness["basic_telemetry_available"] is False
+    assert completeness["actual_data_only"] is True
+    assert completeness["no_proxy_or_fallback"] is True
+    assert "chart_and_monomial_transport_ids" in completeness["missing_required_groups"]
     assert "regularizer" in paper["paper_claim_scope"]["monomial_transports"]
     assert "toric_active_rows" in paper["unavailable_fields"]
     assert "No chart-bundle transport metadata" in html
@@ -1317,16 +1326,53 @@ def test_chart_bundle_transport_sidecar_renders_metadata_contracts(tmp_path: Pat
     assert paper["graphcg_toric_agreement"]["agreement"]["value"] == 0.75
     assert paper["transported_persistence_landscape_metrics"]["available"] is True
     assert paper["transported_persistence_landscape_metrics"]["metrics"]["cosine_mean"]["value"] == 0.875
+    completeness = paper["completeness_contract"]
+    assert paper["completeness_tier"] == "paper_ready"
+    assert paper["safe_to_use_as_vector_bundle_paper_ready_evidence"] is True
+    assert completeness["schema_version"] == "tropicalgt.vector_bundle_paper_sidecar_completeness.v1"
+    assert completeness["paper_ready"] is True
+    assert completeness["basic_telemetry_available"] is True
+    assert completeness["missing_required_groups"] == []
+    assert all(value is True for value in completeness["required_groups"].values())
     assert paper["safe_to_use_as_vector_bundle_theorem_certificate"] is False
     assert paper["paper_claim_scope"]["actual_tropical_toric_variety_constructed"] is False
     assert paper["paper_claim_scope"]["actual_tropical_scheme_constructed"] is False
     assert "regularizer" in paper["paper_claim_scope"]["matroid_one_dimensional_cone_filtrations"]
     assert payload["safe_to_render_as_tropical_variety_embedding"] is False
     assert "chart_00__to__chart_01" in html
+    assert "paper sidecar completeness tier" in html
+    assert "paper_ready" in html
     assert "paper sidecar GraphCG-toric agreement" in html
     assert "one dimensional cone(s)" in html
     assert "not a toric embedding" in html
     assert "chart_bundle_transport_sidecar_contract" in html
+
+
+def test_chart_bundle_transport_sidecar_marks_partial_telemetry_not_paper_ready(tmp_path: Path):
+    metadata = _chart_bundle_transport_metadata_fixture()
+    result = {
+        "metrics": {
+            "bundle_flat_rank_defect": 0.0125,
+            "bundle_flat_incidence_binary_defect": 0.21,
+            "bundle_flat_incidence_mean": 0.48,
+        },
+        "inference_scaling": {"candidates": [{"record_id": "q0", "chart_bundle_transport_metadata": metadata}]},
+    }
+    paths = write_chart_bundle_transport_sidecar(result, tmp_path)
+    payload = json.loads(Path(paths["chart_bundle_transport_sidecar_payload"]).read_text(encoding="utf-8"))
+    paper = payload["vector_bundle_paper_sidecar"]
+    completeness = paper["completeness_contract"]
+
+    assert paper["available"] is True
+    assert paper["completeness_tier"] == "telemetry_partial"
+    assert paper["safe_to_use_as_vector_bundle_paper_ready_evidence"] is False
+    assert completeness["basic_telemetry_available"] is True
+    assert completeness["paper_ready"] is False
+    assert completeness["required_groups"]["chart_and_monomial_transport_ids"] is True
+    assert completeness["required_groups"]["configured_toric_active_rows"] is True
+    assert completeness["required_groups"]["flat_incidence_diagnostics"] is True
+    assert "graphcg_toric_agreement" in completeness["missing_required_groups"]
+    assert "transported_persistence_landscapes" in completeness["missing_required_groups"]
 
 
 def test_tropical_support_heatmap_does_not_fabricate_invalid_supports(tmp_path: Path):

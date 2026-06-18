@@ -759,6 +759,26 @@ def validate_row(row_dir: Path, *, min_candidates: int = 8, min_depth: int = 2, 
         _assert("regularizer" in str(paper_claim_scope.get("monomial_transports", "")), errors, "vector-bundle paper claim scope does not keep monomial transports as regularizers/telemetry")
         paper_contract = str(paper_sidecar.get("render_contract", ""))
         _assert("no proxies" in paper_contract or "no proxy" in paper_contract, errors, "vector-bundle paper sidecar missing no-proxy render contract")
+        completeness = paper_sidecar.get("completeness_contract", {}) if isinstance(paper_sidecar.get("completeness_contract"), dict) else {}
+        _assert(completeness.get("schema_version") == "tropicalgt.vector_bundle_paper_sidecar_completeness.v1", errors, "vector-bundle paper sidecar missing completeness contract schema")
+        _assert(completeness.get("actual_data_only") is True, errors, "vector-bundle paper sidecar completeness contract missing actual-data-only flag")
+        _assert(completeness.get("no_proxy_or_fallback") is True, errors, "vector-bundle paper sidecar completeness contract missing no-proxy flag")
+        _assert(
+            paper_sidecar.get("completeness_tier") in {"unavailable", "telemetry_partial", "paper_ready"},
+            errors,
+            "vector-bundle paper sidecar has invalid completeness tier",
+        )
+        _assert(
+            paper_sidecar.get("safe_to_use_as_vector_bundle_paper_ready_evidence") == completeness.get("paper_ready"),
+            errors,
+            "vector-bundle paper-ready flag disagrees with completeness contract",
+        )
+        required_groups = completeness.get("required_groups", {}) if isinstance(completeness.get("required_groups"), dict) else {}
+        missing_groups = completeness.get("missing_required_groups", []) if isinstance(completeness.get("missing_required_groups"), list) else []
+        if paper_sidecar.get("safe_to_use_as_vector_bundle_paper_ready_evidence") is True:
+            _assert(paper_sidecar.get("completeness_tier") == "paper_ready", errors, "vector-bundle paper-ready evidence missing paper-ready tier")
+            _assert(not missing_groups, errors, "vector-bundle paper-ready evidence still has missing required groups")
+            _assert(all(value is True for value in required_groups.values()), errors, "vector-bundle paper-ready evidence has incomplete required groups")
         required_paper_keys = (
             "chart_ids",
             "monomial_transport_ids",

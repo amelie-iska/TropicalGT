@@ -766,3 +766,12 @@ The live item-by-item repair inventory is maintained in `planning/tropicalgt_i_c
 - [x] Marked greedy probability assignments as non-optimal diagnostic assignments when the optimal backend is unavailable; they remain real probability-vector evidence but are not optimal-transport, proxy-optimal, simplicial-map, chain-map, or persistence-module certificates by themselves.
 - [x] Updated provenance coverage from a fallback label to an explicit solver-availability contract.
 - [x] Focused verification passed: `pytest TropicalGT-I/tests/test_metrics_and_memory.py TropicalGT-I/tests/test_metric_provenance.py -q` and full provenance audit.
+
+### Current Objective Update - Vector-Bundle Paper Sidecar Completeness Pass
+
+- [x] Added `tropicalgt.vector_bundle_paper_sidecar_completeness.v1` to the vector-bundle paper sidecar.
+- [x] Split sidecar evidence into `unavailable`, `telemetry_partial`, and `paper_ready` tiers instead of treating any chart-bundle telemetry as paper-ready vector-bundle evidence.
+- [x] Required paper-ready evidence to include actual chart/transport ids, configured toric active rows, flat-incidence diagnostics, GraphCG-toric agreement metrics, and transported persistence-landscape metrics.
+- [x] Kept theorem, toric/tropical embedding, normal-fan, scheme, sheaf, and CAS certificate claims false unless separate certified evidence exists.
+- [x] Extended the strict interactive-artifact validator to reject paper-ready claims with missing required groups or inconsistent paper-ready flags.
+- [x] Focused verification passed: chart-bundle visualization tests (`3 passed`) and chart/vector-bundle validator tests (`2 passed`).

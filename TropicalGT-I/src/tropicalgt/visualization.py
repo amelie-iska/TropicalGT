@@ -5881,9 +5881,41 @@ def _build_vector_bundle_paper_sidecar(metadata: Mapping[str, Any] | None, resul
         ]
         if not field.get("available")
     ]
+    basic_telemetry_available = bool(chart_ids and monomial_transport_ids and toric_rows_field.get("available"))
+    required_groups = {
+        "chart_and_monomial_transport_ids": bool(chart_ids and monomial_transport_ids),
+        "configured_toric_active_rows": bool(toric_rows_field.get("available") and toric_row_count_field.get("available")),
+        "flat_incidence_diagnostics": bool(
+            flat_shape_field.get("available")
+            and flat_rank_defect_field.get("available")
+            and flat_binary_defect_field.get("available")
+            and flat_mean_field.get("available")
+        ),
+        "graphcg_toric_agreement": bool(graphcg_available and graphcg_score_field.get("available") and graphcg_loss_field.get("available")),
+        "transported_persistence_landscapes": bool(
+            landscape_available_field.get("available")
+            and landscape_l2_field.get("available")
+            and landscape_cosine_field.get("available")
+        ),
+    }
+    missing_required_groups = [name for name, available in required_groups.items() if not available]
+    paper_ready = bool(basic_telemetry_available and not missing_required_groups)
+    completeness_tier = "paper_ready" if paper_ready else ("telemetry_partial" if basic_telemetry_available else "unavailable")
+    completeness_contract = {
+        "schema_version": "tropicalgt.vector_bundle_paper_sidecar_completeness.v1",
+        "tier": completeness_tier,
+        "paper_ready": paper_ready,
+        "basic_telemetry_available": basic_telemetry_available,
+        "required_groups": required_groups,
+        "missing_required_groups": missing_required_groups,
+        "unavailable_fields": unavailable,
+        "actual_data_only": True,
+        "no_proxy_or_fallback": True,
+        "policy": "Paper-ready vector-bundle telemetry requires chart/transport ids, configured toric active rows, flat-incidence diagnostics, GraphCG-toric agreement, and transported persistence-landscape metrics; theorem and toric/tropical certificates remain separate CAS-backed evidence.",
+    }
     return {
         "schema_version": _VECTOR_BUNDLE_PAPER_SIDECAR_SCHEMA,
-        "available": bool(chart_ids and monomial_transport_ids and toric_rows_field.get("available")),
+        "available": basic_telemetry_available,
         "actual_data_only": True,
         "no_proxy_or_fallback": True,
         "chart_ids": chart_ids,
@@ -5917,6 +5949,9 @@ def _build_vector_bundle_paper_sidecar(metadata: Mapping[str, Any] | None, resul
             "metrics": landscape_fields,
         },
         "unavailable_fields": unavailable,
+        "completeness_tier": completeness_tier,
+        "completeness_contract": completeness_contract,
+        "safe_to_use_as_vector_bundle_paper_ready_evidence": paper_ready,
         "safe_to_use_as_vector_bundle_paper_telemetry": True,
         "safe_to_use_as_vector_bundle_theorem_certificate": False,
         "safe_to_use_as_toric_or_tropical_embedding_certificate": False,
@@ -6011,6 +6046,9 @@ def _write_chart_bundle_transport_html(path: Path, payload: Mapping[str, Any]) -
         ("safe as tropical variety embedding", payload.get("safe_to_render_as_tropical_variety_embedding", False)),
         ("safe as normal fan certificate", payload.get("safe_to_use_as_normal_fan_certificate", False)),
         ("paper sidecar schema", paper_sidecar.get("schema_version", "unavailable")),
+        ("paper sidecar completeness tier", paper_sidecar.get("completeness_tier", "unavailable")),
+        ("paper sidecar paper-ready evidence", paper_sidecar.get("safe_to_use_as_vector_bundle_paper_ready_evidence", False)),
+        ("paper sidecar completeness contract", _json_clip(paper_sidecar.get("completeness_contract", {}), 720)),
         ("paper sidecar chart ids", _json_clip(paper_sidecar.get("chart_ids", []), 260)),
         ("paper sidecar transport ids", _json_clip(paper_sidecar.get("monomial_transport_ids", []), 360)),
         ("paper sidecar toric active rows", _json_clip(paper_sidecar.get("toric_active_rows", {}), 420)),
