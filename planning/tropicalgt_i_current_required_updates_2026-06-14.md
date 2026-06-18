@@ -1055,3 +1055,10 @@ CUDA_VISIBLE_DEVICES="" /home/iska/miniconda3/bin/conda run -n tokengt python -m
 - The strict validator rejects retired `decorative 3D` wording and requires `secondary diagnostic` plus `no 3D rank-slab primary view` markers.
 - The generated growth-persistence module page emits the same secondary-diagnostic wording.
 - Verification passed: py-compile; focused Betti/bifiltration validator tests (`4 passed`); focused visualization/validator slice (`4 passed`); full interactive validator tests (`46 passed`).
+
+## 2026-06-18 Certificate-Indexed CAS Evidence Source Contract
+
+- `certificate_indexed_evidence` now exposes a source contract tying every Fitting/minor/Buchsbaum-Eisenbud/syzygy diagnostic block to its exact CAS source block.
+- The contract explicitly forbids treating Fitting ideals or determinantal minors as multiplier output, a free-resolution certificate, or derived-equivalence evidence.
+- Singular and Macaulay2 fixture tests assert backend-specific source blocks and the no-proxy flags.
+- Verification passed: py-compile; focused CAS source-contract tests (`2 passed, 30 deselected`); full algebraic persistence tests (`32 passed`).

@@ -543,6 +543,14 @@ def test_singular_certified_result_structures_ungraded_betti_rows_without_multig
     assert evidence["schema_version"] == cas_free_resolution.CAS_CERTIFICATE_INDEXED_EVIDENCE_SCHEMA_VERSION
     assert evidence["backend"] == "Singular"
     assert evidence["safe_to_render_as_multigraded_free_resolution"] is False
+    source_contract = evidence["evidence_source_contract"]
+    assert source_contract["schema_version"] == "tropicalgt.cas_certificate_indexed_source_contract.v1"
+    assert source_contract["fitting_ideals_source"] == "Singular_fitting_ideal_block"
+    assert source_contract["determinantal_minors_source"] == "Singular_minors_block"
+    assert source_contract["requires_exactness_certificate_before_rendering"] is True
+    assert source_contract["fitting_and_minors_do_not_imply_multipliers"] is True
+    assert source_contract["diagnostics_do_not_certify_resolution_or_derived_equivalence"] is True
+    assert source_contract["no_proxy_or_fallback"] is True
     assert evidence["evidence_blocks"]["fitting_ideals"] == {
         "available": True,
         "count": 2,
@@ -849,6 +857,14 @@ def test_certified_cas_result_surfaces_buchsbaum_eisenbud_diagnostics():
     assert evidence["backend"] == "Macaulay2"
     assert evidence["input_sha256"] == schema["input_sha256"]
     assert evidence["safe_to_render_as_multigraded_free_resolution"] is True
+    source_contract = evidence["evidence_source_contract"]
+    assert source_contract["schema_version"] == "tropicalgt.cas_certificate_indexed_source_contract.v1"
+    assert source_contract["fitting_ideals_source"] == "Macaulay2_fitting_ideal_block"
+    assert source_contract["determinantal_minors_source"] == "Macaulay2_minors_block"
+    assert source_contract["buchsbaum_eisenbud_multiplier_source"] == "buchsbaum_eisenbud_diagnostics_block"
+    assert source_contract["fitting_and_minors_do_not_imply_multipliers"] is True
+    assert source_contract["diagnostics_do_not_certify_resolution_or_derived_equivalence"] is True
+    assert source_contract["no_proxy_or_fallback"] is True
     assert evidence["evidence_blocks"]["fitting_ideals"]["available"] is True
     assert evidence["evidence_blocks"]["fitting_ideals"]["count"] == 2
     assert evidence["evidence_blocks"]["determinantal_minors"]["available"] is True

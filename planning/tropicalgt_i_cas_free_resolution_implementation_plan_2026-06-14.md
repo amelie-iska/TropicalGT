@@ -791,3 +791,23 @@ CUDA_VISIBLE_DEVICES="" /home/iska/miniconda3/envs/tokengt/bin/python -m py_comp
 ```
 
 Next linear item: continue the two-parameter persistence repair queue, preserving actual-data-only Miller-Sturmfels staircase rendering and adding any remaining no-proxy QA/validator coverage.
+
+## 2026-06-18 Certificate-Indexed CAS Evidence Source Contract
+
+Sequential CAS fixture hardening item completed after the two-parameter Betti diagnostic QA pass:
+
+- `certificate_indexed_evidence` now includes `tropicalgt.cas_certificate_indexed_source_contract.v1`.
+- The source contract records the exact source blocks for the exactness certificate, Fitting ideals, determinantal minors, ideal diagnostics, Buchsbaum-Eisenbud rank diagnostics, grade/depth diagnostics, BEMultipliers output, and syzygy diagnostics.
+- The contract explicitly states that an exactness certificate is required before rendering, Fitting/minor diagnostics do not imply Buchsbaum-Eisenbud multipliers, and diagnostics do not certify a free resolution or derived equivalence by themselves.
+- Singular and Macaulay2 fixture tests now assert backend-specific source names and no-proxy flags.
+
+Validation:
+
+```text
+CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m py_compile TropicalGT-I/src/tropicalgt/cas_free_resolution.py TropicalGT-I/tests/test_algebraic_persistence.py
+# passed
+CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest -q TropicalGT-I/tests/test_algebraic_persistence.py -k "singular_certified_result or certified_cas_result_surfaces"
+# 2 passed, 30 deselected
+CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest -q TropicalGT-I/tests/test_algebraic_persistence.py
+# 32 passed
+```

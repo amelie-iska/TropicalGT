@@ -1765,6 +1765,21 @@ def _certificate_indexed_cas_evidence(
         "safe_to_render_as_real_free_resolution": bool(certificate_summary.get("safe_to_render_as_real_free_resolution")),
         "safe_to_render_as_total_graded_resolution": bool(certificate_summary.get("safe_to_render_as_total_graded_resolution")),
         "safe_to_render_as_multigraded_free_resolution": bool(certificate_summary.get("safe_to_render_as_multigraded_free_resolution")),
+        "evidence_source_contract": {
+            "schema_version": "tropicalgt.cas_certificate_indexed_source_contract.v1",
+            "exactness_certificate_source": "certificate_summary",
+            "fitting_ideals_source": f"{backend}_fitting_ideal_block",
+            "determinantal_minors_source": f"{backend}_minors_block",
+            "ideal_diagnostics_source": "structured_diagnostics_from_certified_cas_ideal_blocks",
+            "buchsbaum_eisenbud_rank_source": "certified_free_module_ranks_and_differential_shapes",
+            "grade_depth_regular_source": f"{backend}_grade_depth_regular_diagnostics_block",
+            "buchsbaum_eisenbud_multiplier_source": "buchsbaum_eisenbud_diagnostics_block",
+            "syzygy_source": "certified_macaulay2_resolution_maps_when_available",
+            "requires_exactness_certificate_before_rendering": True,
+            "fitting_and_minors_do_not_imply_multipliers": True,
+            "diagnostics_do_not_certify_resolution_or_derived_equivalence": True,
+            "no_proxy_or_fallback": True,
+        },
         "evidence_blocks": {
             "fitting_ideals": {
                 "available": bool(fitting_ideals),

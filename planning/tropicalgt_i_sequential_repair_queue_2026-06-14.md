@@ -824,3 +824,11 @@ The live item-by-item repair inventory is maintained in `planning/tropicalgt_i_c
 - [x] Updated the generated growth-persistence Betti page subtitle to say `Secondary diagnostic 2D matrix/bar view; no 3D rank-slab primary view`, preserving the Miller-Sturmfels staircase as the primary two-parameter page.
 - [x] Added regression coverage proving old `decorative 3D` Betti diagnostic HTML fails validation.
 - [x] Verification passed: py-compile for touched validator/visualization/tests; focused Betti/bifiltration validator tests (`4 passed`); focused visualization/validator slice (`4 passed`); full interactive artifact validator tests (`46 passed`).
+
+### Current Objective Update - Certificate-Indexed CAS Evidence Source Contract Pass
+
+- [x] Added `tropicalgt.cas_certificate_indexed_source_contract.v1` to certificate-indexed CAS evidence.
+- [x] The contract binds Fitting ideals, determinantal minors, ideal diagnostics, Buchsbaum-Eisenbud rank/grade/depth diagnostics, optional BEMultipliers output, and syzygy diagnostics back to exact backend source blocks.
+- [x] The contract preserves the no-proxy rule that Fitting/minor diagnostics do not imply multipliers, free-resolution certification, or derived equivalence.
+- [x] Singular and Macaulay2 fixture tests now assert the source contract and backend-specific block names.
+- [x] Verification passed: py-compile; focused CAS source-contract tests (`2 passed, 30 deselected`); full algebraic persistence tests (`32 passed`).
