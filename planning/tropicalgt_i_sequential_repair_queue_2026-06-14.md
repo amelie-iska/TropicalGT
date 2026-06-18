@@ -850,3 +850,10 @@ The live item-by-item repair inventory is maintained in `planning/tropicalgt_i_c
 - [x] Contract rows record probability source, audit-selection score source, selected-action count, requested branch factor, stop/diversity/stochastic controls, and no-proxy/no-fallback status.
 - [x] Updated provenance from the old control-flow fallback wording to the explicit action-selection contract and added registry coverage.
 - [x] Verification passed: py-compile; focused scaling/provenance tests (`12 passed`); metric provenance audit (`333 covered, 0 uncovered`).
+
+### Current Objective Update - GFlowNet Branch-Selection Report Surfacing Pass
+
+- [x] Added `tropicalgt.gflownet_branch_selection_audit.v1` rows to `run_inference_scaling()` level summaries for all expansion levels.
+- [x] Report rows expose parent id/path, selected action rows, model probabilities, audit-selection scores, stochastic sampling metadata when available, and the shared action-selection contract.
+- [x] Added regression coverage proving the public report carries branch-selection contracts and selected-action count consistency.
+- [x] Verification passed: py-compile; focused scaling/provenance tests (`12 passed`); metric provenance audit (`334 covered, 0 uncovered`).

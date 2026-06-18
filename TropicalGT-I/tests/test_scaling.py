@@ -62,6 +62,22 @@ def test_inference_scaling_uses_deeper_non_stop_audit_branches():
     assert report["evaluated_candidates"] > 3
     assert any(len(row.get("path", [])) >= 2 for row in report["candidates"])
     assert all("stop" not in row.get("path", []) for row in report["candidates"])
+    branch_selection = report["levels"][0]["branch_selection"]
+    assert branch_selection
+    first = branch_selection[0]
+    assert first["schema_version"] == "tropicalgt.gflownet_branch_selection_audit.v1"
+    assert first["source"] == "run_inference_scaling._select_branch_actions"
+    assert first["no_proxy_or_fallback"] is True
+    contract = first["action_selection_contract"]
+    assert contract["schema_version"] == "tropicalgt.gflownet_action_selection_contract.v1"
+    assert contract["source"] == "gflownet_action_probs"
+    assert contract["selection_policy"] == "ranked_diverse_action_sweep"
+    assert contract["selected_from_real_model_action_probabilities"] is True
+    assert contract["not_a_policy_quality_certificate"] is True
+    assert contract["no_proxy_or_fallback"] is True
+    assert first["selected_action_count"] == len(first["selected_actions"])
+    assert first["selected_action_count"] == contract["selected_action_count"]
+    assert all(action["action_selection_contract"] == contract for action in first["selected_actions"])
 
 
 def test_select_branch_actions_filters_stop_and_preserves_diversity():

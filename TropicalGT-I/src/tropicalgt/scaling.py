@@ -164,17 +164,17 @@ def run_inference_scaling(
             score.update({"path": item["path"], "parent": item["parent"], "level": level})
         scored = sorted(scored, key=lambda row: row["score"], reverse=True)[:width]
         evaluated.extend(scored)
-        levels.append(
-            {
-                "level": level,
-                "candidate_count": len(scored),
-                "best_score": scored[0]["score"] if scored else None,
-                "candidates": _compact_candidates(scored),
-            }
-        )
+        level_summary = {
+            "level": level,
+            "candidate_count": len(scored),
+            "best_score": scored[0]["score"] if scored else None,
+            "candidates": _compact_candidates(scored),
+        }
+        levels.append(level_summary)
         if level >= depth:
             break
         next_frontier = []
+        branch_selection = []
         for rank, row in enumerate(scored):
             probs = row["gflownet_action_probs"]
             actions = _select_branch_actions(
@@ -188,6 +188,7 @@ def run_inference_scaling(
                 exploration=sampling_exploration,
                 seed=_branch_sampling_seed(sampling_seed, row.get("record_id", ""), level, rank, row.get("path", [])),
             )
+            branch_selection.append(_compact_branch_selection(row, level=level, parent_rank=rank, actions=actions))
             for branch_rank, action_row in enumerate(actions):
                 child = apply_reasoning_action(row["record"], action_row["action"], rank=branch_rank)
                 next_frontier.append(
@@ -198,6 +199,7 @@ def run_inference_scaling(
                         level=level + 1,
                     )
                 )
+        level_summary["branch_selection"] = branch_selection
         frontier = next_frontier or frontier
     best = max(evaluated, key=lambda row: row["score"])
     public_candidates = [_public_candidate(row) for row in evaluated]
@@ -679,6 +681,35 @@ def _compact_candidates(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
         }
         for row in rows
     ]
+
+
+def _compact_branch_selection(row: dict[str, Any], *, level: int, parent_rank: int, actions: list[dict[str, Any]]) -> dict[str, Any]:
+    contract = actions[0].get("action_selection_contract", {}) if actions else {}
+    selected_actions = []
+    for branch_rank, action_row in enumerate(actions):
+        selected_actions.append(
+            {
+                "branch_rank": branch_rank,
+                "action": action_row.get("action"),
+                "probability": action_row.get("probability"),
+                "audit_selection_score": action_row.get("audit_selection_score"),
+                "sampling_weight": action_row.get("sampling_weight"),
+                "sampling_rank": action_row.get("sampling_rank"),
+                "action_selection_contract": action_row.get("action_selection_contract", {}),
+            }
+        )
+    return {
+        "schema_version": "tropicalgt.gflownet_branch_selection_audit.v1",
+        "source": "run_inference_scaling._select_branch_actions",
+        "parent_record_id": row.get("record_id"),
+        "parent_path": row.get("path", []),
+        "level": int(level),
+        "parent_rank": int(parent_rank),
+        "selected_action_count": len(selected_actions),
+        "selected_actions": selected_actions,
+        "action_selection_contract": contract,
+        "no_proxy_or_fallback": True,
+    }
 
 
 def _action_probs(row: torch.Tensor) -> list[dict[str, Any]]:

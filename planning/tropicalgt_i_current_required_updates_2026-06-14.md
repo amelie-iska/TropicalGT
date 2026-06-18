@@ -1078,3 +1078,10 @@ CUDA_VISIBLE_DEVICES="" /home/iska/miniconda3/bin/conda run -n tokengt python -m
 - The contract records the exact source (`gflownet_action_probs`), probability source, audit-score source, selection policy, requested branch factor, ranked candidate count, selected action count, stop/diversity/stochastic settings, sampling temperature, exploration, and no-proxy/no-fallback status.
 - The contract explicitly marks selected branches as real model action-probability selections and not learned policy-quality certificates, closing the old control-flow fallback/proxy ambiguity without changing sampler behavior.
 - Verification passed: py-compile; focused scaling/provenance tests (`12 passed`); metric provenance audit (`333 covered, 0 uncovered`).
+
+## 2026-06-18 GFlowNet Branch-Selection Report Surfacing
+
+- `run_inference_scaling()` now exposes a compact `branch_selection` audit on each expansion level, so selected action contracts are visible in public inference reports rather than only inside helper return rows.
+- Each branch-selection row records parent record id/path, expansion level, parent rank, selected actions, model probabilities, audit-selection scores, stochastic sampling weights/ranks when present, the shared `tropicalgt.gflownet_action_selection_contract.v1`, and no-proxy/no-fallback status.
+- Regression coverage proves deeper non-stop inference reports include the branch-selection audit, selected-action count consistency, and identical action-selection contracts on every selected action row.
+- Verification passed: py-compile; focused scaling/provenance tests (`12 passed`); metric provenance audit (`334 covered, 0 uncovered`).

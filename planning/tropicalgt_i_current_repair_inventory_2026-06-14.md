@@ -479,3 +479,18 @@ Verification:
 - `PYTHONPATH=TropicalGT-I/src:TropicalGT-I/scripts /home/iska/miniconda3/envs/tokengt/bin/python TropicalGT-I/scripts/audit_metric_provenance.py --fail-on-uncovered` -> `333 covered, 0 uncovered`.
 
 Next sequential item: continue source-side no-proxy contract expansion and browser/report QA without launching or interrupting GPU training.
+
+## 2026-06-18 GFlowNet Branch-Selection Report Surfacing Pass
+
+Status: implemented and focused-tested.
+
+Changes made:
+- Inference-scaling reports now include compact branch-selection audits on expansion levels.
+- Selected branch actions expose the same no-proxy action-selection contract in user/reviewer-visible report payloads.
+- The branch audit keeps probabilities, audit scores, and stochastic sampling metadata separate from model-quality claims.
+
+Verification:
+- `PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_scaling.py TropicalGT-I/tests/test_metric_provenance.py -q` -> `12 passed`.
+- `PYTHONPATH=TropicalGT-I/src:TropicalGT-I/scripts /home/iska/miniconda3/envs/tokengt/bin/python TropicalGT-I/scripts/audit_metric_provenance.py --fail-on-uncovered` -> `334 covered, 0 uncovered`.
+
+Next sequential item: continue source-side no-proxy/report surfacing and browser QA without starting or interrupting GPU work.
