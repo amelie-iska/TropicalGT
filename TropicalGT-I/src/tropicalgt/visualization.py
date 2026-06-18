@@ -5332,6 +5332,7 @@ def write_toric_embedding_sidecar(result: dict[str, object], output_dir: str | P
 
 
 _CHART_BUNDLE_TRANSPORT_SCHEMA = "tropicalgt.chart_bundle_transport_metadata.v1"
+_VECTOR_BUNDLE_PAPER_SIDECAR_SCHEMA = "tropicalgt.vector_bundle_paper_sidecar.v1"
 
 
 def _find_chart_bundle_transport_metadata(result: Mapping[str, Any]) -> tuple[str, Mapping[str, Any]] | None:
@@ -5396,12 +5397,323 @@ def _safe_int_count(value: Any, fallback: int = 0) -> int:
         return int(fallback)
 
 
+def _chart_sidecar_json_value(value: Any) -> Any:
+    if torch.is_tensor(value):
+        tensor = value.detach().cpu()
+        if tensor.numel() == 0:
+            return []
+        if tensor.numel() == 1:
+            scalar = tensor.reshape(-1)[0].item()
+            return _chart_sidecar_json_value(scalar)
+        return [_chart_sidecar_json_value(item) for item in tensor.reshape(-1).tolist()]
+    if isinstance(value, np.ndarray):
+        if value.size == 0:
+            return []
+        if value.size == 1:
+            return _chart_sidecar_json_value(value.reshape(-1)[0].item())
+        return [_chart_sidecar_json_value(item) for item in value.reshape(-1).tolist()]
+    if isinstance(value, np.generic):
+        return _chart_sidecar_json_value(value.item())
+    if isinstance(value, float):
+        return value if math.isfinite(value) else None
+    if isinstance(value, (str, int, bool)) or value is None:
+        return value
+    if isinstance(value, Mapping):
+        return {str(key): _chart_sidecar_json_value(val) for key, val in value.items()}
+    if isinstance(value, Sequence) and not isinstance(value, (str, bytes)):
+        return [_chart_sidecar_json_value(item) for item in value]
+    return str(value)
+
+
+def _chart_sidecar_sequence(value: Any) -> list[Any]:
+    if not isinstance(value, Sequence) or isinstance(value, (str, bytes)):
+        return []
+    json_value = _chart_sidecar_json_value(value)
+    return json_value if isinstance(json_value, list) else []
+
+
+def _sidecar_named_value(name: str, value: Any, source: str, missing_reason: str) -> dict[str, Any]:
+    json_value = _chart_sidecar_json_value(value)
+    available = json_value is not None and json_value != [] and json_value != {}
+    return {
+        "name": name,
+        "available": bool(available),
+        "source": source if available else "unavailable",
+        "value": json_value if available else None,
+        "reason": "actual_model_or_run_metric" if available else missing_reason,
+        "actual_data_only": True,
+        "no_proxy_or_fallback": True,
+    }
+
+
+def _find_chart_sidecar_named_value(root: Any, key_names: Sequence[str], path: str, depth: int = 0, seen: set[int] | None = None) -> tuple[str, Any] | None:
+    if depth > 6 or not isinstance(root, (Mapping, Sequence)) or isinstance(root, (str, bytes)):
+        return None
+    seen = set() if seen is None else seen
+    object_id = id(root)
+    if object_id in seen:
+        return None
+    seen.add(object_id)
+    if isinstance(root, Mapping):
+        for key in key_names:
+            if key in root:
+                return f"{path}.{key}", root[key]
+        priority_keys = (
+            "metrics",
+            "graph_token_trace",
+            "model_output",
+            "output",
+            "diagnostics",
+            "chart_bundle_transport_metadata",
+            "inference_scaling",
+            "best",
+            "candidate",
+        )
+        for key in priority_keys:
+            if key in root:
+                found = _find_chart_sidecar_named_value(root[key], key_names, f"{path}.{key}", depth + 1, seen)
+                if found is not None:
+                    return found
+        candidates = root.get("candidates")
+        if isinstance(candidates, Sequence) and not isinstance(candidates, (str, bytes)):
+            for idx, candidate in enumerate(candidates[:16]):
+                found = _find_chart_sidecar_named_value(candidate, key_names, f"{path}.candidates[{idx}]", depth + 1, seen)
+                if found is not None:
+                    return found
+    elif isinstance(root, Sequence):
+        for idx, item in enumerate(root[:16]):
+            found = _find_chart_sidecar_named_value(item, key_names, f"{path}[{idx}]", depth + 1, seen)
+            if found is not None:
+                return found
+    return None
+
+
+def _vector_bundle_paper_field(
+    *,
+    name: str,
+    key_names: Sequence[str],
+    missing_reason: str,
+    metadata: Mapping[str, Any],
+    result_context: Mapping[str, Any] | None,
+) -> dict[str, Any]:
+    roots: list[tuple[str, Any]] = [("metadata", metadata)]
+    transport_contract = metadata.get("monomial_transport_contract") if isinstance(metadata.get("monomial_transport_contract"), Mapping) else None
+    matroid_contract = metadata.get("bundle_matroid_contract") if isinstance(metadata.get("bundle_matroid_contract"), Mapping) else None
+    if transport_contract is not None:
+        roots.append(("metadata.monomial_transport_contract", transport_contract))
+    if matroid_contract is not None:
+        roots.append(("metadata.bundle_matroid_contract", matroid_contract))
+    if isinstance(result_context, Mapping):
+        roots.append(("result", result_context))
+    for source_path, root in roots:
+        found = _find_chart_sidecar_named_value(root, key_names, source_path)
+        if found is not None:
+            path_found, value = found
+            return _sidecar_named_value(name, value, path_found, missing_reason)
+    return _sidecar_named_value(name, None, "unavailable", missing_reason)
+
+
+def _metric_truthy(value: Any) -> bool | None:
+    json_value = _chart_sidecar_json_value(value)
+    if isinstance(json_value, bool):
+        return json_value
+    if isinstance(json_value, (int, float)):
+        return float(json_value) > 0.0
+    return None
+
+
+def _build_vector_bundle_paper_sidecar(metadata: Mapping[str, Any] | None, result_context: Mapping[str, Any] | None) -> dict[str, Any]:
+    meta = metadata if isinstance(metadata, Mapping) else {}
+    transport_contract = meta.get("monomial_transport_contract") if isinstance(meta.get("monomial_transport_contract"), Mapping) else {}
+    matroid_contract = meta.get("bundle_matroid_contract") if isinstance(meta.get("bundle_matroid_contract"), Mapping) else {}
+    chart_ids = _chart_sidecar_sequence(meta.get("chart_ids"))
+    monomial_transport_ids = _chart_sidecar_sequence(transport_contract.get("transport_ids"))
+    toric_active_rows = _chart_sidecar_sequence(meta.get("toric_active_rows"))
+    toric_rows_field = _sidecar_named_value(
+        "toric_active_rows",
+        toric_active_rows,
+        "metadata.toric_active_rows",
+        "chart-bundle metadata did not export configured toric active rows",
+    )
+    toric_row_count_field = _vector_bundle_paper_field(
+        name="toric_active_row_count",
+        key_names=("toric_active_row_count",),
+        missing_reason="no toric active-row count metric found",
+        metadata=meta,
+        result_context=result_context,
+    )
+    flat_shape_field = _vector_bundle_paper_field(
+        name="flat_incidence_shape",
+        key_names=("flat_incidence_shape",),
+        missing_reason="no chart-by-toric-row flat-incidence shape exported",
+        metadata=meta,
+        result_context=result_context,
+    )
+    flat_rank_defect_field = _vector_bundle_paper_field(
+        name="bundle_flat_rank_defect",
+        key_names=("bundle_flat_rank_defect",),
+        missing_reason="no bundle flat-rank defect metric found in result metrics",
+        metadata=meta,
+        result_context=result_context,
+    )
+    flat_binary_defect_field = _vector_bundle_paper_field(
+        name="bundle_flat_incidence_binary_defect",
+        key_names=("bundle_flat_incidence_binary_defect",),
+        missing_reason="no flat-incidence binary-defect metric found in result metrics",
+        metadata=meta,
+        result_context=result_context,
+    )
+    flat_mean_field = _vector_bundle_paper_field(
+        name="bundle_flat_incidence_mean",
+        key_names=("bundle_flat_incidence_mean",),
+        missing_reason="no flat-incidence mean metric found in result metrics",
+        metadata=meta,
+        result_context=result_context,
+    )
+    rank_defect_label_field = _vector_bundle_paper_field(
+        name="rank_defect_metric",
+        key_names=("rank_defect_metric",),
+        missing_reason="no rank-defect metric label exported",
+        metadata=meta,
+        result_context=result_context,
+    )
+    flat_metric_label_field = _vector_bundle_paper_field(
+        name="flat_incidence_metric",
+        key_names=("flat_incidence_metric",),
+        missing_reason="no flat-incidence metric label exported",
+        metadata=meta,
+        result_context=result_context,
+    )
+    graphcg_available_field = _vector_bundle_paper_field(
+        name="graphcg_toric_cell_agreement_available",
+        key_names=("graphcg_toric_cell_agreement_available",),
+        missing_reason="no GraphCG-toric agreement availability metric found",
+        metadata=meta,
+        result_context=result_context,
+    )
+    graphcg_score_field = _vector_bundle_paper_field(
+        name="graphcg_toric_cell_agreement",
+        key_names=("graphcg_toric_cell_agreement",),
+        missing_reason="no GraphCG-toric agreement metric found",
+        metadata=meta,
+        result_context=result_context,
+    )
+    graphcg_loss_field = _vector_bundle_paper_field(
+        name="loss_graphcg_toric_cell_agreement_weighted",
+        key_names=("loss_graphcg_toric_cell_agreement_weighted",),
+        missing_reason="no weighted GraphCG-toric agreement loss found",
+        metadata=meta,
+        result_context=result_context,
+    )
+    landscape_available_field = _vector_bundle_paper_field(
+        name="analogical_memory_transported_landscape_available_rate",
+        key_names=("analogical_memory_transported_landscape_available_rate",),
+        missing_reason="no transported persistence-landscape availability metric found",
+        metadata=meta,
+        result_context=result_context,
+    )
+    landscape_l2_field = _vector_bundle_paper_field(
+        name="analogical_memory_transported_landscape_l2_mean",
+        key_names=("analogical_memory_transported_landscape_l2_mean",),
+        missing_reason="no transported persistence-landscape L2 metric found",
+        metadata=meta,
+        result_context=result_context,
+    )
+    landscape_cosine_field = _vector_bundle_paper_field(
+        name="analogical_memory_transported_landscape_cosine_mean",
+        key_names=("analogical_memory_transported_landscape_cosine_mean",),
+        missing_reason="no transported persistence-landscape cosine metric found",
+        metadata=meta,
+        result_context=result_context,
+    )
+    landscape_score_field = _vector_bundle_paper_field(
+        name="analogical_memory_landscape_score_contribution_mean",
+        key_names=("analogical_memory_landscape_score_contribution_mean",),
+        missing_reason="no analogical landscape score-contribution metric found",
+        metadata=meta,
+        result_context=result_context,
+    )
+    flat_fields = {
+        "flat_incidence_shape": flat_shape_field,
+        "rank_defect_metric": rank_defect_label_field,
+        "flat_incidence_metric": flat_metric_label_field,
+        "bundle_flat_rank_defect": flat_rank_defect_field,
+        "bundle_flat_incidence_binary_defect": flat_binary_defect_field,
+        "bundle_flat_incidence_mean": flat_mean_field,
+    }
+    graphcg_available_value = graphcg_available_field.get("value") if graphcg_available_field.get("available") else None
+    graphcg_available_flag = _metric_truthy(graphcg_available_value)
+    graphcg_available = bool(graphcg_score_field.get("available") and graphcg_available_flag is not False)
+    landscape_fields = {
+        "available_rate": landscape_available_field,
+        "l2_mean": landscape_l2_field,
+        "cosine_mean": landscape_cosine_field,
+        "score_contribution_mean": landscape_score_field,
+    }
+    unavailable = [
+        field["name"]
+        for field in [
+            toric_rows_field,
+            toric_row_count_field,
+            flat_rank_defect_field,
+            flat_binary_defect_field,
+            graphcg_score_field,
+            landscape_available_field,
+            landscape_l2_field,
+            landscape_cosine_field,
+        ]
+        if not field.get("available")
+    ]
+    return {
+        "schema_version": _VECTOR_BUNDLE_PAPER_SIDECAR_SCHEMA,
+        "available": bool(chart_ids and monomial_transport_ids and toric_rows_field.get("available")),
+        "actual_data_only": True,
+        "no_proxy_or_fallback": True,
+        "chart_ids": chart_ids,
+        "monomial_transport_ids": monomial_transport_ids,
+        "toric_active_rows": toric_rows_field,
+        "toric_active_row_count": toric_row_count_field,
+        "one_dimensional_cone_filtration_flat_defects": {
+            "available": any(field.get("available") for field in flat_fields.values()),
+            "actual_data_only": True,
+            "no_proxy_or_fallback": True,
+            "scope": "chart-by-toric-active-row flat-incidence diagnostics over the exported chart-bundle head; not a normal-fan or toric-variety certificate",
+            "coordinate_one_dimensional_cones": [
+                {"name": "rho_chart", "primitive_generator": [1, 0], "coordinate": "chart_index"},
+                {"name": "rho_toric_active_row", "primitive_generator": [0, 1], "coordinate": "toric_active_row"},
+            ],
+            "metrics": flat_fields,
+        },
+        "graphcg_toric_agreement": {
+            "available": graphcg_available,
+            "actual_data_only": True,
+            "no_proxy_or_fallback": True,
+            "availability": graphcg_available_field,
+            "agreement": graphcg_score_field,
+            "weighted_loss": graphcg_loss_field,
+        },
+        "transported_persistence_landscape_metrics": {
+            "available": any(field.get("available") for field in landscape_fields.values()),
+            "actual_data_only": True,
+            "no_proxy_or_fallback": True,
+            "source": "analogical memory retrieval metrics emitted by tropicalgt.run when transported landscapes are computed",
+            "metrics": landscape_fields,
+        },
+        "unavailable_fields": unavailable,
+        "safe_to_use_as_vector_bundle_paper_telemetry": True,
+        "safe_to_use_as_vector_bundle_theorem_certificate": False,
+        "safe_to_use_as_toric_or_tropical_embedding_certificate": False,
+        "render_contract": "Vector-bundle paper sidecar fields are model/run telemetry only: chart ids, monomial transport ids, configured toric active rows, one dimensional cone(s) flat-incidence diagnostics, GraphCG-toric agreement, and transported persistence-landscape metrics. Missing fields stay unavailable; no proxies, fallbacks, toric embeddings, tropical varieties, normal fans, or theorem certificates are fabricated.",
+    }
+
+
 def _chart_bundle_transport_payload(
     *,
     source_path: str,
     metadata: Mapping[str, Any] | None,
     available: bool,
     reason: str,
+    result_context: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     meta = dict(metadata) if isinstance(metadata, Mapping) else None
     transport_contract = meta.get("monomial_transport_contract") if isinstance(meta, Mapping) and isinstance(meta.get("monomial_transport_contract"), Mapping) else {}
@@ -5410,6 +5722,7 @@ def _chart_bundle_transport_payload(
     chart_ids = meta.get("chart_ids") if isinstance(meta, Mapping) and isinstance(meta.get("chart_ids"), Sequence) and not isinstance(meta.get("chart_ids"), (str, bytes)) else []
     overlap_pairs = meta.get("overlap_pairs") if isinstance(meta, Mapping) and isinstance(meta.get("overlap_pairs"), Sequence) and not isinstance(meta.get("overlap_pairs"), (str, bytes)) else []
     overlap_triples = meta.get("overlap_triples") if isinstance(meta, Mapping) and isinstance(meta.get("overlap_triples"), Sequence) and not isinstance(meta.get("overlap_triples"), (str, bytes)) else []
+    vector_bundle_paper_sidecar = _build_vector_bundle_paper_sidecar(meta, result_context)
     return {
         "schema_version": "tropicalgt.chart_bundle_transport_sidecar.v1",
         "available": bool(available),
@@ -5422,6 +5735,7 @@ def _chart_bundle_transport_payload(
         "monomial_transport_contract": dict(transport_contract),
         "bundle_matroid_contract": dict(matroid_contract),
         "toric_embedding_certificate": dict(toric_certificate),
+        "vector_bundle_paper_sidecar": vector_bundle_paper_sidecar,
         "actual_data_only": True,
         "no_proxy_or_fallback": True,
         "safe_to_render_as_toric_embedding_certificate": False,
@@ -5437,6 +5751,7 @@ def _write_chart_bundle_transport_html(path: Path, payload: Mapping[str, Any]) -
     transport_contract = payload.get("monomial_transport_contract") if isinstance(payload.get("monomial_transport_contract"), Mapping) else {}
     matroid_contract = payload.get("bundle_matroid_contract") if isinstance(payload.get("bundle_matroid_contract"), Mapping) else {}
     toric_certificate = payload.get("toric_embedding_certificate") if isinstance(payload.get("toric_embedding_certificate"), Mapping) else {}
+    paper_sidecar = payload.get("vector_bundle_paper_sidecar") if isinstance(payload.get("vector_bundle_paper_sidecar"), Mapping) else {}
     chart_ids = payload.get("chart_ids") if isinstance(payload.get("chart_ids"), Sequence) and not isinstance(payload.get("chart_ids"), (str, bytes)) else []
     overlap_pairs = metadata.get("overlap_pairs") if isinstance(metadata.get("overlap_pairs"), Sequence) and not isinstance(metadata.get("overlap_pairs"), (str, bytes)) else []
     overlap_triples = metadata.get("overlap_triples") if isinstance(metadata.get("overlap_triples"), Sequence) and not isinstance(metadata.get("overlap_triples"), (str, bytes)) else []
@@ -5468,6 +5783,15 @@ def _write_chart_bundle_transport_html(path: Path, payload: Mapping[str, Any]) -
         ("safe as toric embedding certificate", payload.get("safe_to_render_as_toric_embedding_certificate", False)),
         ("safe as tropical variety embedding", payload.get("safe_to_render_as_tropical_variety_embedding", False)),
         ("safe as normal fan certificate", payload.get("safe_to_use_as_normal_fan_certificate", False)),
+        ("paper sidecar schema", paper_sidecar.get("schema_version", "unavailable")),
+        ("paper sidecar chart ids", _json_clip(paper_sidecar.get("chart_ids", []), 260)),
+        ("paper sidecar transport ids", _json_clip(paper_sidecar.get("monomial_transport_ids", []), 360)),
+        ("paper sidecar toric active rows", _json_clip(paper_sidecar.get("toric_active_rows", {}), 420)),
+        ("paper sidecar flat defects", _json_clip(paper_sidecar.get("one_dimensional_cone_filtration_flat_defects", {}), 700)),
+        ("paper sidecar GraphCG-toric agreement", _json_clip(paper_sidecar.get("graphcg_toric_agreement", {}), 520)),
+        ("paper sidecar transported landscapes", _json_clip(paper_sidecar.get("transported_persistence_landscape_metrics", {}), 520)),
+        ("paper sidecar unavailable fields", _json_clip(paper_sidecar.get("unavailable_fields", []), 360)),
+        ("paper sidecar render contract", paper_sidecar.get("render_contract", "unavailable")),
         ("actual data only", payload.get("actual_data_only", False)),
         ("no proxy or fallback", payload.get("no_proxy_or_fallback", False)),
         ("render contract", payload.get("render_contract", "unavailable")),
@@ -5482,8 +5806,8 @@ def _write_chart_bundle_transport_html(path: Path, payload: Mapping[str, Any]) -
     )
     if payload.get("available") is True:
         title = "Chart-bundle transport sidecar: exported overlap and transport metadata"
-        subtitle = "Actual chart ids, transport ids, and flat-incidence contracts only; this is not a toric embedding, normal-fan, or tropical-variety certificate."
-        height = 860
+        subtitle = "Actual chart ids, transport ids, flat-incidence diagnostics, GraphCG-toric metrics, and transported-landscape metrics only; this is not a toric embedding, normal-fan, or tropical-variety certificate."
+        height = 1080
     else:
         title = "Chart-bundle transport sidecar unavailable"
         subtitle = "No chart-bundle transport metadata is rendered by proxy; train/eval exports must attach tropicalgt.chart_bundle_transport_metadata.v1."
@@ -5510,6 +5834,7 @@ def write_chart_bundle_transport_sidecar(result: dict[str, object], output_dir: 
             metadata=None,
             available=False,
             reason="No exported chart_bundle_transport_metadata with schema tropicalgt.chart_bundle_transport_metadata.v1 was found in result, metrics, graph_token_trace, or inference_scaling candidates.",
+            result_context=result if isinstance(result, Mapping) else {},
         )
     else:
         source_path, metadata = found
@@ -5536,6 +5861,7 @@ def write_chart_bundle_transport_sidecar(result: dict[str, object], output_dir: 
             metadata=metadata,
             available=available,
             reason=reason,
+            result_context=result if isinstance(result, Mapping) else {},
         )
     payload_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
     _write_chart_bundle_transport_html(html_path, payload)

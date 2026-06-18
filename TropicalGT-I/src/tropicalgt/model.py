@@ -93,6 +93,10 @@ class ChartBundleToricHead(nn.Module):
 
     def transport_metadata(self) -> dict[str, Any]:
         chart_ids = [f"chart_{idx:02d}" for idx in range(self.num_charts)]
+        toric_active_rows = [
+            {"row_id": f"toric_row_{idx:02d}", "row_index": idx, "source": "ChartBundleToricHead.toric_head"}
+            for idx in range(self.toric_rows)
+        ]
         pairs = [
             {
                 "id": f"{chart_ids[i]}__to__{chart_ids[j]}",
@@ -122,6 +126,8 @@ class ChartBundleToricHead(nn.Module):
             "available": True,
             "source": "ChartBundleToricHead.transport_metadata",
             "chart_ids": chart_ids,
+            "toric_active_rows": toric_active_rows,
+            "toric_active_row_scope": "configured_toric_head_rows_not_per_record_argmax_assignments",
             "overlap_pairs": pairs,
             "overlap_triples": triples,
             "overlap_pair_count": len(pairs),
@@ -485,6 +491,8 @@ class TropicalGTModel(nn.Module):
                 "available": False,
                 "source": "chart_bundle_disabled",
                 "chart_ids": [],
+                "toric_active_rows": [],
+                "toric_active_row_scope": "chart_bundle_disabled",
                 "overlap_pairs": [],
                 "overlap_triples": [],
                 "overlap_pair_count": 0,

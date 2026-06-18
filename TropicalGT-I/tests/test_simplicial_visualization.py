@@ -1166,6 +1166,11 @@ def _chart_bundle_transport_metadata_fixture() -> dict[str, object]:
         "available": True,
         "source": "test.fixture",
         "chart_ids": chart_ids,
+        "toric_active_rows": [
+            {"row_id": f"toric_row_{idx:02d}", "row_index": idx, "source": "test.toric_head"}
+            for idx in range(5)
+        ],
+        "toric_active_row_scope": "configured_toric_head_rows_not_per_record_argmax_assignments",
         "overlap_pairs": pairs,
         "overlap_triples": triples,
         "overlap_pair_count": len(pairs),
@@ -1207,13 +1212,34 @@ def test_chart_bundle_transport_sidecar_unavailable_without_metadata(tmp_path: P
     assert payload["no_proxy_or_fallback"] is True
     assert payload["safe_to_render_as_toric_embedding_certificate"] is False
     assert payload["metadata"] is None
+    paper = payload["vector_bundle_paper_sidecar"]
+    assert paper["schema_version"] == "tropicalgt.vector_bundle_paper_sidecar.v1"
+    assert paper["available"] is False
+    assert paper["actual_data_only"] is True
+    assert paper["no_proxy_or_fallback"] is True
+    assert paper["safe_to_use_as_vector_bundle_theorem_certificate"] is False
+    assert "toric_active_rows" in paper["unavailable_fields"]
     assert "No chart-bundle transport metadata" in html
     assert "Chart-bundle transport sidecar unavailable" in html
 
 
 def test_chart_bundle_transport_sidecar_renders_metadata_contracts(tmp_path: Path):
     metadata = _chart_bundle_transport_metadata_fixture()
-    result = {"inference_scaling": {"candidates": [{"record_id": "q0", "chart_bundle_transport_metadata": metadata}]}}
+    result = {
+        "metrics": {
+            "bundle_flat_rank_defect": 0.0125,
+            "bundle_flat_incidence_binary_defect": 0.21,
+            "bundle_flat_incidence_mean": 0.48,
+            "graphcg_toric_cell_agreement": 0.75,
+            "graphcg_toric_cell_agreement_available": 1.0,
+            "loss_graphcg_toric_cell_agreement_weighted": 0.003,
+            "analogical_memory_transported_landscape_available_rate": 0.5,
+            "analogical_memory_transported_landscape_l2_mean": 0.125,
+            "analogical_memory_transported_landscape_cosine_mean": 0.875,
+            "analogical_memory_landscape_score_contribution_mean": 0.044,
+        },
+        "inference_scaling": {"candidates": [{"record_id": "q0", "chart_bundle_transport_metadata": metadata}]},
+    }
     paths = write_chart_bundle_transport_sidecar(result, tmp_path)
     payload = json.loads(Path(paths["chart_bundle_transport_sidecar_payload"]).read_text(encoding="utf-8"))
     html = Path(paths["chart_bundle_transport_sidecar"]).read_text(encoding="utf-8")
@@ -1224,8 +1250,27 @@ def test_chart_bundle_transport_sidecar_renders_metadata_contracts(tmp_path: Pat
     assert payload["overlap_triple_count"] == 1
     assert payload["monomial_transport_contract"]["no_proxy_or_fallback"] is True
     assert payload["bundle_matroid_contract"]["flat_incidence_shape"] == [3, 5]
+    paper = payload["vector_bundle_paper_sidecar"]
+    assert paper["schema_version"] == "tropicalgt.vector_bundle_paper_sidecar.v1"
+    assert paper["available"] is True
+    assert paper["chart_ids"] == ["chart_00", "chart_01", "chart_02"]
+    assert paper["monomial_transport_ids"] == ["chart_00__to__chart_01", "chart_01__to__chart_02"]
+    assert paper["toric_active_rows"]["available"] is True
+    assert paper["toric_active_rows"]["value"][0]["row_id"] == "toric_row_00"
+    assert paper["toric_active_row_count"]["value"] == 5
+    flat_defects = paper["one_dimensional_cone_filtration_flat_defects"]
+    assert flat_defects["available"] is True
+    assert flat_defects["coordinate_one_dimensional_cones"][1]["coordinate"] == "toric_active_row"
+    assert flat_defects["metrics"]["bundle_flat_rank_defect"]["value"] == 0.0125
+    assert paper["graphcg_toric_agreement"]["available"] is True
+    assert paper["graphcg_toric_agreement"]["agreement"]["value"] == 0.75
+    assert paper["transported_persistence_landscape_metrics"]["available"] is True
+    assert paper["transported_persistence_landscape_metrics"]["metrics"]["cosine_mean"]["value"] == 0.875
+    assert paper["safe_to_use_as_vector_bundle_theorem_certificate"] is False
     assert payload["safe_to_render_as_tropical_variety_embedding"] is False
     assert "chart_00__to__chart_01" in html
+    assert "paper sidecar GraphCG-toric agreement" in html
+    assert "one dimensional cone(s)" in html
     assert "not a toric embedding" in html
     assert "chart_bundle_transport_sidecar_contract" in html
 

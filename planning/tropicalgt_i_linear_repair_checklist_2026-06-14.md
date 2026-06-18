@@ -264,3 +264,15 @@ Status: complete and focused-tested.
 - Verification: focused bifiltration/validator tests -> `11 passed`; broader algebra/backfill/validator slice -> `39 passed`.
 
 Next sequential implementation item: continue Item 4/5/6 visual-math repairs by auditing real CAS/free-resolution and analogical-memory sidecar evidence while b61 trains uninterrupted to 5K.
+
+### 2026-06-18 Vector-Bundle Paper Sidecar Audit Fields
+
+Status: complete and focused-tested.
+
+- `ChartBundleToricHead.transport_metadata()` now exports configured toric row labels under `toric_active_rows` plus an explicit scope label, while keeping per-record argmax assignments out of the sidecar unless a future eval export emits them directly.
+- `write_chart_bundle_transport_sidecar()` now emits `vector_bundle_paper_sidecar` with schema `tropicalgt.vector_bundle_paper_sidecar.v1`, actual-data/no-proxy flags, chart ids, monomial transport ids, configured toric active rows, toric row counts, chart-by-toric-row one dimensional cone flat-incidence diagnostics, GraphCG-toric agreement metrics, and transported persistence-landscape memory metrics.
+- Missing paper-sidecar fields remain explicit unavailable records with source/reason fields; the sidecar is marked safe only as telemetry and explicitly unsafe as a vector-bundle theorem certificate, toric embedding certificate, tropical-variety certificate, global toric-variety embedding, or normal-fan certificate.
+- `validate_interactive_audit_artifacts.py` now rejects chart-bundle sidecars missing the vector-bundle paper sidecar schema, no-proxy flags, required audit keys, one-dimensional cone labels, or theorem/certificate unsafety guards.
+- Verification: `test_simplicial_visualization.py` -> `48 passed`; `test_interactive_artifact_validator.py` -> `32 passed`; `test_losses_and_model.py` -> `10 passed`; project Python `py_compile` passed for the touched source/validator files.
+
+Next sequential implementation item: continue the visual/math repair queue with the next no-proxy CAS/free-resolution, analogical-map, or browser-audit repair while avoiding GPU/training inspection or interruption.

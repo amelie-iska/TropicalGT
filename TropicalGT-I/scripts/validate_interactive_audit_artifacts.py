@@ -605,6 +605,7 @@ def validate_row(row_dir: Path, *, min_candidates: int = 8, min_depth: int = 2, 
         metadata = chart_bundle_payload.get("metadata", {}) if isinstance(chart_bundle_payload.get("metadata"), dict) else {}
         transport_contract = chart_bundle_payload.get("monomial_transport_contract", {}) if isinstance(chart_bundle_payload.get("monomial_transport_contract"), dict) else {}
         matroid_contract = chart_bundle_payload.get("bundle_matroid_contract", {}) if isinstance(chart_bundle_payload.get("bundle_matroid_contract"), dict) else {}
+        paper_sidecar = chart_bundle_payload.get("vector_bundle_paper_sidecar", {}) if isinstance(chart_bundle_payload.get("vector_bundle_paper_sidecar"), dict) else {}
         _assert(chart_bundle_payload.get("schema_version") == "tropicalgt.chart_bundle_transport_sidecar.v1", errors, "chart-bundle transport sidecar payload has wrong schema")
         _assert(chart_bundle_payload.get("actual_data_only") is True, errors, "chart-bundle transport sidecar missing actual-data-only flag")
         _assert(chart_bundle_payload.get("no_proxy_or_fallback") is True, errors, "chart-bundle transport sidecar missing no-proxy flag")
@@ -615,6 +616,31 @@ def validate_row(row_dir: Path, *, min_candidates: int = 8, min_depth: int = 2, 
         _assert(chart_bundle_payload.get("safe_to_render_as_tropical_variety_embedding") is False, errors, "chart-bundle sidecar incorrectly claims tropical-variety embedding")
         _assert(chart_bundle_payload.get("safe_to_render_as_global_toric_variety_embedding") is False, errors, "chart-bundle sidecar incorrectly claims global toric-variety embedding")
         _assert(chart_bundle_payload.get("safe_to_use_as_normal_fan_certificate") is False, errors, "chart-bundle sidecar incorrectly claims normal-fan certificate")
+        _assert(paper_sidecar.get("schema_version") == "tropicalgt.vector_bundle_paper_sidecar.v1", errors, "chart-bundle sidecar missing vector-bundle paper sidecar schema")
+        _assert(paper_sidecar.get("actual_data_only") is True, errors, "vector-bundle paper sidecar missing actual-data-only flag")
+        _assert(paper_sidecar.get("no_proxy_or_fallback") is True, errors, "vector-bundle paper sidecar missing no-proxy flag")
+        _assert(paper_sidecar.get("safe_to_use_as_vector_bundle_theorem_certificate") is False, errors, "vector-bundle paper sidecar incorrectly claims theorem-certificate safety")
+        _assert(paper_sidecar.get("safe_to_use_as_toric_or_tropical_embedding_certificate") is False, errors, "vector-bundle paper sidecar incorrectly claims toric/tropical certificate safety")
+        paper_contract = str(paper_sidecar.get("render_contract", ""))
+        _assert("no proxies" in paper_contract or "no proxy" in paper_contract, errors, "vector-bundle paper sidecar missing no-proxy render contract")
+        required_paper_keys = (
+            "chart_ids",
+            "monomial_transport_ids",
+            "toric_active_rows",
+            "toric_active_row_count",
+            "one_dimensional_cone_filtration_flat_defects",
+            "graphcg_toric_agreement",
+            "transported_persistence_landscape_metrics",
+        )
+        for key in required_paper_keys:
+            _assert(key in paper_sidecar, errors, f"vector-bundle paper sidecar missing {key}")
+        flat_defects = paper_sidecar.get("one_dimensional_cone_filtration_flat_defects", {}) if isinstance(paper_sidecar.get("one_dimensional_cone_filtration_flat_defects"), dict) else {}
+        graphcg_agreement = paper_sidecar.get("graphcg_toric_agreement", {}) if isinstance(paper_sidecar.get("graphcg_toric_agreement"), dict) else {}
+        landscape_metrics = paper_sidecar.get("transported_persistence_landscape_metrics", {}) if isinstance(paper_sidecar.get("transported_persistence_landscape_metrics"), dict) else {}
+        _assert(flat_defects.get("actual_data_only") is True and flat_defects.get("no_proxy_or_fallback") is True, errors, "vector-bundle flat-defect sidecar is not no-proxy")
+        _assert(bool(flat_defects.get("coordinate_one_dimensional_cones")), errors, "vector-bundle flat-defect sidecar missing one-dimensional cone labels")
+        _assert(graphcg_agreement.get("actual_data_only") is True and graphcg_agreement.get("no_proxy_or_fallback") is True, errors, "GraphCG-toric agreement sidecar is not no-proxy")
+        _assert(landscape_metrics.get("actual_data_only") is True and landscape_metrics.get("no_proxy_or_fallback") is True, errors, "transported persistence-landscape sidecar is not no-proxy")
         if chart_bundle_payload.get("available") is True:
             chart_ids = chart_bundle_payload.get("chart_ids", []) if isinstance(chart_bundle_payload.get("chart_ids"), list) else []
             overlap_pairs = metadata.get("overlap_pairs", []) if isinstance(metadata.get("overlap_pairs"), list) else []
@@ -622,6 +648,11 @@ def validate_row(row_dir: Path, *, min_candidates: int = 8, min_depth: int = 2, 
             _assert(metadata.get("schema_version") == "tropicalgt.chart_bundle_transport_metadata.v1", errors, "available chart-bundle sidecar missing metadata schema")
             _assert(metadata.get("available") is True, errors, "available chart-bundle sidecar metadata is not available")
             _assert(bool(chart_ids), errors, "available chart-bundle sidecar missing chart ids")
+            _assert(paper_sidecar.get("chart_ids") == chart_ids, errors, "vector-bundle paper sidecar chart ids do not match chart-bundle metadata")
+            _assert(bool(paper_sidecar.get("monomial_transport_ids")), errors, "available vector-bundle paper sidecar missing monomial transport ids")
+            toric_rows = paper_sidecar.get("toric_active_rows", {}) if isinstance(paper_sidecar.get("toric_active_rows"), dict) else {}
+            _assert(toric_rows.get("actual_data_only") is True and toric_rows.get("no_proxy_or_fallback") is True, errors, "vector-bundle toric active rows are not no-proxy")
+            _assert(toric_rows.get("available") is True, errors, "available vector-bundle paper sidecar missing configured toric active rows")
             _assert(int(chart_bundle_payload.get("overlap_pair_count", -1)) == len(overlap_pairs), errors, "chart-bundle sidecar overlap pair count mismatch")
             _assert(int(chart_bundle_payload.get("overlap_triple_count", -1)) == len(overlap_triples), errors, "chart-bundle sidecar overlap triple count mismatch")
             _assert(transport_contract.get("actual_data_only") is True and transport_contract.get("no_proxy_or_fallback") is True, errors, "available chart-bundle transport contract is not no-proxy")

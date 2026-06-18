@@ -278,6 +278,14 @@ def test_chart_bundle_auxiliary_zero_weights_do_not_change_logits_or_loss():
     assert metadata["schema_version"] == "tropicalgt.chart_bundle_transport_metadata.v1"
     assert metadata["available"] is True
     assert metadata["chart_ids"] == ["chart_00", "chart_01", "chart_02"]
+    assert metadata["toric_active_row_scope"] == "configured_toric_head_rows_not_per_record_argmax_assignments"
+    assert [row["row_id"] for row in metadata["toric_active_rows"]] == [
+        "toric_row_00",
+        "toric_row_01",
+        "toric_row_02",
+        "toric_row_03",
+        "toric_row_04",
+    ]
     assert {row["id"] for row in metadata["overlap_pairs"]} >= {"chart_00__to__chart_01", "chart_01__to__chart_02"}
     assert metadata["overlap_triples"][0]["pair_ids"]
     transport_contract = metadata["monomial_transport_contract"]

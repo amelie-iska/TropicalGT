@@ -91,7 +91,7 @@ The review uses the full `pdftotext -layout` extractions of both PDFs. The goal 
 
 ## Implementation Handoff
 
-The paper-sidecar implementation should add zero-default auxiliary losses and read-only audit artifacts first. Promotion requires no regression in validation BPB, graph-BPB, certificate loss, or tropical wall-hit rate. Required code-level hooks include chart ids, overlap triples, monomial transport heads, toric active rows, one dimensional cone-filtration flat defects, GraphCG-toric agreement, persistence-landscape availability masks, and browser labels distinguishing `lambda_k(t)` from NLL/fitness/density fields.
+The paper-sidecar implementation now has a read-only audit path for the first required code-level hooks: chart ids, overlap triples, monomial transport ids, configured toric active rows, one dimensional cone-filtration flat defects, GraphCG-toric agreement metrics, and transported persistence-landscape memory metrics. The browser JSON/HTML sidecar uses schema `tropicalgt.vector_bundle_paper_sidecar.v1`, marks all missing fields unavailable with source/reason records, and explicitly refuses theorem/certificate promotion. Promotion to training use still requires no regression in validation BPB, graph-BPB, certificate loss, or tropical wall-hit rate, and browser labels must continue distinguishing real GUDHI `lambda_k(t)` landscapes from NLL, fitness, or density fields.
 
 ## Real Implementations Only Policy
 
@@ -99,4 +99,4 @@ No TropicalGT-I metric, loss, visualization, analogical map, persistence module,
 
 Use "one dimensional cone" or "one dimensional cones" as the preferred fan-theoretic language whenever the intended object is a cone of a fan or a cone-indexed filtration datum. Use singular or plural according to ordinary grammar.
 
-_Last updated: 2026-06-14T15:34:45+00:00_
+_Last updated: 2026-06-18T00:00:00+00:00_
