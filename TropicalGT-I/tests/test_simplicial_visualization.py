@@ -2680,3 +2680,74 @@ def _toy_topology(intervals):
             }
         },
     }
+
+
+def test_got_trajectory_unavailable_probability_pages_are_plotly_and_legacy_radius_safe(tmp_path: Path):
+    candidates = [
+        {
+            "record_id": "root",
+            "embedding": [0.0, 0.0, 0.0],
+            "score": 0.1,
+            "nll": 1.0,
+            "level": 0,
+            "path": [],
+            "input_text": "input root",
+            "decoded_argmax": "decoded root",
+        },
+        {
+            "record_id": "child",
+            "parent": "root",
+            "embedding": [1.0, 0.2, 0.0],
+            "score": 0.2,
+            "nll": 0.9,
+            "level": 1,
+            "path": ["expand"],
+            "input_text": "input child",
+            "decoded_argmax": "decoded child",
+        },
+        {
+            "record_id": "leaf",
+            "parent": "child",
+            "embedding": [1.2, 0.8, 0.3],
+            "score": 0.3,
+            "nll": 0.7,
+            "level": 2,
+            "path": ["expand", "refine"],
+            "input_text": "input leaf",
+            "decoded_argmax": "decoded leaf",
+        },
+    ]
+    legacy_obj = build_reasoning_trajectory_complex(candidates)
+    legacy_obj["summary"].pop("radius_filtration", None)
+    paths = write_got_trajectory_visualization(
+        {"candidates": candidates, "trajectory_filtered_simplicial_object": legacy_obj},
+        tmp_path,
+    )
+
+    payload = json.loads(Path(paths["got_full_trajectory_complex_payload"]).read_text(encoding="utf-8"))
+    overlay_contract = payload["trajectory_complex_overlay_contract"]
+    assert overlay_contract["embedding_view"]["radius_filtration"] is True
+    assert overlay_contract["embedding_view"]["safe_to_render_overlay_semantics"] is True
+    assert overlay_contract["safe_to_render_available_views"] is True
+    assert payload["probability_filtered_simplicial_object"]["available"] is False
+    assert payload["probability_filtered_simplicial_object"]["reason"] == "missing_model_probability_vectors"
+
+    probability_html = Path(paths["got_full_trajectory_complex_jensen_shannon"]).read_text(encoding="utf-8")
+    probability_tree_html = Path(paths["got_full_trajectory_simplex_tree_3d_jensen_shannon"]).read_text(encoding="utf-8")
+    assert "Plotly.newPlot" in probability_html
+    assert "plotly.min.js" in probability_html
+    assert "probability filtered simplicial complex" in probability_html
+    assert "Jensen-Shannon" in probability_html
+    assert "Plotly.newPlot" in probability_tree_html
+    assert "plotly.min.js" in probability_tree_html
+    assert "SimplexTree" in probability_tree_html
+    assert "Jensen-Shannon" in probability_tree_html
+
+    tree_contract = json.loads(
+        Path(paths["got_full_trajectory_simplex_tree_3d_jensen_shannon"])
+        .with_name("got_full_trajectory_simplex_tree_3d_jensen_shannon_simplex_tree_poset_contract.json")
+        .read_text(encoding="utf-8")
+    )
+    assert tree_contract["available"] is False
+    assert tree_contract["safe_unavailable_render"] is True
+    assert tree_contract["safe_to_render_simplex_tree"] is False

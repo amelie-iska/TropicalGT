@@ -490,6 +490,7 @@ PROVENANCE_REGISTRY: tuple[ProvenanceEntry, ...] = (
             "finite toric-ideal sidecar diagnostics rather than",
             "no resolution certificate was fabricated",
             "no-proxy evidence rows were preserved",
+            "no probability radius complex, simplex tree, edges, faces, or proxy geometry is fabricated",
         ),
     ),
     ProvenanceEntry(

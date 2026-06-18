@@ -959,3 +959,22 @@ rebuilt the local dashboard. The strict validator still fails for remaining
 non-GraphCG evidence, but the gap count decreased from `15` to `9`; GraphCG
 `6` decreased to `0`. Remaining categories are other `4`, trajectory
 overlay/radius `3`, missing artifact `1`, and row coverage `1`.
+
+Completed 2026-06-18 follow-up: full-trajectory overlay contracts now infer
+radius-filtration status from the actual canonical Vietoris-Rips/radius
+filtration model instead of requiring legacy summaries to contain a
+`radius_filtration` boolean. Unavailable Jensen-Shannon probability trajectory
+pages now render as local-Plotly unavailable diagnostics with the required
+probability, Jensen-Shannon, and SimplexTree markers, while keeping the raw
+`probability_filtered_simplicial_object` unavailable when model probability
+vectors are absent. No probability radius complex, simplex tree, edges, faces,
+or proxy geometry is fabricated.
+
+Executed safe generated-artifact trajectory overlay/Jensen-Shannon backfill on
+the b60 step-5000 `got_audit` bundle without staging generated outputs. It
+regenerated the trajectory pages from stored `inference_scaling_tree.json`,
+repaired the embedding overlay safety contract, and replaced static unavailable
+Jensen-Shannon pages with local-Plotly unavailable diagnostics. The strict
+validator now reports the only remaining failure as row coverage: row `0` passes
+all artifact checks and the gap count decreased from `9` to `1`; other `4`,
+trajectory overlay/radius `3`, and missing artifact `1` all decreased to `0`.

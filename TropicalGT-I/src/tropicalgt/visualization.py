@@ -1689,6 +1689,7 @@ def _trajectory_complex_overlay_view_contract(
     decoding_overlay = obj.get("decoding_causal_overlay", {}) if isinstance(obj.get("decoding_causal_overlay"), Mapping) else {}
     trajectory_edges = trajectory_overlay.get("edges", []) if isinstance(trajectory_overlay.get("edges"), list) else []
     decoding_edges = decoding_overlay.get("edges", []) if isinstance(decoding_overlay.get("edges"), list) else []
+    radius_filtration = _is_radius_filtration_complex(obj)
     contract = {
         "schema_version": "tropicalgt.trajectory_complex_overlay_view_contract.v1",
         "view": view,
@@ -1699,7 +1700,7 @@ def _trajectory_complex_overlay_view_contract(
         "distance_metric": str(summary.get("embedding_metric") or trajectory_overlay.get("distance_metric") or expected_metric),
         "expected_distance_metric": expected_metric,
         "filtration_model": summary.get("filtration_model"),
-        "radius_filtration": summary.get("radius_filtration") is True,
+        "radius_filtration": radius_filtration,
         "solid_lines_semantics": "radius-filtered 1-simplices only",
         "filled_faces_semantics": "radius-gated 2-simplices only",
         "dotted_lines_semantics": "trajectory and decoding/order overlays only",
@@ -1787,6 +1788,54 @@ def _trajectory_complex_overlay_contract(full_obj: object, probability_obj: obje
     return contract
 
 
+
+def _write_unavailable_probability_complex_plotly_page(
+    path: Path,
+    *,
+    title: str,
+    reason: str,
+    include_simplex_tree_marker: bool = False,
+) -> None:
+    marker = "Jensen-Shannon probability SimplexTree unavailable" if include_simplex_tree_marker else "Jensen-Shannon probability filtered simplicial complex unavailable"
+    fig = go.Figure(
+        data=[
+            _table_trace(
+                ["field", "value"],
+                [
+                    ["status", "metric", "source", "SimplexTree", "policy"],
+                    [
+                        "unavailable",
+                        "Jensen-Shannon",
+                        "model candidate probability vectors",
+                        marker,
+                        "No probability radius complex, simplex tree, edges, faces, or proxy geometry is fabricated.",
+                    ],
+                ],
+            )
+        ]
+    )
+    fig.update_layout(
+        title=title,
+        height=520,
+        annotations=[
+            dict(
+                text=(
+                    "probability filtered simplicial complex; Jensen-Shannon; "
+                    + ("SimplexTree; " if include_simplex_tree_marker else "")
+                    + html.escape(reason)
+                ),
+                x=0.0,
+                y=1.08,
+                xref="paper",
+                yref="paper",
+                showarrow=False,
+                align="left",
+                font=dict(color="#e8eef8", size=13),
+            )
+        ],
+    )
+    _write_plotly_dark_html(path, fig, title)
+
 def _write_full_trajectory_complex_map(scaling_report: dict[str, object], output_dir: Path) -> dict[str, str]:
     candidates = [row for row in scaling_report.get("candidates", []) if isinstance(row, dict)]
     obj = scaling_report.get("trajectory_filtered_simplicial_object")
@@ -1852,7 +1901,11 @@ def _write_full_trajectory_complex_map(scaling_report: dict[str, object], output
             "Full graph-of-thought trajectory probability filtered simplicial complex unavailable: "
             "model candidate probability vectors were not present, so no Jensen-Shannon radius complex or simplex tree was rendered."
         )
-        _write_dark_empty(probability_path, message)
+        _write_unavailable_probability_complex_plotly_page(
+            probability_path,
+            title="Full graph-of-thought trajectory probability filtered simplicial complex (Jensen-Shannon unavailable)",
+            reason=message,
+        )
         _write_simplex_tree_poset_contract(
             probability_tree_path,
             _unavailable_simplex_tree_poset_contract(
@@ -1861,7 +1914,12 @@ def _write_full_trajectory_complex_map(scaling_report: dict[str, object], output
                 reason="missing_model_probability_vectors",
             ),
         )
-        _write_dark_empty(probability_tree_path, message)
+        _write_unavailable_probability_complex_plotly_page(
+            probability_tree_path,
+            title="Full graph-of-thought trajectory Jensen-Shannon probability SimplexTree face-coface poset unavailable",
+            reason=message,
+            include_simplex_tree_marker=True,
+        )
         payload["probability_filtered_simplicial_object"] = unavailable
     result["got_full_trajectory_complex_jensen_shannon"] = str(probability_path)
     result["got_full_trajectory_simplex_tree_3d_jensen_shannon"] = str(probability_tree_path)
@@ -2212,7 +2270,7 @@ def _has_real_probability_filtration(obj: object) -> bool:
     }
     if summary.get("filtration_model") not in allowed_models:
         return False
-    if summary.get("radius_filtration") is not True:
+    if not _is_radius_filtration_complex(obj):
         return False
     vertices = [
         simplex
