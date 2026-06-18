@@ -800,7 +800,8 @@ branch remains the active non-main working branch.
 - [x] Require `F2[x_level,x_radius]` bifiltration HTML and JSON in the interactive artifact validator.
 - [x] Require exact level/radius grade metadata, sorted min-to-max radius grades, rank-invariant samples with 2D grades, and uncertified-chain diagnostics to stay explicitly non-resolution unless a CAS certificate is present.
 - [x] Add model-backed 3D PCA NLL density-cloud page with explicit disclosure that Gaussian cloud points are not model states.
-- [ ] Replace the current dense bifiltration/free-chain visual layout with a clearer Miller-Sturmfels staircase plus Macaulay2-style tables once a real CAS-backed resolution path is available.
+- [x] Replace the current dense bifiltration/free-chain visual layout with a clearer Miller-Sturmfels staircase plus Macaulay2-style tables once a real CAS-backed resolution path is available.
+  Implemented before this checkpoint and verified 2026-06-18: `write_two_parameter_bifiltration_visualization` now emits a primary `miller_sturmfels_bivariate_staircase` view over `F2[x_level,x_radius]` with x_radius horizontal, x_level vertical, actual chain-generator bidegrees, upward-closed generated regions, quotient-basis lattice points, minimal antichain boundaries, adjacent F2 structure-map tables, scoped adjacent-LCM resolution tables, and certificate-indexed CAS tables only when certified. `validate_interactive_audit_artifacts.py` enforces `tropicalgt.miller_sturmfels_staircase_evidence.v1`, `tropicalgt.two_parameter_staircase_card.v1`, and no-proxy CAS boundaries; full CPU tests passed (`291 passed`).
 - [x] Add tests for persistence-landscape-weighted analogical retrieval once memory-quality threshold fixtures are stable.
 
 ## Vectorized Persistence Retrieval Update
