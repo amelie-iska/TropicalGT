@@ -128,6 +128,13 @@ def _assert_real_resolution_guard(real, expected_ring):
         assert real["exactness_certified"] is True
         assert real["cas_artifacts"]
         assert real["cas_artifacts"].get("raw_tagged_output")
+        evidence = real["cas_artifacts"].get("certificate_indexed_evidence")
+        assert evidence["schema_version"] == cas_free_resolution.CAS_CERTIFICATE_INDEXED_EVIDENCE_SCHEMA_VERSION
+        assert evidence["input_sha256"] == real["input_sha256"]
+        assert evidence["exactness_certified"] is True
+        assert evidence["no_proxy_or_fallback"] is True
+        assert evidence["derived_category_claim_requires_chain_map_or_resolution_comparison"] is True
+        assert "do not independently certify" in evidence["render_rule"]
         summary = real["free_resolution_summary"]
         if summary.get("safe_for_multigraded_claims") is True:
             assert real["multigraded_free_resolution_certified"] is True
@@ -532,6 +539,26 @@ def test_singular_certified_result_structures_ungraded_betti_rows_without_multig
     assert "not inferred" in syzygies["reason"]
     assert "ungraded" in syzygies["no_proxy_policy"]
     assert be_rank["paper_method_contract"]["buchsbaum_eisenbud_multipliers"]["requires_certified_chain_complex"] is True
+    evidence = real["cas_artifacts"]["certificate_indexed_evidence"]
+    assert evidence["schema_version"] == cas_free_resolution.CAS_CERTIFICATE_INDEXED_EVIDENCE_SCHEMA_VERSION
+    assert evidence["backend"] == "Singular"
+    assert evidence["safe_to_render_as_multigraded_free_resolution"] is False
+    assert evidence["evidence_blocks"]["fitting_ideals"] == {
+        "available": True,
+        "count": 2,
+        "diagnostic_only": True,
+        "not_a_resolution_certificate_by_itself": True,
+        "source": "Singular_fitting_ideal_block",
+    }
+    assert evidence["evidence_blocks"]["determinantal_minors"]["available"] is True
+    assert evidence["evidence_blocks"]["determinantal_minors"]["count"] == 1
+    assert evidence["evidence_blocks"]["buchsbaum_eisenbud_rank_conditions"]["available"] is True
+    assert evidence["evidence_blocks"]["buchsbaum_eisenbud_rank_conditions"]["is_independent_certificate"] is False
+    assert evidence["evidence_blocks"]["grade_depth_regular_diagnostics"]["available"] is False
+    assert evidence["evidence_blocks"]["buchsbaum_eisenbud_multipliers"]["available"] is False
+    assert evidence["evidence_blocks"]["buchsbaum_eisenbud_multipliers"]["safe_to_substitute_for_resolution"] is False
+    assert evidence["evidence_blocks"]["syzygy_diagnostics"]["available"] is False
+    assert evidence["no_proxy_or_fallback"] is True
 
 
 def test_macaulay2_rejects_nonhomogeneous_stored_multigrading(monkeypatch):
@@ -817,6 +844,26 @@ def test_certified_cas_result_surfaces_buchsbaum_eisenbud_diagnostics():
     assert real["free_resolution_summary"]["grade_depth_regular_diagnostics"] == grade_depth
     assert cert["grade_depth_regular_diagnostics_available"] is True
     assert cert["regular_element_certificate_available"] is False
+    evidence = real["cas_artifacts"]["certificate_indexed_evidence"]
+    assert evidence["schema_version"] == cas_free_resolution.CAS_CERTIFICATE_INDEXED_EVIDENCE_SCHEMA_VERSION
+    assert evidence["backend"] == "Macaulay2"
+    assert evidence["input_sha256"] == schema["input_sha256"]
+    assert evidence["safe_to_render_as_multigraded_free_resolution"] is True
+    assert evidence["evidence_blocks"]["fitting_ideals"]["available"] is True
+    assert evidence["evidence_blocks"]["fitting_ideals"]["count"] == 2
+    assert evidence["evidence_blocks"]["determinantal_minors"]["available"] is True
+    assert evidence["evidence_blocks"]["determinantal_minors"]["count"] == 1
+    assert evidence["evidence_blocks"]["ideal_diagnostics"]["fitting_invariant_count"] == 2
+    assert evidence["evidence_blocks"]["ideal_diagnostics"]["minor_count"] == 1
+    assert evidence["evidence_blocks"]["buchsbaum_eisenbud_rank_conditions"]["available"] is True
+    assert evidence["evidence_blocks"]["buchsbaum_eisenbud_rank_conditions"]["is_independent_certificate"] is False
+    assert evidence["evidence_blocks"]["grade_depth_regular_diagnostics"]["available"] is True
+    assert evidence["evidence_blocks"]["grade_depth_regular_diagnostics"]["regular_element_certificate_available"] is False
+    assert evidence["evidence_blocks"]["buchsbaum_eisenbud_multipliers"]["available"] is False
+    assert evidence["evidence_blocks"]["syzygy_diagnostics"]["available"] is True
+    assert evidence["derived_category_claim_requires_chain_map_or_resolution_comparison"] is True
+    assert evidence["no_proxy_or_fallback"] is True
+    assert cert["certificate_indexed_evidence_schema"] == evidence["schema_version"]
     assert real["free_resolution_summary"]["betti_table_rows"] == [
         {
             "homological_degree": 0,
@@ -945,6 +992,13 @@ def test_bemultipliers_computed_output_is_post_resolution_diagnostic_only():
     assert cert["bemultipliers_status"] == "computed_aMultiplier_1"
     assert cert["bemultipliers_safe_to_render_multiplier_output"] is True
     assert cert["bemultipliers_is_resolution_backend"] is False
+    evidence = real["cas_artifacts"]["certificate_indexed_evidence"]
+    assert evidence["evidence_blocks"]["buchsbaum_eisenbud_multipliers"]["available"] is True
+    assert evidence["evidence_blocks"]["buchsbaum_eisenbud_multipliers"]["safe_to_render_multiplier_output"] is True
+    assert evidence["evidence_blocks"]["buchsbaum_eisenbud_multipliers"]["is_resolution_backend"] is False
+    assert evidence["evidence_blocks"]["buchsbaum_eisenbud_multipliers"]["safe_to_substitute_for_resolution"] is False
+    assert evidence["evidence_blocks"]["buchsbaum_eisenbud_multipliers"]["bemultipliers_status"] == "computed_aMultiplier_1"
+    assert evidence["no_proxy_or_fallback"] is True
 
 
 def test_macaulay2_tropical_fan_diagnostic_parser_and_script():

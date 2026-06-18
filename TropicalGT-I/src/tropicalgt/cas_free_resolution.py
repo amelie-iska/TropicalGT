@@ -18,6 +18,7 @@ MODULE_SCHEMA_VERSION = "tropicalgt.level_radius_module.v1"
 CACHE_SCHEMA_VERSION = "tropicalgt.real_free_resolution.cache.v1"
 ADAPTER_CACHE_VERSION = "2026-06-18.cas-free-resolution-cache-v3"
 CAS_BRIDGE_PROVENANCE_SCHEMA_VERSION = "tropicalgt.cas_backend_bridge_provenance.v1"
+CAS_CERTIFICATE_INDEXED_EVIDENCE_SCHEMA_VERSION = "tropicalgt.cas_certificate_indexed_evidence.v1"
 SUPPORTED_RINGS = {
     "F2[x_level,x_radius]": ["x_level", "x_radius"],
     "F2[x_filtration,x_dimension]": ["x_filtration", "x_dimension"],
@@ -1447,6 +1448,19 @@ def _certified_result(module_schema: dict[str, Any], backend_result: dict[str, A
         "paper_method_contract": be_fitting_paper_method_contract(),
         "cas_execution_manifest_schema": execution_manifest["schema_version"],
     }
+    certificate_indexed_evidence = _certificate_indexed_cas_evidence(
+        module_schema=module_schema,
+        backend=backend,
+        certificate_summary=certificate_summary,
+        fitting_ideals=fitting_ideals,
+        minors=minors,
+        ideal_diagnostics=ideal_diagnostics,
+        be_rank_conditions=be_rank_conditions,
+        grade_depth_regular=grade_depth_regular,
+        be_diagnostics=be_diagnostics,
+        syzygy_diagnostics=syzygy_diagnostics,
+    )
+    certificate_summary["certificate_indexed_evidence_schema"] = certificate_indexed_evidence["schema_version"]
     return {
         "schema_version": SCHEMA_VERSION,
         "available": True,
@@ -1480,6 +1494,7 @@ def _certified_result(module_schema: dict[str, Any], backend_result: dict[str, A
             "buchsbaum_eisenbud_rank_conditions": be_rank_conditions,
             "grade_depth_regular_diagnostics": grade_depth_regular,
             "certificate_summary": certificate_summary,
+            "certificate_indexed_evidence": certificate_indexed_evidence,
             "singular_resolution_text": singular_resolution_text,
             "sage_resolution_text": sage_resolution_text,
             "raw_tagged_output": backend_result.get("tagged_output", ""),
@@ -1719,6 +1734,94 @@ def _buchsbaum_eisenbud_rank_condition_diagnostics(
             "are not inferred from these ranks and must come from the CAS diagnostic block."
         ),
         "paper_method_contract": be_fitting_paper_method_contract(),
+    }
+
+
+def _certificate_indexed_cas_evidence(
+    *,
+    module_schema: dict[str, Any],
+    backend: str,
+    certificate_summary: dict[str, Any],
+    fitting_ideals: dict[str, str],
+    minors: dict[str, str],
+    ideal_diagnostics: dict[str, Any],
+    be_rank_conditions: dict[str, Any],
+    grade_depth_regular: dict[str, Any],
+    be_diagnostics: dict[str, Any],
+    syzygy_diagnostics: dict[str, Any],
+) -> dict[str, Any]:
+    return {
+        "schema_version": CAS_CERTIFICATE_INDEXED_EVIDENCE_SCHEMA_VERSION,
+        "available": bool(certificate_summary.get("available")),
+        "backend": backend,
+        "coefficient_ring": module_schema.get("coefficient_ring"),
+        "module_schema_version": module_schema.get("schema_version"),
+        "input_sha256": module_schema.get("input_sha256"),
+        "presentation_shape": certificate_summary.get("presentation_shape"),
+        "certificate_type": certificate_summary.get("certificate_type", ""),
+        "exactness_certified": bool(certificate_summary.get("exactness_certified")),
+        "minimality_certified": bool(certificate_summary.get("minimality_certified")),
+        "free_resolution_summary_available": bool(certificate_summary.get("free_resolution_summary_available")),
+        "safe_to_render_as_real_free_resolution": bool(certificate_summary.get("safe_to_render_as_real_free_resolution")),
+        "safe_to_render_as_total_graded_resolution": bool(certificate_summary.get("safe_to_render_as_total_graded_resolution")),
+        "safe_to_render_as_multigraded_free_resolution": bool(certificate_summary.get("safe_to_render_as_multigraded_free_resolution")),
+        "evidence_blocks": {
+            "fitting_ideals": {
+                "available": bool(fitting_ideals),
+                "count": len(fitting_ideals or {}),
+                "diagnostic_only": True,
+                "not_a_resolution_certificate_by_itself": True,
+                "source": f"{backend}_fitting_ideal_block",
+            },
+            "determinantal_minors": {
+                "available": bool(minors),
+                "count": len(minors or {}),
+                "diagnostic_only": True,
+                "not_a_resolution_certificate_by_itself": True,
+                "source": f"{backend}_minors_block",
+            },
+            "ideal_diagnostics": {
+                "available": bool(ideal_diagnostics.get("available")),
+                "fitting_invariant_count": len(ideal_diagnostics.get("fitting_invariants", []) or []),
+                "minor_count": len(ideal_diagnostics.get("determinantal_minors", []) or []),
+                "diagnostic_only": True,
+                "not_a_resolution_certificate_by_itself": bool(ideal_diagnostics.get("not_a_resolution_certificate_by_itself", True)),
+            },
+            "buchsbaum_eisenbud_rank_conditions": {
+                "available": bool(be_rank_conditions.get("available")),
+                "diagnostic_only": True,
+                "is_independent_certificate": bool(be_rank_conditions.get("is_independent_certificate", False)),
+                "exactness_certified_by_backend": bool(be_rank_conditions.get("exactness_certified_by_backend")),
+                "minimality_certified_by_backend": bool(be_rank_conditions.get("minimality_certified_by_backend")),
+            },
+            "grade_depth_regular_diagnostics": {
+                "available": bool(grade_depth_regular.get("available")),
+                "diagnostic_only": True,
+                "rank_ideal_row_count": len(grade_depth_regular.get("rank_ideal_diagnostics", []) or []),
+                "regular_element_certificate_available": bool(grade_depth_regular.get("regular_element_certificate_available")),
+                "not_a_resolution_certificate_by_itself": bool(grade_depth_regular.get("not_a_resolution_certificate_by_itself", True)),
+            },
+            "buchsbaum_eisenbud_multipliers": {
+                "available": bool(be_diagnostics.get("multiplier_output_available")),
+                "diagnostic_only": True,
+                "safe_to_render_multiplier_output": bool(be_diagnostics.get("safe_to_render_multiplier_output")),
+                "is_resolution_backend": bool(be_diagnostics.get("is_resolution_backend", False)),
+                "safe_to_substitute_for_resolution": bool(be_diagnostics.get("safe_to_substitute_for_resolution", False)),
+                "bemultipliers_status": str(be_diagnostics.get("bemultipliers_status", "unreported")),
+            },
+            "syzygy_diagnostics": {
+                "available": bool(syzygy_diagnostics.get("available")),
+                "diagnostic_only": False,
+                "requires_certified_macaulay2_resolution_maps": bool(syzygy_diagnostics.get("requires_certified_macaulay2_resolution_maps", True)),
+                "not_inferred_from_chain_diagnostics": bool(syzygy_diagnostics.get("not_inferred_from_chain_diagnostics", True)),
+            },
+        },
+        "derived_category_claim_requires_chain_map_or_resolution_comparison": True,
+        "no_proxy_or_fallback": True,
+        "render_rule": (
+            "This block indexes explicit CAS evidence to the returned exactness certificate. Diagnostic blocks annotate "
+            "the certified result but do not independently certify a free resolution or derived equivalence."
+        ),
     }
 
 
@@ -2323,6 +2426,27 @@ def _hydrate_cached_result_contracts(result: dict[str, Any]) -> dict[str, Any]:
                     diag.setdefault("paper_method_contract", result["paper_method_contract"])
                     row["diagnostic_contract"] = diag
                 artifacts[key] = row
+        cert = artifacts.get("certificate_summary") if isinstance(artifacts.get("certificate_summary"), dict) else None
+        if cert is not None and not isinstance(artifacts.get("certificate_indexed_evidence"), dict):
+            module_schema = {
+                "schema_version": result.get("module_schema_version"),
+                "coefficient_ring": result.get("coefficient_ring"),
+                "input_sha256": result.get("input_sha256"),
+            }
+            artifacts["certificate_indexed_evidence"] = _certificate_indexed_cas_evidence(
+                module_schema=module_schema,
+                backend=str(cert.get("backend", result.get("backend", "unknown"))),
+                certificate_summary=cert,
+                fitting_ideals=artifacts.get("fitting_ideals") if isinstance(artifacts.get("fitting_ideals"), dict) else {},
+                minors=artifacts.get("minors") if isinstance(artifacts.get("minors"), dict) else {},
+                ideal_diagnostics=artifacts.get("ideal_diagnostics") if isinstance(artifacts.get("ideal_diagnostics"), dict) else {},
+                be_rank_conditions=artifacts.get("buchsbaum_eisenbud_rank_conditions") if isinstance(artifacts.get("buchsbaum_eisenbud_rank_conditions"), dict) else {},
+                grade_depth_regular=artifacts.get("grade_depth_regular_diagnostics") if isinstance(artifacts.get("grade_depth_regular_diagnostics"), dict) else {},
+                be_diagnostics=artifacts.get("buchsbaum_eisenbud_diagnostics") if isinstance(artifacts.get("buchsbaum_eisenbud_diagnostics"), dict) else {},
+                syzygy_diagnostics=artifacts.get("syzygies") if isinstance(artifacts.get("syzygies"), dict) else {},
+            )
+            cert["certificate_indexed_evidence_schema"] = artifacts["certificate_indexed_evidence"]["schema_version"]
+            artifacts["certificate_summary"] = cert
         result["cas_artifacts"] = artifacts
     return result
 

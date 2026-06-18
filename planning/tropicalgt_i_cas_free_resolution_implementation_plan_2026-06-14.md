@@ -739,3 +739,28 @@ CUDA_VISIBLE_DEVICES="" /home/iska/miniconda3/envs/tokengt/bin/python -m py_comp
 ```
 
 Next linear CAS item: expand certified small-module fixtures for Fitting/minor/Buchsbaum-Eisenbud output while keeping BEMultipliers post-certificate only and never substituting unavailable CAS evidence.
+
+## 2026-06-18 Certificate-Indexed CAS Evidence Summary
+
+Sequential CAS evidence item completed after bridge provenance:
+
+- Added `tropicalgt.cas_certificate_indexed_evidence.v1` to certified free-resolution reports.
+- Certified result payloads now include `cas_artifacts["certificate_indexed_evidence"]`, which indexes Fitting ideals, determinantal minors, ideal diagnostics, Buchsbaum-Eisenbud rank conditions, grade/depth regular diagnostics, optional BEMultipliers multiplier output, and syzygy diagnostics back to the exact CAS certificate and input hash.
+- The summary records render-safety flags from the certificate and marks diagnostic blocks as diagnostic-only where appropriate. It explicitly states that derived-category claims still require a chain map or certified resolution comparison.
+- Existing certified cache hits are hydrated with this evidence summary when they already contain a certificate summary. Hydration does not create a certificate; it only indexes already stored certified artifacts and preserves no-proxy policy.
+- Regression tests cover Singular ungraded determinantal/Fitting evidence, Macaulay2 multigraded evidence with grade/depth and syzygy diagnostics, BEMultipliers computed-output-as-post-resolution-diagnostic-only, live/cache certified reports, and older cache hydration.
+
+Validation:
+
+```text
+CUDA_VISIBLE_DEVICES="" PYTHONPATH=/home/iska/Documents/amelie/bio/TropicalGT/TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest -q TropicalGT-I/tests/test_algebraic_persistence.py -k "singular_certified_result or certified_cas_result_surfaces or bemultipliers_computed_output or smoke_when_backend_available"
+# 4 passed, 28 deselected
+CUDA_VISIBLE_DEVICES="" PYTHONPATH=/home/iska/Documents/amelie/bio/TropicalGT/TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest -q TropicalGT-I/tests/test_algebraic_persistence.py -k "total_graded_output or topological_algebra_report_has_multiparameter_data or level_radius_bifiltration_reports"
+# 3 passed, 29 deselected
+CUDA_VISIBLE_DEVICES="" PYTHONPATH=/home/iska/Documents/amelie/bio/TropicalGT/TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest -q TropicalGT-I/tests/test_algebraic_persistence.py
+# 32 passed
+CUDA_VISIBLE_DEVICES="" /home/iska/miniconda3/envs/tokengt/bin/python -m py_compile TropicalGT-I/src/tropicalgt/cas_free_resolution.py TropicalGT-I/tests/test_algebraic_persistence.py
+# passed
+```
+
+Next linear CAS/UI item: surface `certificate_indexed_evidence` in the relevant two-parameter/CAS visual and Herschel report paths only when present, otherwise show exact unavailable states.
