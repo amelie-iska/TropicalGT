@@ -54,6 +54,10 @@ def test_bpb_ablation_grid_dry_run_writes_isolated_configs(tmp_path: Path):
     paths = json.loads(result.stdout)
     manifest = json.loads(Path(paths["manifest"]).read_text(encoding="utf-8"))
     assert manifest["ran_training"] is False
+    assert manifest["match_contract"]["schema_version"] == "tropicalgt.bpb_ablation_match_contract.v1"
+    assert manifest["match_contract"]["boundary_steps"] == 5000
+    assert manifest["match_contract"]["requested_max_steps"] == 1
+    assert manifest["match_contract"]["variant_count"] == 4
     assert len(manifest["variants"]) == 4
     baseline_cfg = json.loads(Path(manifest["variants"][0]["config"]).read_text(encoding="utf-8"))
     telemetry_cfg = json.loads(Path(manifest["variants"][1]["config"]).read_text(encoding="utf-8"))
@@ -61,7 +65,14 @@ def test_bpb_ablation_grid_dry_run_writes_isolated_configs(tmp_path: Path):
     no_chart_cfg = json.loads(Path(manifest["variants"][3]["config"]).read_text(encoding="utf-8"))
     assert baseline_cfg["data_root"] is None
     assert baseline_cfg["wandb"]["enabled"] is False
+    assert baseline_cfg["max_steps"] == 1
     assert baseline_cfg["memory_bank_path"].endswith("baseline/analogical_memory/reasoning_memory.jsonl")
+    baseline_match = baseline_cfg["ablation_match_contract"]
+    assert baseline_match["schema_version"] == "tropicalgt.bpb_ablation_match_contract.v1"
+    assert baseline_match["boundary_steps"] == 5000
+    assert baseline_match["requested_max_steps"] == 1
+    assert baseline_match["seed"] == 123
+    assert baseline_match["data_root"] is None
     assert telemetry_cfg["model"]["enable_chart_bundle_auxiliary"] is True
     assert telemetry_cfg["model"]["bundle_transport_weight"] == 0.0
     assert telemetry_cfg["model"]["chart_bpb_consistency_weight"] == 0.0
@@ -76,6 +87,13 @@ def test_bpb_ablation_grid_dry_run_writes_isolated_configs(tmp_path: Path):
     assert no_chart_cfg["model"]["enable_chart_bundle_auxiliary"] is False
     assert no_chart_cfg["model"]["bundle_transport_weight"] == 0.0
     assert no_chart_cfg["seed"] == baseline_cfg["seed"] == 123
+    for cfg_row in (telemetry_cfg, toric_cfg, no_chart_cfg):
+        contract = cfg_row["ablation_match_contract"]
+        assert contract["match_group_id"] == baseline_match["match_group_id"]
+        assert contract["boundary_steps"] == baseline_match["boundary_steps"]
+        assert contract["requested_max_steps"] == baseline_match["requested_max_steps"]
+        assert contract["seed"] == baseline_match["seed"]
+        assert contract["base_config_fingerprint"] == baseline_match["base_config_fingerprint"]
 
 
 def test_bpb_ablation_grid_blocks_contract_breaking_bpb_configs_before_writing(tmp_path: Path):

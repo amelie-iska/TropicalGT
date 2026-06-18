@@ -12,6 +12,12 @@ import numpy as np
 DEFAULT_TARGETS = ("bpb", "graph_bpb", "eval_bpb", "eval_graph_bpb")
 PROMOTION_REQUIRED_TARGETS = ("eval_bpb", "eval_graph_bpb")
 ADVANCED_AUXILIARY_COEFFICIENT_KEYS = (
+    "gflownet_weight",
+    "graphcg_weight",
+    "margin_weight",
+    "entropy_weight",
+    "certificate_weight",
+    "sequence_tropical_weight",
     "bundle_transport_weight",
     "bundle_cocycle_weight",
     "bundle_flat_rank_weight",
@@ -20,6 +26,24 @@ ADVANCED_AUXILIARY_COEFFICIENT_KEYS = (
     "chart_bpb_consistency_weight",
     "bundle_atom_stability_weight",
 )
+PROMOTION_GUARDRAIL_GROUPS = {
+    "certificate": (
+        ("eval_certificate_agreement", "higher"),
+        ("eval_certificate_coverage", "higher"),
+        ("eval_certificate_disallowed_support_rate", "lower"),
+        ("eval_certificate_loss", "lower"),
+        ("eval_certificate_objective_loss", "lower"),
+        ("eval_certificate_diagnostic_penalty", "lower"),
+    ),
+    "tropical_wall": (
+        ("eval_margin_mean", "higher"),
+        ("eval_sequence_tropical_margin_mean", "higher"),
+        ("eval_wall_hit_rate", "lower"),
+        ("eval_strict_wall_hit_rate", "lower"),
+        ("eval_near_wall_hit_rate", "lower"),
+        ("eval_near_wall_only_rate", "lower"),
+    ),
+}
 
 
 @dataclass(frozen=True)
@@ -72,7 +96,7 @@ def build_bpb_ablation_report(
         "interpretation": {
             "primary_metric": "bpb",
             "graph_primary_metric": "graph_bpb",
-            "warning": "Per-step correlations use train history; eval targets are screened across matched final reports when at least three runs are available. Promote a component only after matched-seed ablations improve held-out bpb or graph_bpb.",
+            "warning": "Per-step correlations use train history; eval targets are screened across matched final reports when at least three runs are available. Promote a component only after matched-seed ablations improve held-out BPB and graph-BPB without regressing certificate or tropical-wall guardrails.",
         },
     }
 
@@ -110,6 +134,7 @@ def _run_row(bundle: ReportBundle, targets: tuple[str, ...]) -> dict[str, Any]:
         "device": bundle.report.get("device"),
         "ablation_variant": bundle.report.get("ablation_variant"),
         "ablation_overrides": bundle.report.get("ablation_overrides", {}),
+        "ablation_match_contract": bundle.report.get("ablation_match_contract", {}),
         "advanced_auxiliary_coefficients": _nonzero_advanced_auxiliary_coefficients(bundle.report),
         "targets": {target: metrics.get(target) for target in targets},
         "metrics": {key: value for key, value in metrics.items() if _is_finite_number(value)},
@@ -163,19 +188,23 @@ def _advanced_auxiliary_promotion_gate(baseline: ReportBundle, bundles: list[Rep
             continue
         current_metrics = _flatten_report_metrics(bundle.report)
         target_deltas = _target_deltas(baseline_metrics, current_metrics, PROMOTION_REQUIRED_TARGETS)
+        guardrails = _promotion_guardrail_status(baseline_metrics, current_metrics)
         match_issues = _matched_run_issues(baseline, bundle, baseline_seed, baseline_step, baseline_manifest_hash)
         missing_targets = [target for target in PROMOTION_REQUIRED_TARGETS if target not in target_deltas]
         improves_required = bool(not missing_targets and all(target_deltas[target] < 0.0 for target in PROMOTION_REQUIRED_TARGETS))
         matched_run = not match_issues
-        promotable = bool(matched_run and improves_required)
+        guardrails_safe = bool(guardrails["safe_for_promotion"])
+        promotable = bool(matched_run and improves_required and guardrails_safe)
         if not matched_run:
             status = "blocked_unmatched_ablation_run"
         elif missing_targets:
             status = "blocked_missing_required_eval_bpb_eval_graph_bpb_deltas"
-        elif promotable:
-            status = "promotable_matched_eval_bpb_eval_graph_bpb_improvement"
-        else:
+        elif not improves_required:
             status = "blocked_no_matched_eval_bpb_eval_graph_bpb_improvement"
+        elif not guardrails_safe:
+            status = "blocked_guardrail_regression_or_missing_certificate_tropical_evidence"
+        else:
+            status = "promotable_matched_eval_bpb_eval_graph_bpb_certificate_tropical_wall_safe"
         rows.append(
             {
                 "name": bundle.name,
@@ -188,18 +217,20 @@ def _advanced_auxiliary_promotion_gate(baseline: ReportBundle, bundles: list[Rep
                 "match_issues": match_issues,
                 "required_target_deltas": target_deltas,
                 "missing_required_targets": missing_targets,
-                "policy": "promote nonzero chart-bundle/toric coefficients only after matched-seed held-out eval BPB and eval graph-BPB both improve; otherwise keep them zero/default or telemetry-only",
+                "guardrail_status": guardrails,
+                "policy": "promote nonzero advanced auxiliary coefficients only after matched-seed held-out eval BPB and eval graph-BPB both improve and certificate/tropical-wall guardrails have real no-regression evidence; otherwise keep them zero/default or telemetry-only",
             }
         )
     candidates = [row for row in rows if row.get("advanced_auxiliary_coefficients")]
     promotable = [row for row in candidates if row.get("promotable")]
     return {
         "available": bool(candidates),
-        "policy": "no_proxy_no_fallback_matched_seed_eval_bpb_and_eval_graph_bpb_required_before_promoting_advanced_auxiliary_coefficients",
+        "policy": "no_proxy_no_fallback_matched_seed_eval_bpb_eval_graph_bpb_certificate_and_tropical_wall_required_before_promoting_advanced_auxiliary_coefficients",
         "baseline": str(baseline.path),
         "baseline_seed": baseline_seed,
         "baseline_final_step": baseline_step,
         "required_targets": list(PROMOTION_REQUIRED_TARGETS),
+        "required_guardrail_groups": {group: [metric for metric, _direction in metrics] for group, metrics in PROMOTION_GUARDRAIL_GROUPS.items()},
         "advanced_auxiliary_coefficient_keys": list(ADVANCED_AUXILIARY_COEFFICIENT_KEYS),
         "candidate_count": len(candidates),
         "promotable_count": len(promotable),
@@ -230,6 +261,55 @@ def _target_deltas(base: dict[str, float], current: dict[str, float], targets: I
     return out
 
 
+def _promotion_guardrail_status(base: dict[str, float], current: dict[str, float]) -> dict[str, Any]:
+    groups: dict[str, Any] = {}
+    failed_groups: list[str] = []
+    for group, metrics in PROMOTION_GUARDRAIL_GROUPS.items():
+        rows = []
+        regressions = []
+        for metric, direction in metrics:
+            if not (_is_finite_number(base.get(metric)) and _is_finite_number(current.get(metric))):
+                rows.append({"metric": metric, "direction": direction, "available": False})
+                continue
+            baseline_value = float(base[metric])
+            candidate_value = float(current[metric])
+            delta = candidate_value - baseline_value
+            if direction == "higher":
+                regressed = delta < 0.0
+            else:
+                regressed = delta > 0.0
+            row = {
+                "metric": metric,
+                "direction": direction,
+                "available": True,
+                "baseline": baseline_value,
+                "candidate": candidate_value,
+                "delta": delta,
+                "regressed": bool(regressed),
+            }
+            rows.append(row)
+            if regressed:
+                regressions.append(f"{metric}:delta={delta:.6g}:direction={direction}")
+        available_rows = [row for row in rows if row.get("available")]
+        group_safe = bool(available_rows and not regressions)
+        if not group_safe:
+            failed_groups.append(group)
+        groups[group] = {
+            "safe": group_safe,
+            "available_metric_count": len(available_rows),
+            "missing_metrics": [row["metric"] for row in rows if not row.get("available")],
+            "regressions": regressions,
+            "metrics": rows,
+            "policy": "at least one real metric in this group must be present for baseline and candidate, and no present metric may regress",
+        }
+    return {
+        "safe_for_promotion": not failed_groups,
+        "failed_groups": failed_groups,
+        "groups": groups,
+        "policy": "No proxy/fallback guardrail: advanced coefficients cannot be promoted if held-out eval certificate or tropical-wall evidence is missing or regresses.",
+    }
+
+
 def _matched_run_issues(
     baseline: ReportBundle,
     bundle: ReportBundle,
@@ -245,6 +325,28 @@ def _matched_run_issues(
     candidate_manifest_hash = _stable_json_hash(bundle.report.get("dataset_manifest")) if bundle.report.get("dataset_manifest") else ""
     if baseline_manifest_hash and candidate_manifest_hash and candidate_manifest_hash != baseline_manifest_hash:
         issues.append("dataset_manifest mismatch")
+    baseline_contract = baseline.report.get("ablation_match_contract") if isinstance(baseline.report.get("ablation_match_contract"), dict) else {}
+    candidate_contract = bundle.report.get("ablation_match_contract") if isinstance(bundle.report.get("ablation_match_contract"), dict) else {}
+    if baseline_contract:
+        if not candidate_contract:
+            issues.append("ablation_match_contract missing on candidate")
+        else:
+            for key in (
+                "match_group_id",
+                "boundary_steps",
+                "requested_max_steps",
+                "seed",
+                "base_config_fingerprint",
+                "data_root",
+                "require_data",
+                "train_limit",
+                "val_limit",
+                "graph_bpb_side_weight",
+            ):
+                if candidate_contract.get(key) != baseline_contract.get(key):
+                    issues.append(
+                        f"ablation_match_contract {key} mismatch: baseline={baseline_contract.get(key)} candidate={candidate_contract.get(key)}"
+                    )
     return issues
 
 
@@ -503,28 +605,29 @@ def _markdown_report(report: dict[str, Any]) -> str:
     gate = report.get("advanced_auxiliary_promotion_gate") if isinstance(report.get("advanced_auxiliary_promotion_gate"), dict) else {}
     lines.extend(["", "## Advanced Auxiliary Promotion Gate", ""])
     lines.append(str(gate.get("policy", "no promotion gate available")))
-    lines.extend(["", "| variant | status | promotable | delta eval_bpb | delta eval_graph_bpb |", "|---|---|---:|---:|---:|"])
+    lines.extend(["", "| variant | status | promotable | delta eval_bpb | delta eval_graph_bpb | guardrails |", "|---|---|---:|---:|---:|---|"])
     for row in gate.get("rows", []):
         if not isinstance(row, dict) or not row.get("advanced_auxiliary_coefficients"):
             continue
         deltas = row.get("required_target_deltas", {}) if isinstance(row.get("required_target_deltas"), dict) else {}
         lines.append(
-            "| {name} | `{status}` | {promotable} | {bpb} | {graph_bpb} |".format(
+            "| {name} | `{status}` | {promotable} | {bpb} | {graph_bpb} | {guardrails} |".format(
                 name=row.get("ablation_variant") or row.get("name"),
                 status=row.get("status"),
                 promotable=str(bool(row.get("promotable"))),
                 bpb=_fmt(deltas.get("eval_bpb")),
                 graph_bpb=_fmt(deltas.get("eval_graph_bpb")),
+                guardrails=_guardrail_summary_label(row.get("guardrail_status")),
             )
         )
     if not gate.get("candidate_count"):
-        lines.append("| no nonzero chart-bundle/toric variants | `unavailable` | False | NA | NA |")
+        lines.append("| no nonzero advanced auxiliary variants | `unavailable` | False | NA | NA | unavailable |")
     lines.extend(
         [
             "",
             "## Discipline",
             "",
-            "Use this report to choose ablation candidates, not to claim causal wins. A metric is promoted only when matched-seed validation improves held-out `bpb` or `graph_bpb`.",
+            "Use this report to choose ablation candidates, not to claim causal wins. A metric is promoted only when matched-seed validation improves held-out `bpb` and `graph_bpb` while held-out certificate and tropical-wall guardrails remain non-regressing with real evidence.",
             "",
         ]
     )
@@ -568,6 +671,15 @@ def _write_correlation_html(report: dict[str, Any], path: Path) -> None:
         "<h1>BPB/graph-BPB metric correlation screen</h1>"
         + fig.to_html(full_html=False, include_plotlyjs=True, config={"responsive": True}),
     )
+
+
+def _guardrail_summary_label(status: Any) -> str:
+    if not isinstance(status, dict):
+        return "unavailable"
+    if status.get("safe_for_promotion"):
+        return "pass"
+    failed = status.get("failed_groups") if isinstance(status.get("failed_groups"), list) else []
+    return "failed: " + ", ".join(str(group) for group in failed) if failed else "failed"
 
 
 def _write_dark_html(path: Path, body: str) -> None:

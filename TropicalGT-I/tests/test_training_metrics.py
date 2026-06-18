@@ -138,6 +138,21 @@ def test_training_history_contains_certificate_and_throughput_metrics(tmp_path: 
         assert key in row
         assert row[key] == row[key]
     assert report["eval"]["bpb"] == report["eval"]["bpb_exact"]
+    for key in [
+        "certificate_agreement",
+        "certificate_coverage",
+        "certificate_disallowed_support_rate",
+        "certificate_loss",
+        "certificate_objective_loss",
+        "certificate_diagnostic_penalty",
+        "margin_mean",
+        "strict_wall_hit_rate",
+        "near_wall_hit_rate",
+    ]:
+        assert key in report["eval"]
+        assert report["eval"][key] == report["eval"][key]
+    assert "eval_certificate_agreement" in report["metrics"]
+    assert "eval_strict_wall_hit_rate" in report["metrics"]
     assert report["eval"]["legacy_graph_json_substitution_guardrail_records"] == report["eval"]["graph_json_fallback_records"] == 0
     assert report["eval"]["legacy_graph_json_substitution_guardrail_rate"] == report["eval"]["invalid_graph_rate"] == 0.0
     assert report["eval"]["graph_bpb"] == report["eval"]["graph_bpb"]

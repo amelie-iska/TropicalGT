@@ -54,3 +54,22 @@ CUDA_VISIBLE_DEVICES="" python3 -m py_compile TropicalGT-I/scripts/write_hersche
 CUDA_VISIBLE_DEVICES="" /home/iska/miniconda3/bin/conda run -n tokengt python -m pytest -q tests/test_herschel_5k_report.py tests/test_prepare_5k_review_bundle.py tests/test_launch_safety.py tests/test_parameter_golf_review_loop.py
 # 34 passed in 1.17s
 ```
+
+## 2026-06-18 BPB-First Promotion Gates And Matched 5K Ablations
+
+BPB-first ablation promotion is now stricter and evidence-backed:
+
+- `build_bpb_ablation_report` now treats nonzero core advanced coefficients (`gflownet_weight`, `graphcg_weight`, `margin_weight`, `entropy_weight`, `certificate_weight`, `sequence_tropical_weight`) and chart-bundle/toric coefficients as promotion candidates.
+- Promotion requires matched held-out `eval_bpb` and `eval_graph_bpb` improvement plus real held-out certificate and tropical-wall guardrail evidence. Missing or regressing `eval_certificate_*` or `eval_*wall*`/margin metrics blocks promotion; no train-history proxy or fallback can justify a coefficient increase.
+- `evaluate_model` now aggregates actual scalar validation outputs for certificate and tropical-wall guardrails and leaves them absent when unavailable. Training reports persist those as `eval_*` metrics.
+- `run_bpb_ablation_grid.py` now writes `tropicalgt.bpb_ablation_match_contract.v1` into the manifest and every generated config, with 5K boundary metadata, requested max steps, seed, data identity, graph-BPB side weight, and a base-config fingerprint. Training reports copy this contract forward so later analysis rejects mismatched runs.
+- The analyzer rejects candidates whose match contract differs from baseline even if BPB improves and guardrails pass.
+
+Validation:
+
+```text
+CUDA_VISIBLE_DEVICES="" python3 -m py_compile TropicalGT-I/src/tropicalgt/ablation.py TropicalGT-I/src/tropicalgt/run.py TropicalGT-I/scripts/run_bpb_ablation_grid.py TropicalGT-I/tests/test_bpb_ablation.py TropicalGT-I/tests/test_bpb_ablation_grid.py TropicalGT-I/tests/test_training_metrics.py
+# passed
+CUDA_VISIBLE_DEVICES="" /home/iska/miniconda3/bin/conda run -n tokengt python -m pytest -q tests/test_bpb_ablation.py tests/test_bpb_ablation_grid.py tests/test_training_metrics.py
+# 19 passed in 5.20s
+```

@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 from copy import deepcopy
+import hashlib
 import json
 import sys
 import time
@@ -108,7 +109,8 @@ def main() -> None:
     parser.add_argument("--config", default=str(ROOT / "configs" / "gpu_smoke.json"))
     parser.add_argument("--output-dir", default=str(ROOT / "outputs" / "bpb_ablation_grid"))
     parser.add_argument("--variants", default="baseline,chart_bundle_telemetry,chart_bundle_toric_0p1x,no_graphcg,no_gflownet,no_certificate,no_tropical_regularizers,no_auxiliary")
-    parser.add_argument("--max-steps", type=int, default=None)
+    parser.add_argument("--max-steps", type=int, default=None, help="Override training steps for quick tests; omitted configs use --boundary-steps.")
+    parser.add_argument("--boundary-steps", type=int, default=5000, help="Matched ablation boundary step; defaults to the 5K gate.")
     parser.add_argument("--seed", type=int, default=None)
     parser.add_argument("--run", action="store_true", help="Actually train each generated variant")
     parser.add_argument("--fixture", action="store_true", help="Force fixture data for quick CPU/debug ablations")
@@ -134,6 +136,10 @@ def main() -> None:
     report_paths: list[str] = []
     configs = []
     run_id = time.strftime("%Y%m%d_%H%M%S")
+    boundary_steps = int(args.boundary_steps or 5000)
+    requested_max_steps = int(args.max_steps) if args.max_steps is not None else boundary_steps
+    match_group_id = f"{str(base.get('run_name', 'tropicalgt_i'))}_matched_{boundary_steps}_step_{run_id}"
+    base_config_fingerprint = _stable_json_hash(_match_fingerprint_payload(base, boundary_steps))
     variant_rows: list[dict[str, Any]] = []
     for idx, name in enumerate(variant_names):
         cfg = _variant_config(
@@ -144,6 +150,10 @@ def main() -> None:
             VARIANTS[name],
             seed=args.seed,
             max_steps=args.max_steps,
+            boundary_steps=boundary_steps,
+            requested_max_steps=requested_max_steps,
+            match_group_id=match_group_id,
+            base_config_fingerprint=base_config_fingerprint,
             fixture=args.fixture,
             device=args.device,
             wandb=args.wandb,
@@ -189,6 +199,15 @@ def main() -> None:
         "base_config": str(args.config),
         "run_id": run_id,
         "ran_training": bool(args.run),
+        "match_contract": {
+            "schema_version": "tropicalgt.bpb_ablation_match_contract.v1",
+            "match_group_id": match_group_id,
+            "boundary_steps": boundary_steps,
+            "requested_max_steps": requested_max_steps,
+            "base_config_fingerprint": base_config_fingerprint,
+            "variant_count": len(configs),
+            "policy": "Matched BPB ablations must share seed, boundary, requested steps, data identity, graph BPB side weight, and base config fingerprint before any advanced auxiliary coefficient can be promoted.",
+        },
         "variants": configs,
         "reports": report_paths,
     }
@@ -221,6 +240,10 @@ def _variant_config(
     overrides: dict[str, Any],
     seed: int | None,
     max_steps: int | None,
+    boundary_steps: int,
+    requested_max_steps: int,
+    match_group_id: str,
+    base_config_fingerprint: str,
     fixture: bool,
     device: str | None,
     wandb: bool,
@@ -236,8 +259,7 @@ def _variant_config(
         cfg["seed"] = int(seed)
     else:
         cfg["seed"] = int(cfg.get("seed", 1729))
-    if max_steps is not None:
-        cfg["max_steps"] = int(max_steps)
+    cfg["max_steps"] = int(max_steps) if max_steps is not None else int(boundary_steps)
     if fixture:
         cfg["data_root"] = None
         cfg["require_data"] = False
@@ -253,7 +275,35 @@ def _variant_config(
         _set_dotted(cfg, dotted_key, value)
     cfg["ablation_variant"] = name
     cfg["ablation_overrides"] = overrides
+    cfg["ablation_match_contract"] = {
+        "schema_version": "tropicalgt.bpb_ablation_match_contract.v1",
+        "match_group_id": match_group_id,
+        "variant": name,
+        "baseline_variant": "baseline",
+        "boundary_steps": int(boundary_steps),
+        "requested_max_steps": int(requested_max_steps),
+        "seed": int(cfg.get("seed", 0)),
+        "base_config_fingerprint": base_config_fingerprint,
+        "data_root": cfg.get("data_root"),
+        "require_data": bool(cfg.get("require_data", False)),
+        "train_limit": cfg.get("train_limit"),
+        "val_limit": cfg.get("val_limit"),
+        "graph_bpb_side_weight": float(cfg.get("graph_bpb_side_weight", 1.0) or 1.0),
+        "policy": "No promotion from this run unless all candidate reports share these matched fields with baseline and pass held-out BPB, graph-BPB, certificate, and tropical-wall gates.",
+    }
     return cfg
+
+
+def _match_fingerprint_payload(base: dict[str, Any], boundary_steps: int) -> dict[str, Any]:
+    excluded = {"run_name", "output_dir", "checkpoint_dir", "memory_bank_path", "wandb_name", "wandb_run_name", "ablation_variant", "ablation_overrides"}
+    payload = {key: value for key, value in base.items() if key not in excluded}
+    payload["boundary_steps"] = int(boundary_steps)
+    return payload
+
+
+def _stable_json_hash(value: object) -> str:
+    payload = json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
+    return hashlib.sha256(payload.encode("utf-8", "ignore")).hexdigest()
 
 
 def _set_dotted(cfg: dict[str, Any], key: str, value: Any) -> None:

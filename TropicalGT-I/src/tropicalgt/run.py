@@ -43,6 +43,22 @@ from .tokenizer import TokenGTTokenizer
 from .visualization import write_graphcg_training_visualizations, write_inference_audit_artifacts, write_metric_visualizations, write_reasoning_visualizations
 
 
+EVAL_GUARDRAIL_SCALAR_KEYS: tuple[str, ...] = (
+    "certificate_loss",
+    "certificate_objective_loss",
+    "certificate_diagnostic_penalty",
+    "certificate_agreement",
+    "certificate_coverage",
+    "certificate_disallowed_support_rate",
+    "margin_mean",
+    "sequence_tropical_margin_mean",
+    "wall_hit_rate",
+    "strict_wall_hit_rate",
+    "near_wall_hit_rate",
+    "near_wall_only_rate",
+)
+
+
 WANDB_PRIORITY_GROUPS: tuple[tuple[str, tuple[str, ...]], ...] = (
     (
         "00_primary",
@@ -914,6 +930,7 @@ def train(config_path: str | Path, resume_from: str | Path | None = None, max_st
         "seed": seed,
         "ablation_variant": cfg.get("ablation_variant"),
         "ablation_overrides": cfg.get("ablation_overrides", {}),
+        "ablation_match_contract": cfg.get("ablation_match_contract", {}),
         "advanced_bpb_contract": advanced_bpb_contract,
         "advanced_bpb_contract_gates": advanced_bpb_contract_gates,
     }
@@ -1569,6 +1586,8 @@ def evaluate_model(
     causal_dag_total = 0
     random_graph_total = 0
     parameter_golf_total = 0
+    eval_guardrail_sums: dict[str, float] = {}
+    eval_guardrail_counts: dict[str, int] = {}
     mim_metric_sums: dict[str, float] = {}
     mim_batches = 0
     mim_records: list[dict[str, Any]] = []
@@ -1577,6 +1596,14 @@ def evaluate_model(
         for x, y, graph_batch, records in loader:
             x = x.to(device); y = y.to(device)
             out = model(x, graph_batch, y)
+            for key in EVAL_GUARDRAIL_SCALAR_KEYS:
+                value = out.get(key)
+                if not (torch.is_tensor(value) and value.ndim == 0):
+                    continue
+                scalar = float(value.detach().cpu())
+                if math.isfinite(scalar):
+                    eval_guardrail_sums[key] = eval_guardrail_sums.get(key, 0.0) + scalar
+                    eval_guardrail_counts[key] = eval_guardrail_counts.get(key, 0) + 1
             if mim_cfg.enabled:
                 mim_report = meet_in_middle_batch(
                     model,
@@ -1641,6 +1668,11 @@ def evaluate_model(
         explicit_graph_json_bytes_total,
         graph_side_weight=graph_bpb_side_weight,
     )
+    eval_guardrail_metrics = {
+        key: eval_guardrail_sums[key] / max(eval_guardrail_counts.get(key, 0), 1)
+        for key in EVAL_GUARDRAIL_SCALAR_KEYS
+        if eval_guardrail_counts.get(key, 0) > 0
+    }
     report: dict[str, Any] = {
         "nll": nll,
         "ppl": math.exp(min(nll, 20)),
@@ -1662,6 +1694,7 @@ def evaluate_model(
         "random_graph_ar_rate": random_graph_total / max(len(dataset), 1),
         "parameter_golf_source_rate": parameter_golf_total / max(len(dataset), 1),
         "graph_autoregressive_decoding_enabled": 1.0 if graph_autoregressive else 0.0,
+        **eval_guardrail_metrics,
         **bpb,
     }
     if mim_cfg.enabled:
