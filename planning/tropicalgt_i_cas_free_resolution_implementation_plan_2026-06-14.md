@@ -765,6 +765,27 @@ CUDA_VISIBLE_DEVICES="" /home/iska/miniconda3/envs/tokengt/bin/python -m py_comp
 
 Next linear CAS/UI item: surface `certificate_indexed_evidence` in the relevant two-parameter/CAS visual and Herschel report paths only when present, otherwise show exact unavailable states.
 
+### 2026-06-18 Live CAS Source-Contract Smoke Coverage
+
+Follow-up verification item completed after adding the certificate-indexed source contract:
+
+- The installed remote CAS path now exercises the same `tropicalgt.cas_certificate_indexed_source_contract.v1` assertions used by the deterministic Singular and Macaulay2 fixtures.
+- The live backend smoke asserts the certificate summary source, backend-specific Fitting/minor source block names, exactness-required rendering flag, no-proxy/no-fallback flag, and the explicit rule that Fitting/minor diagnostics do not imply multipliers or derived equivalence.
+- This remains a source-contract check, not a new algebraic claim: the backend still has to emit the certified resolution, exactness/minimality flags, and structured artifact blocks before any visual/report path may render them as mathematical evidence.
+
+Validation:
+
+```text
+CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m py_compile TropicalGT-I/tests/test_algebraic_persistence.py
+# passed
+CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest -q TropicalGT-I/tests/test_algebraic_persistence.py::test_real_cas_free_resolution_smoke_when_backend_available
+# 1 passed
+CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest -q TropicalGT-I/tests/test_algebraic_persistence.py
+# 32 passed
+CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src:TropicalGT-I/scripts /home/iska/miniconda3/envs/tokengt/bin/python TropicalGT-I/scripts/audit_metric_provenance.py --fail-on-uncovered
+# findings=332 covered=332 uncovered=0
+```
+
 ## 2026-06-18 Certificate-Indexed Evidence Visual And Herschel Surfacing
 
 Sequential CAS/UI surfacing item completed:

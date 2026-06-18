@@ -635,6 +635,16 @@ def test_real_cas_free_resolution_smoke_when_backend_available():
         assert ungraded["betti_table_rows"]
         assert all(row["safe_for_multigraded_claims"] is False for row in ungraded["betti_table_rows"])
         assert ungraded["not_multigraded"] is True
+        evidence = real["cas_artifacts"]["certificate_indexed_evidence"]
+        source_contract = evidence["evidence_source_contract"]
+        assert source_contract["schema_version"] == "tropicalgt.cas_certificate_indexed_source_contract.v1"
+        assert source_contract["exactness_certificate_source"] == "certificate_summary"
+        assert source_contract["requires_exactness_certificate_before_rendering"] is True
+        assert source_contract["fitting_and_minors_do_not_imply_multipliers"] is True
+        assert source_contract["diagnostics_do_not_certify_resolution_or_derived_equivalence"] is True
+        assert source_contract["no_proxy_or_fallback"] is True
+        assert source_contract["fitting_ideals_source"] == f"{real['backend']}_fitting_ideal_block"
+        assert source_contract["determinantal_minors_source"] == f"{real['backend']}_minors_block"
         if real["backend"] == "Singular":
             assert real["cas_artifacts"]["singular_determinantal"]["available"] is True
             assert real["cas_artifacts"]["fitting_ideals"]

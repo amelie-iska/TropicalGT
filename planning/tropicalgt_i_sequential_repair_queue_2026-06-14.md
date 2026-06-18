@@ -832,3 +832,5 @@ The live item-by-item repair inventory is maintained in `planning/tropicalgt_i_c
 - [x] The contract preserves the no-proxy rule that Fitting/minor diagnostics do not imply multipliers, free-resolution certification, or derived equivalence.
 - [x] Singular and Macaulay2 fixture tests now assert the source contract and backend-specific block names.
 - [x] Verification passed: py-compile; focused CAS source-contract tests (`2 passed, 30 deselected`); full algebraic persistence tests (`32 passed`).
+- [x] Live backend smoke now asserts the same source-contract fields on the installed CAS path: certificate-summary source, backend-specific Fitting/minor block names, exactness-required rendering, diagnostic-only Fitting/minor policy, no derived-equivalence implication, and no proxy/fallback.
+- [x] Verification passed: live CAS source-contract smoke (`1 passed`); full algebraic persistence tests (`32 passed`); metric provenance audit (`332 covered, 0 uncovered`).

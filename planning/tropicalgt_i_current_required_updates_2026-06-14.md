@@ -1062,3 +1062,5 @@ CUDA_VISIBLE_DEVICES="" /home/iska/miniconda3/bin/conda run -n tokengt python -m
 - The contract explicitly forbids treating Fitting ideals or determinantal minors as multiplier output, a free-resolution certificate, or derived-equivalence evidence.
 - Singular and Macaulay2 fixture tests assert backend-specific source blocks and the no-proxy flags.
 - Verification passed: py-compile; focused CAS source-contract tests (`2 passed, 30 deselected`); full algebraic persistence tests (`32 passed`).
+- Live CAS smoke now asserts the same source-contract fields against the installed backend path, including certificate-summary source, Fitting/minor block names, exactness-required rendering, no derived-equivalence implication, and no proxy/fallback.
+- Verification passed: live CAS source-contract smoke (`1 passed`); full algebraic persistence tests (`32 passed`); metric provenance audit (`332 covered, 0 uncovered`).
