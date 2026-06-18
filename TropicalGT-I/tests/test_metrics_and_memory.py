@@ -516,6 +516,7 @@ def test_probability_simplicial_map_diagnostics_certifies_filtered_chain_map():
     assert report["assignment_solver"] in {"scipy_linear_sum_assignment", "greedy_fallback"}
     evidence = report["probability_vector_evidence"]
     assert evidence["schema_version"] == "tropicalgt.probability_vector_assignment_evidence.v1"
+    assert evidence["available"] is True
     assert evidence["assignment_metric"] == "jensen_shannon_distance_on_model_probability_vectors"
     assert evidence["assignment_solver"] == report["assignment_solver"]
     assert evidence["all_displayed_query_vertices_have_probability_vectors"] is True
@@ -539,6 +540,39 @@ def test_probability_simplicial_map_diagnostics_certifies_filtered_chain_map():
     assert "certifies a filtered simplicial map" in report["simplex_tree_map"]["interpretation"]
     wrapped = {"inference_scaling": {"trajectory_probability_filtered_simplicial_object": query_complex}}
     assert query_probability_complex_from_report(wrapped) == query_complex
+
+
+def test_probability_simplicial_map_unavailable_reports_probability_vector_evidence():
+    query_complex = _probability_complex("q")
+    no_probability_complex = _probability_complex("n")
+    for simplex in no_probability_complex["simplices"]:
+        if simplex.get("dimension") == 0:
+            simplex.pop("probability", None)
+            simplex.pop("model_probability_vector", None)
+            simplex.pop("probability_vector", None)
+            simplex.pop("probability_source", None)
+
+    report = probability_simplicial_map_diagnostics(query_complex, no_probability_complex)
+    assert report["available"] is False
+    assert report["map_source"] == "unavailable_model_probability_jensen_shannon_assignment"
+    assert report["assignment_metric"] == "jensen_shannon_distance_on_model_probability_vectors"
+    assert report["assignment_solver"] == "unavailable"
+    assert report["map_claim_failure_reason"] == "unavailable_no_model_probability_vectors"
+    assert report["safe_unavailable_render"] is True
+    assert report["vertex_map"] == []
+    evidence = report["probability_vector_evidence"]
+    assert evidence["schema_version"] == "tropicalgt.probability_vector_assignment_evidence.v1"
+    assert evidence["available"] is False
+    assert evidence["reason"] == "unavailable_no_model_probability_vectors"
+    assert evidence["query_probability_vertex_count"] == 3
+    assert evidence["memory_probability_vertex_count"] == 0
+    assert evidence["all_displayed_query_vertices_have_probability_vectors"] is True
+    assert evidence["all_displayed_memory_vertices_have_probability_vectors"] is False
+    assert evidence["embedding_only_assignment_used"] is False
+    assert evidence["safe_unavailable_render"] is True
+    assert evidence["no_proxy_or_fallback"] is True
+    assert report["simplex_tree_map"]["safe_unavailable_render"] is True
+    assert "embedding-derived" in report["simplex_tree_map"]["interpretation"]
 
 
 def test_analogical_memory_retrieval_uses_probability_simplicial_map_weight(tmp_path):
@@ -635,6 +669,15 @@ def test_analogical_memory_retrieval_requires_probability_vectors_when_weight_po
     assert hits[0]["probability_assignment_gate_passed"] is True
     assert hits[0]["probability_simplicial_map_available"] is False
     assert hits[0]["probability_simplicial_map_claim_failure_reason"] == "unavailable_no_model_probability_vectors"
+    evidence = hits[0]["probability_simplicial_map_probability_vector_evidence"]
+    assert evidence["schema_version"] == "tropicalgt.probability_vector_assignment_evidence.v1"
+    assert evidence["available"] is False
+    assert evidence["reason"] == "unavailable_no_model_probability_vectors"
+    assert evidence["query_probability_vertex_count"] == 3
+    assert evidence["memory_probability_vertex_count"] == 0
+    assert evidence["embedding_only_assignment_used"] is False
+    assert evidence["safe_unavailable_render"] is True
+    assert evidence["no_proxy_or_fallback"] is True
 
 
 def test_analogical_memory_probability_map_must_preserve_simplex_tree_to_score(tmp_path):

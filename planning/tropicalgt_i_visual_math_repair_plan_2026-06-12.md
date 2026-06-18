@@ -122,6 +122,7 @@
 - [x] Compute conservative `derived_algebraic_similarity = min(ph_similarity, free_resolution_similarity, rank_invariant_similarity, chain_map_score)`. (2026-06-18: coarse signature cosine remains displayed separately and no longer participates in the derived/algebraic minimum.)
 - [x] Move any embedding/probability cosine into a separate `signature_cosine` column. (2026-06-18 verified: top-k table and pair hovers label this as coarse signature cosine, separate from derived/algebraic similarity.)
 - [x] Add a simplex-tree analogy view with preserved face/coface paths. (2026-06-18 verified: `analogical_simplex_tree_analogy.html/json` renders finite simplex-tree rows and preserved face/coface chains.)
+- [x] Add explicit unavailable probability-vector assignment evidence for early-training or missing-probability analogies. (2026-06-18 verified: unavailable probability maps now emit `tropicalgt.probability_vector_assignment_evidence.v1` with vertex/probability counts, exact reason, `embedding_only_assignment_used=false`, `safe_unavailable_render=true`, and no-proxy/no-fallback flags. CPU-only checks: `pytest -q TropicalGT-I/tests/test_metrics_and_memory.py -k "probability_simplicial_map or probability_vectors_when_weight_positive"` and full `test_metrics_and_memory.py`.)
 
 ### Task 7: Browser QA and Push
 

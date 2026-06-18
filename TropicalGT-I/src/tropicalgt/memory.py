@@ -553,13 +553,33 @@ def _probability_simplicial_map_retrieval_fields(
 
 def _empty_probability_map(query_vertices: list[dict[str, Any]], memory_vertices: list[dict[str, Any]], reason: str) -> dict[str, Any]:
     chain_map = _memory_unavailable_chain_map(reason)
+    probability_vector_evidence = _unavailable_probability_vector_assignment_evidence(query_vertices, memory_vertices, reason)
     return {
         "available": False,
-        "map_source": "none",
+        "map_source": "unavailable_model_probability_jensen_shannon_assignment",
+        "assignment_metric": "jensen_shannon_distance_on_model_probability_vectors",
+        "assignment_solver": "unavailable",
+        "field": "F2",
+        "ring": "F2[x_level,x_radius]",
+        "probability_alignment": "zero_pad_to_common_token_index_feature_space_then_renormalize",
+        "probability_vector_evidence": probability_vector_evidence,
         "reason": reason,
         "displayed_domain_vertices": len(query_vertices),
         "displayed_codomain_vertices": len(memory_vertices),
         "vertex_map": [],
+        "jensen_shannon_distance_summary": _numeric_summary([]),
+        "assignment_cost_summary": _numeric_summary([]),
+        "simplex_tree_map": {
+            "available": False,
+            "filtered_simplicial_map_certified": False,
+            "checked_simplices": 0,
+            "preserved_simplices": 0,
+            "preservation_rate": 0.0,
+            "reason": reason,
+            "safe_unavailable_render": True,
+            "no_proxy_or_fallback": True,
+            "interpretation": "No probability-vector assignment was computed; the row is rendered as unavailable rather than as an embedding-derived correspondence.",
+        },
         "simplex_tree_map_checked": 0,
         "simplex_tree_map_preserved": 0,
         "simplex_tree_map_preservation_rate": 0.0,
@@ -571,8 +591,10 @@ def _empty_probability_map(query_vertices: list[dict[str, Any]], memory_vertices
         "map_claim_status": "unavailable_probability_correspondence_certificate",
         "map_claim_failure_reason": reason,
         "no_proxy_or_fallback": True,
+        "safe_unavailable_render": True,
         "chain_map_diagnostics": chain_map,
         "persistence_module_morphism_diagnostics": _memory_persistence_morphism_diagnostics(chain_map),
+        "interpretation": "No model-probability Jensen-Shannon assignment is available; no embedding-only proxy or fallback map is rendered.",
     }
 
 
@@ -684,6 +706,7 @@ def _probability_vector_assignment_evidence(
     memory_count = sum(vec is not None for vec in m_probs)
     return {
         "schema_version": "tropicalgt.probability_vector_assignment_evidence.v1",
+        "available": True,
         "source": "probability_filtered_complex_vertices",
         "probability_vector_source": "model_probability_vectors_on_vertices",
         "assignment_metric": "jensen_shannon_distance_on_model_probability_vectors",
@@ -697,6 +720,38 @@ def _probability_vector_assignment_evidence(
         "all_displayed_memory_vertices_have_probability_vectors": bool(memory_vertices and memory_count == len(memory_vertices)),
         "embedding_only_assignment_used": False,
         "no_proxy_or_fallback": True,
+        "safe_unavailable_render": False,
+    }
+
+
+def _unavailable_probability_vector_assignment_evidence(
+    query_vertices: list[dict[str, Any]],
+    memory_vertices: list[dict[str, Any]],
+    reason: str,
+) -> dict[str, Any]:
+    q_probs = [_probability_feature_vector(row) for row in query_vertices]
+    m_probs = [_probability_feature_vector(row) for row in memory_vertices]
+    query_count = sum(vec is not None for vec in q_probs)
+    memory_count = sum(vec is not None for vec in m_probs)
+    return {
+        "schema_version": "tropicalgt.probability_vector_assignment_evidence.v1",
+        "available": False,
+        "reason": reason,
+        "source": "probability_filtered_complex_vertices",
+        "probability_vector_source": "model_probability_vectors_on_vertices",
+        "assignment_metric": "jensen_shannon_distance_on_model_probability_vectors",
+        "assignment_solver": "unavailable",
+        "probability_alignment": "zero_pad_to_common_token_index_feature_space_then_renormalize",
+        "displayed_query_vertices": int(len(query_vertices)),
+        "displayed_memory_vertices": int(len(memory_vertices)),
+        "query_probability_vertex_count": int(query_count),
+        "memory_probability_vertex_count": int(memory_count),
+        "all_displayed_query_vertices_have_probability_vectors": bool(query_vertices and query_count == len(query_vertices)),
+        "all_displayed_memory_vertices_have_probability_vectors": bool(memory_vertices and memory_count == len(memory_vertices)),
+        "embedding_only_assignment_used": False,
+        "no_proxy_or_fallback": True,
+        "safe_unavailable_render": True,
+        "interpretation": "Model probability vectors were missing or the domain/codomain was empty, so no Jensen-Shannon assignment was computed and no embedding-only proxy was used.",
     }
 
 
