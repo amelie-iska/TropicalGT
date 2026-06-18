@@ -764,3 +764,30 @@ CUDA_VISIBLE_DEVICES="" /home/iska/miniconda3/envs/tokengt/bin/python -m py_comp
 ```
 
 Next linear CAS/UI item: surface `certificate_indexed_evidence` in the relevant two-parameter/CAS visual and Herschel report paths only when present, otherwise show exact unavailable states.
+
+## 2026-06-18 Certificate-Indexed Evidence Visual And Herschel Surfacing
+
+Sequential CAS/UI surfacing item completed:
+
+- `_cas_real_resolution_display()` now passes through `certificate_indexed_evidence` from certified CAS artifacts and emits an explicit unavailable contract when a certified legacy artifact lacks that block.
+- The two-parameter bifiltration visual JSON now includes `certificate_indexed_cas_evidence` beside the Miller-Sturmfels staircase and structure-map evidence. Available blocks expose exact certificate-indexed CAS evidence; unavailable blocks render only as safe unavailable states with reasons.
+- The CAS certificate table now includes a clipped JSON row for certificate-indexed evidence so reviewers can see the evidence schema, no-proxy policy, and derived-category guard without opening raw artifacts.
+- Herschel's sidecar grouping now counts `certificate_indexed` evidence filenames under CAS algebra, so future review bundles that emit standalone certificate-indexed evidence sidecars are inventoried with the rest of the algebraic evidence.
+- Regression tests cover direct display extraction, certificate-table rendering, two-parameter visual payload emission, Herschel sidecar grouping, and CPU-only full affected test files.
+
+Validation:
+
+```text
+CUDA_VISIBLE_DEVICES="" PYTHONPATH=/home/iska/Documents/amelie/bio/TropicalGT/TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest -q TropicalGT-I/tests/test_simplicial_visualization.py -k "certified_cas_diagnostic_tables"
+# 1 passed, 47 deselected
+CUDA_VISIBLE_DEVICES="" PYTHONPATH=/home/iska/Documents/amelie/bio/TropicalGT/TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest -q TropicalGT-I/tests/test_algebraic_persistence.py -k "level_radius_bifiltration_reports_scoped_real_staircase_resolution"
+# 1 passed, 31 deselected
+CUDA_VISIBLE_DEVICES="" PYTHONPATH=/home/iska/Documents/amelie/bio/TropicalGT/TropicalGT-I/scripts:/home/iska/Documents/amelie/bio/TropicalGT/TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest -q TropicalGT-I/tests/test_herschel_5k_report.py
+# 2 passed
+CUDA_VISIBLE_DEVICES="" PYTHONPATH=/home/iska/Documents/amelie/bio/TropicalGT/TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest -q TropicalGT-I/tests/test_simplicial_visualization.py TropicalGT-I/tests/test_algebraic_persistence.py
+# 80 passed
+CUDA_VISIBLE_DEVICES="" /home/iska/miniconda3/envs/tokengt/bin/python -m py_compile TropicalGT-I/src/tropicalgt/visualization.py TropicalGT-I/scripts/write_herschel_5k_report.py TropicalGT-I/tests/test_simplicial_visualization.py TropicalGT-I/tests/test_algebraic_persistence.py TropicalGT-I/tests/test_herschel_5k_report.py
+# passed
+```
+
+Next linear item: continue the two-parameter persistence repair queue, preserving actual-data-only Miller-Sturmfels staircase rendering and adding any remaining no-proxy QA/validator coverage.

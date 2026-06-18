@@ -58,6 +58,7 @@ def test_write_herschel_report_preserves_blockers_and_sidecar_groups(tmp_path: P
             "advanced_sidecars_tail": [
                 "got_audit/tropical_fan_diagnostics.json",
                 "got_audit/betti_table.json",
+                "got_audit/certificate_indexed_cas_evidence.json",
                 "got_audit/persistence_landscape.json",
                 "got_audit/analogical_memory_report.json",
                 "got_audit/graphcg_report.json",
@@ -91,7 +92,7 @@ def test_write_herschel_report_preserves_blockers_and_sidecar_groups(tmp_path: P
     assert summary["restart_decision"]["step0_restart_allowed"] is False
     assert "checkpoint_file_is_empty" in " ".join(summary["restart_decision"]["blockers"])
     groups = summary["artifact_evidence"]["sidecar_groups"]
-    assert groups["cas_algebra"] == 1
+    assert groups["cas_algebra"] == 2
     assert groups["topology_persistence"] == 1
     assert groups["analogical_memory"] == 1
     assert groups["tropical_toric"] == 1

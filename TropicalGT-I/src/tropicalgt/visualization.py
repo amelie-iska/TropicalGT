@@ -26,6 +26,9 @@ from .simplicial import build_embedding_radius_simplicial_object, build_reasonin
 from .algebra import _bivariate_staircase_resolution_from_points
 
 
+_CAS_CERTIFICATE_INDEXED_EVIDENCE_SCHEMA = "tropicalgt.cas_certificate_indexed_evidence.v1"
+
+
 GRAPHCG_BROWSER_PRIORITY_METRICS: tuple[str, ...] = (
     "graphcg_loss",
     "graphcg_embedding_span_full_rank",
@@ -6045,6 +6048,17 @@ def _m2_style_report_from_bifiltration(bifiltration: Mapping[str, Any]) -> Dict[
     return out
 
 
+def _unavailable_certificate_indexed_evidence(reason: str) -> Dict[str, Any]:
+    return {
+        "schema_version": _CAS_CERTIFICATE_INDEXED_EVIDENCE_SCHEMA,
+        "available": False,
+        "reason": reason,
+        "safe_unavailable_render": True,
+        "no_proxy_or_fallback": True,
+        "render_rule": "No certificate-indexed CAS evidence is displayed unless a certified CAS result emitted the evidence block.",
+    }
+
+
 def _cas_real_resolution_display(real: Mapping[str, Any]) -> Dict[str, Any]:
     """Return certified CAS output under the strongest grading it actually supports."""
     if not (isinstance(real, Mapping) and real.get("available") is True and real.get("exactness_certified") is True):
@@ -6153,6 +6167,7 @@ def _cas_real_resolution_display(real: Mapping[str, Any]) -> Dict[str, Any]:
     grade_depth_regular = artifacts.get("grade_depth_regular_diagnostics") if isinstance(artifacts.get("grade_depth_regular_diagnostics"), Mapping) else summary.get("grade_depth_regular_diagnostics", {})
     syzygies = artifacts.get("syzygies") if isinstance(artifacts.get("syzygies"), Mapping) else summary.get("syzygy_diagnostics", {})
     certificate_summary = artifacts.get("certificate_summary") if isinstance(artifacts.get("certificate_summary"), Mapping) else {}
+    certificate_indexed_evidence = artifacts.get("certificate_indexed_evidence") if isinstance(artifacts.get("certificate_indexed_evidence"), Mapping) else _unavailable_certificate_indexed_evidence("certified_cas_result_did_not_emit_certificate_indexed_evidence")
     return {
         "available": bool(modules),
         "ring": real.get("coefficient_ring", "F2[x_level,x_radius]"),
@@ -6169,6 +6184,7 @@ def _cas_real_resolution_display(real: Mapping[str, Any]) -> Dict[str, Any]:
         "grade_depth_regular_diagnostics": dict(grade_depth_regular) if isinstance(grade_depth_regular, Mapping) else {},
         "syzygies": dict(syzygies) if isinstance(syzygies, Mapping) else {},
         "certificate_summary": dict(certificate_summary) if isinstance(certificate_summary, Mapping) else {},
+        "certificate_indexed_evidence": dict(certificate_indexed_evidence) if isinstance(certificate_indexed_evidence, Mapping) else _unavailable_certificate_indexed_evidence("certificate_indexed_evidence_not_mapping"),
         "buchsbaum_eisenbud_diagnostics": {
             "minimality_certified": bool(real.get("minimality_certified")),
             "exactness_certified": bool(real.get("exactness_certified")),
@@ -6460,6 +6476,7 @@ def _m2_certificate_columns(m2: Mapping[str, Any], bifiltration: Mapping[str, An
     be_rank = resolution.get("buchsbaum_eisenbud_rank_conditions", {}) if isinstance(resolution.get("buchsbaum_eisenbud_rank_conditions"), Mapping) else {}
     grade_depth = resolution.get("grade_depth_regular_diagnostics", {}) if isinstance(resolution.get("grade_depth_regular_diagnostics"), Mapping) else {}
     cert_summary = resolution.get("certificate_summary", {}) if isinstance(resolution.get("certificate_summary"), Mapping) else {}
+    certificate_indexed = resolution.get("certificate_indexed_evidence", {}) if isinstance(resolution.get("certificate_indexed_evidence"), Mapping) else _unavailable_certificate_indexed_evidence("certified_resolution_display_has_no_certificate_indexed_evidence")
     syzygies = resolution.get("syzygies", {}) if isinstance(resolution.get("syzygies"), Mapping) else {}
     items = [
         ("ring", resolution.get("ring", m2.get("ring", bifiltration.get("module_ring", "F2[x_level,x_radius]")))),
@@ -6474,6 +6491,7 @@ def _m2_certificate_columns(m2: Mapping[str, Any], bifiltration: Mapping[str, An
         ("CAS homogeneous presentation", cert_summary.get("homogeneous_presentation", "unavailable")),
         ("CAS input sha256", cert_summary.get("input_sha256", "unavailable")),
         ("CAS no-proxy policy", cert_summary.get("no_proxy_policy", "unavailable")),
+        ("certificate-indexed CAS evidence", _json_clip(certificate_indexed, 1400)),
         ("BEMultiplier output available", res_be.get("multiplier_output_available", False)),
         ("BEMultipliers safe render", res_be.get("safe_to_render_multiplier_output", False)),
         ("BEMultipliers is resolution backend", res_be.get("is_resolution_backend", False)),
@@ -7440,6 +7458,12 @@ def _write_two_parameter_bifiltration_staircase_html(
         [(row.get("homology_rank", {}) if isinstance(row.get("homology_rank", {}), Mapping) else {}).get("1", "") for row in structure_rank_rows],
         [row.get("method", "") for row in structure_rank_rows],
     ]
+    selected_resolution_for_payload = _m2_selected_staircase_resolution(m2)
+    certificate_indexed_cas_evidence = (
+        selected_resolution_for_payload.get("certificate_indexed_evidence")
+        if isinstance(selected_resolution_for_payload.get("certificate_indexed_evidence"), Mapping)
+        else _unavailable_certificate_indexed_evidence("no_certified_cas_resolution_with_certificate_indexed_evidence_in_bifiltration_payload")
+    )
     rank_h, rank_c = _rank_invariant_columns(bifiltration)
     betti_h, betti_c = _m2_betti_columns(m2)
     free_h, free_c = _m2_free_module_columns(m2)
@@ -7537,6 +7561,7 @@ td {{ background:#07111f; color:#d7e8ff; }}
             "no_proxy_or_fallback": True,
         },
         "miller_sturmfels_staircase_evidence": staircase_evidence,
+        "certificate_indexed_cas_evidence": dict(certificate_indexed_cas_evidence),
         "module_visual_contract": {
             "schema_version": "tropicalgt.two_parameter_module_staircase_contract.v1",
             "no_proxy_or_fallback": True,

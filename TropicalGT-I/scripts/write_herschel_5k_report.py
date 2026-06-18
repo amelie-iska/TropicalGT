@@ -50,7 +50,7 @@ def _sidecar_groups(paths: list[str]) -> dict[str, int]:
     for path in paths:
         lower = path.lower()
         matched = False
-        if any(term in lower for term in ("cas", "betti", "fitting", "minor", "free_resolution", "buchsbaum", "be_")):
+        if any(term in lower for term in ("cas", "betti", "fitting", "minor", "free_resolution", "buchsbaum", "be_", "certificate_indexed")):
             groups["cas_algebra"] += 1
             matched = True
         if any(term in lower for term in ("persistence", "bifiltration", "simplex", "barcode", "landscape")):

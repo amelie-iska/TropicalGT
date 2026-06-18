@@ -1500,6 +1500,16 @@ def test_level_radius_bifiltration_reports_scoped_real_staircase_resolution(tmp_
     assert "certified_syzygy_tables" in visual_payload["secondary_views"]
     assert "certified_fitting_minor_tables" in visual_payload["secondary_views"]
     assert "buchsbaum_eisenbud_diagnostic_tables" in visual_payload["secondary_views"]
+    cas_evidence = visual_payload["certificate_indexed_cas_evidence"]
+    assert cas_evidence["schema_version"] == "tropicalgt.cas_certificate_indexed_evidence.v1"
+    assert cas_evidence["no_proxy_or_fallback"] is True
+    if cas_evidence["available"]:
+        assert cas_evidence["exactness_certified"] is True
+        assert "evidence_blocks" in cas_evidence
+        assert cas_evidence["derived_category_claim_requires_chain_map_or_resolution_comparison"] is True
+    else:
+        assert cas_evidence["safe_unavailable_render"] is True
+        assert "reason" in cas_evidence
     assert visual_payload["rank_invariant_sample_count"] == len(report["rank_invariant_samples"])
     assert visual_payload["rank_invariant_sample_count"] > 0
     staircase_cards = visual_payload["staircase_cards"]

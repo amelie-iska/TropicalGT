@@ -2051,6 +2051,29 @@ def _topology_with_certified_real_resolution(*, input_hash: str = "hash-a", fitt
                 "a_multiplier_1_shape": "1x1",
                 "a_multiplier_1_matrix": multiplier_matrix,
             },
+            "certificate_indexed_evidence": {
+                "schema_version": "tropicalgt.cas_certificate_indexed_evidence.v1",
+                "available": True,
+                "backend": "Macaulay2",
+                "input_sha256": input_hash,
+                "exactness_certified": True,
+                "minimality_certified": True,
+                "safe_to_render_as_multigraded_free_resolution": True,
+                "evidence_blocks": {
+                    "fitting_ideals": {"available": True, "count": 2, "diagnostic_only": True},
+                    "determinantal_minors": {"available": True, "count": 1, "diagnostic_only": True},
+                    "buchsbaum_eisenbud_multipliers": {
+                        "available": True,
+                        "safe_to_render_multiplier_output": True,
+                        "is_resolution_backend": False,
+                        "safe_to_substitute_for_resolution": False,
+                        "bemultipliers_status": "computed_aMultiplier_1",
+                    },
+                },
+                "derived_category_claim_requires_chain_map_or_resolution_comparison": True,
+                "no_proxy_or_fallback": True,
+                "render_rule": "Diagnostic blocks annotate the certified result but do not independently certify a free resolution or derived equivalence.",
+            },
         },
     }
     return {
@@ -2161,6 +2184,14 @@ def test_certified_cas_diagnostic_tables_require_explicit_structured_certificate
 
     display = _cas_real_resolution_display(real_with_structured)
     assert display["certificate_summary"]["certificate_type"].startswith("Macaulay2 res")
+    evidence = display["certificate_indexed_evidence"]
+    assert evidence["schema_version"] == "tropicalgt.cas_certificate_indexed_evidence.v1"
+    assert evidence["available"] is True
+    assert evidence["input_sha256"] == real_with_structured["input_sha256"]
+    assert evidence["evidence_blocks"]["fitting_ideals"]["available"] is True
+    assert evidence["evidence_blocks"]["buchsbaum_eisenbud_multipliers"]["safe_to_substitute_for_resolution"] is False
+    assert evidence["derived_category_claim_requires_chain_map_or_resolution_comparison"] is True
+    assert evidence["no_proxy_or_fallback"] is True
     assert display["buchsbaum_eisenbud_diagnostics"]["safe_to_render_multiplier_output"] is True
     assert display["buchsbaum_eisenbud_diagnostics"]["is_resolution_backend"] is False
     assert display["buchsbaum_eisenbud_diagnostics"]["safe_to_substitute_for_resolution"] is False
@@ -2172,6 +2203,8 @@ def test_certified_cas_diagnostic_tables_require_explicit_structured_certificate
     assert cert_rows["CAS homogeneous presentation"] == "True"
     assert cert_rows["CAS input sha256"] == real_with_structured["input_sha256"]
     assert "Only exact CAS certificates" in cert_rows["CAS no-proxy policy"]
+    assert "tropicalgt.cas_certificate_indexed_evidence.v1" in cert_rows["certificate-indexed CAS evidence"]
+    assert "derived_category_claim_requires_chain_map_or_resolution_comparison" in cert_rows["certificate-indexed CAS evidence"]
     assert cert_rows["BEMultipliers safe render"] == "True"
     assert cert_rows["BEMultipliers is resolution backend"] == "False"
     assert cert_rows["BEMultipliers substitute for resolution"] == "False"
