@@ -1477,6 +1477,25 @@ def validate_row(row_dir: Path, *, min_candidates: int = 8, min_depth: int = 2, 
                 _assert(evidence.get("all_displayed_memory_vertices_have_probability_vectors") is True, errors, f"analogical map {index} does not certify probability vectors on all displayed memory vertices")
                 _assert(int(_finite_float(evidence.get("displayed_query_vertices"), -1.0)) == int(_finite_float(row.get("displayed_domain_vertices"), -2.0)), errors, f"analogical map {index} probability query vertex count mismatches displayed domain")
                 _assert(int(_finite_float(evidence.get("displayed_memory_vertices"), -1.0)) == int(_finite_float(row.get("displayed_codomain_vertices"), -2.0)), errors, f"analogical map {index} probability memory vertex count mismatches displayed codomain")
+                layout = row.get("layout_contract", {}) if isinstance(row.get("layout_contract"), dict) else {}
+                table_rows = row.get("correspondence_table_rows", []) if isinstance(row.get("correspondence_table_rows"), list) else []
+                _assert(layout.get("schema_version") == "tropicalgt.analogical_map_layout.v1", errors, f"analogical map {index} lacks analogical map layout contract")
+                _assert(layout.get("default_view") == "side_by_side_query_codomain_small_multiples_plus_correspondence_table", errors, f"analogical map {index} layout contract has wrong default view")
+                _assert(layout.get("query_panel") == "query trajectory probability complex", errors, f"analogical map {index} layout contract lacks query panel")
+                _assert(layout.get("codomain_panel") == "retrieved memory probability complex", errors, f"analogical map {index} layout contract lacks codomain panel")
+                _assert(layout.get("assignment_metric") == "jensen_shannon_distance_on_model_probability_vectors", errors, f"analogical map {index} layout contract has wrong assignment metric")
+                _assert(layout.get("embedding_only_assignment_allowed") is False, errors, f"analogical map {index} layout contract allows embedding-only assignment")
+                _assert(layout.get("fail_closed_when_probability_vectors_missing") is True, errors, f"analogical map {index} layout contract does not fail closed")
+                _assert(layout.get("draws_pseudo_map_when_unavailable") is False, errors, f"analogical map {index} layout contract permits pseudo maps")
+                _assert(layout.get("no_proxy_or_fallback") is True, errors, f"analogical map {index} layout contract lacks no-proxy flag")
+                _assert(isinstance(table_rows, list) and int(_finite_float(layout.get("correspondence_table_rows"), -1.0)) == len(table_rows), errors, f"analogical map {index} correspondence-table row count mismatches layout contract")
+                for table_row in table_rows[:12]:
+                    if not isinstance(table_row, dict):
+                        errors.append(f"analogical map {index} correspondence table contains a non-object row")
+                        continue
+                    _assert(table_row.get("assignment_metric") == "jensen_shannon_distance_on_model_probability_vectors", errors, f"analogical map {index} correspondence row has wrong assignment metric")
+                    _assert(table_row.get("embedding_only_assignment_used") is False, errors, f"analogical map {index} correspondence row uses embedding-only assignment")
+                    _assert(table_row.get("no_proxy_or_fallback") is True, errors, f"analogical map {index} correspondence row allows proxy/fallback data")
             _assert(all(isinstance(row.get("jensen_shannon_distance_summary"), dict) and _finite_float(row["jensen_shannon_distance_summary"].get("count"), 0.0) > 0 for row in maps if isinstance(row, dict)), errors, "analogical maps are missing Jensen-Shannon distance summaries")
             _assert(all(isinstance(row.get("assignment_cost_summary"), dict) and _finite_float(row["assignment_cost_summary"].get("count"), 0.0) > 0 for row in maps if isinstance(row, dict)), errors, "analogical maps are missing assignment-cost summaries")
             _assert(all(isinstance(row.get("filtration_distortion_summary"), dict) for row in maps if isinstance(row, dict)), errors, "analogical maps are missing filtration-distortion summaries")

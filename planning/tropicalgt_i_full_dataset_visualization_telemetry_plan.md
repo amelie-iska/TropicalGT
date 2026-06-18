@@ -384,13 +384,24 @@ assert "certificate status" in html
 assert "not an exact simplicial map" in html or report["simplicial_map_certificate"]["valid"] is True
 ```
 
-- [ ] **Step 6.2: Redesign analogical map layout**
+- [x] **Step 6.2: Redesign analogical map layout**
 
 Use side-by-side or domain/codomain small multiples with a correspondence table. Query vertices, memory vertices, assignment edges, preserved simplex evidence, failed simplex evidence, and filtration distortion should be visually separate. The default page should not resemble duplicated trajectories; it should read as probability-vector matching between two independently generated trajectory complexes.
 
-- [ ] **Step 6.3: Fail closed on bad analogical evidence**
+- [x] **Step 6.3: Fail closed on bad analogical evidence**
 
 If either side lacks model probability vectors, finite Jensen-Shannon distances, or GUDHI simplex-tree provenance, render an unavailable diagnostic and do not draw a pseudo-map.
+
+
+Implemented 2026-06-18: each analogical pair report now carries
+`tropicalgt.analogical_map_layout.v1` plus explicit
+`correspondence_table_rows` for model-probability Jensen-Shannon vertex
+assignments. The pair-page diagnostics surface the side-by-side
+query/codomain-small-multiple layout and correspondence-table row count, while
+validators reject missing layout contracts, embedding-only correspondence rows,
+wrong assignment metrics, pseudo-map permissions, and missing GUDHI simplex-tree
+provenance. CPU-only checks passed: focused analogical visualization tests,
+focused analogical validator tests, and `py_compile` for touched Python files.
 
 ---
 

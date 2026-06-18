@@ -1879,6 +1879,9 @@ def test_analogical_memory_visualization_renders_simplicial_maps(tmp_path: Path)
     assert "probability-map contribution" in html
     assert "retrieval probability map" in html
     assert "retrieval weights" in html
+    assert "map layout" in html
+    assert "correspondence table rows" in html
+    assert "fail-closed evidence" in html
     assert "preserved 1-simplex correspondence" in html
     assert "certificate diagnostic" in html
     assert "preserved 1-simplex correspondences" in html
@@ -1964,6 +1967,23 @@ def test_analogical_memory_visualization_renders_simplicial_maps(tmp_path: Path)
     assert maps["maps"][0]["query_complex_source"] == "trajectory_probability_filtered_simplicial_object"
     assert maps["maps"][0]["codomain_complex_source"] == "trajectory_probability_filtered_simplicial_object"
     assert maps["maps"][0]["simplicial_map_certificate"]["source"] == "retrieval_probability_simplicial_map_certificate"
+    layout = maps["maps"][0]["layout_contract"]
+    assert layout["schema_version"] == "tropicalgt.analogical_map_layout.v1"
+    assert layout["default_view"] == "side_by_side_query_codomain_small_multiples_plus_correspondence_table"
+    assert layout["query_panel"] == "query trajectory probability complex"
+    assert layout["codomain_panel"] == "retrieved memory probability complex"
+    assert layout["assignment_metric"] == "jensen_shannon_distance_on_model_probability_vectors"
+    assert layout["embedding_only_assignment_allowed"] is False
+    assert layout["fail_closed_when_probability_vectors_missing"] is True
+    assert layout["draws_pseudo_map_when_unavailable"] is False
+    assert layout["safe_to_draw_simplicial_map_edges"] is True
+    assert layout["correspondence_table_rows"] == len(maps["maps"][0]["correspondence_table_rows"])
+    assert "certificate_quality_table" in layout["visual_layers_separated"]
+    first_row = maps["maps"][0]["correspondence_table_rows"][0]
+    assert first_row["assignment_metric"] == "jensen_shannon_distance_on_model_probability_vectors"
+    assert first_row["embedding_only_assignment_used"] is False
+    assert first_row["rendered_as_map_edge"] is True
+    assert first_row["no_proxy_or_fallback"] is True
     assert maps["maps"][0]["derived_signature_similarity"] >= 0.0
     assert maps["maps"][0]["persistence_vector_representation_similarity"]["includes_landscape"] is False
     assert maps["maps"][0]["persistence_landscape_vector_available"] == 1.0
@@ -2388,6 +2408,11 @@ def test_analogical_memory_visualization_requires_retrieval_probability_map_cert
     assert report["safe_to_render_as_persistence_module_morphism"] is False
     assert report["map_render_claim"] == "unavailable_probability_correspondence_certificate"
     assert report["map_claim_failure_reason"] == "missing_retrieval_probability_simplicial_map_certificate"
+    assert report["layout_contract"]["schema_version"] == "tropicalgt.analogical_map_layout.v1"
+    assert report["layout_contract"]["correspondence_table_rows"] == 0
+    assert report["layout_contract"]["safe_to_draw_simplicial_map_edges"] is False
+    assert report["layout_contract"]["draws_pseudo_map_when_unavailable"] is False
+    assert report["correspondence_table_rows"] == []
 
 
 def test_analogical_memory_visualization_labels_failed_probability_correspondence_not_map(tmp_path: Path):
@@ -2449,6 +2474,12 @@ def test_analogical_memory_visualization_labels_failed_probability_correspondenc
     assert report["safe_to_render_as_persistence_module_morphism"] is False
     assert report["map_render_claim"] == "probability_correspondence_not_a_simplicial_map"
     assert report["map_claim_failure_reason"] == "simplex_tree_map_not_fully_preserved"
+    assert report["layout_contract"]["schema_version"] == "tropicalgt.analogical_map_layout.v1"
+    assert report["layout_contract"]["correspondence_table_rows"] == len(report["correspondence_table_rows"])
+    assert report["layout_contract"]["safe_to_draw_simplicial_map_edges"] is False
+    assert report["layout_contract"]["draws_pseudo_map_when_unavailable"] is False
+    assert report["correspondence_table_rows"]
+    assert all(row["rendered_as_map_edge"] is False for row in report["correspondence_table_rows"])
     assert report["chain_map_diagnostics"]["available"] is False
     assert report["persistence_module_morphism_diagnostics"]["available"] is False
     assert report["simplex_tree_map"]["filtered_simplicial_map_certified"] is False

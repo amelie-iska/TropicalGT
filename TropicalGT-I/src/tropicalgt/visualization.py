@@ -9359,6 +9359,10 @@ def _analogical_pair_figure(
     derived_comparison = _derived_invariant_comparison(query_topology, mem_topology, sim)
     sim_map["derived_invariant_comparison"] = derived_comparison
     sim_map["algebraic_realization_certificate"] = _analogical_realization_certificate(sim, sim_map, derived_comparison)
+    correspondence_rows = _analogical_correspondence_table_rows(sim_map)
+    layout_contract = _analogical_map_layout_contract(sim_map, correspondence_rows)
+    sim_map["correspondence_table_rows"] = correspondence_rows
+    sim_map["layout_contract"] = layout_contract
     map_claim_label = str(sim_map.get("map_claim_label") or ("certified filtered simplicial map" if sim_map.get("is_filtered_simplicial_map") else "probability correspondence only; no map asserted"))
     map_report = {
         "memory_id": row.get("memory_id"),
@@ -9372,6 +9376,8 @@ def _analogical_pair_figure(
         "codomain_complex_source": mem_complex_source,
         **sim,
         **sim_map,
+        "correspondence_table_rows": correspondence_rows,
+        "layout_contract": layout_contract,
         "derived_invariant_comparison": derived_comparison,
     }
     panel_hover = (
@@ -9453,6 +9459,7 @@ def _analogical_pair_figure(
             f"Analogical probability-matched correspondence: rank {idx + 1}"
             "<br><sup>query trajectory complex to retrieved memory complex</sup>"
             f"<br><sup>{html.escape(map_claim_label)}; filtered-complex certificate from model-probability Jensen-Shannon assignment; gold=preserved 1-simplices, rose=vertex-only correspondences; slider filters domain/codomain/certificate edges</sup>"
+            "<br><sup>layout: side-by-side query/codomain small multiples plus a separate vertex-correspondence table; fail-closed if probability-vector evidence is unavailable</sup>"
         ),
         height=1040,
         margin=dict(t=154, l=24, r=24, b=164),
@@ -9486,6 +9493,79 @@ def _analogical_pair_figure(
     return fig, panel_items, map_report
 
 
+def _analogical_correspondence_table_rows(sim_map: Mapping[str, object]) -> list[dict[str, object]]:
+    vertex_rows = sim_map.get("vertex_map", []) if isinstance(sim_map, Mapping) else []
+    if not isinstance(vertex_rows, list):
+        return []
+    preserved_query_vertices = set(str(v) for v in sim_map.get("preserved_edge_query_vertices", []) if isinstance(v, (str, int, float))) if isinstance(sim_map.get("preserved_edge_query_vertices"), list) else set()
+    preserved_memory_vertices = set(str(v) for v in sim_map.get("preserved_edge_memory_vertices", []) if isinstance(v, (str, int, float))) if isinstance(sim_map.get("preserved_edge_memory_vertices"), list) else set()
+    rows: list[dict[str, object]] = []
+    for idx, row in enumerate(vertex_rows):
+        if not isinstance(row, dict):
+            continue
+        query_vertex = str(row.get("query_vertex", ""))
+        memory_vertex = str(row.get("memory_vertex", ""))
+        rows.append(
+            {
+                "row_index": int(idx),
+                "query_vertex": query_vertex,
+                "memory_vertex": memory_vertex,
+                "assignment_metric": str(row.get("assignment_metric", sim_map.get("assignment_metric", "jensen_shannon_distance_on_model_probability_vectors"))),
+                "assignment_solver": str(row.get("assignment_solver", sim_map.get("assignment_solver", "unavailable"))),
+                "jensen_shannon_distance": _safe_float(row.get("jensen_shannon_distance")),
+                "assignment_cost": _safe_float(row.get("assignment_cost")),
+                "query_probability_source": row.get("query_probability_source"),
+                "memory_probability_source": row.get("memory_probability_source"),
+                "incident_preserved_query_edge": query_vertex in preserved_query_vertices,
+                "incident_preserved_memory_edge": memory_vertex in preserved_memory_vertices,
+                "rendered_as_map_edge": bool(sim_map.get("safe_to_render_as_simplicial_map")),
+                "embedding_only_assignment_used": False,
+                "no_proxy_or_fallback": True,
+            }
+        )
+    return rows
+
+
+def _analogical_map_layout_contract(sim_map: Mapping[str, object], correspondence_rows: list[dict[str, object]]) -> dict[str, object]:
+    evidence = sim_map.get("probability_vector_evidence", {}) if isinstance(sim_map.get("probability_vector_evidence"), dict) else {}
+    evidence_available = bool(
+        evidence.get("embedding_only_assignment_used") is False
+        and evidence.get("no_proxy_or_fallback") is True
+        and sim_map.get("map_source") == "model_probability_jensen_shannon_assignment"
+        and len(correspondence_rows) > 0
+    )
+    return {
+        "schema_version": "tropicalgt.analogical_map_layout.v1",
+        "default_view": "side_by_side_query_codomain_small_multiples_plus_correspondence_table",
+        "query_panel": "query trajectory probability complex",
+        "codomain_panel": "retrieved memory probability complex",
+        "visual_layers_separated": [
+            "query_vertices_edges_faces",
+            "codomain_vertices_edges_faces",
+            "probability_js_vertex_correspondence_edges",
+            "preserved_simplex_evidence",
+            "failed_simplex_evidence",
+            "filtration_distortion_diagnostics",
+            "certificate_quality_table",
+        ],
+        "correspondence_table_rows": int(len(correspondence_rows)),
+        "assignment_metric": "jensen_shannon_distance_on_model_probability_vectors",
+        "assignment_evidence_available": evidence_available,
+        "embedding_only_assignment_allowed": False,
+        "fail_closed_when_probability_vectors_missing": True,
+        "draws_pseudo_map_when_unavailable": False,
+        "safe_to_draw_simplicial_map_edges": bool(sim_map.get("safe_to_render_as_simplicial_map")),
+        "safe_to_draw_chain_map_or_module_morphism": bool(sim_map.get("safe_to_render_as_chain_map") and sim_map.get("safe_to_render_as_persistence_module_morphism")),
+        "map_render_claim": sim_map.get("map_render_claim", "unavailable"),
+        "map_claim_failure_reason": sim_map.get("map_claim_failure_reason"),
+        "checked_edges": int(sim_map.get("checked_edges", 0) or 0),
+        "preserved_edges": int(sim_map.get("preserved_edges", 0) or 0),
+        "checked_two_simplices": int(sim_map.get("checked_two_simplices", 0) or 0),
+        "preserved_two_simplices": int(sim_map.get("preserved_two_simplices", 0) or 0),
+        "no_proxy_or_fallback": True,
+    }
+
+
 def _analogical_quality_table_trace(
     row: dict[str, object],
     sim: dict[str, float],
@@ -9497,6 +9577,8 @@ def _analogical_quality_table_trace(
     source_label = str(sim_map.get("map_source", "unknown")).replace("model_probability_jensen_shannon_assignment", "prob-JS assignment")
     vector_methods_raw = str(sim.get("persistence_vector_methods", "")) or "unavailable"
     vector_methods_display = vector_methods_raw if vector_methods_raw == "unavailable" else ",<br>".join(part.strip() for part in vector_methods_raw.split(",") if part.strip())
+    layout_contract = sim_map.get("layout_contract", {}) if isinstance(sim_map.get("layout_contract"), dict) else {}
+    correspondence_rows = sim_map.get("correspondence_table_rows", []) if isinstance(sim_map.get("correspondence_table_rows"), list) else []
     rows = [
         ("rank", str(idx + 1)),
         ("memory", _short_label(str(row.get("memory_id", idx)), 24)),
@@ -9523,6 +9605,9 @@ def _analogical_quality_table_trace(
         ("derived/algebraic similarity", f"{float(sim.get('derived_algebraic_similarity', 0.0)):.4f}"),
         ("coarse signature cosine", f"{float(sim.get('derived_signature_similarity', 0.0)):.4f}"),
         ("assignment source", source_label),
+        ("map layout", html.escape(str(layout_contract.get("default_view", "unavailable")))),
+        ("correspondence table rows", str(len(correspondence_rows))),
+        ("fail-closed evidence", str(bool(layout_contract.get("fail_closed_when_probability_vectors_missing")))),
         ("JS mean/max", f"{_fmt_optional(sim_map.get('jensen_shannon_distance_mean'))}/{_fmt_optional(sim_map.get('jensen_shannon_distance_max'))}"),
         ("assign cost mean/max", f"{_fmt_optional(sim_map.get('assignment_cost_mean'))}/{_fmt_optional(sim_map.get('assignment_cost_max'))}"),
         ("filt distortion max", _fmt_optional(sim_map.get("max_positive_filtration_distortion"))),
