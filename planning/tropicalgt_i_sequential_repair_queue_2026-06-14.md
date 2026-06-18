@@ -809,3 +809,10 @@ The live item-by-item repair inventory is maintained in `planning/tropicalgt_i_c
 - [x] Missing or unparsable analogical query-context sidecars are explicit unavailable sources and cannot justify a restart or artifact promotion.
 - [x] Markdown and HTML reports now include an `Analogical Query Context Evidence` section/table for user review while Herschel continues training/review cycles.
 - [x] Focused verification passed: Herschel report tests (`2 passed`); broader Herschel/validator/provenance slice passed (`54 passed`) with provenance audit `331 covered, 0 uncovered`.
+
+### Current Objective Update - 5K Bundle Analogical Sidecar Inventory Pass
+
+- [x] `prepare_5k_review_bundle.py` now augments the active training contract's artifact inventory before writing the contract/prompt/bundle/report artifacts, so Herschel sees real `analogical_simplicial_maps.json` sidecars from the latest recorded `got_audit` directory.
+- [x] The augmentation is path-only and evidence-only: it records existing sidecars under `advanced_sidecars_tail` and `herschel_required_sidecars_present`; it does not copy generated artifacts, infer missing evidence, or substitute validator prose for a sidecar.
+- [x] Regression coverage creates a real periodic `got_audit/analogical_simplicial_maps.json`, verifies the persisted active contract contains it, and verifies Herschel's `analogical_query_context_evidence` reads the contract from the review bundle.
+- [x] Verification passed: py-compile for touched bundle/report files, focused bundle/Herschel tests (`11 passed`), broader bundle/Herschel/review-loop/provenance slice (`36 passed`), and provenance audit (`331 covered, 0 uncovered`).

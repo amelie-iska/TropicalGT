@@ -1041,3 +1041,10 @@ CUDA_VISIBLE_DEVICES="" python3 -m py_compile TropicalGT-I/src/tropicalgt/readin
 CUDA_VISIBLE_DEVICES="" /home/iska/miniconda3/bin/conda run -n tokengt python -m pytest -q tests/test_readiness_audit.py tests/test_prepare_5k_review_bundle.py tests/test_parameter_golf_review_loop.py tests/test_training_resume.py
 # 45 passed in 2.96s
 ```
+
+## 2026-06-18 5K Bundle Analogical Sidecar Inventory
+
+- `prepare_5k_review_bundle.py` now carries real `analogical_simplicial_maps.json` sidecars from the latest recorded `got_audit` directory into `advanced_sidecars_tail` before contract/prompt/bundle/Herschel report generation.
+- The bundle records `herschel_required_sidecars_present` for exact sidecar provenance. Missing sidecars stay unavailable and cannot be inferred from validator text, embedding rows, or generic artifact filenames.
+- Regression coverage verifies a real periodic analogical sidecar is present in the persisted active contract and that Herschel's `analogical_query_context_evidence` reads the expected trajectory-probability query source and probability-vertex count.
+- Verification passed: py-compile; focused bundle/Herschel tests (`11 passed`); broader bundle/Herschel/review-loop/provenance tests (`36 passed`); metric provenance audit (`331 covered, 0 uncovered`).

@@ -96,3 +96,18 @@ CUDA_VISIBLE_DEVICES="" python3 -m py_compile TropicalGT-I/src/tropicalgt/readin
 CUDA_VISIBLE_DEVICES="" /home/iska/miniconda3/bin/conda run -n tokengt python -m pytest -q tests/test_readiness_audit.py tests/test_prepare_5k_review_bundle.py tests/test_parameter_golf_review_loop.py tests/test_training_resume.py
 # 45 passed in 2.96s
 ```
+
+2026-06-18 sidecar-inventory follow-up: `prepare_5k_review_bundle.py` now augments the active training contract before writing the contract, Codex prompt, bundle JSON/Markdown, and Herschel report. The augmentation scans only the recorded `latest_got_audit_dir` and only records real existing Herschel-required sidecars, currently `analogical_simplicial_maps.json`, under `advanced_sidecars_tail` plus `herschel_required_sidecars_present`. Missing sidecars remain missing/unavailable; the bundle does not copy, synthesize, or substitute evidence.
+
+2026-06-18 sidecar-inventory validation:
+
+```text
+CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src:TropicalGT-I/scripts /home/iska/miniconda3/envs/tokengt/bin/python -m py_compile TropicalGT-I/scripts/prepare_5k_review_bundle.py TropicalGT-I/tests/test_prepare_5k_review_bundle.py TropicalGT-I/scripts/write_herschel_5k_report.py
+# passed
+CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src:TropicalGT-I/scripts /home/iska/miniconda3/envs/tokengt/bin/python -m pytest -q TropicalGT-I/tests/test_prepare_5k_review_bundle.py TropicalGT-I/tests/test_herschel_5k_report.py
+# 11 passed
+CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src:TropicalGT-I/scripts /home/iska/miniconda3/envs/tokengt/bin/python -m pytest -q TropicalGT-I/tests/test_prepare_5k_review_bundle.py TropicalGT-I/tests/test_herschel_5k_report.py TropicalGT-I/tests/test_parameter_golf_review_loop.py TropicalGT-I/tests/test_metric_provenance.py
+# 36 passed
+CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src:TropicalGT-I/scripts /home/iska/miniconda3/envs/tokengt/bin/python TropicalGT-I/scripts/audit_metric_provenance.py --fail-on-uncovered
+# findings=331 covered=331 uncovered=0
+```

@@ -1535,3 +1535,25 @@ CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src:TropicalGT-I/scripts /home/i
 CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src:TropicalGT-I/scripts /home/iska/miniconda3/envs/tokengt/bin/pytest -q TropicalGT-I/tests/test_herschel_5k_report.py TropicalGT-I/tests/test_interactive_artifact_validator.py TropicalGT-I/tests/test_metric_provenance.py
 # 54 passed
 ```
+
+## 2026-06-18 5K Bundle Analogical Sidecar Inventory
+
+Sequential Herschel/reporting item completed after the analogical query-context evidence pass:
+
+- `prepare_5k_review_bundle.py` now scans the active contract's `latest_got_audit_dir` for real Herschel-required sidecars before any contract, prompt, review bundle, or Herschel report artifact is written.
+- The first required sidecar is `analogical_simplicial_maps.json`, so Herschel's 5K report can consume the actual `tropicalgt.analogical_query_context_conversion.v1` contract when the sidecar exists even if a bounded generic artifact tail would otherwise miss it.
+- The generated inventory records `herschel_required_sidecars_present` as a concrete path list. Absence stays absence; the code does not create, copy, or promote missing sidecars.
+- The regression fixture proves the bundle, persisted active contract, and Herschel summary agree on the same analogical query-domain evidence.
+
+Validation:
+
+```text
+CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src:TropicalGT-I/scripts /home/iska/miniconda3/envs/tokengt/bin/python -m py_compile TropicalGT-I/scripts/prepare_5k_review_bundle.py TropicalGT-I/tests/test_prepare_5k_review_bundle.py TropicalGT-I/scripts/write_herschel_5k_report.py
+# passed
+CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src:TropicalGT-I/scripts /home/iska/miniconda3/envs/tokengt/bin/python -m pytest -q TropicalGT-I/tests/test_prepare_5k_review_bundle.py TropicalGT-I/tests/test_herschel_5k_report.py
+# 11 passed
+CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src:TropicalGT-I/scripts /home/iska/miniconda3/envs/tokengt/bin/python -m pytest -q TropicalGT-I/tests/test_prepare_5k_review_bundle.py TropicalGT-I/tests/test_herschel_5k_report.py TropicalGT-I/tests/test_parameter_golf_review_loop.py TropicalGT-I/tests/test_metric_provenance.py
+# 36 passed
+CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src:TropicalGT-I/scripts /home/iska/miniconda3/envs/tokengt/bin/python TropicalGT-I/scripts/audit_metric_provenance.py --fail-on-uncovered
+# findings=331 covered=331 uncovered=0
+```

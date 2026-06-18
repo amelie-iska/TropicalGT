@@ -20,6 +20,11 @@ from tropicalgt.readiness_contracts import advanced_bpb_contract_report  # noqa:
 from tropicalgt.run import load_config  # noqa: E402
 
 
+HERSCHEL_REQUIRED_AUDIT_SIDECARS = (
+    "analogical_simplicial_maps.json",
+)
+
+
 def _project_path(value: str | Path | None, default: str | Path) -> Path:
     raw = Path(str(value or default))
     return raw if raw.is_absolute() else ROOT / raw
@@ -127,6 +132,37 @@ def _report_step(report: dict[str, Any]) -> int | None:
         if isinstance(value, int):
             return int(value)
     return None
+
+
+def _merge_unique_paths(existing: Any, additions: list[str]) -> list[str]:
+    merged: list[str] = []
+    seen: set[str] = set()
+    source_values = existing if isinstance(existing, list) else []
+    for raw in [*source_values, *additions]:
+        text = str(raw or "")
+        if not text or text in seen:
+            continue
+        seen.add(text)
+        merged.append(text)
+    return merged
+
+
+def _augment_artifact_inventory_for_herschel(inventory: Any) -> dict[str, Any]:
+    if not isinstance(inventory, dict):
+        return {}
+    augmented = dict(inventory)
+    latest_got_audit = str(augmented.get("latest_got_audit_dir") or "")
+    discovered: list[str] = []
+    if latest_got_audit:
+        audit_dir = _project_path(latest_got_audit, latest_got_audit)
+        if audit_dir.is_dir():
+            for filename in HERSCHEL_REQUIRED_AUDIT_SIDECARS:
+                candidate = audit_dir / filename
+                if candidate.is_file():
+                    discovered.append(_relative_project_path(candidate))
+    augmented["advanced_sidecars_tail"] = _merge_unique_paths(augmented.get("advanced_sidecars_tail", []), discovered)
+    augmented["herschel_required_sidecars_present"] = discovered
+    return augmented
 
 
 def _execution_readiness(args: argparse.Namespace, report_path: Path, checkpoint_path: Path, report: dict[str, Any], inventory: dict[str, Any], boundary_step: int) -> dict[str, Any]:
@@ -403,6 +439,8 @@ def prepare_review_bundle(args: argparse.Namespace) -> dict[str, Any]:
         checkpoint_path=checkpoint_path,
         target_bpb=args.target_bpb,
     )
+    inventory = _augment_artifact_inventory_for_herschel(contract.get("artifact_inventory", {}))
+    contract["artifact_inventory"] = inventory
     checkpoint_evidence = contract.get("checkpoint_evidence", {})
     advanced_bpb_section, advanced_bpb_gates = advanced_bpb_contract_report(cfg)
     advanced_bpb_failed = [gate for gate in advanced_bpb_gates if gate.get("status") == "fail"]
@@ -440,7 +478,6 @@ def prepare_review_bundle(args: argparse.Namespace) -> dict[str, Any]:
     advanced_bpb_contract_path.write_text(json.dumps(advanced_bpb_contract, indent=2), encoding="utf-8")
     prompt_path.write_text(prompt, encoding="utf-8")
 
-    inventory = contract.get("artifact_inventory", {})
     commands = {
         "eval_validation_visualizations": _eval_command(args, checkpoint_path, bundle_dir),
         "interactive_audit_backfills": inventory.get("interactive_audit_backfill_commands", []),

@@ -111,6 +111,33 @@ def test_prepare_review_bundle_defaults_to_periodic_validation_artifacts(tmp_pat
     output_dir = tmp_path / "run"
     checkpoint_dir = tmp_path / "ckpts"
     periodic_dir = output_dir / "periodic" / "step_00005000"
+    query_context_contract = {
+        "schema_version": "tropicalgt.analogical_query_context_conversion.v1",
+        "actual_data_only": True,
+        "no_proxy_or_fallback": True,
+        "observed_query_context_keys": ["trajectory_probability_filtered_simplicial_object", "topological_algebra"],
+        "accepted_query_complex_keys": ["trajectory_probability_filtered_simplicial_object"],
+        "selected_query_complex_source": "trajectory_probability_filtered_simplicial_object",
+        "selected_query_complex_available": True,
+        "selected_query_probability_vertex_count": 4,
+        "query_topological_algebra_source": "topological_algebra",
+        "query_topological_algebra_available": True,
+        "rejected_query_context_keys": [
+            {
+                "key": "probability_filtered_simplicial_object",
+                "reason": "non_trajectory_probability_complex_not_accepted_as_query_fallback",
+                "has_real_probability_filtration": True,
+                "probability_vertex_count": 4,
+            }
+        ],
+        "rejects_probability_filtered_simplicial_object_alias_as_fallback": True,
+        "rejects_filtered_simplicial_object_without_model_probabilities": True,
+        "conversion_path": "query_context.trajectory_probability_filtered_simplicial_object",
+        "conversion_status": "valid_query_probability_trajectory_complex",
+        "fail_closed_reason": None,
+        "embedding_only_assignment_allowed": False,
+        "probability_assignment_metric_required": "jensen_shannon_distance_on_model_probability_vectors",
+    }
     (periodic_dir / "got_audit").mkdir(parents=True)
     checkpoint_dir.mkdir()
     periodic_report = {
@@ -125,6 +152,18 @@ def test_prepare_review_bundle_defaults_to_periodic_validation_artifacts(tmp_pat
         "visualizations": {"got_audit": str(periodic_dir / "got_audit" / "inference_audit.html")},
     }
     (periodic_dir / "periodic_validation_artifacts.json").write_text(json.dumps(periodic_report), encoding="utf-8")
+    (periodic_dir / "got_audit" / "analogical_simplicial_maps.json").write_text(
+        json.dumps(
+            {
+                "query_context_contract": query_context_contract,
+                "topk_contract": {
+                    "query_context_contract_schema_version": "tropicalgt.analogical_query_context_conversion.v1",
+                    "query_context_contract": query_context_contract,
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
     cfg_path = tmp_path / "config.json"
     cfg_path.write_text(
         json.dumps(
@@ -167,6 +206,18 @@ def test_prepare_review_bundle_defaults_to_periodic_validation_artifacts(tmp_pat
     assert bundle["commands"]["interactive_audit_backfills"]
     assert "backfill_interactive_audit_artifacts.py" in bundle["commands"]["interactive_audit_backfills"][0]
     assert bundle["commands"]["interactive_audit_validators"]
+    sidecars = bundle["artifact_inventory"]["advanced_sidecars_tail"]
+    assert any(path.endswith("periodic/step_00005000/got_audit/analogical_simplicial_maps.json") for path in sidecars)
+    assert bundle["artifact_inventory"]["herschel_required_sidecars_present"]
+    persisted_contract = json.loads((module.ROOT / bundle["artifacts"]["contract_json"]).read_text(encoding="utf-8"))
+    assert any(
+        path.endswith("periodic/step_00005000/got_audit/analogical_simplicial_maps.json")
+        for path in persisted_contract["artifact_inventory"]["advanced_sidecars_tail"]
+    )
+    analogical_query = bundle["herschel_report_summary"]["artifact_evidence"]["analogical_query_context_evidence"]
+    assert analogical_query["available"] is True
+    assert analogical_query["sources"][0]["selected_query_complex_source"] == "trajectory_probability_filtered_simplicial_object"
+    assert analogical_query["sources"][0]["selected_query_probability_vertex_count"] == 4
 
 def test_prepare_review_bundle_blocks_command_execution_without_checkpoint(tmp_path: Path):
     module = _load_bundle_module()
