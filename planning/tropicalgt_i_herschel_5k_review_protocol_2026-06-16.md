@@ -48,6 +48,8 @@ Blocked evidence remains blocked. Empty or unavailable checkpoints, missing post
 
 2026-06-18 follow-up: Herschel report summaries now also read strict interactive-validator `--json-output` files from recorded validator command results and expose `validator_gap_evidence` under `artifact_evidence`. This carries the validator `evidence_gap_inventory` into Herschel's JSON/markdown report with combined category counts and per-source availability, while preserving failed validator status. Missing validator JSON is recorded as unavailable and cannot justify a restart, artifact pass, or hyperparameter change.
 
+2026-06-18 visual-report follow-up: `write_herschel_5k_report.py` now also writes an optional HTML visual report, and `prepare_5k_review_bundle.py` records it as `herschel_report_html`. The HTML report renders metric cards, a restart-decision flow, sidecar-group bar charts, strict-validator gap bar charts, validator-source tables, blocker/warning panels, and a filterable sidecar list from the existing summary only. It is an evidence visualization layer, not a command runner or substitute for failed validators.
+
 Validation:
 
 ```text

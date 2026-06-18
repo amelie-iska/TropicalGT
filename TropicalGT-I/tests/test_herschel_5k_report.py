@@ -120,8 +120,9 @@ def test_write_herschel_report_preserves_blockers_and_sidecar_groups(tmp_path: P
     bundle_path.write_text(json.dumps(bundle), encoding="utf-8")
     markdown_path = tmp_path / "herschel_report.md"
     json_path = tmp_path / "herschel_report.json"
+    html_path = tmp_path / "herschel_report.html"
 
-    summary = module.write_herschel_report(bundle_path, markdown_path, json_path)
+    summary = module.write_herschel_report(bundle_path, markdown_path, json_path, html_path)
 
     assert summary["schema_version"] == "tropicalgt.herschel_5k_report_summary.v1"
     assert summary["primary_metrics"]["bpb"] == 1.31
@@ -153,6 +154,13 @@ def test_write_herschel_report_preserves_blockers_and_sidecar_groups(tmp_path: P
     assert "analogical_memory" in markdown
     assert "checkpoint_file_is_empty" in markdown
     assert "blocked_missing_required_evidence_no_restart" in markdown
+    html = html_path.read_text(encoding="utf-8")
+    assert "Herschel 5K Visual Evidence Report" in html
+    assert "data-chart='sidecar-groups'" in html
+    assert "data-chart='validator-gap-counts'" in html
+    assert "Restart Decision Flow" in html
+    assert "sidecar-filter" in html
+    assert "analogical_memory" in html
     assert json.loads(json_path.read_text(encoding="utf-8"))["restart_decision"] == summary["restart_decision"]
 
 
@@ -205,18 +213,25 @@ def test_prepare_review_bundle_writes_herschel_report_artifacts(tmp_path: Path):
     artifacts = bundle["artifacts"]
     assert "herschel_report_markdown" in artifacts
     assert "herschel_report_json" in artifacts
+    assert "herschel_report_html" in artifacts
     assert (module.ROOT / artifacts["herschel_report_markdown"]).exists()
     assert (module.ROOT / artifacts["herschel_report_json"]).exists()
+    assert (module.ROOT / artifacts["herschel_report_html"]).exists()
     assert bundle["herschel_report_summary"]["restart_decision"]["action"] == bundle["restart_evidence_gate"]["restart_action"]
     assert bundle["herschel_report_summary"]["checkpoint_evidence"]["restart_safe"] is False
     persisted_bundle = json.loads((module.ROOT / artifacts["bundle_json"]).read_text(encoding="utf-8"))
     assert persisted_bundle["artifacts"]["herschel_report_markdown"] == artifacts["herschel_report_markdown"]
     assert persisted_bundle["artifacts"]["herschel_report_json"] == artifacts["herschel_report_json"]
+    assert persisted_bundle["artifacts"]["herschel_report_html"] == artifacts["herschel_report_html"]
     assert persisted_bundle["herschel_report_summary"]["restart_decision"] == bundle["herschel_report_summary"]["restart_decision"]
 
     report_markdown = (module.ROOT / artifacts["herschel_report_markdown"]).read_text(encoding="utf-8")
     assert "# Herschel 5K Evidence Report" in report_markdown
     assert "checkpoint_summary_unavailable" in report_markdown
+    report_html = (module.ROOT / artifacts["herschel_report_html"]).read_text(encoding="utf-8")
+    assert "Herschel 5K Visual Evidence Report" in report_html
+    assert "Restart Decision Flow" in report_html
     bundle_markdown = (module.ROOT / artifacts["bundle_markdown"]).read_text(encoding="utf-8")
     assert "Herschel Report Summary" in bundle_markdown
     assert "herschel_report_markdown" in bundle_markdown
+    assert "herschel_report_html" in bundle_markdown

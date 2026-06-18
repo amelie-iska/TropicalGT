@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 from datetime import datetime, timezone
+import html
 import json
 from pathlib import Path
 import shlex
@@ -359,7 +360,141 @@ def render_markdown(summary: dict[str, Any]) -> str:
     return chr(10).join(lines)
 
 
-def write_herschel_report(bundle_path: Path, output_path: Path, json_output: Path | None = None) -> dict[str, Any]:
+
+
+def _bar_chart_svg(values: dict[str, Any], *, title: str, chart_id: str) -> str:
+    numeric: list[tuple[str, int]] = []
+    for key, value in values.items():
+        try:
+            count = int(value)
+        except (TypeError, ValueError):
+            continue
+        if count > 0:
+            numeric.append((str(key), count))
+    if not numeric:
+        return f"<section class='panel' data-chart='{html.escape(chart_id)}'><h2>{html.escape(title)}</h2><p class='muted'>No recorded counts.</p></section>"
+    numeric.sort(key=lambda item: (-item[1], item[0]))
+    max_count = max(count for _, count in numeric) or 1
+    width = 880
+    left = 250
+    bar_max = width - left - 96
+    row_h = 34
+    height = 44 + row_h * len(numeric)
+    rows = [f"<svg role='img' aria-label='{html.escape(title)}' viewBox='0 0 {width} {height}'>"]
+    rows.append(f"<title>{html.escape(title)}</title>")
+    rows.append(f"<text x='0' y='20' class='svg-title'>{html.escape(title)}</text>")
+    for index, (label, count) in enumerate(numeric):
+        y = 40 + index * row_h
+        bar_w = max(2, int(bar_max * (count / max_count)))
+        rows.append(f"<text x='0' y='{y + 18}' class='axis-label'>{html.escape(label)}</text>")
+        rows.append(f"<rect x='{left}' y='{y}' width='{bar_w}' height='22' rx='3'><title>{html.escape(label)}: {count}</title></rect>")
+        rows.append(f"<text x='{left + bar_w + 10}' y='{y + 17}' class='value-label'>{count}</text>")
+    rows.append("</svg>")
+    return f"<section class='panel' data-chart='{html.escape(chart_id)}'><h2>{html.escape(title)}</h2>{''.join(rows)}</section>"
+
+
+def _html_list(values: list[Any]) -> str:
+    if not values:
+        return "<li class='muted'>none</li>"
+    return "".join(f"<li>{html.escape(str(value))}</li>" for value in values)
+
+
+def render_html(summary: dict[str, Any]) -> str:
+    run = summary["run_identity"]
+    metrics = summary["primary_metrics"]
+    checkpoint = summary["checkpoint_evidence"]
+    execution = summary["execution_evidence"]
+    advanced = summary["advanced_bpb_contract"]
+    artifacts = summary["artifact_evidence"]
+    restart = summary["restart_decision"]
+    validator_gaps = artifacts.get("validator_gap_evidence", {}) if isinstance(artifacts.get("validator_gap_evidence"), dict) else {}
+    sidecar_groups = artifacts.get("sidecar_groups", {}) if isinstance(artifacts.get("sidecar_groups"), dict) else {}
+    validator_counts = validator_gaps.get("combined_category_counts", {}) if isinstance(validator_gaps.get("combined_category_counts"), dict) else {}
+    validator_sources = validator_gaps.get("sources", []) if isinstance(validator_gaps.get("sources"), list) else []
+    sidecars = [str(path) for path in artifacts.get("advanced_sidecars_tail", [])]
+    source_rows = []
+    for source in validator_sources:
+        if not isinstance(source, dict):
+            continue
+        source_rows.append(
+            "<tr>"
+            f"<td>{html.escape(str(source.get('name', 'validator')))}</td>"
+            f"<td>{html.escape(str(source.get('path', '')))}</td>"
+            f"<td>{html.escape(str(source.get('available')))}</td>"
+            f"<td>{html.escape(str(source.get('gap_count')))}</td>"
+            f"<td>{html.escape(str(source.get('reason', '')))}</td>"
+            "</tr>"
+        )
+    if not source_rows:
+        source_rows.append("<tr><td colspan='5' class='muted'>No validator JSON sources recorded.</td></tr>")
+    sidecar_items = "".join(f"<li data-path='{html.escape(path.lower())}'>{html.escape(path)}</li>" for path in sidecars[:160]) or "<li class='muted'>No sidecar paths recorded.</li>"
+    restart_safe = checkpoint.get("restart_safe") and execution.get("ready") and advanced.get("safe_for_restart") and restart.get("step0_restart_allowed")
+    return f"""<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Herschel 5K Visual Evidence Report</title>
+<style>
+:root {{ color-scheme: light; --ink:#151923; --muted:#5b6472; --line:#d8dee8; --panel:#ffffff; --bg:#f5f7fb; --accent:#2457d6; --warn:#b42318; --ok:#087443; }}
+body {{ margin:0; font:14px/1.45 system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; background:var(--bg); color:var(--ink); }}
+header, main {{ max-width:1180px; margin:0 auto; padding:24px; }}
+header {{ padding-bottom:10px; }}
+h1 {{ margin:0 0 8px; font-size:28px; letter-spacing:0; }}
+h2 {{ margin:0 0 12px; font-size:18px; letter-spacing:0; }}
+.grid {{ display:grid; grid-template-columns:repeat(auto-fit,minmax(210px,1fr)); gap:12px; }}
+.card, .panel {{ background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:14px; box-shadow:0 1px 2px rgba(10,20,40,.04); }}
+.card b {{ display:block; font-size:22px; margin-top:5px; }}
+.muted {{ color:var(--muted); }}
+.badge {{ display:inline-block; padding:3px 8px; border-radius:999px; border:1px solid var(--line); background:#f8fafc; margin-right:6px; }}
+.badge.ok {{ color:var(--ok); border-color:#9bd3b7; background:#effaf4; }} .badge.warn {{ color:var(--warn); border-color:#f2aaa4; background:#fff3f1; }}
+section {{ margin:14px 0; }}
+svg {{ width:100%; height:auto; }}
+rect {{ fill:var(--accent); }}
+.svg-title {{ font-weight:700; font-size:16px; fill:var(--ink); }} .axis-label,.value-label {{ font-size:12px; fill:var(--ink); }}
+table {{ width:100%; border-collapse:collapse; }} th,td {{ border-bottom:1px solid var(--line); padding:8px; text-align:left; vertical-align:top; }} th {{ color:var(--muted); font-weight:600; }}
+.flow {{ display:grid; grid-template-columns:repeat(auto-fit,minmax(160px,1fr)); gap:8px; align-items:stretch; }} .flow div {{ border:1px solid var(--line); border-radius:8px; padding:10px; background:#fbfcff; }}
+input[type=search] {{ width:100%; padding:10px; border:1px solid var(--line); border-radius:6px; margin-bottom:8px; }}
+code {{ white-space:break-spaces; }}
+</style>
+</head>
+<body>
+<header>
+<h1>Herschel 5K Visual Evidence Report</h1>
+<p class="muted">Generated {html.escape(str(summary.get('generated_at')))} from <code>{html.escape(str(summary.get('bundle_path')))}</code>. Evidence-only rendering: no training, validation, checkpoint loading, browser control, or GPU command is executed by this report.</p>
+<span class="badge {'ok' if restart_safe else 'warn'}">restart_safe={html.escape(str(bool(restart_safe)))}</span>
+<span class="badge {'ok' if validator_gaps.get('available') else 'warn'}">validator_gap_evidence={html.escape(str(bool(validator_gaps.get('available'))))}</span>
+</header>
+<main>
+<section class="grid">
+<div class="card">Observed BPB<b>{html.escape(_fmt(metrics.get('bpb')))}</b><span class="muted">target &lt; {html.escape(_fmt(run.get('target_bpb')))}</span></div>
+<div class="card">Observed graph-BPB<b>{html.escape(_fmt(metrics.get('graph_bpb')))}</b><span class="muted">graph-conditioned gate</span></div>
+<div class="card">Checkpoint restart-safe<b>{html.escape(str(checkpoint.get('restart_safe')))}</b><span class="muted">{html.escape(str(checkpoint.get('unavailable_reason') or 'n/a'))}</span></div>
+<div class="card">Restart action<b>{html.escape(str(restart.get('action')))}</b><span class="muted">step-0 allowed={html.escape(str(restart.get('step0_restart_allowed')))}</span></div>
+</section>
+<section class="panel"><h2>Restart Decision Flow</h2><div class="flow"><div>5K bundle<br><b>step {html.escape(str(run.get('boundary_step')))}</b></div><div>Target missed<br><b>{html.escape(str(metrics.get('target_missed')))}</b></div><div>Checkpoint safe<br><b>{html.escape(str(checkpoint.get('restart_safe')))}</b></div><div>Execution ready<br><b>{html.escape(str(execution.get('ready')))}</b></div><div>Advanced gate<br><b>{html.escape(str(advanced.get('safe_for_restart')))}</b></div><div>Action<br><b>{html.escape(str(restart.get('action')))}</b></div></div></section>
+{_bar_chart_svg(sidecar_groups, title='Advanced Sidecar Groups', chart_id='sidecar-groups')}
+{_bar_chart_svg(validator_counts, title='Strict Validator Evidence Gaps', chart_id='validator-gap-counts')}
+<section class="panel"><h2>Validator Sources</h2><table><thead><tr><th>Name</th><th>JSON path</th><th>Available</th><th>Gaps</th><th>Reason</th></tr></thead><tbody>{''.join(source_rows)}</tbody></table></section>
+<section class="panel"><h2>Blockers And Warnings</h2><div class="grid"><div><h3>Checkpoint</h3><ul>{_html_list(checkpoint.get('warnings', []))}</ul></div><div><h3>Execution</h3><ul>{_html_list(execution.get('issues', []))}</ul></div><div><h3>Advanced BPB</h3><ul>{_html_list(advanced.get('failed_gates', []))}</ul></div><div><h3>Restart</h3><ul>{_html_list(restart.get('blockers', []))}</ul></div></div></section>
+<section class="panel"><h2>Advanced Sidecars Tail</h2><input id="sidecar-filter" type="search" placeholder="Filter sidecar paths"><ul id="sidecar-list">{sidecar_items}</ul></section>
+</main>
+<script>
+const input = document.getElementById('sidecar-filter');
+const items = Array.from(document.querySelectorAll('#sidecar-list li[data-path]'));
+if (input) {{ input.addEventListener('input', () => {{ const q = input.value.toLowerCase(); items.forEach(li => li.style.display = li.dataset.path.includes(q) ? '' : 'none'); }}); }}
+</script>
+</body>
+</html>
+"""
+
+
+def write_herschel_report(
+    bundle_path: Path,
+    output_path: Path,
+    json_output: Path | None = None,
+    html_output: Path | None = None,
+) -> dict[str, Any]:
     bundle = _read_json(bundle_path)
     summary = summarize_bundle(bundle, bundle_path=bundle_path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -367,6 +502,9 @@ def write_herschel_report(bundle_path: Path, output_path: Path, json_output: Pat
     if json_output is not None:
         json_output.parent.mkdir(parents=True, exist_ok=True)
         json_output.write_text(json.dumps(summary, indent=2), encoding="utf-8")
+    if html_output is not None:
+        html_output.parent.mkdir(parents=True, exist_ok=True)
+        html_output.write_text(render_html(summary), encoding="utf-8")
     return summary
 
 
@@ -375,9 +513,20 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--bundle", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--json-output", type=Path)
+    parser.add_argument("--html-output", type=Path)
     args = parser.parse_args(argv)
-    summary = write_herschel_report(args.bundle, args.output, args.json_output)
-    print(json.dumps({"output": _project_path(args.output), "json_output": _project_path(args.json_output) if args.json_output else "", "restart_action": summary["restart_decision"]["action"]}, indent=2))
+    summary = write_herschel_report(args.bundle, args.output, args.json_output, args.html_output)
+    print(
+        json.dumps(
+            {
+                "output": _project_path(args.output),
+                "json_output": _project_path(args.json_output) if args.json_output else "",
+                "html_output": _project_path(args.html_output) if args.html_output else "",
+                "restart_action": summary["restart_decision"]["action"],
+            },
+            indent=2,
+        )
+    )
     return 0
 
 
