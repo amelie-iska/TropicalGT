@@ -25,6 +25,50 @@ def _write(path: Path, text: str) -> None:
     path.write_text(text, encoding="utf-8")
 
 
+
+def test_evidence_gap_inventory_groups_strict_validator_failures_without_relaxing_gate():
+    module = _load_validator()
+    errors = [
+        "only 1 rows available, expected at least 3",
+        "row 0 missing json analogical_simplex_tree_analogy.json",
+        "row 0 trajectory persistence landscapes payload is missing",
+        "row 0 GraphCG payload is missing structured readability contract",
+        "row 0 reasoning-step manifest is missing contract schema",
+        "row 0 trajectory bifiltration chain-presentation lacks CAS execution manifest",
+    ]
+
+    inventory = module._build_evidence_gap_inventory(errors)
+
+    assert inventory["schema_version"] == "tropicalgt.interactive_audit_evidence_gap_inventory.v1"
+    assert inventory["actual_data_only"] is True
+    assert inventory["no_proxy_or_fallback"] is True
+    assert inventory["strict_validation_still_required"] is True
+    assert inventory["gap_count"] == len(errors)
+    assert inventory["category_counts"]["row_coverage"] == 1
+    assert inventory["category_counts"]["analogical_memory"] == 1
+    assert inventory["category_counts"]["persistence_landscapes"] == 1
+    assert inventory["category_counts"]["graphcg_direction_audit"] == 1
+    assert inventory["category_counts"]["reasoning_step_contracts"] == 1
+    assert inventory["category_counts"]["cas_resolution_certificate"] == 1
+    assert "does not make an artifact valid" in inventory["policy"]
+
+    markdown = module._markdown_report(
+        {
+            "audit_root": "/tmp/got_audit",
+            "ok": False,
+            "rows_checked": 0,
+            "errors": errors,
+            "row_reports": [],
+            "validation_metrics": {"available": False},
+            "evidence_gap_inventory": inventory,
+        }
+    )
+    assert "## Evidence Gap Inventory" in markdown
+    assert "Strict validation still required: `true`" in markdown
+    assert "`analogical_memory`: `1`" in markdown
+    assert "## Errors" in markdown
+
+
 def _html(title: str, extra: str = "Plotly.newPlot play filtration Filtration radius") -> str:
     return f"<!doctype html><title>{title}</title><script src='plotly.min.js'></script><body>{title} {extra}</body>"
 

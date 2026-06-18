@@ -773,6 +773,18 @@ support, GraphCG, embedding trajectory identity, slider/poset sidecars,
 reasoning-step manifests, and analogical maps. This stale generated bundle is
 not acceptance evidence.
 
+Completed 2026-06-18 follow-up: the strict validator now emits a first-class
+`evidence_gap_inventory` in JSON and markdown output. The inventory classifies
+failures while preserving `ok=false`, `strict_validation_still_required=true`,
+and no-proxy/no-fallback policy. Re-running the validator on the b60 step-5000
+`got_audit` bundle still fails as intended with `319` gaps, now grouped as:
+reasoning-step contracts `112`, embedding-map identity `55`, trajectory
+overlay/radius sidecars `42`, analogical memory `35`, tropical support `30`,
+persistence landscapes `17`, CAS resolution certificates `12`, GraphCG `6`, NLL
+surface/density `5`, other `2`, SimplexTree poset `2`, and row coverage `1`.
+This is reporting evidence for repair planning only; it does not make stale
+artifacts pass acceptance.
+
 - [x] **Step 9.4: Push**
 
 Stage only intended files, exclude unrelated files, commit, push `tropicalgt-i-implementation`.

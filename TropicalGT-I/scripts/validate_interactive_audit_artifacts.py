@@ -53,6 +53,104 @@ REQUIRED_JSON = {
 }
 
 
+EVIDENCE_GAP_CATEGORY_RULES: tuple[tuple[str, tuple[str, ...]], ...] = (
+    ("row_coverage", ("rows available", "expected at least")),
+    ("persistence_landscapes", ("persistence landscapes", "persistence_landscapes", "lambda_k", "landscape")),
+    (
+        "cas_resolution_certificate",
+        (
+            "free-resolution",
+            "cas certificate",
+            "be/fitting",
+            "cas execution manifest",
+            "unavailable cas guard",
+            "chain-presentation",
+            "finite-chain",
+        ),
+    ),
+    ("nll_density_surface", ("nll density", "nll surface", "local embedding-neighborhood surface", "pc3 z-axis")),
+    ("tropical_support", ("tropical support", "wall margin", "support assignment")),
+    ("graphcg_direction_audit", ("graphcg",)),
+    ("embedding_map_identity", ("embedding map", "trajectory identity", "graph_state", "parent-child")),
+    (
+        "trajectory_overlay_radius",
+        (
+            "trajectory complex overlay",
+            "radius slider",
+            "slider contract",
+            "full trajectory complex",
+            "probability trajectory complex",
+        ),
+    ),
+    ("analogical_memory", ("analogical", "jensen-shannon", "top-k")),
+    ("reasoning_step_contracts", ("reasoning-step", "reasoning step", "complex fingerprint", "fingerprint basis")),
+    ("simplex_tree_poset", ("simplex tree", "simplex-tree", "face-coface")),
+    ("bifiltration_module", ("bifiltration", "miller-sturmfels", "structure map")),
+    ("browser_index", ("browser index", "codex browser")),
+    ("missing_artifact", ("missing json", "missing html", "references missing", "missing")),
+)
+
+
+EVIDENCE_GAP_ACTIONS = {
+    "row_coverage": "Regenerate or collect the required number of real audit rows; do not duplicate rows to satisfy min-row gates.",
+    "missing_artifact": "Regenerate the missing artifact from the original model/audit payload or keep the bundle failed; do not create placeholder evidence.",
+    "cas_resolution_certificate": "Attach a real CAS certificate or an explicit safe-unavailable CAS guard; chain diagnostics cannot stand in for a resolution.",
+    "persistence_landscapes": "Compute real GUDHI/persim lambda_k(t) landscape rows from persistence intervals, or render an explicit unavailable landscape state.",
+    "nll_density_surface": "Regenerate NLL density/surface payloads with the current visual-layer contracts from model GoT anchors.",
+    "tropical_support": "Regenerate tropical support payloads with trace-backed support, margin, and no-normal-fan-certificate scope.",
+    "graphcg_direction_audit": "Regenerate GraphCG direction evidence with per-direction rows, contiguous ids, and bounded top-active summaries.",
+    "embedding_map_identity": "Regenerate embedding-map payloads with graph_state provenance, branch/depth metadata, and parent-child transitions.",
+    "trajectory_overlay_radius": "Regenerate radius filtration overlays and slider sidecars from canonical filtered complexes.",
+    "analogical_memory": "Regenerate probability-vector analogical reports from model probabilities and certified simplex-tree correspondence checks.",
+    "reasoning_step_contracts": "Regenerate per-step complex pages and manifest contracts from each candidate filtered simplicial object.",
+    "simplex_tree_poset": "Regenerate GUDHI SimplexTree face-to-coface poset sidecars from canonical complexes.",
+    "bifiltration_module": "Regenerate the two-parameter bifiltration sidecar from actual level/radius fibers and structure maps.",
+    "browser_index": "Rebuild browser indexes only after the referenced real artifacts exist.",
+    "other": "Inspect the exact strict-validator error and repair the underlying source artifact; this inventory does not downgrade failures.",
+}
+
+
+def _evidence_gap_category(error: str) -> str:
+    text = error.lower()
+    for category, needles in EVIDENCE_GAP_CATEGORY_RULES:
+        if any(needle in text for needle in needles):
+            return category
+    return "other"
+
+
+def _build_evidence_gap_inventory(errors: list[str]) -> dict[str, Any]:
+    counts: Counter[str] = Counter()
+    examples: dict[str, list[str]] = {}
+    for error in errors:
+        category = _evidence_gap_category(error)
+        counts[category] += 1
+        examples.setdefault(category, [])
+        if len(examples[category]) < 5:
+            examples[category].append(error)
+    categories = [
+        {
+            "category": category,
+            "count": count,
+            "examples": examples.get(category, []),
+            "required_action": EVIDENCE_GAP_ACTIONS.get(category, EVIDENCE_GAP_ACTIONS["other"]),
+        }
+        for category, count in sorted(counts.items(), key=lambda item: (-item[1], item[0]))
+    ]
+    return {
+        "schema_version": "tropicalgt.interactive_audit_evidence_gap_inventory.v1",
+        "actual_data_only": True,
+        "no_proxy_or_fallback": True,
+        "strict_validation_still_required": True,
+        "gap_count": len(errors),
+        "category_counts": {category: count for category, count in sorted(counts.items())},
+        "categories": categories,
+        "policy": (
+            "This inventory classifies strict-validator failures so stale or incomplete bundles can be repaired from real payloads. "
+            "It does not make an artifact valid, synthesize evidence, or replace missing CAS/topology/geometry/algebra objects."
+        ),
+    }
+
+
 class ArtifactValidationError(RuntimeError):
     pass
 
@@ -1794,6 +1892,7 @@ def validate_audit_root(audit_root: str | Path, *, min_rows: int = 3, min_candid
         "rows_checked": len(row_reports),
         "row_reports": row_reports,
         "validation_metrics": _validation_metrics(root),
+        "evidence_gap_inventory": _build_evidence_gap_inventory(errors),
     }
 
 
@@ -1811,6 +1910,19 @@ def _markdown_report(report: dict[str, Any]) -> str:
         for key, value in metrics.items():
             if key not in {"available", "path"}:
                 lines.append(f"- `{key}`: `{value}`")
+    inventory = report.get("evidence_gap_inventory", {}) if isinstance(report.get("evidence_gap_inventory"), dict) else {}
+    categories = inventory.get("categories", []) if isinstance(inventory.get("categories"), list) else []
+    if inventory.get("gap_count"):
+        lines.extend(["", "## Evidence Gap Inventory"])
+        lines.append(f"- Gap count: `{inventory.get('gap_count')}`")
+        lines.append("- Strict validation still required: `true`")
+        lines.append(f"- Policy: {inventory.get('policy')}")
+        for row in categories:
+            if not isinstance(row, dict):
+                continue
+            lines.append(f"- `{row.get('category')}`: `{row.get('count')}` - {row.get('required_action')}")
+            for example in row.get("examples", [])[:2] if isinstance(row.get("examples"), list) else []:
+                lines.append(f"  - example: `{example}`")
     if report.get("errors"):
         lines.extend(["", "## Errors"])
         lines.extend(f"- {err}" for err in report["errors"])
