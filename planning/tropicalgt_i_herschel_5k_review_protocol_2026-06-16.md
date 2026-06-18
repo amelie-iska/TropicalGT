@@ -146,3 +146,16 @@ CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src:TropicalGT-I/scripts /home/i
 CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src:TropicalGT-I/scripts /home/iska/miniconda3/envs/tokengt/bin/python TropicalGT-I/scripts/audit_metric_provenance.py --fail-on-uncovered
 # findings=360 covered=360 uncovered=0
 ```
+
+2026-06-18 chart/vector-bundle evidence follow-up: Herschel now treats `chart_bundle_transport_sidecar.json` as a required recorded GoT audit sidecar when it exists. `write_herschel_5k_report.py` exposes `tropicalgt.herschel_chart_bundle_transport_evidence.v1`, sourced only from recorded chart/vector-bundle transport payloads with exported chart metadata, monomial transport contracts, bundle matroid flat-incidence contracts, vector-bundle paper sidecars, completeness contracts, safety flags, and no-proxy/no-fallback markers. Available telemetry can be reported as partial or paper-ready according to the recorded completeness tier, but it is never promoted to a vector-bundle theorem certificate, toric embedding, tropical variety, global toric variety, normal-fan certificate, or restart justification by itself.
+
+2026-06-18 chart/vector-bundle evidence validation:
+
+```text
+CUDA_VISIBLE_DEVICES="" /home/iska/miniconda3/envs/tokengt/bin/python -m py_compile TropicalGT-I/scripts/write_herschel_5k_report.py TropicalGT-I/scripts/prepare_5k_review_bundle.py TropicalGT-I/src/tropicalgt/provenance.py TropicalGT-I/tests/test_herschel_5k_report.py TropicalGT-I/tests/test_prepare_5k_review_bundle.py
+# passed
+CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src:TropicalGT-I/scripts /home/iska/miniconda3/envs/tokengt/bin/python -m pytest -q TropicalGT-I/tests/test_herschel_5k_report.py TropicalGT-I/tests/test_prepare_5k_review_bundle.py TropicalGT-I/tests/test_parameter_golf_review_loop.py TropicalGT-I/tests/test_metric_provenance.py
+# 36 passed
+CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src:TropicalGT-I/scripts /home/iska/miniconda3/envs/tokengt/bin/python TropicalGT-I/scripts/audit_metric_provenance.py --fail-on-uncovered
+# findings=372 covered=372 uncovered=0
+```

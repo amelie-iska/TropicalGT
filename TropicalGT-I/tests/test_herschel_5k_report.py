@@ -250,6 +250,71 @@ def test_write_herschel_report_preserves_blockers_and_sidecar_groups(tmp_path: P
         ),
         encoding="utf-8",
     )
+    chart_bundle_path = tmp_path / "chart_bundle_transport_sidecar.json"
+    chart_bundle_payload = {
+        "schema_version": "tropicalgt.chart_bundle_transport_sidecar.v1",
+        "available": True,
+        "source_path": "unit.chart_bundle_transport_metadata",
+        "reason": "exported_chart_bundle_transport_metadata_available",
+        "metadata": {
+            "schema_version": "tropicalgt.chart_bundle_transport_metadata.v1",
+            "available": True,
+            "source": "unit.fixture",
+            "chart_ids": ["chart_00", "chart_01"],
+            "overlap_pairs": [{"id": "chart_00__to__chart_01"}],
+            "overlap_triples": [],
+        },
+        "chart_ids": ["chart_00", "chart_01"],
+        "overlap_pair_count": 1,
+        "overlap_triple_count": 0,
+        "monomial_transport_contract": {
+            "schema_version": "tropicalgt.monomial_transport_head.v1",
+            "transport_ids": ["chart_00__to__chart_01"],
+            "actual_data_only": True,
+            "no_proxy_or_fallback": True,
+        },
+        "bundle_matroid_contract": {
+            "schema_version": "tropicalgt.bundle_matroid_flat_incidence.v1",
+            "flat_incidence_shape": [2, 3],
+            "actual_data_only": True,
+            "no_proxy_or_fallback": True,
+        },
+        "vector_bundle_paper_sidecar": {
+            "schema_version": "tropicalgt.vector_bundle_paper_sidecar.v1",
+            "available": True,
+            "actual_data_only": True,
+            "no_proxy_or_fallback": True,
+            "chart_ids": ["chart_00", "chart_01"],
+            "monomial_transport_ids": ["chart_00__to__chart_01"],
+            "completeness_tier": "paper_ready",
+            "safe_to_use_as_vector_bundle_paper_ready_evidence": True,
+            "safe_to_use_as_vector_bundle_theorem_certificate": False,
+            "safe_to_use_as_toric_or_tropical_embedding_certificate": False,
+            "completeness_contract": {
+                "schema_version": "tropicalgt.vector_bundle_paper_sidecar_completeness.v1",
+                "tier": "paper_ready",
+                "paper_ready": True,
+                "basic_telemetry_available": True,
+                "required_groups": {
+                    "chart_and_monomial_transport_ids": True,
+                    "configured_toric_active_rows": True,
+                    "flat_incidence_diagnostics": True,
+                    "graphcg_toric_agreement": True,
+                    "transported_persistence_landscapes": True,
+                },
+                "missing_required_groups": [],
+                "actual_data_only": True,
+                "no_proxy_or_fallback": True,
+            },
+        },
+        "actual_data_only": True,
+        "no_proxy_or_fallback": True,
+        "safe_to_render_as_toric_embedding_certificate": False,
+        "safe_to_render_as_tropical_variety_embedding": False,
+        "safe_to_render_as_global_toric_variety_embedding": False,
+        "safe_to_use_as_normal_fan_certificate": False,
+    }
+    chart_bundle_path.write_text(json.dumps(chart_bundle_payload), encoding="utf-8")
     validator_json = tmp_path / "interactive_validator.json"
     validator_json.write_text(
         json.dumps(
@@ -334,7 +399,7 @@ def test_write_herschel_report_preserves_blockers_and_sidecar_groups(tmp_path: P
                 str(graphcg_direction_path),
                 str(nll_density_path),
                 "got_audit/chart_bundle_metrics.json",
-                "got_audit/chart_bundle_transport_sidecar.json",
+                str(chart_bundle_path),
                 "got_audit/derived_category_chain_map_report.json",
             ],
         },
@@ -440,6 +505,19 @@ def test_write_herschel_report_preserves_blockers_and_sidecar_groups(tmp_path: P
     assert nll_density["sources"][0]["support_sample_trace_visibility"] == "legendonly"
     assert nll_density["sources"][0]["support_samples_are_model_states"] is False
     assert nll_density["sources"][0]["no_proxy_or_fallback"] is True
+    chart_bundle = summary["artifact_evidence"]["chart_bundle_transport_evidence"]
+    assert chart_bundle["schema_version"] == "tropicalgt.herschel_chart_bundle_transport_evidence.v1"
+    assert chart_bundle["available"] is True
+    assert chart_bundle["source_count"] == 1
+    assert chart_bundle["available_source_count"] == 1
+    assert chart_bundle["paper_ready_source_count"] == 1
+    assert chart_bundle["total_chart_count"] == 2
+    assert chart_bundle["total_transport_count"] == 1
+    assert chart_bundle["completeness_tier_counts"] == {"paper_ready": 1}
+    assert chart_bundle["sources"][0]["paper_ready"] is True
+    assert chart_bundle["sources"][0]["safe_to_render_as_toric_embedding_certificate"] is False
+    assert chart_bundle["sources"][0]["safe_to_use_as_vector_bundle_theorem_certificate"] is False
+    assert chart_bundle["sources"][0]["no_proxy_or_fallback"] is True
     analogical_query = summary["artifact_evidence"]["analogical_query_context_evidence"]
     assert analogical_query["schema_version"] == "tropicalgt.herschel_analogical_query_context_evidence.v1"
     assert analogical_query["available"] is True
@@ -471,6 +549,8 @@ def test_write_herschel_report_preserves_blockers_and_sidecar_groups(tmp_path: P
     assert "effective_full_rank_qr" in markdown
     assert "## NLL Density Evidence" in markdown
     assert "density_volume" in markdown
+    assert "## Chart/Vector-Bundle Evidence" in markdown
+    assert "paper_ready" in markdown
     assert "## Analogical Query Context Evidence" in markdown
     assert "trajectory_probability_filtered_simplicial_object" in markdown
     assert "probability_filtered_simplicial_object" in markdown
@@ -494,6 +574,9 @@ def test_write_herschel_report_preserves_blockers_and_sidecar_groups(tmp_path: P
     assert "NLL Density Evidence" in html
     assert "data-chart='nll-density-visible-layers'" in html
     assert "density_volume" in html
+    assert "Chart/Vector-Bundle Evidence" in html
+    assert "data-chart='chart-vector-bundle-completeness-tiers'" in html
+    assert "paper_ready" in html
     assert "Analogical Query Context Evidence" in html
     assert "valid_query_probability_trajectory_complex" in html
     assert "row 0 missing json analogical_simplex_tree_analogy.json" in html

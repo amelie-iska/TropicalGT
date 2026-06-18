@@ -690,6 +690,153 @@ def _graphcg_direction_evidence(sidecar_paths: list[str]) -> dict[str, Any]:
     }
 
 
+def _chart_bundle_transport_evidence(sidecar_paths: list[str]) -> dict[str, Any]:
+    sources: list[dict[str, Any]] = []
+    tier_counts: dict[str, int] = {}
+    missing_group_counts: dict[str, int] = {}
+    total_chart_count = 0
+    total_transport_count = 0
+    for raw_path in sidecar_paths:
+        lower = raw_path.lower()
+        if "chart_bundle_transport_sidecar" not in lower or not lower.endswith(".json"):
+            continue
+        resolved = _resolve_output_path(Path(raw_path))
+        source: dict[str, Any] = {"path": _project_path(resolved), "available": False}
+        if not resolved.exists():
+            source["reason"] = "chart_bundle_transport_sidecar_missing"
+            sources.append(source)
+            continue
+        try:
+            payload = json.loads(resolved.read_text(encoding="utf-8"))
+        except Exception as exc:  # pragma: no cover - parse message is platform-dependent
+            source["reason"] = f"chart_bundle_transport_sidecar_parse_error:{exc}"
+            sources.append(source)
+            continue
+        if not isinstance(payload, dict):
+            source["reason"] = "chart_bundle_transport_sidecar_not_object"
+            sources.append(source)
+            continue
+        metadata = payload.get("metadata") if isinstance(payload.get("metadata"), dict) else {}
+        transport_contract = payload.get("monomial_transport_contract") if isinstance(payload.get("monomial_transport_contract"), dict) else {}
+        matroid_contract = payload.get("bundle_matroid_contract") if isinstance(payload.get("bundle_matroid_contract"), dict) else {}
+        paper_sidecar = payload.get("vector_bundle_paper_sidecar") if isinstance(payload.get("vector_bundle_paper_sidecar"), dict) else {}
+        completeness = paper_sidecar.get("completeness_contract") if isinstance(paper_sidecar.get("completeness_contract"), dict) else {}
+        chart_ids = payload.get("chart_ids") if isinstance(payload.get("chart_ids"), list) else []
+        transport_ids = paper_sidecar.get("monomial_transport_ids") if isinstance(paper_sidecar.get("monomial_transport_ids"), list) else transport_contract.get("transport_ids", [])
+        if not isinstance(transport_ids, list):
+            transport_ids = []
+        missing_groups = completeness.get("missing_required_groups") if isinstance(completeness.get("missing_required_groups"), list) else []
+        schema_ok = payload.get("schema_version") == "tropicalgt.chart_bundle_transport_sidecar.v1"
+        metadata_ok = metadata.get("schema_version") == "tropicalgt.chart_bundle_transport_metadata.v1" and metadata.get("available") is True
+        transport_ok = bool(
+            transport_contract.get("schema_version") == "tropicalgt.monomial_transport_head.v1"
+            and transport_contract.get("actual_data_only") is True
+            and transport_contract.get("no_proxy_or_fallback") is True
+        )
+        matroid_ok = bool(
+            matroid_contract.get("schema_version") == "tropicalgt.bundle_matroid_flat_incidence.v1"
+            and matroid_contract.get("actual_data_only") is True
+            and matroid_contract.get("no_proxy_or_fallback") is True
+        )
+        paper_ok = bool(
+            paper_sidecar.get("schema_version") == "tropicalgt.vector_bundle_paper_sidecar.v1"
+            and paper_sidecar.get("actual_data_only") is True
+            and paper_sidecar.get("no_proxy_or_fallback") is True
+            and completeness.get("schema_version") == "tropicalgt.vector_bundle_paper_sidecar_completeness.v1"
+            and completeness.get("actual_data_only") is True
+            and completeness.get("no_proxy_or_fallback") is True
+        )
+        safety_ok = bool(
+            payload.get("safe_to_render_as_toric_embedding_certificate") is False
+            and payload.get("safe_to_render_as_tropical_variety_embedding") is False
+            and payload.get("safe_to_render_as_global_toric_variety_embedding") is False
+            and payload.get("safe_to_use_as_normal_fan_certificate") is False
+            and paper_sidecar.get("safe_to_use_as_vector_bundle_theorem_certificate") is False
+            and paper_sidecar.get("safe_to_use_as_toric_or_tropical_embedding_certificate", False) is False
+        )
+        no_proxy_ok = bool(payload.get("actual_data_only") is True and payload.get("no_proxy_or_fallback") is True)
+        chart_ok = bool(len(chart_ids) > 0)
+        available = bool(payload.get("available") is True and schema_ok and metadata_ok and transport_ok and matroid_ok and paper_ok and safety_ok and no_proxy_ok and chart_ok)
+        completeness_tier = str(paper_sidecar.get("completeness_tier") or completeness.get("tier") or "unavailable")
+        paper_ready = bool(
+            completeness.get("paper_ready") is True
+            and paper_sidecar.get("safe_to_use_as_vector_bundle_paper_ready_evidence") is True
+            and not missing_groups
+        )
+        if available:
+            tier_counts[completeness_tier] = tier_counts.get(completeness_tier, 0) + 1
+            total_chart_count += len(chart_ids)
+            total_transport_count += len(transport_ids)
+            for group in missing_groups:
+                missing_group_counts[str(group)] = missing_group_counts.get(str(group), 0) + 1
+        source.update(
+            {
+                "available": available,
+                "sidecar_schema_version": payload.get("schema_version", "unavailable"),
+                "metadata_schema_version": metadata.get("schema_version", "unavailable"),
+                "chart_count": len(chart_ids),
+                "transport_count": len(transport_ids),
+                "overlap_pair_count": _optional_int(payload.get("overlap_pair_count")),
+                "overlap_triple_count": _optional_int(payload.get("overlap_triple_count")),
+                "transport_contract_schema_version": transport_contract.get("schema_version", "unavailable"),
+                "matroid_contract_schema_version": matroid_contract.get("schema_version", "unavailable"),
+                "flat_incidence_shape": matroid_contract.get("flat_incidence_shape", []),
+                "paper_sidecar_schema_version": paper_sidecar.get("schema_version", "unavailable"),
+                "completeness_contract_schema_version": completeness.get("schema_version", "unavailable"),
+                "completeness_tier": completeness_tier,
+                "paper_ready": paper_ready,
+                "missing_required_groups": [str(group) for group in missing_groups],
+                "safe_to_render_as_toric_embedding_certificate": payload.get("safe_to_render_as_toric_embedding_certificate"),
+                "safe_to_render_as_tropical_variety_embedding": payload.get("safe_to_render_as_tropical_variety_embedding"),
+                "safe_to_use_as_normal_fan_certificate": payload.get("safe_to_use_as_normal_fan_certificate"),
+                "safe_to_use_as_vector_bundle_theorem_certificate": paper_sidecar.get("safe_to_use_as_vector_bundle_theorem_certificate"),
+                "safe_to_use_as_vector_bundle_paper_ready_evidence": paper_sidecar.get("safe_to_use_as_vector_bundle_paper_ready_evidence"),
+                "actual_data_only": bool(payload.get("actual_data_only") is True and paper_sidecar.get("actual_data_only") is True),
+                "no_proxy_or_fallback": bool(no_proxy_ok and paper_sidecar.get("no_proxy_or_fallback") is True),
+            }
+        )
+        if not available:
+            reasons = []
+            if payload.get("available") is not True:
+                reasons.append("chart_bundle_transport_sidecar_unavailable")
+            if not schema_ok:
+                reasons.append("missing_chart_bundle_transport_sidecar_schema")
+            if not metadata_ok:
+                reasons.append("missing_chart_bundle_transport_metadata")
+            if not transport_ok:
+                reasons.append("missing_monomial_transport_no_proxy_contract")
+            if not matroid_ok:
+                reasons.append("missing_bundle_matroid_no_proxy_contract")
+            if not paper_ok:
+                reasons.append("missing_vector_bundle_paper_sidecar_completeness_contract")
+            if not safety_ok:
+                reasons.append("unsafe_chart_bundle_certificate_claim")
+            if not no_proxy_ok:
+                reasons.append("missing_chart_bundle_no_proxy_contract")
+            if not chart_ok:
+                reasons.append("missing_chart_ids")
+            source["reason"] = ";".join(reasons) or "chart_bundle_transport_evidence_unavailable"
+        sources.append(source)
+    available_sources = [row for row in sources if row.get("available")]
+    paper_ready_sources = [row for row in available_sources if row.get("paper_ready")]
+    return {
+        "schema_version": "tropicalgt.herschel_chart_bundle_transport_evidence.v1",
+        "available": bool(available_sources),
+        "source_count": len(sources),
+        "available_source_count": len(available_sources),
+        "paper_ready_source_count": len(paper_ready_sources),
+        "required_sidecar_schema": "tropicalgt.chart_bundle_transport_sidecar.v1",
+        "required_metadata_schema": "tropicalgt.chart_bundle_transport_metadata.v1",
+        "required_paper_sidecar_schema": "tropicalgt.vector_bundle_paper_sidecar.v1",
+        "total_chart_count": total_chart_count,
+        "total_transport_count": total_transport_count,
+        "completeness_tier_counts": {key: tier_counts[key] for key in sorted(tier_counts)},
+        "missing_required_group_counts": {key: missing_group_counts[key] for key in sorted(missing_group_counts)},
+        "sources": sources,
+        "policy": "Herschel reports chart/vector-bundle telemetry only from recorded chart_bundle_transport_sidecar JSON with exported metadata, monomial transport and matroid contracts, vector-bundle completeness contracts, and no-proxy flags. Paper-ready telemetry is not a vector-bundle theorem certificate, toric embedding, tropical variety, global toric variety, or normal-fan certificate.",
+    }
+
+
 def _analogical_query_context_evidence(sidecar_paths: list[str]) -> dict[str, Any]:
     sources: list[dict[str, Any]] = []
     for raw_path in sidecar_paths:
@@ -816,6 +963,7 @@ def summarize_bundle(bundle: dict[str, Any], *, bundle_path: Path | None = None)
             "tropical_support_evidence": _tropical_support_evidence(sidecars),
             "graphcg_direction_evidence": _graphcg_direction_evidence(sidecars),
             "nll_density_evidence": _nll_density_evidence(sidecars),
+            "chart_bundle_transport_evidence": _chart_bundle_transport_evidence(sidecars),
             "analogical_query_context_evidence": _analogical_query_context_evidence(sidecars),
         },
         "restart_decision": {
@@ -992,6 +1140,33 @@ def render_markdown(summary: dict[str, Any]) -> str:
         )
         if source.get("reason"):
             lines.append(f"  - reason: `{source.get('reason')}`")
+    chart_bundle_transport = artifacts.get("chart_bundle_transport_evidence", {}) if isinstance(artifacts.get("chart_bundle_transport_evidence"), dict) else {}
+    lines.extend(
+        [
+            "## Chart/Vector-Bundle Evidence",
+            "",
+            f"- Available: `{chart_bundle_transport.get('available', False)}`",
+            f"- Sources: `{chart_bundle_transport.get('source_count', 0)}`",
+            f"- Paper-ready telemetry sources: `{chart_bundle_transport.get('paper_ready_source_count', 0)}`",
+            f"- Total charts: `{chart_bundle_transport.get('total_chart_count', 0)}`",
+            f"- Total transports: `{chart_bundle_transport.get('total_transport_count', 0)}`",
+            "",
+            "```json",
+            json.dumps(chart_bundle_transport.get("completeness_tier_counts", {}), indent=2),
+            "```",
+            "",
+        ]
+    )
+    for source in chart_bundle_transport.get("sources", []) if isinstance(chart_bundle_transport.get("sources"), list) else []:
+        if not isinstance(source, dict):
+            continue
+        lines.append(
+            f"- `{source.get('path', '')}` available=`{source.get('available')}` tier=`{source.get('completeness_tier', 'unavailable')}` "
+            f"paper_ready=`{source.get('paper_ready')}` charts=`{source.get('chart_count')}` transports=`{source.get('transport_count')}` "
+            f"missing=`{source.get('missing_required_groups', [])}`"
+        )
+        if source.get("reason"):
+            lines.append(f"  - reason: `{source.get('reason')}`")
     analogical_query_context = artifacts.get("analogical_query_context_evidence", {}) if isinstance(artifacts.get("analogical_query_context_evidence"), dict) else {}
     lines.extend(
         [
@@ -1132,6 +1307,7 @@ def render_html(summary: dict[str, Any]) -> str:
     tropical_support = artifacts.get("tropical_support_evidence", {}) if isinstance(artifacts.get("tropical_support_evidence"), dict) else {}
     graphcg_direction = artifacts.get("graphcg_direction_evidence", {}) if isinstance(artifacts.get("graphcg_direction_evidence"), dict) else {}
     nll_density = artifacts.get("nll_density_evidence", {}) if isinstance(artifacts.get("nll_density_evidence"), dict) else {}
+    chart_bundle_transport = artifacts.get("chart_bundle_transport_evidence", {}) if isinstance(artifacts.get("chart_bundle_transport_evidence"), dict) else {}
     analogical_query_context = artifacts.get("analogical_query_context_evidence", {}) if isinstance(artifacts.get("analogical_query_context_evidence"), dict) else {}
     validator_sources = validator_gaps.get("sources", []) if isinstance(validator_gaps.get("sources"), list) else []
     sidecars = [str(path) for path in artifacts.get("advanced_sidecars_tail", [])]
@@ -1239,6 +1415,24 @@ def render_html(summary: dict[str, Any]) -> str:
         )
     if not nll_density_rows:
         nll_density_rows.append("<tr><td colspan='8' class='muted'>No NLL density payload sidecar paths recorded.</td></tr>")
+    chart_bundle_rows = []
+    for source in chart_bundle_transport.get("sources", []) if isinstance(chart_bundle_transport.get("sources"), list) else []:
+        if not isinstance(source, dict):
+            continue
+        chart_bundle_rows.append(
+            "<tr>"
+            f"<td>{html.escape(str(source.get('path', '')))}</td>"
+            f"<td>{html.escape(str(source.get('available')))}</td>"
+            f"<td>{html.escape(str(source.get('completeness_tier', 'unavailable')))}</td>"
+            f"<td>{html.escape(str(source.get('paper_ready')))}</td>"
+            f"<td>{html.escape(str(source.get('chart_count')))}</td>"
+            f"<td>{html.escape(str(source.get('transport_count')))}</td>"
+            f"<td>{html.escape(str(source.get('missing_required_groups', [])))}</td>"
+            f"<td>{html.escape(str(source.get('reason', '')))}</td>"
+            "</tr>"
+        )
+    if not chart_bundle_rows:
+        chart_bundle_rows.append("<tr><td colspan='8' class='muted'>No chart-bundle transport sidecar paths recorded.</td></tr>")
     analogical_query_rows = []
     for source in analogical_query_context.get("sources", []) if isinstance(analogical_query_context.get("sources"), list) else []:
         if not isinstance(source, dict):
@@ -1296,6 +1490,7 @@ code {{ white-space:break-spaces; }}
 <span class="badge {'ok' if tropical_support.get('available') else 'warn'}">tropical_support_evidence={html.escape(str(bool(tropical_support.get('available'))))}</span>
 <span class="badge {'ok' if graphcg_direction.get('available') else 'warn'}">graphcg_direction_evidence={html.escape(str(bool(graphcg_direction.get('available'))))}</span>
 <span class="badge {'ok' if nll_density.get('available') else 'warn'}">nll_density_evidence={html.escape(str(bool(nll_density.get('available'))))}</span>
+<span class="badge {'ok' if chart_bundle_transport.get('available') else 'warn'}">chart_bundle_evidence={html.escape(str(bool(chart_bundle_transport.get('available'))))}</span>
 </header>
 <main>
 <section class="grid">
@@ -1311,12 +1506,14 @@ code {{ white-space:break-spaces; }}
 {_bar_chart_svg(tropical_support.get('support_probability_source_counts', {}) if isinstance(tropical_support, dict) else {}, title='Tropical Support Probability Sources', chart_id='tropical-support-probability-sources')}
 {_bar_chart_svg(graphcg_direction.get('basis_source_counts', {}) if isinstance(graphcg_direction, dict) else {}, title='GraphCG Projection Basis Sources', chart_id='graphcg-projection-basis-sources')}
 {_bar_chart_svg(nll_density.get('visible_density_layer_counts', {}) if isinstance(nll_density, dict) else {}, title='NLL Density Visible Layers', chart_id='nll-density-visible-layers')}
+{_bar_chart_svg(chart_bundle_transport.get('completeness_tier_counts', {}) if isinstance(chart_bundle_transport, dict) else {}, title='Chart/Vector-Bundle Completeness Tiers', chart_id='chart-vector-bundle-completeness-tiers')}
 <section class="panel"><h2>Validator Sources</h2><table><thead><tr><th>Name</th><th>JSON path</th><th>Available</th><th>Gaps</th><th>Reason</th></tr></thead><tbody>{''.join(source_rows)}</tbody></table></section>
 <section class="panel"><h2>Validator Gap Actions</h2><table><thead><tr><th>Category</th><th>Count</th><th>Required action</th><th>Examples</th></tr></thead><tbody>{''.join(action_rows)}</tbody></table></section>
 <section class="panel"><h2>GFlowNet Branch Selection Evidence</h2><table><thead><tr><th>Sidecar</th><th>Available</th><th>Valid rows</th><th>Selected actions</th><th>Policies</th><th>Reason</th></tr></thead><tbody>{''.join(gflownet_branch_rows)}</tbody></table></section>
 <section class="panel"><h2>Tropical Support Evidence</h2><table><thead><tr><th>Sidecar</th><th>Available</th><th>Probability source</th><th>Tokens</th><th>Strict wall rate</th><th>Near wall rate</th><th>Status</th><th>Reason</th></tr></thead><tbody>{''.join(tropical_support_rows)}</tbody></table></section>
 <section class="panel"><h2>GraphCG Direction Evidence</h2><table><thead><tr><th>Sidecar</th><th>Available</th><th>Basis</th><th>Directions</th><th>Candidates</th><th>Active nonzero</th><th>Mean |cos| p90</th><th>Reason</th></tr></thead><tbody>{''.join(graphcg_direction_rows)}</tbody></table></section>
 <section class="panel"><h2>NLL Density Evidence</h2><table><thead><tr><th>Sidecar</th><th>Available</th><th>Anchors</th><th>Support samples</th><th>Kernel bandwidth</th><th>NLL span</th><th>Support visibility</th><th>Reason</th></tr></thead><tbody>{''.join(nll_density_rows)}</tbody></table></section>
+<section class="panel"><h2>Chart/Vector-Bundle Evidence</h2><table><thead><tr><th>Sidecar</th><th>Available</th><th>Completeness tier</th><th>Paper-ready telemetry</th><th>Charts</th><th>Transports</th><th>Missing groups</th><th>Reason</th></tr></thead><tbody>{''.join(chart_bundle_rows)}</tbody></table></section>
 <section class="panel"><h2>Analogical Query Context Evidence</h2><table><thead><tr><th>Sidecar</th><th>Available</th><th>Selected source</th><th>Status</th><th>Probability vertices</th><th>Rejected keys</th><th>Reason</th></tr></thead><tbody>{''.join(analogical_query_rows)}</tbody></table></section>
 <section class="panel"><h2>Blockers And Warnings</h2><div class="grid"><div><h3>Checkpoint</h3><ul>{_html_list(checkpoint.get('warnings', []))}</ul></div><div><h3>Execution</h3><ul>{_html_list(execution.get('issues', []))}</ul></div><div><h3>Advanced BPB</h3><ul>{_html_list(advanced.get('failed_gates', []))}</ul></div><div><h3>Restart</h3><ul>{_html_list(restart.get('blockers', []))}</ul></div></div></section>
 <section class="panel"><h2>Advanced Sidecars Tail</h2><input id="sidecar-filter" type="search" placeholder="Filter sidecar paths"><ul id="sidecar-list">{sidecar_items}</ul></section>

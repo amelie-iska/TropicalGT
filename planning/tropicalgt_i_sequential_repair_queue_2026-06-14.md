@@ -892,3 +892,12 @@ The live item-by-item repair inventory is maintained in `planning/tropicalgt_i_c
 - [x] Markdown and HTML reports now expose `NLL Density Evidence` plus a visible-density-layer chart for post-5K review.
 - [x] Missing, unparsable, unsafe, anchor-missing, or support-sample-confused NLL density payloads remain unavailable and cannot justify restart, BPB claims, or hyperparameter promotion.
 - [x] Verification passed: py-compile; focused Herschel/bundle tests (`11 passed`); broader Herschel/bundle/review-loop/provenance tests (`36 passed`); metric provenance audit (`360 covered, 0 uncovered`).
+
+### Current Objective Update - Herschel Chart/Vector-Bundle Evidence Pass
+
+- [x] Added `chart_bundle_transport_sidecar.json` to the Herschel-required audit sidecar inventory when it exists in the latest recorded `got_audit` directory.
+- [x] Added `tropicalgt.herschel_chart_bundle_transport_evidence.v1` to the Herschel 5K summary, sourced only from recorded chart/vector-bundle transport sidecars.
+- [x] Availability now requires the chart-bundle transport schema, exported chart metadata schema, monomial transport no-proxy contract, bundle matroid flat-incidence no-proxy contract, vector-bundle paper sidecar, completeness contract, chart ids, and explicit safety flags that prevent theorem/toric/tropical/normal-fan promotion.
+- [x] Markdown and HTML reports now expose `Chart/Vector-Bundle Evidence` plus a completeness-tier chart for post-5K review.
+- [x] Missing, unparsable, unsafe, schema-mismatched, metadata-lacking, or contract-lacking chart/vector-bundle sidecars remain unavailable and cannot justify restart, BPB claims, paper-ready claims, toric embedding claims, or hyperparameter promotion.
+- [x] Verification passed: py-compile; broader Herschel/bundle/review-loop/provenance tests (`36 passed`); metric provenance audit (`372 covered, 0 uncovered`).

@@ -353,6 +353,74 @@ def test_prepare_review_bundle_defaults_to_periodic_validation_artifacts(tmp_pat
         ),
         encoding="utf-8",
     )
+    (periodic_dir / "got_audit" / "chart_bundle_transport_sidecar.json").write_text(
+        json.dumps(
+            {
+                "schema_version": "tropicalgt.chart_bundle_transport_sidecar.v1",
+                "available": True,
+                "source_path": "unit.chart_bundle_transport_metadata",
+                "reason": "exported_chart_bundle_transport_metadata_available",
+                "metadata": {
+                    "schema_version": "tropicalgt.chart_bundle_transport_metadata.v1",
+                    "available": True,
+                    "source": "unit.fixture",
+                    "chart_ids": ["chart_00", "chart_01", "chart_02"],
+                    "overlap_pairs": [{"id": "chart_00__to__chart_01"}, {"id": "chart_01__to__chart_02"}],
+                    "overlap_triples": [{"id": "chart_00__to__chart_01__to__chart_02"}],
+                },
+                "chart_ids": ["chart_00", "chart_01", "chart_02"],
+                "overlap_pair_count": 2,
+                "overlap_triple_count": 1,
+                "monomial_transport_contract": {
+                    "schema_version": "tropicalgt.monomial_transport_head.v1",
+                    "transport_ids": ["chart_00__to__chart_01", "chart_01__to__chart_02"],
+                    "actual_data_only": True,
+                    "no_proxy_or_fallback": True,
+                },
+                "bundle_matroid_contract": {
+                    "schema_version": "tropicalgt.bundle_matroid_flat_incidence.v1",
+                    "flat_incidence_shape": [3, 5],
+                    "actual_data_only": True,
+                    "no_proxy_or_fallback": True,
+                },
+                "vector_bundle_paper_sidecar": {
+                    "schema_version": "tropicalgt.vector_bundle_paper_sidecar.v1",
+                    "available": True,
+                    "actual_data_only": True,
+                    "no_proxy_or_fallback": True,
+                    "chart_ids": ["chart_00", "chart_01", "chart_02"],
+                    "monomial_transport_ids": ["chart_00__to__chart_01", "chart_01__to__chart_02"],
+                    "completeness_tier": "telemetry_partial",
+                    "safe_to_use_as_vector_bundle_paper_ready_evidence": False,
+                    "safe_to_use_as_vector_bundle_theorem_certificate": False,
+                    "safe_to_use_as_toric_or_tropical_embedding_certificate": False,
+                    "completeness_contract": {
+                        "schema_version": "tropicalgt.vector_bundle_paper_sidecar_completeness.v1",
+                        "tier": "telemetry_partial",
+                        "paper_ready": False,
+                        "basic_telemetry_available": True,
+                        "required_groups": {
+                            "chart_and_monomial_transport_ids": True,
+                            "configured_toric_active_rows": True,
+                            "flat_incidence_diagnostics": True,
+                            "graphcg_toric_agreement": False,
+                            "transported_persistence_landscapes": True,
+                        },
+                        "missing_required_groups": ["graphcg_toric_agreement"],
+                        "actual_data_only": True,
+                        "no_proxy_or_fallback": True,
+                    },
+                },
+                "actual_data_only": True,
+                "no_proxy_or_fallback": True,
+                "safe_to_render_as_toric_embedding_certificate": False,
+                "safe_to_render_as_tropical_variety_embedding": False,
+                "safe_to_render_as_global_toric_variety_embedding": False,
+                "safe_to_use_as_normal_fan_certificate": False,
+            }
+        ),
+        encoding="utf-8",
+    )
     cfg_path = tmp_path / "config.json"
     cfg_path.write_text(
         json.dumps(
@@ -401,6 +469,7 @@ def test_prepare_review_bundle_defaults_to_periodic_validation_artifacts(tmp_pat
     assert any(path.endswith("periodic/step_00005000/got_audit/tropical_support_payload.json") for path in sidecars)
     assert any(path.endswith("periodic/step_00005000/got_audit/graphcg_direction_cosines_payload.json") for path in sidecars)
     assert any(path.endswith("periodic/step_00005000/got_audit/got_nll_density_cloud_payload.json") for path in sidecars)
+    assert any(path.endswith("periodic/step_00005000/got_audit/chart_bundle_transport_sidecar.json") for path in sidecars)
     assert bundle["artifact_inventory"]["herschel_required_sidecars_present"]
     persisted_contract = json.loads((module.ROOT / bundle["artifacts"]["contract_json"]).read_text(encoding="utf-8"))
     assert any(
@@ -417,6 +486,10 @@ def test_prepare_review_bundle_defaults_to_periodic_validation_artifacts(tmp_pat
     )
     assert any(
         path.endswith("periodic/step_00005000/got_audit/got_nll_density_cloud_payload.json")
+        for path in persisted_contract["artifact_inventory"]["advanced_sidecars_tail"]
+    )
+    assert any(
+        path.endswith("periodic/step_00005000/got_audit/chart_bundle_transport_sidecar.json")
         for path in persisted_contract["artifact_inventory"]["advanced_sidecars_tail"]
     )
     gflownet_branch = bundle["herschel_report_summary"]["artifact_evidence"]["gflownet_branch_selection_evidence"]
@@ -441,6 +514,14 @@ def test_prepare_review_bundle_defaults_to_periodic_validation_artifacts(tmp_pat
     assert nll_density["total_support_sample_count"] == 12
     assert nll_density["visible_density_layer_counts"] == {"actual_model_anchor_markers": 1, "density_volume": 1}
     assert nll_density["sources"][0]["support_sample_trace_visibility"] == "legendonly"
+    chart_bundle = bundle["herschel_report_summary"]["artifact_evidence"]["chart_bundle_transport_evidence"]
+    assert chart_bundle["available"] is True
+    assert chart_bundle["paper_ready_source_count"] == 0
+    assert chart_bundle["total_chart_count"] == 3
+    assert chart_bundle["total_transport_count"] == 2
+    assert chart_bundle["completeness_tier_counts"] == {"telemetry_partial": 1}
+    assert chart_bundle["missing_required_group_counts"] == {"graphcg_toric_agreement": 1}
+    assert chart_bundle["sources"][0]["safe_to_render_as_toric_embedding_certificate"] is False
     analogical_query = bundle["herschel_report_summary"]["artifact_evidence"]["analogical_query_context_evidence"]
     assert analogical_query["available"] is True
     assert analogical_query["sources"][0]["selected_query_complex_source"] == "trajectory_probability_filtered_simplicial_object"
