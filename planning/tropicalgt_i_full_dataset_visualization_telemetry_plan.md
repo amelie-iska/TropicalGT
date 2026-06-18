@@ -773,9 +773,16 @@ support, GraphCG, embedding trajectory identity, slider/poset sidecars,
 reasoning-step manifests, and analogical maps. This stale generated bundle is
 not acceptance evidence.
 
-- [ ] **Step 9.4: Push**
+- [x] **Step 9.4: Push**
 
 Stage only intended files, exclude unrelated files, commit, push `tropicalgt-i-implementation`.
+
+Completed 2026-06-18 on the current non-main branch
+`tropicalgt-i-real-cas-no-proxy-20260614`: pushed `ad071ae` (SimplexTree
+readability), `7d8a294` (training evidence safety hold), `acebf85` (b60/docs and
+audit contracts), and `845d171` (no-proxy provenance coverage). The stale
+instruction text names older `tropicalgt-i-implementation`; the actual pushed
+branch remains the active non-main working branch.
 
 
 ## Repair Cycle Update: 2026-06-12 20:18:23
