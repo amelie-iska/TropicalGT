@@ -213,6 +213,43 @@ def test_write_herschel_report_preserves_blockers_and_sidecar_groups(tmp_path: P
         ),
         encoding="utf-8",
     )
+    nll_density_path = tmp_path / "got_nll_density_cloud_payload.json"
+    nll_density_path.write_text(
+        json.dumps(
+            {
+                "available": True,
+                "render_contract": "Gaussian cloud points are not model states; actual model anchors remain distinct.",
+                "anchor_count": 3,
+                "actual_model_anchor_count": 3,
+                "support_sample_count": 9,
+                "support_samples_hidden_as_model_states": True,
+                "sample_points_are_model_states": False,
+                "kernel_bandwidth": 0.25,
+                "nll_range": {"min": 1.0, "max": 1.4, "span": 0.4},
+                "visual_layer_contract": {
+                    "schema_version": "tropicalgt.nll_density_render.v1",
+                    "page": "standalone_density_cloud",
+                    "z_axis_policy": "z is PC3(graph_state embedding); raw NLL is encoded by color",
+                    "actual_model_anchor_count": 3,
+                    "support_sample_count": 9,
+                    "kernel_bandwidth": 0.25,
+                    "actual_anchor_layer_visible_by_default": True,
+                    "support_sample_trace_visibility": "legendonly",
+                    "support_samples_are_model_states": False,
+                    "support_samples_hidden_as_model_states": True,
+                    "visible_density_layers": ["density_volume", "anchor_gaussian_neighborhoods", "actual_model_anchor_markers"],
+                    "no_proxy_or_fallback": True,
+                },
+                "density_contract": {
+                    "actual_model_anchor_layer": True,
+                    "sample_points_are_model_states": False,
+                    "support_samples_hidden_as_model_states": True,
+                },
+                "density_volume": {"available": True, "support_samples_are_not_model_states": True},
+            }
+        ),
+        encoding="utf-8",
+    )
     validator_json = tmp_path / "interactive_validator.json"
     validator_json.write_text(
         json.dumps(
@@ -295,7 +332,7 @@ def test_write_herschel_report_preserves_blockers_and_sidecar_groups(tmp_path: P
                 str(inference_scaling_tree_path),
                 str(tropical_support_path),
                 str(graphcg_direction_path),
-                "got_audit/nll_density_grid.json",
+                str(nll_density_path),
                 "got_audit/chart_bundle_metrics.json",
                 "got_audit/chart_bundle_transport_sidecar.json",
                 "got_audit/derived_category_chain_map_report.json",
@@ -392,6 +429,17 @@ def test_write_herschel_report_preserves_blockers_and_sidecar_groups(tmp_path: P
     assert graphcg_direction["sources"][0]["active_rank_nonzero_mean_abs"] == 4
     assert graphcg_direction["sources"][0]["all_direction_panels_available"] is True
     assert graphcg_direction["sources"][0]["no_proxy_or_fallback"] is True
+    nll_density = summary["artifact_evidence"]["nll_density_evidence"]
+    assert nll_density["schema_version"] == "tropicalgt.herschel_nll_density_evidence.v1"
+    assert nll_density["available"] is True
+    assert nll_density["source_count"] == 1
+    assert nll_density["available_source_count"] == 1
+    assert nll_density["total_actual_model_anchor_count"] == 3
+    assert nll_density["total_support_sample_count"] == 9
+    assert nll_density["visible_density_layer_counts"] == {"actual_model_anchor_markers": 1, "anchor_gaussian_neighborhoods": 1, "density_volume": 1}
+    assert nll_density["sources"][0]["support_sample_trace_visibility"] == "legendonly"
+    assert nll_density["sources"][0]["support_samples_are_model_states"] is False
+    assert nll_density["sources"][0]["no_proxy_or_fallback"] is True
     analogical_query = summary["artifact_evidence"]["analogical_query_context_evidence"]
     assert analogical_query["schema_version"] == "tropicalgt.herschel_analogical_query_context_evidence.v1"
     assert analogical_query["available"] is True
@@ -421,6 +469,8 @@ def test_write_herschel_report_preserves_blockers_and_sidecar_groups(tmp_path: P
     assert "strict_wall_margin_events_observed" in markdown
     assert "## GraphCG Direction Evidence" in markdown
     assert "effective_full_rank_qr" in markdown
+    assert "## NLL Density Evidence" in markdown
+    assert "density_volume" in markdown
     assert "## Analogical Query Context Evidence" in markdown
     assert "trajectory_probability_filtered_simplicial_object" in markdown
     assert "probability_filtered_simplicial_object" in markdown
@@ -441,6 +491,9 @@ def test_write_herschel_report_preserves_blockers_and_sidecar_groups(tmp_path: P
     assert "GraphCG Direction Evidence" in html
     assert "data-chart='graphcg-projection-basis-sources'" in html
     assert "effective_full_rank_qr" in html
+    assert "NLL Density Evidence" in html
+    assert "data-chart='nll-density-visible-layers'" in html
+    assert "density_volume" in html
     assert "Analogical Query Context Evidence" in html
     assert "valid_query_probability_trajectory_complex" in html
     assert "row 0 missing json analogical_simplex_tree_analogy.json" in html

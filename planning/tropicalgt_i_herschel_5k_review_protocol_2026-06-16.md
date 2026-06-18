@@ -135,3 +135,14 @@ CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src:TropicalGT-I/scripts /home/i
 CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src:TropicalGT-I/scripts /home/iska/miniconda3/envs/tokengt/bin/python TropicalGT-I/scripts/audit_metric_provenance.py --fail-on-uncovered
 # findings=354 covered=354 uncovered=0
 ```
+
+2026-06-18 NLL density evidence follow-up: Herschel now treats `got_nll_density_cloud_payload.json` as a required recorded GoT audit sidecar when it exists. `write_herschel_5k_report.py` exposes `tropicalgt.herschel_nll_density_evidence.v1`, but marks it available only when the payload carries `tropicalgt.nll_density_render.v1`, visible actual model GoT anchors, legend-only non-model Gaussian support samples, hidden support samples, PC3 z-axis policy, positive kernel bandwidth, NLL range, density-volume provenance, and no-proxy/no-fallback flags. Markdown and HTML reports now include `NLL Density Evidence` plus a visible-density-layer chart. Gaussian support samples are visualization support only, not model states, training data, or BPB evidence.
+
+2026-06-18 NLL density evidence validation:
+
+```text
+CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src:TropicalGT-I/scripts /home/iska/miniconda3/envs/tokengt/bin/python -m pytest -q TropicalGT-I/tests/test_herschel_5k_report.py TropicalGT-I/tests/test_prepare_5k_review_bundle.py TropicalGT-I/tests/test_parameter_golf_review_loop.py TropicalGT-I/tests/test_metric_provenance.py
+# 36 passed
+CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src:TropicalGT-I/scripts /home/iska/miniconda3/envs/tokengt/bin/python TropicalGT-I/scripts/audit_metric_provenance.py --fail-on-uncovered
+# findings=360 covered=360 uncovered=0
+```

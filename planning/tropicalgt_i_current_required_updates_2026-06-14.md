@@ -1111,3 +1111,12 @@ CUDA_VISIBLE_DEVICES="" /home/iska/miniconda3/bin/conda run -n tokengt python -m
 - [x] Markdown and HTML reports now expose `GraphCG Direction Evidence` plus a projection-basis source chart for post-5K review.
 - [x] Missing, unparsable, unsafe, sampled, or certificate-lacking GraphCG payloads remain unavailable and cannot justify restart, promotion, semantic-identifiability, or toric-fan claims.
 - [x] Verification passed: py-compile; focused Herschel/bundle tests (`11 passed`); broader Herschel/bundle/review-loop/provenance tests (`36 passed`); metric provenance audit (`354 covered, 0 uncovered`).
+
+### Current Objective Update - Herschel NLL Density Evidence Pass
+
+- [x] Added `got_nll_density_cloud_payload.json` to the Herschel-required audit sidecar inventory when it exists in the latest recorded `got_audit` directory.
+- [x] Added `tropicalgt.herschel_nll_density_evidence.v1` to the Herschel 5K summary, sourced only from recorded NLL density cloud payload sidecars.
+- [x] Availability now requires `tropicalgt.nll_density_render.v1`, visible actual model anchors, legend-only non-model Gaussian support samples, hidden support samples, positive kernel bandwidth, PC3 z-axis policy, NLL range, density-volume non-model-state provenance, and no-proxy/no-fallback flags.
+- [x] Markdown and HTML reports now expose `NLL Density Evidence` plus a visible-density-layer chart for post-5K review.
+- [x] Missing, unparsable, unsafe, anchor-missing, or support-sample-confused NLL density payloads remain unavailable and cannot justify restart, BPB claims, or hyperparameter promotion.
+- [x] Verification passed: py-compile; focused Herschel/bundle tests (`11 passed`); broader Herschel/bundle/review-loop/provenance tests (`36 passed`); metric provenance audit (`360 covered, 0 uncovered`).

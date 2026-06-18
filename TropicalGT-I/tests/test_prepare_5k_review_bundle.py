@@ -317,6 +317,42 @@ def test_prepare_review_bundle_defaults_to_periodic_validation_artifacts(tmp_pat
         ),
         encoding="utf-8",
     )
+    (periodic_dir / "got_audit" / "got_nll_density_cloud_payload.json").write_text(
+        json.dumps(
+            {
+                "available": True,
+                "render_contract": "Gaussian cloud points are not model states; actual model anchors remain distinct.",
+                "anchor_count": 4,
+                "actual_model_anchor_count": 4,
+                "support_sample_count": 12,
+                "support_samples_hidden_as_model_states": True,
+                "sample_points_are_model_states": False,
+                "kernel_bandwidth": 0.2,
+                "nll_range": {"min": 0.9, "max": 1.3, "span": 0.4},
+                "visual_layer_contract": {
+                    "schema_version": "tropicalgt.nll_density_render.v1",
+                    "page": "standalone_density_cloud",
+                    "z_axis_policy": "z is PC3(graph_state embedding); raw NLL is encoded by color",
+                    "actual_model_anchor_count": 4,
+                    "support_sample_count": 12,
+                    "kernel_bandwidth": 0.2,
+                    "actual_anchor_layer_visible_by_default": True,
+                    "support_sample_trace_visibility": "legendonly",
+                    "support_samples_are_model_states": False,
+                    "support_samples_hidden_as_model_states": True,
+                    "visible_density_layers": ["density_volume", "actual_model_anchor_markers"],
+                    "no_proxy_or_fallback": True,
+                },
+                "density_contract": {
+                    "actual_model_anchor_layer": True,
+                    "sample_points_are_model_states": False,
+                    "support_samples_hidden_as_model_states": True,
+                },
+                "density_volume": {"available": True, "support_samples_are_not_model_states": True},
+            }
+        ),
+        encoding="utf-8",
+    )
     cfg_path = tmp_path / "config.json"
     cfg_path.write_text(
         json.dumps(
@@ -364,6 +400,7 @@ def test_prepare_review_bundle_defaults_to_periodic_validation_artifacts(tmp_pat
     assert any(path.endswith("periodic/step_00005000/got_audit/inference_scaling_tree.json") for path in sidecars)
     assert any(path.endswith("periodic/step_00005000/got_audit/tropical_support_payload.json") for path in sidecars)
     assert any(path.endswith("periodic/step_00005000/got_audit/graphcg_direction_cosines_payload.json") for path in sidecars)
+    assert any(path.endswith("periodic/step_00005000/got_audit/got_nll_density_cloud_payload.json") for path in sidecars)
     assert bundle["artifact_inventory"]["herschel_required_sidecars_present"]
     persisted_contract = json.loads((module.ROOT / bundle["artifacts"]["contract_json"]).read_text(encoding="utf-8"))
     assert any(
@@ -376,6 +413,10 @@ def test_prepare_review_bundle_defaults_to_periodic_validation_artifacts(tmp_pat
     )
     assert any(
         path.endswith("periodic/step_00005000/got_audit/graphcg_direction_cosines_payload.json")
+        for path in persisted_contract["artifact_inventory"]["advanced_sidecars_tail"]
+    )
+    assert any(
+        path.endswith("periodic/step_00005000/got_audit/got_nll_density_cloud_payload.json")
         for path in persisted_contract["artifact_inventory"]["advanced_sidecars_tail"]
     )
     gflownet_branch = bundle["herschel_report_summary"]["artifact_evidence"]["gflownet_branch_selection_evidence"]
@@ -394,6 +435,12 @@ def test_prepare_review_bundle_defaults_to_periodic_validation_artifacts(tmp_pat
     assert graphcg_direction["total_direction_count"] == 3
     assert graphcg_direction["total_candidate_count"] == 2
     assert graphcg_direction["sources"][0]["all_model_directions_have_rows"] is True
+    nll_density = bundle["herschel_report_summary"]["artifact_evidence"]["nll_density_evidence"]
+    assert nll_density["available"] is True
+    assert nll_density["total_actual_model_anchor_count"] == 4
+    assert nll_density["total_support_sample_count"] == 12
+    assert nll_density["visible_density_layer_counts"] == {"actual_model_anchor_markers": 1, "density_volume": 1}
+    assert nll_density["sources"][0]["support_sample_trace_visibility"] == "legendonly"
     analogical_query = bundle["herschel_report_summary"]["artifact_evidence"]["analogical_query_context_evidence"]
     assert analogical_query["available"] is True
     assert analogical_query["sources"][0]["selected_query_complex_source"] == "trajectory_probability_filtered_simplicial_object"

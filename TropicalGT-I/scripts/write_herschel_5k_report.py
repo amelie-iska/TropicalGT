@@ -452,6 +452,124 @@ def _tropical_support_evidence(sidecar_paths: list[str]) -> dict[str, Any]:
     }
 
 
+def _nll_density_evidence(sidecar_paths: list[str]) -> dict[str, Any]:
+    sources: list[dict[str, Any]] = []
+    visible_layer_counts: dict[str, int] = {}
+    total_anchor_count = 0
+    total_support_sample_count = 0
+    for raw_path in sidecar_paths:
+        lower = raw_path.lower()
+        if "got_nll_density_cloud_payload" not in lower:
+            continue
+        resolved = _resolve_output_path(Path(raw_path))
+        source: dict[str, Any] = {"path": _project_path(resolved), "available": False}
+        if not resolved.exists():
+            source["reason"] = "nll_density_sidecar_missing"
+            sources.append(source)
+            continue
+        try:
+            payload = json.loads(resolved.read_text(encoding="utf-8"))
+        except Exception as exc:  # pragma: no cover - parse message is platform-dependent
+            source["reason"] = f"nll_density_sidecar_parse_error:{exc}"
+            sources.append(source)
+            continue
+        if not isinstance(payload, dict):
+            source["reason"] = "nll_density_sidecar_not_object"
+            sources.append(source)
+            continue
+        visual_contract = payload.get("visual_layer_contract") if isinstance(payload.get("visual_layer_contract"), dict) else {}
+        density_contract = payload.get("density_contract") if isinstance(payload.get("density_contract"), dict) else {}
+        density_volume = payload.get("density_volume") if isinstance(payload.get("density_volume"), dict) else {}
+        nll_range = payload.get("nll_range") if isinstance(payload.get("nll_range"), dict) else {}
+        anchor_count = _optional_int(payload.get("actual_model_anchor_count", visual_contract.get("actual_model_anchor_count")))
+        support_sample_count = _optional_int(payload.get("support_sample_count", visual_contract.get("support_sample_count")))
+        kernel_bandwidth = _optional_float(payload.get("kernel_bandwidth", visual_contract.get("kernel_bandwidth")))
+        nll_span = _optional_float(nll_range.get("span"))
+        visible_layers = visual_contract.get("visible_density_layers") if isinstance(visual_contract.get("visible_density_layers"), list) else []
+        schema_ok = visual_contract.get("schema_version") == "tropicalgt.nll_density_render.v1"
+        no_proxy_ok = visual_contract.get("no_proxy_or_fallback") is True
+        anchor_ok = bool((anchor_count or 0) > 0 and visual_contract.get("actual_anchor_layer_visible_by_default") is True)
+        support_ok = bool(
+            support_sample_count is not None
+            and anchor_count is not None
+            and support_sample_count >= anchor_count
+            and visual_contract.get("support_samples_are_model_states") is False
+            and visual_contract.get("support_samples_hidden_as_model_states") is True
+            and visual_contract.get("support_sample_trace_visibility") == "legendonly"
+        )
+        z_axis_ok = isinstance(visual_contract.get("z_axis_policy"), str) and str(visual_contract.get("z_axis_policy")).startswith("z is PC3")
+        density_ok = bool(
+            isinstance(visible_layers, list)
+            and {"density_volume", "actual_model_anchor_markers"}.issubset(set(str(item) for item in visible_layers))
+            and density_volume.get("support_samples_are_not_model_states") is True
+        )
+        contract_ok = bool(
+            density_contract.get("actual_model_anchor_layer") is True
+            and density_contract.get("sample_points_are_model_states") is False
+            and density_contract.get("support_samples_hidden_as_model_states") is True
+        )
+        numeric_ok = bool(kernel_bandwidth is not None and kernel_bandwidth > 0.0 and nll_span is not None and nll_span >= 0.0)
+        available = bool(payload.get("available") is True and schema_ok and no_proxy_ok and anchor_ok and support_ok and z_axis_ok and density_ok and contract_ok and numeric_ok)
+        if available:
+            total_anchor_count += int(anchor_count or 0)
+            total_support_sample_count += int(support_sample_count or 0)
+            for layer in visible_layers:
+                visible_layer_counts[str(layer)] = visible_layer_counts.get(str(layer), 0) + 1
+        source.update(
+            {
+                "available": available,
+                "visual_layer_contract_schema_version": visual_contract.get("schema_version", "unavailable"),
+                "actual_model_anchor_count": anchor_count,
+                "support_sample_count": support_sample_count,
+                "kernel_bandwidth": kernel_bandwidth,
+                "nll_span": nll_span,
+                "z_axis_policy": visual_contract.get("z_axis_policy", "unavailable"),
+                "visible_density_layers": visible_layers,
+                "actual_anchor_layer_visible_by_default": bool(visual_contract.get("actual_anchor_layer_visible_by_default", False)),
+                "support_sample_trace_visibility": visual_contract.get("support_sample_trace_visibility", "unavailable"),
+                "support_samples_are_model_states": visual_contract.get("support_samples_are_model_states"),
+                "support_samples_hidden_as_model_states": visual_contract.get("support_samples_hidden_as_model_states"),
+                "density_volume_support_samples_are_not_model_states": density_volume.get("support_samples_are_not_model_states"),
+                "no_proxy_or_fallback": bool(no_proxy_ok),
+            }
+        )
+        if not available:
+            reasons = []
+            if payload.get("available") is not True:
+                reasons.append("nll_density_payload_unavailable")
+            if not schema_ok:
+                reasons.append("missing_nll_density_visual_layer_contract_schema")
+            if not no_proxy_ok:
+                reasons.append("missing_nll_density_no_proxy_contract")
+            if not anchor_ok:
+                reasons.append("missing_visible_actual_anchor_layer")
+            if not support_ok:
+                reasons.append("support_samples_not_hidden_as_non_model_states")
+            if not z_axis_ok:
+                reasons.append("missing_pc3_z_axis_policy")
+            if not density_ok:
+                reasons.append("missing_density_volume_or_anchor_layer")
+            if not contract_ok:
+                reasons.append("missing_density_contract_non_model_state_provenance")
+            if not numeric_ok:
+                reasons.append("missing_positive_kernel_or_nll_range")
+            source["reason"] = ";".join(reasons) or "nll_density_evidence_unavailable"
+        sources.append(source)
+    available_sources = [row for row in sources if row.get("available")]
+    return {
+        "schema_version": "tropicalgt.herschel_nll_density_evidence.v1",
+        "available": bool(available_sources),
+        "source_count": len(sources),
+        "available_source_count": len(available_sources),
+        "required_visual_layer_contract_schema": "tropicalgt.nll_density_render.v1",
+        "total_actual_model_anchor_count": total_anchor_count,
+        "total_support_sample_count": total_support_sample_count,
+        "visible_density_layer_counts": {key: visible_layer_counts[key] for key in sorted(visible_layer_counts)},
+        "sources": sources,
+        "policy": "Herschel reports NLL density evidence only from recorded got_nll_density_cloud_payload sidecars with tropicalgt.nll_density_render.v1, visible actual model anchors, legend-only non-model support samples, positive kernel bandwidth, NLL range, and no-proxy flags. Gaussian support samples are visualization support, not model states or training data.",
+    }
+
+
 def _graphcg_direction_evidence(sidecar_paths: list[str]) -> dict[str, Any]:
     sources: list[dict[str, Any]] = []
     basis_source_counts: dict[str, int] = {}
@@ -697,6 +815,7 @@ def summarize_bundle(bundle: dict[str, Any], *, bundle_path: Path | None = None)
             "gflownet_branch_selection_evidence": _gflownet_branch_selection_evidence(sidecars),
             "tropical_support_evidence": _tropical_support_evidence(sidecars),
             "graphcg_direction_evidence": _graphcg_direction_evidence(sidecars),
+            "nll_density_evidence": _nll_density_evidence(sidecars),
             "analogical_query_context_evidence": _analogical_query_context_evidence(sidecars),
         },
         "restart_decision": {
@@ -848,6 +967,31 @@ def render_markdown(summary: dict[str, Any]) -> str:
         )
         if source.get("reason"):
             lines.append(f"  - reason: `{source.get('reason')}`")
+    nll_density = artifacts.get("nll_density_evidence", {}) if isinstance(artifacts.get("nll_density_evidence"), dict) else {}
+    lines.extend(
+        [
+            "## NLL Density Evidence",
+            "",
+            f"- Available: `{nll_density.get('available', False)}`",
+            f"- Sources: `{nll_density.get('source_count', 0)}`",
+            f"- Actual model anchors: `{nll_density.get('total_actual_model_anchor_count', 0)}`",
+            f"- Support samples: `{nll_density.get('total_support_sample_count', 0)}`",
+            "",
+            "```json",
+            json.dumps(nll_density.get("visible_density_layer_counts", {}), indent=2),
+            "```",
+            "",
+        ]
+    )
+    for source in nll_density.get("sources", []) if isinstance(nll_density.get("sources"), list) else []:
+        if not isinstance(source, dict):
+            continue
+        lines.append(
+            f"- `{source.get('path', '')}` available=`{source.get('available')}` anchors=`{source.get('actual_model_anchor_count')}` "
+            f"samples=`{source.get('support_sample_count')}` bandwidth=`{_fmt(source.get('kernel_bandwidth'))}` nll_span=`{_fmt(source.get('nll_span'))}`"
+        )
+        if source.get("reason"):
+            lines.append(f"  - reason: `{source.get('reason')}`")
     analogical_query_context = artifacts.get("analogical_query_context_evidence", {}) if isinstance(artifacts.get("analogical_query_context_evidence"), dict) else {}
     lines.extend(
         [
@@ -987,6 +1131,7 @@ def render_html(summary: dict[str, Any]) -> str:
     gflownet_branch = artifacts.get("gflownet_branch_selection_evidence", {}) if isinstance(artifacts.get("gflownet_branch_selection_evidence"), dict) else {}
     tropical_support = artifacts.get("tropical_support_evidence", {}) if isinstance(artifacts.get("tropical_support_evidence"), dict) else {}
     graphcg_direction = artifacts.get("graphcg_direction_evidence", {}) if isinstance(artifacts.get("graphcg_direction_evidence"), dict) else {}
+    nll_density = artifacts.get("nll_density_evidence", {}) if isinstance(artifacts.get("nll_density_evidence"), dict) else {}
     analogical_query_context = artifacts.get("analogical_query_context_evidence", {}) if isinstance(artifacts.get("analogical_query_context_evidence"), dict) else {}
     validator_sources = validator_gaps.get("sources", []) if isinstance(validator_gaps.get("sources"), list) else []
     sidecars = [str(path) for path in artifacts.get("advanced_sidecars_tail", [])]
@@ -1076,6 +1221,24 @@ def render_html(summary: dict[str, Any]) -> str:
         )
     if not graphcg_direction_rows:
         graphcg_direction_rows.append("<tr><td colspan='8' class='muted'>No GraphCG direction-cosine payload sidecar paths recorded.</td></tr>")
+    nll_density_rows = []
+    for source in nll_density.get("sources", []) if isinstance(nll_density.get("sources"), list) else []:
+        if not isinstance(source, dict):
+            continue
+        nll_density_rows.append(
+            "<tr>"
+            f"<td>{html.escape(str(source.get('path', '')))}</td>"
+            f"<td>{html.escape(str(source.get('available')))}</td>"
+            f"<td>{html.escape(str(source.get('actual_model_anchor_count')))}</td>"
+            f"<td>{html.escape(str(source.get('support_sample_count')))}</td>"
+            f"<td>{html.escape(_fmt(source.get('kernel_bandwidth')))}</td>"
+            f"<td>{html.escape(_fmt(source.get('nll_span')))}</td>"
+            f"<td>{html.escape(str(source.get('support_sample_trace_visibility', 'unavailable')))}</td>"
+            f"<td>{html.escape(str(source.get('reason', '')))}</td>"
+            "</tr>"
+        )
+    if not nll_density_rows:
+        nll_density_rows.append("<tr><td colspan='8' class='muted'>No NLL density payload sidecar paths recorded.</td></tr>")
     analogical_query_rows = []
     for source in analogical_query_context.get("sources", []) if isinstance(analogical_query_context.get("sources"), list) else []:
         if not isinstance(source, dict):
@@ -1132,6 +1295,7 @@ code {{ white-space:break-spaces; }}
 <span class="badge {'ok' if validator_gaps.get('available') else 'warn'}">validator_gap_evidence={html.escape(str(bool(validator_gaps.get('available'))))}</span>
 <span class="badge {'ok' if tropical_support.get('available') else 'warn'}">tropical_support_evidence={html.escape(str(bool(tropical_support.get('available'))))}</span>
 <span class="badge {'ok' if graphcg_direction.get('available') else 'warn'}">graphcg_direction_evidence={html.escape(str(bool(graphcg_direction.get('available'))))}</span>
+<span class="badge {'ok' if nll_density.get('available') else 'warn'}">nll_density_evidence={html.escape(str(bool(nll_density.get('available'))))}</span>
 </header>
 <main>
 <section class="grid">
@@ -1146,11 +1310,13 @@ code {{ white-space:break-spaces; }}
 {_bar_chart_svg(gflownet_branch.get('policy_counts', {}) if isinstance(gflownet_branch, dict) else {}, title='GFlowNet Branch Selection Policies', chart_id='gflownet-branch-selection-policies')}
 {_bar_chart_svg(tropical_support.get('support_probability_source_counts', {}) if isinstance(tropical_support, dict) else {}, title='Tropical Support Probability Sources', chart_id='tropical-support-probability-sources')}
 {_bar_chart_svg(graphcg_direction.get('basis_source_counts', {}) if isinstance(graphcg_direction, dict) else {}, title='GraphCG Projection Basis Sources', chart_id='graphcg-projection-basis-sources')}
+{_bar_chart_svg(nll_density.get('visible_density_layer_counts', {}) if isinstance(nll_density, dict) else {}, title='NLL Density Visible Layers', chart_id='nll-density-visible-layers')}
 <section class="panel"><h2>Validator Sources</h2><table><thead><tr><th>Name</th><th>JSON path</th><th>Available</th><th>Gaps</th><th>Reason</th></tr></thead><tbody>{''.join(source_rows)}</tbody></table></section>
 <section class="panel"><h2>Validator Gap Actions</h2><table><thead><tr><th>Category</th><th>Count</th><th>Required action</th><th>Examples</th></tr></thead><tbody>{''.join(action_rows)}</tbody></table></section>
 <section class="panel"><h2>GFlowNet Branch Selection Evidence</h2><table><thead><tr><th>Sidecar</th><th>Available</th><th>Valid rows</th><th>Selected actions</th><th>Policies</th><th>Reason</th></tr></thead><tbody>{''.join(gflownet_branch_rows)}</tbody></table></section>
 <section class="panel"><h2>Tropical Support Evidence</h2><table><thead><tr><th>Sidecar</th><th>Available</th><th>Probability source</th><th>Tokens</th><th>Strict wall rate</th><th>Near wall rate</th><th>Status</th><th>Reason</th></tr></thead><tbody>{''.join(tropical_support_rows)}</tbody></table></section>
 <section class="panel"><h2>GraphCG Direction Evidence</h2><table><thead><tr><th>Sidecar</th><th>Available</th><th>Basis</th><th>Directions</th><th>Candidates</th><th>Active nonzero</th><th>Mean |cos| p90</th><th>Reason</th></tr></thead><tbody>{''.join(graphcg_direction_rows)}</tbody></table></section>
+<section class="panel"><h2>NLL Density Evidence</h2><table><thead><tr><th>Sidecar</th><th>Available</th><th>Anchors</th><th>Support samples</th><th>Kernel bandwidth</th><th>NLL span</th><th>Support visibility</th><th>Reason</th></tr></thead><tbody>{''.join(nll_density_rows)}</tbody></table></section>
 <section class="panel"><h2>Analogical Query Context Evidence</h2><table><thead><tr><th>Sidecar</th><th>Available</th><th>Selected source</th><th>Status</th><th>Probability vertices</th><th>Rejected keys</th><th>Reason</th></tr></thead><tbody>{''.join(analogical_query_rows)}</tbody></table></section>
 <section class="panel"><h2>Blockers And Warnings</h2><div class="grid"><div><h3>Checkpoint</h3><ul>{_html_list(checkpoint.get('warnings', []))}</ul></div><div><h3>Execution</h3><ul>{_html_list(execution.get('issues', []))}</ul></div><div><h3>Advanced BPB</h3><ul>{_html_list(advanced.get('failed_gates', []))}</ul></div><div><h3>Restart</h3><ul>{_html_list(restart.get('blockers', []))}</ul></div></div></section>
 <section class="panel"><h2>Advanced Sidecars Tail</h2><input id="sidecar-filter" type="search" placeholder="Filter sidecar paths"><ul id="sidecar-list">{sidecar_items}</ul></section>
