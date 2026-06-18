@@ -222,3 +222,21 @@ Status: implemented and under test. Analogical memory retrieval now compares the
 
 This keeps both overloaded “landscape” meanings separate: persistence landscapes `lambda_k(t)` are topological vector features; NLL/fitness landscapes or density clouds are model-evaluation visualizations over projected embeddings.
 
+
+
+## 2026-06-18 Analogical Memory Probability-Vector Gate And CAS Payload Compaction
+
+- Hardened `AnalogicalMemoryBank.retrieve` so any positive probability-simplicial-map weight requires real model-probability-vector Jensen-Shannon assignment evidence on both query and memory complexes. Embedding/signature/quality terms can no longer surface a retrieval row when the requested probability-map evidence is absent.
+- Kept failed simplex-tree preservation useful but honest: probability-vector correspondences that do not preserve edges/faces/filtration can still be audited when assignment evidence exists, but they score zero as probability maps and are not rendered as simplicial, chain, or persistence-module morphisms.
+- Added retrieval-side gate fields (`requires_model_probability_assignment`, `probability_assignment_gate`, `probability_assignment_evidence_available`, and `probability_assignment_gate_passed`) so browser/report layers can show why a row was admitted or filtered.
+- Compacted only analogical-memory copies of certified CAS payloads by retaining exact CAS artifact hashes, Betti/free-module shifts, fitting/minor strings, Buchsbaum-Eisenbud multiplier hashes, and bounded syzygy summaries while omitting bulky matrix text from memory JSONL records. Live CAS artifacts and visualization certificates are not altered by this memory-storage compaction.
+- Regression coverage: `test_metrics_and_memory.py` now verifies probability-vector-gated retrieval, explicit no-probability-vector rejection, zero-weight opt-out for isolated scoring tests, and bounded compact memory records. Related validator coverage also passes.
+
+Verification:
+
+```bash
+CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_metrics_and_memory.py -q
+CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_interactive_artifact_validator.py TropicalGT-I/tests/test_metrics_and_memory.py -q
+CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m py_compile TropicalGT-I/src/tropicalgt/memory.py TropicalGT-I/tests/test_metrics_and_memory.py
+git diff --check
+```

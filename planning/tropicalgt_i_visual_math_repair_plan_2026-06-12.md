@@ -116,9 +116,9 @@
 - Modify: `TropicalGT-I/src/tropicalgt/visualization.py`
 - Test: `TropicalGT-I/tests/test_metrics_and_memory.py`
 
-- [ ] Enforce memory-quality gates before retrieval display.
-- [ ] For each retrieved memory, compute probability-JS vertex assignment from model probabilities.
-- [ ] Check edge, face, and filtration preservation before calling it a simplicial map.
+- [x] Enforce memory-quality gates before retrieval display. (2026-06-18: retrieval rows with positive probability-map weight now require real model-probability assignment evidence; storage gate remains quality-thresholded.)
+- [x] For each retrieved memory, compute probability-JS vertex assignment from model probabilities. (2026-06-18: positive probability-map retrieval rejects rows lacking full query/codomain probability vectors.)
+- [x] Check edge, face, and filtration preservation before calling it a simplicial map. (2026-06-18: failed preservation remains a correspondence with zero probability-map score.)
 - [ ] Compute conservative `derived_algebraic_similarity = min(ph_similarity, free_resolution_similarity, rank_invariant_similarity, chain_map_score)`.
 - [ ] Move any embedding/probability cosine into a separate `signature_cosine` column.
 - [ ] Add a simplex-tree analogy view with preserved face/coface paths.

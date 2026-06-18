@@ -213,6 +213,7 @@ class AnalogicalMemoryBank:
         query_signature = _normalize(np.asarray(signature_vector, dtype=float))
         query_topology = query_topology if isinstance(query_topology, dict) else {}
         query_probability_complex = query_probability_complex if isinstance(query_probability_complex, dict) else {}
+        require_probability_assignment = float(probability_map_weight) > 0.0
         rows = []
         for record in self.records:
             trajectory_source = str(record.metadata.get("source", record.record_id)) if isinstance(record.metadata, dict) else record.record_id
@@ -252,6 +253,9 @@ class AnalogicalMemoryBank:
                 probability_map_similarity,
                 probability_map_contribution,
             )
+            probability_assignment_evidence_available = _probability_assignment_evidence_available(probability_map)
+            if require_probability_assignment and not probability_assignment_evidence_available:
+                continue
             transported_landscape = transported_persistence_landscape_diagnostics(query_topology, memory_topology, probability_map)
             certified_cas_report = certified_cas_evidence_similarity(query_topology, memory_topology)
             certified_cas_retrieval_similarity = float(certified_cas_report.get("retrieval_score_similarity", 0.0) or 0.0)
@@ -281,6 +285,8 @@ class AnalogicalMemoryBank:
                 "persistence_landscape_weight": float(landscape_only_weight),
                 "persistence_vector_weight": float(vector_weight),
                 "probability_simplicial_map_weight": float(probability_map_weight),
+                "requires_model_probability_assignment": bool(require_probability_assignment),
+                "probability_assignment_gate": "model_probability_vectors_required_when_probability_map_weight_positive",
                 "certified_cas_weight": float(certified_cas_weight),
                 "certified_cas_scoring_policy": "exact CAS-certified real-free-resolution artifact match only; no derived-equivalence claim",
                 "probability_simplicial_map_source": "model_probability_jensen_shannon_assignment",
@@ -305,6 +311,8 @@ class AnalogicalMemoryBank:
                     "persistence_vector_score_contribution": float(vector_contribution),
                     "probability_simplicial_map_score_contribution": float(probability_map_contribution),
                     "probability_simplicial_map_similarity": float(probability_map_similarity),
+                    "probability_assignment_evidence_available": bool(probability_assignment_evidence_available),
+                    "probability_assignment_gate_passed": bool(probability_assignment_evidence_available or not require_probability_assignment),
                     **probability_map_retrieval_fields,
                     "certified_cas_score_contribution": float(certified_cas_contribution),
                     "certified_cas_retrieval_similarity": float(certified_cas_retrieval_similarity),
@@ -430,6 +438,32 @@ def _probability_simplicial_map_similarity(report: dict[str, Any]) -> float:
     summary = report.get("jensen_shannon_distance_summary", {})
     mean_js = float(summary.get("mean", 0.0) or 0.0) if isinstance(summary, dict) else 0.0
     return float(max(0.0, min(1.0, rate)) / (1.0 + max(0.0, mean_js)))
+
+
+def _probability_assignment_evidence_available(report: dict[str, Any]) -> bool:
+    """Return true only for model-probability-vector Jensen-Shannon assignments.
+
+    This is deliberately weaker than requiring a certified filtered simplicial
+    map: failed simplex-tree preservation is still useful evidence, but rows
+    with positive probability-map weight must never be retrieved from embedding
+    similarity alone.
+    """
+
+    if not isinstance(report, dict):
+        return False
+    evidence = report.get("probability_vector_evidence")
+    vertex_map = report.get("vertex_map")
+    if not isinstance(evidence, dict) or not isinstance(vertex_map, list) or not vertex_map:
+        return False
+    return bool(
+        report.get("map_source") == "model_probability_jensen_shannon_assignment"
+        and report.get("assignment_metric") == "jensen_shannon_distance_on_model_probability_vectors"
+        and evidence.get("assignment_metric") == "jensen_shannon_distance_on_model_probability_vectors"
+        and evidence.get("embedding_only_assignment_used") is False
+        and evidence.get("all_displayed_query_vertices_have_probability_vectors") is True
+        and evidence.get("all_displayed_memory_vertices_have_probability_vectors") is True
+        and evidence.get("no_proxy_or_fallback") is True
+    )
 
 
 def _probability_map_dimension_summary(report: dict[str, Any], dim: int) -> dict[str, int]:
@@ -1251,6 +1285,137 @@ def _compact_commutative_algebra(ca: dict[str, Any]) -> dict[str, Any]:
     return out
 
 
+def _compact_real_free_resolution_for_memory(report: Any) -> dict[str, Any]:
+    if not isinstance(report, dict):
+        return {}
+    keep = (
+        "schema_version",
+        "available",
+        "status",
+        "backend",
+        "coefficient_ring",
+        "ring",
+        "input_sha256",
+        "certificate_attached",
+        "exactness_certified",
+        "minimality_certified",
+        "real_free_resolution_certified",
+        "multigraded_free_resolution_certified",
+        "safe_to_render_as_multigraded_free_resolution",
+        "safe_for_multigraded_claims",
+        "not_multigraded",
+        "reason",
+    )
+    out = {key: report.get(key) for key in keep if key in report}
+    summary = report.get("free_resolution_summary") if isinstance(report.get("free_resolution_summary"), dict) else {}
+    if summary:
+        out["free_resolution_summary"] = {
+            key: summary.get(key)
+            for key in (
+                "available",
+                "safe_for_multigraded_claims",
+                "not_multigraded",
+                "betti_by_homological_and_multidegree",
+                "free_modules",
+                "total_betti",
+                "projective_dimension",
+                "regularity",
+            )
+            if key in summary
+        }
+    artifacts = report.get("cas_artifacts") if isinstance(report.get("cas_artifacts"), dict) else {}
+    if artifacts:
+        compact_artifacts: dict[str, Any] = {}
+        differentials = artifacts.get("differentials") if isinstance(artifacts.get("differentials"), list) else []
+        if differentials:
+            rows = []
+            for row in differentials[:24]:
+                if not isinstance(row, dict):
+                    continue
+                matrix_text = row.get("matrix_text", row.get("matrix_preview", ""))
+                rows.append(
+                    {
+                        "homological_degree": row.get("homological_degree"),
+                        "rows": row.get("rows"),
+                        "cols": row.get("cols"),
+                        "shape": row.get("shape"),
+                        "source_degrees": row.get("source_degrees"),
+                        "target_degrees": row.get("target_degrees"),
+                        "matrix_hash": row.get("matrix_hash") or _cas_artifact_hash(matrix_text),
+                        "matrix_text_omitted_from_memory_record": bool(matrix_text),
+                        "matrix_text_length": len(str(matrix_text)) if matrix_text is not None else 0,
+                    }
+                )
+            compact_artifacts["differentials"] = rows
+        for key in ("fitting_ideals", "minors"):
+            value = artifacts.get(key)
+            if isinstance(value, dict):
+                compact_artifacts[key] = value
+        be = artifacts.get("buchsbaum_eisenbud_diagnostics") if isinstance(artifacts.get("buchsbaum_eisenbud_diagnostics"), dict) else {}
+        if be:
+            matrix = be.get("a_multiplier_1_matrix", "")
+            compact_artifacts["buchsbaum_eisenbud_diagnostics"] = {
+                key: be.get(key)
+                for key in (
+                    "available",
+                    "multiplier_output_available",
+                    "bemultipliers_status",
+                    "a_multiplier_1_shape",
+                )
+                if key in be
+            }
+            compact_artifacts["buchsbaum_eisenbud_diagnostics"]["a_multiplier_1_matrix_hash"] = be.get("a_multiplier_1_matrix_hash") or _cas_artifact_hash(matrix)
+            compact_artifacts["buchsbaum_eisenbud_diagnostics"]["a_multiplier_1_matrix_omitted_from_memory_record"] = bool(matrix)
+            compact_artifacts["buchsbaum_eisenbud_diagnostics"]["a_multiplier_1_matrix_length"] = len(str(matrix)) if matrix is not None else 0
+        syzygies = artifacts.get("syzygies")
+        if isinstance(syzygies, dict):
+            compact_artifacts["syzygies"] = _compact_syzygy_artifact_for_memory(syzygies)
+        elif isinstance(syzygies, list):
+            compact_artifacts["syzygies"] = [_compact_syzygy_artifact_for_memory(row) for row in syzygies[:24] if isinstance(row, dict)]
+        if compact_artifacts:
+            compact_artifacts["memory_record_policy"] = "exact CAS artifact hashes and bounded textual ideals retained; bulky matrices omitted only from analogical-memory storage"
+            out["cas_artifacts"] = compact_artifacts
+    out["memory_record_compaction"] = "bounded_certified_cas_evidence_no_proxy"
+    return out
+
+
+def _compact_syzygy_artifact_for_memory(value: dict[str, Any]) -> dict[str, Any]:
+    out = {
+        key: value.get(key)
+        for key in (
+            "available",
+            "backend",
+            "status",
+            "reason",
+            "generator_count",
+            "minimal_generator_count",
+            "adjacent_lcm_syzygy_count",
+            "schema_version",
+        )
+        if key in value
+    }
+    generators = value.get("generators") if isinstance(value.get("generators"), list) else []
+    if generators:
+        out["generators"] = [
+            {
+                key: row.get(key)
+                for key in (
+                    "index",
+                    "source_degree",
+                    "target_degree",
+                    "multidegree",
+                    "label",
+                    "basis",
+                    "monomial",
+                )
+                if key in row
+            }
+            for row in generators[:24]
+            if isinstance(row, dict)
+        ]
+    return out
+
+
 def _compact_free_resolution(value: dict[str, Any]) -> dict[str, Any]:
     out: dict[str, Any] = {
         "ring": value.get("ring"),
@@ -1261,8 +1426,8 @@ def _compact_free_resolution(value: dict[str, Any]) -> dict[str, Any]:
         "field": value.get("field"),
         "free_chain_modules": value.get("free_chain_modules", []),
         "monomial_labeled_boundary_entry_counts": value.get("monomial_labeled_boundary_entry_counts", {}),
-        "real_free_resolution": value.get("real_free_resolution", {}),
-        "minimal_free_resolution": value.get("minimal_free_resolution", {}),
+        "real_free_resolution": _compact_real_free_resolution_for_memory(value.get("real_free_resolution", {})),
+        "minimal_free_resolution": _compact_real_free_resolution_for_memory(value.get("minimal_free_resolution", {})),
     }
     det = value.get("determinantal_ideals") if isinstance(value.get("determinantal_ideals"), dict) else {}
     fit = value.get("fitting_ideals") if isinstance(value.get("fitting_ideals"), dict) else {}
@@ -1885,7 +2050,7 @@ def _certified_cas_resolution_summary(topology: dict[str, Any]) -> dict[str, Any
             "bemultipliers_status": be.get("bemultipliers_status", "unreported"),
             "multiplier_output_available": bool(be.get("multiplier_output_available")),
             "a_multiplier_1_shape": be.get("a_multiplier_1_shape", ""),
-            "a_multiplier_1_matrix_hash": _cas_artifact_hash(be.get("a_multiplier_1_matrix", "")),
+            "a_multiplier_1_matrix_hash": be.get("a_multiplier_1_matrix_hash") or _cas_artifact_hash(be.get("a_multiplier_1_matrix", "")),
         }
     return {
         "available": False,
@@ -1911,7 +2076,7 @@ def _certified_cas_resolution_signature(report: dict[str, Any]) -> dict[str, Any
                 "shape": row.get("shape"),
                 "source_degrees": row.get("source_degrees"),
                 "target_degrees": row.get("target_degrees"),
-                "matrix_hash": _cas_artifact_hash(row.get("matrix_text", row.get("matrix_preview", ""))),
+                "matrix_hash": row.get("matrix_hash") or _cas_artifact_hash(row.get("matrix_text", row.get("matrix_preview", ""))),
             }
         )
     return {
@@ -1930,7 +2095,7 @@ def _certified_cas_resolution_signature(report: dict[str, Any]) -> dict[str, Any
             "multiplier_output_available": bool(be.get("multiplier_output_available")),
             "bemultipliers_status": be.get("bemultipliers_status", "unreported"),
             "a_multiplier_1_shape": be.get("a_multiplier_1_shape", ""),
-            "a_multiplier_1_matrix_hash": _cas_artifact_hash(be.get("a_multiplier_1_matrix", "")),
+            "a_multiplier_1_matrix_hash": be.get("a_multiplier_1_matrix_hash") or _cas_artifact_hash(be.get("a_multiplier_1_matrix", "")),
         },
     }
 

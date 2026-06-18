@@ -67,7 +67,13 @@ def test_analogical_memory_bank_roundtrip_and_retrieval(tmp_path):
     bank.save()
     loaded = AnalogicalMemoryBank(path, max_records=8)
     query_embedding, query_signature = query_signature_from_report({"inference_scaling": report})
-    retrieved = loaded.retrieve(query_embedding, query_signature, top_k=2)
+    query_probability_complex = query_probability_complex_from_report({"inference_scaling": report})
+    retrieved = loaded.retrieve(
+        query_embedding,
+        query_signature,
+        top_k=2,
+        query_probability_complex=query_probability_complex,
+    )
     assert retrieved
     assert "filtered_summary" in retrieved[0]
     trajectory_summary = report["trajectory_filtered_simplicial_object"]["summary"]
@@ -88,6 +94,9 @@ def test_analogical_memory_bank_roundtrip_and_retrieval(tmp_path):
         assert "summary" in record.filtered_simplicial_object
     assert "record_family" in retrieved[0]
     assert "base_retrieval_score" in retrieved[0]
+    assert retrieved[0]["retrieval_weights"]["requires_model_probability_assignment"] is True
+    assert retrieved[0]["probability_assignment_evidence_available"] is True
+    assert retrieved[0]["probability_assignment_gate_passed"] is True
     probability_vertices = [
         simplex
         for record in records
@@ -105,13 +114,25 @@ def test_analogical_memory_bank_roundtrip_and_retrieval(tmp_path):
     source_b = memory_records_from_scaling_report(report, source="source-b", max_records=1)
     assert source_a and source_b and source_a[0].record_id == source_b[0].record_id
     source_bank.extend(source_a + source_b)
-    source_hits = source_bank.retrieve(query_embedding, query_signature, top_k=4, exclude_sources={"source-a"})
+    source_hits = source_bank.retrieve(
+        query_embedding,
+        query_signature,
+        top_k=4,
+        exclude_sources={"source-a"},
+        query_probability_complex=query_probability_complex,
+    )
     assert source_hits
     assert all(row["trajectory_source"] != "source-a" for row in source_hits)
     assert "trajectory_probability_filtered_simplicial_object" in source_hits[0]
     assert "jensen_shannon" in source_hits[0]["trajectory_probability_filtered_summary"]["filtration_model"]
     assert any(row["trajectory_source"] == "source-b" for row in source_hits)
-    assert source_bank.retrieve(query_embedding, query_signature, top_k=4, exclude_sources={"source-a", "source-b"}) == []
+    assert source_bank.retrieve(
+        query_embedding,
+        query_signature,
+        top_k=4,
+        exclude_sources={"source-a", "source-b"},
+        query_probability_complex=query_probability_complex,
+    ) == []
 
 
 def _landscape_topology(vector, *, extra_vectors=None):
@@ -402,6 +423,7 @@ def test_analogical_memory_retrieval_uses_gudhi_vector_representation_family(tmp
         score_weight=0.0,
         landscape_weight=0.25,
         vector_representation_weight=1.0,
+        probability_map_weight=0.0,
         diversity_weight=0.0,
         query_topology=query_topology,
     )
@@ -470,6 +492,7 @@ def test_analogical_memory_retrieval_uses_persistence_landscape_vectors(tmp_path
         score_weight=0.0,
         landscape_weight=1.0,
         vector_representation_weight=0.0,
+        probability_map_weight=0.0,
         diversity_weight=0.0,
         query_topology=query_topology,
     )
@@ -561,6 +584,57 @@ def test_analogical_memory_retrieval_uses_probability_simplicial_map_weight(tmp_
     assert hits[0]["probability_simplicial_map_preserved_two_simplices"] == 1
     assert hits[0]["probability_simplicial_map_chain_map_certified"] is True
     assert hits[0]["probability_simplicial_map_persistence_morphism_certified"] is True
+
+
+def test_analogical_memory_retrieval_requires_probability_vectors_when_weight_positive(tmp_path):
+    query_complex = _probability_complex("q")
+    no_probability_complex = _probability_complex("n")
+    for simplex in no_probability_complex["simplices"]:
+        if simplex.get("dimension") == 0:
+            simplex.pop("probability", None)
+            simplex.pop("model_probability_vector", None)
+            simplex.pop("probability_vector", None)
+            simplex.pop("probability_source", None)
+    no_probability_complex["summary"] = {**no_probability_complex["summary"], "filtration_model": "vertices_without_model_probability_vectors"}
+    record = _probability_memory_record("no-probability-vectors", no_probability_complex)
+    record.embedding = [1.0, 0.0, 0.0]
+    record.signature_vector = [1.0, 0.0, 0.0]
+    bank = AnalogicalMemoryBank(tmp_path / "probability_required_memory.jsonl", max_records=4)
+    bank.extend([record])
+
+    assert bank.retrieve(
+        [1.0, 0.0, 0.0],
+        [1.0, 0.0, 0.0],
+        top_k=1,
+        embedding_weight=1.0,
+        signature_weight=0.0,
+        score_weight=0.0,
+        landscape_weight=0.0,
+        vector_representation_weight=0.0,
+        probability_map_weight=1.0,
+        diversity_weight=0.0,
+        query_probability_complex=query_complex,
+    ) == []
+
+    hits = bank.retrieve(
+        [1.0, 0.0, 0.0],
+        [1.0, 0.0, 0.0],
+        top_k=1,
+        embedding_weight=1.0,
+        signature_weight=0.0,
+        score_weight=0.0,
+        landscape_weight=0.0,
+        vector_representation_weight=0.0,
+        probability_map_weight=0.0,
+        diversity_weight=0.0,
+        query_probability_complex=query_complex,
+    )
+    assert hits and hits[0]["record_id"] == "no-probability-vectors"
+    assert hits[0]["retrieval_weights"]["requires_model_probability_assignment"] is False
+    assert hits[0]["probability_assignment_evidence_available"] is False
+    assert hits[0]["probability_assignment_gate_passed"] is True
+    assert hits[0]["probability_simplicial_map_available"] is False
+    assert hits[0]["probability_simplicial_map_claim_failure_reason"] == "unavailable_no_model_probability_vectors"
 
 
 def test_analogical_memory_probability_map_must_preserve_simplex_tree_to_score(tmp_path):
