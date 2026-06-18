@@ -16,6 +16,7 @@ from tropicalgt.visualization import (  # noqa: E402
     _write_reasoning_step_complex_maps,
     write_analogical_memory_visualization,
     write_got_trajectory_visualization,
+    write_persistence_visualizations,
     write_toric_embedding_sidecar,
     write_tropical_fan_diagnostics,
     write_tropical_support_heatmap,
@@ -70,9 +71,9 @@ def _tropical_support_contracts_need_backfill(root: Path) -> bool:
         return True
     if render_contract.get("wall_margin_metric_scope") != "margin_threshold_audit_not_certified_normal_fan_wall_crossing":
         return True
-    if int(render_contract.get("token_count", -1) or -1) != int(metrics.get("token_count", -2) or -2):
+    if int(render_contract.get("token_count", -1)) != int(metrics.get("token_count", -2)):
         return True
-    if int(render_contract.get("invalid_support_count", -1) or -1) != int(metrics.get("invalid_support_count", -2) or -2):
+    if int(render_contract.get("invalid_support_count", -1)) != int(metrics.get("invalid_support_count", -2)):
         return True
     if readability.get("schema_version") != "tropicalgt.tropical_support_readability.v1":
         return True
@@ -204,6 +205,23 @@ def _reasoning_step_contracts_need_backfill(root: Path) -> bool:
         if not (step_file.exists() and slider_file.exists() and tree_file.exists() and poset_file.exists()):
             return True
     return False
+
+
+def _persistence_landscapes_need_backfill(root: Path) -> bool:
+    payload_path = root / "trajectory_persistence" / "persistence_landscapes.json"
+    if not payload_path.exists():
+        return True
+    payload = _read_json(payload_path)
+    if payload.get("schema_version") != "tropicalgt.persistence_landscape_visual_contract.v1":
+        return True
+    if payload.get("actual_data_only") is not True or payload.get("no_proxy_or_fallback") is not True:
+        return True
+    if payload.get("not_nll_fitness_landscape") is not True:
+        return True
+    if payload.get("available") is True:
+        return not (int(payload.get("curve_trace_count", 0) or 0) > 0 and bool(payload.get("landscape_rows")))
+    reasons = payload.get("unavailable_reasons", []) if isinstance(payload.get("unavailable_reasons"), list) else []
+    return "no_finite_persistence_intervals_for_gudhi_landscape" not in reasons
 
 
 def _dashboard_missing_links(root: Path, required_names: tuple[str, ...]) -> bool:
@@ -357,6 +375,39 @@ def backfill_audit_root(audit_root: str | Path, *, overwrite: bool = False) -> d
                     "paths": {"inference_scaling_tree": str(scaling_path)},
                 }
             )
+
+    landscapes_needed = overwrite or _persistence_landscapes_need_backfill(root)
+    topology_path = root / "trajectory_topological_algebra.json"
+    if landscapes_needed and topology_path.exists():
+        topology = _read_json(topology_path)
+        if topology:
+            paths = write_persistence_visualizations(
+                topology,
+                root / "trajectory_persistence",
+                growth=[{"level": 0, "topological_algebra": topology}],
+                title_prefix="Trajectory ",
+            )
+            payload = _read_json(root / "trajectory_persistence" / "persistence_landscapes.json")
+            actions.append(
+                {
+                    "kind": "persistence_landscape_contract_backfill",
+                    "reason": "Regenerated trajectory persistence landscape HTML/JSON contract from stored trajectory_topological_algebra.json intervals and GUDHI representation logic only; unavailable state remains explicit when no finite intervals exist.",
+                    "available": bool(payload.get("available")),
+                    "curve_trace_count": int(payload.get("curve_trace_count", 0) or 0),
+                    "finite_persistence_interval_count": int(payload.get("finite_persistence_interval_count", 0) or 0),
+                    "unavailable_reasons": payload.get("unavailable_reasons", []),
+                    "paths": paths,
+                }
+            )
+        else:
+            actions.append(
+                {
+                    "kind": "persistence_landscape_contract_unavailable",
+                    "reason": "Trajectory persistence landscapes were stale or missing, but trajectory_topological_algebra.json could not be parsed; no landscape curves were fabricated.",
+                    "paths": {"trajectory_topological_algebra": str(topology_path)},
+                }
+            )
+
 
     bif_raw = root / "trajectory_level_radius_bifiltration.json"
     bif_html = root / "trajectory_persistence" / "two_parameter_bifiltration.html"

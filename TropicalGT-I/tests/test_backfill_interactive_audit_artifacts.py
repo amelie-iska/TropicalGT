@@ -396,3 +396,48 @@ def test_backfill_regenerates_tropical_support_contracts_from_stored_payload(tmp
     assert "Plotly.newPlot" in html
     assert "tropical_support_render_contract" in html
     assert "tropical_support_readability_contract" in html
+    assert module._tropical_support_contracts_need_backfill(audit) is False
+
+
+def test_backfill_writes_unavailable_persistence_landscape_contract_from_no_finite_intervals(tmp_path: Path):
+    module = _load_backfill()
+    audit = tmp_path / "got_audit"
+    audit.mkdir()
+    (audit / "trajectory_topological_algebra.json").write_text(
+        json.dumps(
+            {
+                "persistence": {
+                    "backend": "gudhi",
+                    "available": True,
+                    "intervals": [
+                        {"dimension": 0, "birth": 0.0, "death": None, "infinite": True},
+                        {"dimension": 1, "birth": 0.0, "death": None, "infinite": True},
+                    ],
+                },
+                "persistence_representations": {
+                    "available": False,
+                    "backend": "gudhi.representations",
+                    "reason": "no finite persistence intervals",
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    report = module.backfill_audit_root(audit)
+
+    kinds = {row["kind"] for row in report["actions"]}
+    assert "persistence_landscape_contract_backfill" in kinds
+    payload = json.loads((audit / "trajectory_persistence" / "persistence_landscapes.json").read_text(encoding="utf-8"))
+    assert payload["schema_version"] == "tropicalgt.persistence_landscape_visual_contract.v1"
+    assert payload["available"] is False
+    assert payload["actual_data_only"] is True
+    assert payload["no_proxy_or_fallback"] is True
+    assert payload["not_nll_fitness_landscape"] is True
+    assert payload["finite_persistence_interval_count"] == 0
+    assert payload["unavailable_state_verified_by_intervals"] is True
+    assert "no_finite_persistence_intervals_for_gudhi_landscape" in payload["unavailable_reasons"]
+    html = (audit / "trajectory_persistence" / "persistence_landscapes.html").read_text(encoding="utf-8")
+    assert "Plotly.newPlot" in html
+    assert "No finite persistence intervals" in html
+    assert module._persistence_landscapes_need_backfill(audit) is False

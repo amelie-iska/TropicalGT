@@ -902,3 +902,24 @@ evidence, but the gap count decreased from `74` to `44`; `tropical_support`
 decreased from `30` to `0`. Remaining categories are persistence landscapes
 `17`, CAS resolution certificates `12`, GraphCG `6`, other `4`, trajectory
 overlay/radius `3`, missing artifact `1`, and row coverage `1`.
+
+Completed 2026-06-18 follow-up: trajectory persistence-landscape backfill now
+regenerates `trajectory_persistence/persistence_landscapes.html` and `.json`
+from stored `trajectory_topological_algebra.json` via the existing GUDHI
+representation path. If finite intervals exist, the artifact must contain real
+`lambda_k(t)` landscape rows; if no finite intervals exist, it writes an
+explicit unavailable contract with `finite_persistence_interval_count=0`,
+`unavailable_state_verified_by_intervals=true`, and
+`no_finite_persistence_intervals_for_gudhi_landscape`. The validator now accepts
+that unavailable state only when the stored topology proves zero finite
+persistence intervals, preserving the no-proxy/no-NLL-landscape distinction.
+
+Executed safe generated-artifact persistence-landscape backfill on the b60
+step-5000 `got_audit` bundle without staging generated outputs. It found no
+finite persistence intervals in the stored trajectory topology, wrote the
+explicit unavailable landscape contract, rebuilt the local dashboard, and reran
+the strict validator. The strict validator still fails for remaining
+non-landscape evidence, but the gap count decreased from `44` to `27`;
+`persistence_landscapes` decreased from `17` to `0`. Remaining categories are
+CAS resolution certificates `12`, GraphCG `6`, other `4`, trajectory
+overlay/radius `3`, missing artifact `1`, and row coverage `1`.

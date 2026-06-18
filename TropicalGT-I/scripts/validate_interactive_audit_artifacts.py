@@ -177,6 +177,31 @@ def _finite_float(value: Any, default: float = float("nan")) -> float:
     return out if math.isfinite(out) else default
 
 
+def _trajectory_finite_persistence_interval_count(row_dir: Path) -> int:
+    path = row_dir / "trajectory_topological_algebra.json"
+    if not path.exists():
+        return -1
+    try:
+        topology = _read_json(path)
+    except Exception:
+        return -1
+    persistence = topology.get("persistence", {}) if isinstance(topology, dict) and isinstance(topology.get("persistence"), dict) else {}
+    intervals = persistence.get("intervals", []) if isinstance(persistence.get("intervals"), list) else []
+    count = 0
+    for interval in intervals:
+        if not isinstance(interval, dict):
+            continue
+        try:
+            birth = float(interval.get("birth", 0.0) or 0.0)
+            death = interval.get("death")
+            death_value = float(death) if death is not None else None
+        except (TypeError, ValueError):
+            continue
+        if death_value is not None and math.isfinite(death_value) and death_value > birth:
+            count += 1
+    return count
+
+
 def _pairwise_euclidean(values: np.ndarray) -> np.ndarray:
     if values.size == 0:
         return np.zeros((0, 0), dtype=float)
@@ -945,34 +970,49 @@ def validate_row(row_dir: Path, *, min_candidates: int = 8, min_depth: int = 2, 
     _assert(isinstance(landscapes_payload, dict), errors, "trajectory persistence landscapes payload is not an object")
     if isinstance(landscapes_payload, dict):
         _assert(landscapes_payload.get("schema_version") == "tropicalgt.persistence_landscape_visual_contract.v1", errors, "trajectory persistence landscapes payload has wrong schema")
-        _assert(landscapes_payload.get("available") is True, errors, "trajectory persistence landscapes payload is unavailable")
         backend_provenance = landscapes_payload.get("backend_provenance", {}) if isinstance(landscapes_payload.get("backend_provenance"), dict) else {}
-        _assert(str(landscapes_payload.get("landscape_backend", "")).strip() != "", errors, "trajectory persistence landscapes payload lacks landscape backend provenance")
-        _assert(backend_provenance.get("available") is True, errors, "trajectory persistence landscapes backend provenance is unavailable")
-        _assert(backend_provenance.get("source_field") == "topology.persistence_representations.backend", errors, "trajectory persistence landscapes backend provenance has wrong source field")
-        _assert(isinstance(backend_provenance.get("backends"), list) and bool(backend_provenance.get("backends")), errors, "trajectory persistence landscapes backend provenance lists no backends")
-        _assert(landscapes_payload.get("actual_data_only") is True, errors, "trajectory persistence landscapes payload is not actual-data-only")
-        _assert(landscapes_payload.get("no_proxy_or_fallback") is True, errors, "trajectory persistence landscapes payload allows proxy/fallback data")
-        _assert(landscapes_payload.get("not_nll_fitness_landscape") is True, errors, "trajectory persistence landscapes payload confuses GUDHI landscapes with NLL/fitness landscape")
-        _assert(landscapes_payload.get("not_norm_only_summary") is True, errors, "trajectory persistence landscapes payload is norm-only rather than lambda_k curves")
-        _assert(landscapes_payload.get("safe_to_render_actual_landscape_functions") is True, errors, "trajectory persistence landscapes payload is unsafe to render")
-        _assert(_finite_float(landscapes_payload.get("curve_trace_count"), 0.0) > 0, errors, "trajectory persistence landscapes payload has no curve traces")
-        _assert(_finite_float(landscapes_payload.get("rendered_growth_level_count"), 0.0) > 0, errors, "trajectory persistence landscapes payload has no growth levels")
-        rows = landscapes_payload.get("landscape_rows") if isinstance(landscapes_payload.get("landscape_rows"), list) else []
-        _assert(bool(rows), errors, "trajectory persistence landscapes payload has no landscape rows")
-        _assert(isinstance(landscapes_payload.get("homology_dimensions"), list) and bool(landscapes_payload.get("homology_dimensions")), errors, "trajectory persistence landscapes payload has no homology dimensions")
-        for idx, row in enumerate(rows):
-            if not isinstance(row, dict):
-                errors.append(f"trajectory persistence landscape row {idx} is not an object")
-                continue
-            _assert(row.get("source") == "topology.persistence_representations.methods[*].landscape", errors, f"trajectory persistence landscape row {idx} has wrong source")
-            _assert(row.get("actual_gudhi_landscape_values") is True, errors, f"trajectory persistence landscape row {idx} is not actual GUDHI values")
-            _assert(row.get("not_norm_only_summary") is True, errors, f"trajectory persistence landscape row {idx} is norm-only")
-            _assert(row.get("not_nll_fitness_landscape") is True, errors, f"trajectory persistence landscape row {idx} confuses NLL/fitness landscape")
-            _assert(_finite_float(row.get("layer_count"), 0.0) > 0, errors, f"trajectory persistence landscape row {idx} has no lambda layers")
-            _assert(_finite_float(row.get("grid_count"), 0.0) > 0, errors, f"trajectory persistence landscape row {idx} has no grid/sample coordinates")
-            _assert(_finite_float(row.get("finite_value_count"), 0.0) > 0, errors, f"trajectory persistence landscape row {idx} has no finite values")
-            _assert(str(row.get("values_source", "")).startswith("gudhi.representations.Landscape") or row.get("values_source") == "reported_landscape_values", errors, f"trajectory persistence landscape row {idx} has unaudited values source")
+        unavailable_reasons = landscapes_payload.get("unavailable_reasons", []) if isinstance(landscapes_payload.get("unavailable_reasons"), list) else []
+        finite_interval_count = _trajectory_finite_persistence_interval_count(row_dir)
+        no_finite_interval_unavailable = (
+            landscapes_payload.get("available") is False
+            and finite_interval_count == 0
+            and landscapes_payload.get("unavailable_state_verified_by_intervals") is True
+            and "no_finite_persistence_intervals_for_gudhi_landscape" in unavailable_reasons
+        )
+        if no_finite_interval_unavailable:
+            _assert(landscapes_payload.get("actual_data_only") is True, errors, "trajectory persistence landscapes payload is not actual-data-only")
+            _assert(landscapes_payload.get("no_proxy_or_fallback") is True, errors, "trajectory persistence landscapes payload allows proxy/fallback data")
+            _assert(landscapes_payload.get("not_nll_fitness_landscape") is True, errors, "trajectory persistence landscapes payload confuses GUDHI landscapes with NLL/fitness landscape")
+            _assert(landscapes_payload.get("source") == "topology.persistence_representations.methods[*].landscape", errors, "trajectory persistence landscapes payload has wrong source")
+            _assert(int(_finite_float(landscapes_payload.get("finite_persistence_interval_count"), -1.0)) == 0, errors, "trajectory persistence landscapes unavailable state does not report zero finite intervals")
+        else:
+            _assert(landscapes_payload.get("available") is True, errors, "trajectory persistence landscapes payload is unavailable")
+            _assert(str(landscapes_payload.get("landscape_backend", "")).strip() != "", errors, "trajectory persistence landscapes payload lacks landscape backend provenance")
+            _assert(backend_provenance.get("available") is True, errors, "trajectory persistence landscapes backend provenance is unavailable")
+            _assert(backend_provenance.get("source_field") == "topology.persistence_representations.backend", errors, "trajectory persistence landscapes backend provenance has wrong source field")
+            _assert(isinstance(backend_provenance.get("backends"), list) and bool(backend_provenance.get("backends")), errors, "trajectory persistence landscapes backend provenance lists no backends")
+            _assert(landscapes_payload.get("actual_data_only") is True, errors, "trajectory persistence landscapes payload is not actual-data-only")
+            _assert(landscapes_payload.get("no_proxy_or_fallback") is True, errors, "trajectory persistence landscapes payload allows proxy/fallback data")
+            _assert(landscapes_payload.get("not_nll_fitness_landscape") is True, errors, "trajectory persistence landscapes payload confuses GUDHI landscapes with NLL/fitness landscape")
+            _assert(landscapes_payload.get("not_norm_only_summary") is True, errors, "trajectory persistence landscapes payload is norm-only rather than lambda_k curves")
+            _assert(landscapes_payload.get("safe_to_render_actual_landscape_functions") is True, errors, "trajectory persistence landscapes payload is unsafe to render")
+            _assert(_finite_float(landscapes_payload.get("curve_trace_count"), 0.0) > 0, errors, "trajectory persistence landscapes payload has no curve traces")
+            _assert(_finite_float(landscapes_payload.get("rendered_growth_level_count"), 0.0) > 0, errors, "trajectory persistence landscapes payload has no growth levels")
+            rows = landscapes_payload.get("landscape_rows") if isinstance(landscapes_payload.get("landscape_rows"), list) else []
+            _assert(bool(rows), errors, "trajectory persistence landscapes payload has no landscape rows")
+            _assert(isinstance(landscapes_payload.get("homology_dimensions"), list) and bool(landscapes_payload.get("homology_dimensions")), errors, "trajectory persistence landscapes payload has no homology dimensions")
+            for idx, row in enumerate(rows):
+                if not isinstance(row, dict):
+                    errors.append(f"trajectory persistence landscape row {idx} is not an object")
+                    continue
+                _assert(row.get("source") == "topology.persistence_representations.methods[*].landscape", errors, f"trajectory persistence landscape row {idx} has wrong source")
+                _assert(row.get("actual_gudhi_landscape_values") is True, errors, f"trajectory persistence landscape row {idx} is not actual GUDHI values")
+                _assert(row.get("not_norm_only_summary") is True, errors, f"trajectory persistence landscape row {idx} is norm-only")
+                _assert(row.get("not_nll_fitness_landscape") is True, errors, f"trajectory persistence landscape row {idx} confuses NLL/fitness landscape")
+                _assert(_finite_float(row.get("layer_count"), 0.0) > 0, errors, f"trajectory persistence landscape row {idx} has no lambda layers")
+                _assert(_finite_float(row.get("grid_count"), 0.0) > 0, errors, f"trajectory persistence landscape row {idx} has no grid/sample coordinates")
+                _assert(_finite_float(row.get("finite_value_count"), 0.0) > 0, errors, f"trajectory persistence landscape row {idx} has no finite values")
+                _assert(str(row.get("values_source", "")).startswith("gudhi.representations.Landscape") or row.get("values_source") == "reported_landscape_values", errors, f"trajectory persistence landscape row {idx} has unaudited values source")
 
     _assert(len(candidates) >= min_candidates, errors, f"candidate count {len(candidates)} < {min_candidates}")
     _assert(len(edges) >= max(0, len(candidates) - 1), errors, f"edge count {len(edges)} is smaller than candidate tree count {len(candidates) - 1}")

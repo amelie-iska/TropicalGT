@@ -1637,6 +1637,50 @@ def test_validate_audit_root_rejects_missing_persistence_landscape_payload(tmp_p
     assert any("persistence landscapes payload" in err for err in report["errors"])
 
 
+
+def test_validate_audit_root_accepts_no_finite_interval_persistence_landscape_unavailable_state(tmp_path: Path):
+    validator = _load_validator()
+    audit = tmp_path / "step_00000001" / "got_audit"
+    row = _row(audit, ".")
+    (row / "trajectory_topological_algebra.json").write_text(
+        json.dumps(
+            {
+                "persistence": {
+                    "backend": "gudhi",
+                    "available": True,
+                    "intervals": [
+                        {"dimension": 0, "birth": 0.0, "death": None, "infinite": True},
+                        {"dimension": 1, "birth": 0.0, "death": None, "infinite": True},
+                    ],
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+    payload_path = row / "trajectory_persistence" / "persistence_landscapes.json"
+    payload = json.loads(payload_path.read_text(encoding="utf-8"))
+    payload.update(
+        {
+            "available": False,
+            "landscape_backend": "unavailable",
+            "backend_provenance": {"available": False, "reason": "no finite persistence intervals", "source_field": "topology.persistence_representations.backend"},
+            "not_norm_only_summary": False,
+            "safe_to_render_actual_landscape_functions": False,
+            "curve_trace_count": 0,
+            "rendered_growth_level_count": 0,
+            "homology_dimensions": [],
+            "landscape_rows": [],
+            "finite_persistence_interval_count": 0,
+            "unavailable_state_verified_by_intervals": True,
+            "unavailable_reasons": ["no_finite_persistence_intervals_for_gudhi_landscape"],
+        }
+    )
+    payload_path.write_text(json.dumps(payload), encoding="utf-8")
+    _write(audit / "codex_browser_index.html", _codex_browser_html(_browser_samples(audit, ["."])))
+    report = validator.validate_audit_root(audit, min_rows=1, min_candidates=4, min_depth=2)
+    assert report["ok"], report["errors"]
+
+
 def test_validate_audit_root_rejects_missing_persistence_landscape_backend_provenance(tmp_path: Path):
     validator = _load_validator()
     audit = tmp_path / "step_00000001" / "got_audit"

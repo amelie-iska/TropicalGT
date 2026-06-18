@@ -8547,6 +8547,20 @@ def _write_growth_persistence_landscapes(path: Path, topology: dict[str, object]
             y=0.5,
             showarrow=False,
         )
+    finite_persistence_interval_count = 0
+    for growth_row in rows:
+        topo_for_count = growth_row.get("topological_algebra", {}) if isinstance(growth_row.get("topological_algebra"), dict) else {}
+        for interval in _persistence_intervals_only(topo_for_count):
+            try:
+                birth = float(interval.get("birth", 0.0) or 0.0)
+                death = interval.get("death")
+                death_value = float(death) if death is not None else None
+            except (TypeError, ValueError):
+                continue
+            if death_value is not None and math.isfinite(death_value) and death_value > birth:
+                finite_persistence_interval_count += 1
+    if not landscape_contract_rows and finite_persistence_interval_count == 0 and "no_finite_persistence_intervals_for_gudhi_landscape" not in unavailable_reasons:
+        unavailable_reasons.append("no_finite_persistence_intervals_for_gudhi_landscape")
     fig.update_layout(
         template="plotly_dark",
         title=(
@@ -8593,6 +8607,8 @@ def _write_growth_persistence_landscapes(path: Path, topology: dict[str, object]
         "safe_to_render_actual_landscape_functions": bool(trace_count > 0 and landscape_contract_rows),
         "curve_trace_count": int(trace_count),
         "growth_row_count": int(len(rows)),
+        "finite_persistence_interval_count": int(finite_persistence_interval_count),
+        "unavailable_state_verified_by_intervals": bool(not landscape_contract_rows and finite_persistence_interval_count == 0),
         "rendered_growth_level_count": int(len(rendered_levels)),
         "rendered_growth_levels": rendered_levels,
         "homology_dimensions": homology_dimensions,
