@@ -185,3 +185,16 @@ CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src:TropicalGT-I/scripts /home/i
 CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src:TropicalGT-I/scripts /home/iska/miniconda3/envs/tokengt/bin/python TropicalGT-I/scripts/audit_metric_provenance.py --fail-on-uncovered
 # findings=388 covered=388 uncovered=0
 ```
+
+2026-06-18 bivariate module/free-resolution guard evidence follow-up: Herschel now treats `trajectory_level_radius_bifiltration.json` as a required recorded GoT audit sidecar when it exists. `write_herschel_5k_report.py` exposes `tropicalgt.herschel_bivariate_module_evidence.v1`, sourced only from the raw `F2[x_level,x_radius]` level/radius bifiltration payload. The report separates available module-grid evidence (fibers, structure maps, rank samples, chain generators) from nested `tropicalgt.real_free_resolution.v1` certification. Finite multigraded chain-presentation diagnostics remain useful but are not free resolutions; a free-resolution claim is available only when the nested CAS guard certifies exactness and multigraded resolution safety. Safe unavailable CAS guards are reported explicitly.
+
+2026-06-18 bivariate module/free-resolution guard evidence validation:
+
+```text
+CUDA_VISIBLE_DEVICES="" /home/iska/miniconda3/envs/tokengt/bin/python -m py_compile TropicalGT-I/scripts/write_herschel_5k_report.py TropicalGT-I/scripts/prepare_5k_review_bundle.py TropicalGT-I/src/tropicalgt/provenance.py TropicalGT-I/tests/test_herschel_5k_report.py TropicalGT-I/tests/test_prepare_5k_review_bundle.py
+# passed
+CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src:TropicalGT-I/scripts /home/iska/miniconda3/envs/tokengt/bin/python -m pytest -q TropicalGT-I/tests/test_herschel_5k_report.py TropicalGT-I/tests/test_prepare_5k_review_bundle.py TropicalGT-I/tests/test_parameter_golf_review_loop.py TropicalGT-I/tests/test_metric_provenance.py
+# 36 passed
+CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src:TropicalGT-I/scripts /home/iska/miniconda3/envs/tokengt/bin/python TropicalGT-I/scripts/audit_metric_provenance.py --fail-on-uncovered
+# findings=393 covered=393 uncovered=0
+```

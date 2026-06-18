@@ -565,3 +565,13 @@ Next sequential item: continue post-5K evidence/report surfacing and validator/b
 - [x] Verified-unavailable no-finite-interval states are reported explicitly and cannot become zero landscape evidence, NLL/fitness landscapes, norm-only summaries, BPB evidence, or restart justification.
 - [x] Markdown and HTML reports now expose `Persistence Landscape Evidence` plus a backend/unavailable-reason chart for post-5K review.
 - [x] Verification passed: py-compile; focused Herschel/bundle tests (`11 passed`); broader Herschel/bundle/review-loop/provenance tests (`36 passed`); metric provenance audit (`388 covered, 0 uncovered`).
+
+### Current Objective Update - Herschel Bivariate Module/Free-Resolution Guard Evidence Pass
+
+- [x] Added `trajectory_level_radius_bifiltration.json` to the Herschel-required audit sidecar inventory when it exists in the latest recorded `got_audit` directory.
+- [x] Added `tropicalgt.herschel_bivariate_module_evidence.v1` to the Herschel 5K summary, sourced only from the recorded raw `F2[x_level,x_radius]` bivariate module sidecar.
+- [x] Herschel now reports module-grid availability, fiber-rank profile count, structure-map count, rank-invariant sample count, chain-generator count, selected object key, and coefficient ring.
+- [x] Herschel separately reports the nested `tropicalgt.real_free_resolution.v1` guard: certified real free-resolution count, safe-unavailable count, status counts, input hash, and render-safety flags.
+- [x] Finite multigraded chain-presentation diagnostics remain explicitly `not_a_free_resolution`; missing, failed, or safe-unavailable CAS guards cannot justify free-resolution, derived-equivalence, BPB, or restart claims.
+- [x] Markdown and HTML reports now expose `Bivariate Module Evidence` plus a real-resolution status chart for post-5K review.
+- [x] Verification passed: py-compile; focused Herschel/bundle tests (`11 passed`); broader Herschel/bundle/review-loop/provenance tests (`36 passed`); metric provenance audit (`393 covered, 0 uncovered`).

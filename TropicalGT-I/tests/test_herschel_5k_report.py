@@ -250,6 +250,44 @@ def test_write_herschel_report_preserves_blockers_and_sidecar_groups(tmp_path: P
         ),
         encoding="utf-8",
     )
+    bivariate_module_path = tmp_path / "trajectory_level_radius_bifiltration.json"
+    bivariate_module_path.write_text(
+        json.dumps(
+            {
+                "available": True,
+                "coefficient_ring": "F2[x_level,x_radius]",
+                "num_parameters": 2,
+                "object_key_selected": "filtered_simplicial_object",
+                "fiber_rank_profile": [{"grade": [0, 0], "chain_group_ranks": {"0": 1}}],
+                "structure_maps": [{"source_grade": [0, 0], "target_grade": [1, 0], "direction": "x_level", "homology_rank": {"0": 1}}],
+                "rank_invariant_samples": [{"source_grade": [0, 0], "target_grade": [1, 0], "h0_rank": 1}],
+                "chain_module_generators": [{"simplex": ["v0"], "homological_degree": 0, "multidegree": [0, 0]}],
+                "boundary_monomials": {"d1": []},
+                "chain_presentation_diagnostics": {
+                    "method": "finite_multigraded_chain_presentation_diagnostics",
+                    "ring": "F2[x_level,x_radius]",
+                    "field": "F2",
+                    "not_a_free_resolution": True,
+                    "certificate_attached": False,
+                    "resolution_status": "chain_presentation_only",
+                    "real_free_resolution": {
+                        "schema_version": "tropicalgt.real_free_resolution.v1",
+                        "available": False,
+                        "status": "certificate_failed",
+                        "reason": "No CAS backend returned a certified real free resolution.",
+                        "certificate_attached": False,
+                        "real_free_resolution_certified": False,
+                        "exactness_certified": False,
+                        "multigraded_free_resolution_certified": False,
+                        "safe_to_render_as_multigraded_free_resolution": False,
+                        "safe_unavailable_render": True,
+                        "input_sha256": "module-input-sha"
+                    }
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
     persistence_landscape_path = tmp_path / "persistence_landscapes.json"
     persistence_landscape_path.write_text(
         json.dumps(
@@ -492,6 +530,7 @@ def test_write_herschel_report_preserves_blockers_and_sidecar_groups(tmp_path: P
                 str(toric_sidecar_path),
                 "got_audit/betti_table.json",
                 "got_audit/certificate_indexed_cas_evidence.json",
+                str(bivariate_module_path),
                 str(persistence_landscape_path),
                 "got_audit/analogical_memory_report.json",
                 str(analogical_maps_path),
@@ -539,7 +578,7 @@ def test_write_herschel_report_preserves_blockers_and_sidecar_groups(tmp_path: P
     assert "checkpoint_file_is_empty" in " ".join(summary["restart_decision"]["blockers"])
     groups = summary["artifact_evidence"]["sidecar_groups"]
     assert groups["cas_algebra"] == 2
-    assert groups["topology_persistence"] == 1
+    assert groups["topology_persistence"] == 2
     assert groups["analogical_memory"] == 2
     assert groups["tropical_toric"] == 3
     assert groups["graphcg"] == 1
@@ -619,6 +658,19 @@ def test_write_herschel_report_preserves_blockers_and_sidecar_groups(tmp_path: P
     assert persistence_landscape["sources"][0]["not_nll_fitness_landscape"] is True
     assert persistence_landscape["sources"][0]["not_norm_only_summary"] is True
     assert persistence_landscape["sources"][0]["no_proxy_or_fallback"] is True
+    bivariate_module = summary["artifact_evidence"]["bivariate_module_evidence"]
+    assert bivariate_module["schema_version"] == "tropicalgt.herschel_bivariate_module_evidence.v1"
+    assert bivariate_module["available"] is True
+    assert bivariate_module["source_count"] == 1
+    assert bivariate_module["module_available_source_count"] == 1
+    assert bivariate_module["certified_real_free_resolution_source_count"] == 0
+    assert bivariate_module["safe_unavailable_real_free_resolution_source_count"] == 1
+    assert bivariate_module["total_fiber_rank_profile_count"] == 1
+    assert bivariate_module["total_structure_map_count"] == 1
+    assert bivariate_module["resolution_status_counts"] == {"certificate_failed": 1}
+    assert bivariate_module["sources"][0]["chain_presentation_not_a_free_resolution"] is True
+    assert bivariate_module["sources"][0]["real_free_resolution_certified"] is False
+    assert bivariate_module["sources"][0]["safe_unavailable_real_free_resolution"] is True
     chart_bundle = summary["artifact_evidence"]["chart_bundle_transport_evidence"]
     assert chart_bundle["schema_version"] == "tropicalgt.herschel_chart_bundle_transport_evidence.v1"
     assert chart_bundle["available"] is True
@@ -677,6 +729,8 @@ def test_write_herschel_report_preserves_blockers_and_sidecar_groups(tmp_path: P
     assert "effective_full_rank_qr" in markdown
     assert "## NLL Density Evidence" in markdown
     assert "density_volume" in markdown
+    assert "## Bivariate Module Evidence" in markdown
+    assert "certificate_failed" in markdown
     assert "## Persistence Landscape Evidence" in markdown
     assert "gudhi.representations.Landscape" in markdown
     assert "## Chart/Vector-Bundle Evidence" in markdown
@@ -706,6 +760,9 @@ def test_write_herschel_report_preserves_blockers_and_sidecar_groups(tmp_path: P
     assert "NLL Density Evidence" in html
     assert "data-chart='nll-density-visible-layers'" in html
     assert "density_volume" in html
+    assert "Bivariate Module Evidence" in html
+    assert "data-chart='bivariate-module-resolution-statuses'" in html
+    assert "certificate_failed" in html
     assert "Persistence Landscape Evidence" in html
     assert "data-chart='persistence-landscape-backends'" in html
     assert "gudhi.representations.Landscape" in html

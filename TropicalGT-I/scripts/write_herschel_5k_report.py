@@ -837,6 +837,132 @@ def _chart_bundle_transport_evidence(sidecar_paths: list[str]) -> dict[str, Any]
     }
 
 
+def _bivariate_module_evidence(sidecar_paths: list[str]) -> dict[str, Any]:
+    sources: list[dict[str, Any]] = []
+    resolution_status_counts: dict[str, int] = {}
+    unavailable_reason_counts: dict[str, int] = {}
+    total_fibers = 0
+    total_structure_maps = 0
+    total_rank_samples = 0
+    total_generators = 0
+    certified_resolution_count = 0
+    safe_unavailable_resolution_count = 0
+    module_available_count = 0
+    for raw_path in sidecar_paths:
+        lower = raw_path.lower()
+        if "trajectory_level_radius_bifiltration" not in lower or not lower.endswith(".json"):
+            continue
+        resolved = _resolve_output_path(Path(raw_path))
+        source: dict[str, Any] = {"path": _project_path(resolved), "available": False}
+        if not resolved.exists():
+            source["reason"] = "bivariate_module_sidecar_missing"
+            unavailable_reason_counts[source["reason"]] = unavailable_reason_counts.get(source["reason"], 0) + 1
+            sources.append(source)
+            continue
+        try:
+            payload = json.loads(resolved.read_text(encoding="utf-8"))
+        except Exception as exc:  # pragma: no cover
+            source["reason"] = f"bivariate_module_sidecar_parse_error:{exc}"
+            unavailable_reason_counts["bivariate_module_sidecar_parse_error"] = unavailable_reason_counts.get("bivariate_module_sidecar_parse_error", 0) + 1
+            sources.append(source)
+            continue
+        if not isinstance(payload, dict):
+            source["reason"] = "bivariate_module_sidecar_not_object"
+            unavailable_reason_counts[source["reason"]] = unavailable_reason_counts.get(source["reason"], 0) + 1
+            sources.append(source)
+            continue
+        diagnostics = payload.get("chain_presentation_diagnostics") if isinstance(payload.get("chain_presentation_diagnostics"), dict) else {}
+        real = diagnostics.get("real_free_resolution") if isinstance(diagnostics.get("real_free_resolution"), dict) else {}
+        fiber_count = len(payload.get("fiber_rank_profile", [])) if isinstance(payload.get("fiber_rank_profile"), list) else 0
+        structure_map_count = len(payload.get("structure_maps", [])) if isinstance(payload.get("structure_maps"), list) else 0
+        rank_sample_count = len(payload.get("rank_invariant_samples", [])) if isinstance(payload.get("rank_invariant_samples"), list) else 0
+        generator_count = len(payload.get("chain_module_generators", [])) if isinstance(payload.get("chain_module_generators"), list) else 0
+        boundary_count = sum(len(v) for v in payload.get("boundary_monomials", {}).values() if isinstance(v, list)) if isinstance(payload.get("boundary_monomials"), dict) else 0
+        ring_ok = payload.get("coefficient_ring") == "F2[x_level,x_radius]" and diagnostics.get("ring") == "F2[x_level,x_radius]"
+        grid_ok = bool(payload.get("available") is True and payload.get("num_parameters") == 2 and fiber_count > 0 and structure_map_count > 0)
+        no_proxy_ok = bool(diagnostics.get("method") == "finite_multigraded_chain_presentation_diagnostics" and diagnostics.get("not_a_free_resolution") is True)
+        module_available = bool(ring_ok and grid_ok and no_proxy_ok)
+        resolution_certified = bool(
+            real.get("schema_version") == "tropicalgt.real_free_resolution.v1"
+            and real.get("available") is True
+            and real.get("certificate_attached") is True
+            and real.get("real_free_resolution_certified") is True
+            and real.get("exactness_certified") is True
+            and real.get("multigraded_free_resolution_certified") is True
+            and real.get("safe_to_render_as_multigraded_free_resolution") is True
+        )
+        safe_unavailable = bool(
+            real.get("schema_version") == "tropicalgt.real_free_resolution.v1"
+            and real.get("available") is False
+            and real.get("safe_unavailable_render") is True
+            and real.get("safe_to_render_as_multigraded_free_resolution") is False
+        )
+        resolution_status = str(real.get("status") or diagnostics.get("resolution_status") or "unavailable")
+        resolution_status_counts[resolution_status] = resolution_status_counts.get(resolution_status, 0) + 1
+        if module_available:
+            module_available_count += 1
+            total_fibers += fiber_count
+            total_structure_maps += structure_map_count
+            total_rank_samples += rank_sample_count
+            total_generators += generator_count
+        if resolution_certified:
+            certified_resolution_count += 1
+        if safe_unavailable:
+            safe_unavailable_resolution_count += 1
+        source.update(
+            {
+                "available": module_available,
+                "coefficient_ring": payload.get("coefficient_ring", "unavailable"),
+                "num_parameters": payload.get("num_parameters"),
+                "object_key_selected": payload.get("object_key_selected", "unavailable"),
+                "fiber_rank_profile_count": fiber_count,
+                "structure_map_count": structure_map_count,
+                "rank_invariant_sample_count": rank_sample_count,
+                "chain_module_generator_count": generator_count,
+                "boundary_monomial_entry_count": boundary_count,
+                "chain_presentation_method": diagnostics.get("method", "unavailable"),
+                "chain_presentation_not_a_free_resolution": bool(diagnostics.get("not_a_free_resolution", False)),
+                "certificate_attached": bool(diagnostics.get("certificate_attached", False)),
+                "real_free_resolution_schema_version": real.get("schema_version", "unavailable"),
+                "real_free_resolution_status": resolution_status,
+                "real_free_resolution_certified": resolution_certified,
+                "safe_unavailable_real_free_resolution": safe_unavailable,
+                "safe_to_render_as_multigraded_free_resolution": bool(real.get("safe_to_render_as_multigraded_free_resolution", False)),
+                "real_free_resolution_reason": real.get("reason", ""),
+                "input_sha256": real.get("input_sha256"),
+                "no_proxy_or_fallback": no_proxy_ok,
+            }
+        )
+        if not module_available:
+            reasons = []
+            if not ring_ok:
+                reasons.append("missing_f2_level_radius_ring")
+            if not grid_ok:
+                reasons.append("missing_bivariate_fiber_or_structure_maps")
+            if not no_proxy_ok:
+                reasons.append("missing_chain_presentation_no_proxy_guard")
+            source["reason"] = ";".join(reasons) or "bivariate_module_evidence_unavailable"
+            for reason in reasons or [source["reason"]]:
+                unavailable_reason_counts[reason] = unavailable_reason_counts.get(reason, 0) + 1
+        sources.append(source)
+    return {
+        "schema_version": "tropicalgt.herschel_bivariate_module_evidence.v1",
+        "available": bool(module_available_count),
+        "source_count": len(sources),
+        "module_available_source_count": module_available_count,
+        "certified_real_free_resolution_source_count": certified_resolution_count,
+        "safe_unavailable_real_free_resolution_source_count": safe_unavailable_resolution_count,
+        "total_fiber_rank_profile_count": total_fibers,
+        "total_structure_map_count": total_structure_maps,
+        "total_rank_invariant_sample_count": total_rank_samples,
+        "total_chain_module_generator_count": total_generators,
+        "resolution_status_counts": {key: resolution_status_counts[key] for key in sorted(resolution_status_counts)},
+        "unavailable_reason_counts": {key: unavailable_reason_counts[key] for key in sorted(unavailable_reason_counts)},
+        "sources": sources,
+        "policy": "Herschel reports bivariate F2[x_level,x_radius] module evidence from trajectory_level_radius_bifiltration.json. Finite chain-presentation diagnostics are not treated as real free resolutions; the nested tropicalgt.real_free_resolution.v1 guard must certify exactness and multigraded resolution safety before any free-resolution claim is available.",
+    }
+
+
 def _persistence_landscape_evidence(sidecar_paths: list[str]) -> dict[str, Any]:
     sources: list[dict[str, Any]] = []
     backend_counts: dict[str, int] = {}
@@ -1250,6 +1376,7 @@ def summarize_bundle(bundle: dict[str, Any], *, bundle_path: Path | None = None)
             "graphcg_direction_evidence": _graphcg_direction_evidence(sidecars),
             "nll_density_evidence": _nll_density_evidence(sidecars),
             "chart_bundle_transport_evidence": _chart_bundle_transport_evidence(sidecars),
+            "bivariate_module_evidence": _bivariate_module_evidence(sidecars),
             "persistence_landscape_evidence": _persistence_landscape_evidence(sidecars),
             "toric_tropical_cas_evidence": _toric_tropical_cas_evidence(sidecars),
             "analogical_query_context_evidence": _analogical_query_context_evidence(sidecars),
@@ -1425,6 +1552,34 @@ def render_markdown(summary: dict[str, Any]) -> str:
         lines.append(
             f"- `{source.get('path', '')}` available=`{source.get('available')}` anchors=`{source.get('actual_model_anchor_count')}` "
             f"samples=`{source.get('support_sample_count')}` bandwidth=`{_fmt(source.get('kernel_bandwidth'))}` nll_span=`{_fmt(source.get('nll_span'))}`"
+        )
+        if source.get("reason"):
+            lines.append(f"  - reason: `{source.get('reason')}`")
+    bivariate_module = artifacts.get("bivariate_module_evidence", {}) if isinstance(artifacts.get("bivariate_module_evidence"), dict) else {}
+    lines.extend(
+        [
+            "## Bivariate Module Evidence",
+            "",
+            f"- Module available: `{bivariate_module.get('available', False)}`",
+            f"- Sources: `{bivariate_module.get('source_count', 0)}`",
+            f"- Certified real free resolutions: `{bivariate_module.get('certified_real_free_resolution_source_count', 0)}`",
+            f"- Safe unavailable real free resolutions: `{bivariate_module.get('safe_unavailable_real_free_resolution_source_count', 0)}`",
+            f"- Total fibers: `{bivariate_module.get('total_fiber_rank_profile_count', 0)}`",
+            f"- Total structure maps: `{bivariate_module.get('total_structure_map_count', 0)}`",
+            "",
+            "```json",
+            json.dumps(bivariate_module.get("resolution_status_counts", {}), indent=2),
+            "```",
+            "",
+        ]
+    )
+    for source in bivariate_module.get("sources", []) if isinstance(bivariate_module.get("sources"), list) else []:
+        if not isinstance(source, dict):
+            continue
+        lines.append(
+            f"- `{source.get('path', '')}` module_available=`{source.get('available')}` ring=`{source.get('coefficient_ring', 'unavailable')}` "
+            f"fibers=`{source.get('fiber_rank_profile_count', 0)}` maps=`{source.get('structure_map_count', 0)}` "
+            f"real_resolution=`{source.get('real_free_resolution_certified')}` status=`{source.get('real_free_resolution_status', 'unavailable')}`"
         )
         if source.get("reason"):
             lines.append(f"  - reason: `{source.get('reason')}`")
@@ -1651,6 +1806,7 @@ def render_html(summary: dict[str, Any]) -> str:
     graphcg_direction = artifacts.get("graphcg_direction_evidence", {}) if isinstance(artifacts.get("graphcg_direction_evidence"), dict) else {}
     nll_density = artifacts.get("nll_density_evidence", {}) if isinstance(artifacts.get("nll_density_evidence"), dict) else {}
     chart_bundle_transport = artifacts.get("chart_bundle_transport_evidence", {}) if isinstance(artifacts.get("chart_bundle_transport_evidence"), dict) else {}
+    bivariate_module = artifacts.get("bivariate_module_evidence", {}) if isinstance(artifacts.get("bivariate_module_evidence"), dict) else {}
     persistence_landscape = artifacts.get("persistence_landscape_evidence", {}) if isinstance(artifacts.get("persistence_landscape_evidence"), dict) else {}
     toric_tropical_cas = artifacts.get("toric_tropical_cas_evidence", {}) if isinstance(artifacts.get("toric_tropical_cas_evidence"), dict) else {}
     analogical_query_context = artifacts.get("analogical_query_context_evidence", {}) if isinstance(artifacts.get("analogical_query_context_evidence"), dict) else {}
@@ -1760,6 +1916,26 @@ def render_html(summary: dict[str, Any]) -> str:
         )
     if not nll_density_rows:
         nll_density_rows.append("<tr><td colspan='8' class='muted'>No NLL density payload sidecar paths recorded.</td></tr>")
+    bivariate_module_rows = []
+    for source in bivariate_module.get("sources", []) if isinstance(bivariate_module.get("sources"), list) else []:
+        if not isinstance(source, dict):
+            continue
+        bivariate_module_rows.append(
+            "<tr>"
+            f"<td>{html.escape(str(source.get('path', '')))}</td>"
+            f"<td>{html.escape(str(source.get('available')))}</td>"
+            f"<td>{html.escape(str(source.get('coefficient_ring', 'unavailable')))}</td>"
+            f"<td>{html.escape(str(source.get('fiber_rank_profile_count', 0)))}</td>"
+            f"<td>{html.escape(str(source.get('structure_map_count', 0)))}</td>"
+            f"<td>{html.escape(str(source.get('chain_presentation_not_a_free_resolution')))}</td>"
+            f"<td>{html.escape(str(source.get('real_free_resolution_certified')))}</td>"
+            f"<td>{html.escape(str(source.get('safe_unavailable_real_free_resolution')))}</td>"
+            f"<td>{html.escape(str(source.get('real_free_resolution_status', 'unavailable')))}</td>"
+            f"<td>{html.escape(str(source.get('reason', '')))}</td>"
+            "</tr>"
+        )
+    if not bivariate_module_rows:
+        bivariate_module_rows.append("<tr><td colspan='10' class='muted'>No bivariate module sidecar paths recorded.</td></tr>")
     persistence_landscape_rows = []
     for source in persistence_landscape.get("sources", []) if isinstance(persistence_landscape.get("sources"), list) else []:
         if not isinstance(source, dict):
@@ -1873,6 +2049,7 @@ code {{ white-space:break-spaces; }}
 <span class="badge {'ok' if tropical_support.get('available') else 'warn'}">tropical_support_evidence={html.escape(str(bool(tropical_support.get('available'))))}</span>
 <span class="badge {'ok' if graphcg_direction.get('available') else 'warn'}">graphcg_direction_evidence={html.escape(str(bool(graphcg_direction.get('available'))))}</span>
 <span class="badge {'ok' if nll_density.get('available') else 'warn'}">nll_density_evidence={html.escape(str(bool(nll_density.get('available'))))}</span>
+<span class="badge {'ok' if bivariate_module.get('available') else 'warn'}">bivariate_module_evidence={html.escape(str(bool(bivariate_module.get('available'))))}</span>
 <span class="badge {'ok' if persistence_landscape.get('available') else 'warn'}">persistence_landscape_evidence={html.escape(str(bool(persistence_landscape.get('available'))))}</span>
 <span class="badge {'ok' if chart_bundle_transport.get('available') else 'warn'}">chart_bundle_evidence={html.escape(str(bool(chart_bundle_transport.get('available'))))}</span>
 <span class="badge {'ok' if toric_tropical_cas.get('available') else 'warn'}">toric_tropical_cas_evidence={html.escape(str(bool(toric_tropical_cas.get('available'))))}</span>
@@ -1891,6 +2068,7 @@ code {{ white-space:break-spaces; }}
 {_bar_chart_svg(tropical_support.get('support_probability_source_counts', {}) if isinstance(tropical_support, dict) else {}, title='Tropical Support Probability Sources', chart_id='tropical-support-probability-sources')}
 {_bar_chart_svg(graphcg_direction.get('basis_source_counts', {}) if isinstance(graphcg_direction, dict) else {}, title='GraphCG Projection Basis Sources', chart_id='graphcg-projection-basis-sources')}
 {_bar_chart_svg(nll_density.get('visible_density_layer_counts', {}) if isinstance(nll_density, dict) else {}, title='NLL Density Visible Layers', chart_id='nll-density-visible-layers')}
+{_bar_chart_svg(bivariate_module.get('resolution_status_counts', {}) if isinstance(bivariate_module, dict) else {}, title='Bivariate Module Real-Resolution Statuses', chart_id='bivariate-module-resolution-statuses')}
 {_bar_chart_svg(persistence_landscape.get('backend_counts', {}) or persistence_landscape.get('unavailable_reason_counts', {}) if isinstance(persistence_landscape, dict) else {}, title='Persistence Landscape Backends Or Unavailable Reasons', chart_id='persistence-landscape-backends')}
 {_bar_chart_svg(chart_bundle_transport.get('completeness_tier_counts', {}) if isinstance(chart_bundle_transport, dict) else {}, title='Chart/Vector-Bundle Completeness Tiers', chart_id='chart-vector-bundle-completeness-tiers')}
 {_bar_chart_svg(toric_tropical_cas.get('status_counts', {}) if isinstance(toric_tropical_cas, dict) else {}, title='Toric/Tropical CAS Statuses', chart_id='toric-tropical-cas-statuses')}
@@ -1900,6 +2078,7 @@ code {{ white-space:break-spaces; }}
 <section class="panel"><h2>Tropical Support Evidence</h2><table><thead><tr><th>Sidecar</th><th>Available</th><th>Probability source</th><th>Tokens</th><th>Strict wall rate</th><th>Near wall rate</th><th>Status</th><th>Reason</th></tr></thead><tbody>{''.join(tropical_support_rows)}</tbody></table></section>
 <section class="panel"><h2>GraphCG Direction Evidence</h2><table><thead><tr><th>Sidecar</th><th>Available</th><th>Basis</th><th>Directions</th><th>Candidates</th><th>Active nonzero</th><th>Mean |cos| p90</th><th>Reason</th></tr></thead><tbody>{''.join(graphcg_direction_rows)}</tbody></table></section>
 <section class="panel"><h2>NLL Density Evidence</h2><table><thead><tr><th>Sidecar</th><th>Available</th><th>Anchors</th><th>Support samples</th><th>Kernel bandwidth</th><th>NLL span</th><th>Support visibility</th><th>Reason</th></tr></thead><tbody>{''.join(nll_density_rows)}</tbody></table></section>
+<section class="panel"><h2>Bivariate Module Evidence</h2><table><thead><tr><th>Sidecar</th><th>Module available</th><th>Ring</th><th>Fibers</th><th>Structure maps</th><th>Chain only</th><th>Real free resolution</th><th>Safe unavailable</th><th>Status</th><th>Reason</th></tr></thead><tbody>{''.join(bivariate_module_rows)}</tbody></table></section>
 <section class="panel"><h2>Persistence Landscape Evidence</h2><table><thead><tr><th>Sidecar</th><th>Available</th><th>Verified unavailable</th><th>Backend</th><th>Rows</th><th>Curves</th><th>Finite intervals</th><th>Unavailable reasons</th><th>Reason</th></tr></thead><tbody>{''.join(persistence_landscape_rows)}</tbody></table></section>
 <section class="panel"><h2>Chart/Vector-Bundle Evidence</h2><table><thead><tr><th>Sidecar</th><th>Available</th><th>Completeness tier</th><th>Paper-ready telemetry</th><th>Charts</th><th>Transports</th><th>Missing groups</th><th>Reason</th></tr></thead><tbody>{''.join(chart_bundle_rows)}</tbody></table></section>
 <section class="panel"><h2>Toric/Tropical CAS Evidence</h2><table><thead><tr><th>Sidecar</th><th>Kind</th><th>Available</th><th>Status</th><th>Backend</th><th>Finite toric ideal</th><th>Tropical fan</th><th>Rays</th><th>Reason</th></tr></thead><tbody>{''.join(toric_tropical_rows)}</tbody></table></section>

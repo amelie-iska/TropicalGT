@@ -353,6 +353,43 @@ def test_prepare_review_bundle_defaults_to_periodic_validation_artifacts(tmp_pat
         ),
         encoding="utf-8",
     )
+    (periodic_dir / "got_audit" / "trajectory_level_radius_bifiltration.json").write_text(
+        json.dumps(
+            {
+                "available": True,
+                "coefficient_ring": "F2[x_level,x_radius]",
+                "num_parameters": 2,
+                "object_key_selected": "filtered_simplicial_object",
+                "fiber_rank_profile": [{"grade": [0, 0], "chain_group_ranks": {"0": 1}}],
+                "structure_maps": [{"source_grade": [0, 0], "target_grade": [1, 0], "direction": "x_level", "homology_rank": {"0": 1}}],
+                "rank_invariant_samples": [{"source_grade": [0, 0], "target_grade": [1, 0], "h0_rank": 1}],
+                "chain_module_generators": [{"simplex": ["v0"], "homological_degree": 0, "multidegree": [0, 0]}],
+                "boundary_monomials": {"d1": []},
+                "chain_presentation_diagnostics": {
+                    "method": "finite_multigraded_chain_presentation_diagnostics",
+                    "ring": "F2[x_level,x_radius]",
+                    "field": "F2",
+                    "not_a_free_resolution": True,
+                    "certificate_attached": False,
+                    "resolution_status": "chain_presentation_only",
+                    "real_free_resolution": {
+                        "schema_version": "tropicalgt.real_free_resolution.v1",
+                        "available": False,
+                        "status": "certificate_failed",
+                        "reason": "No CAS backend returned a certified real free resolution.",
+                        "certificate_attached": False,
+                        "real_free_resolution_certified": False,
+                        "exactness_certified": False,
+                        "multigraded_free_resolution_certified": False,
+                        "safe_to_render_as_multigraded_free_resolution": False,
+                        "safe_unavailable_render": True,
+                        "input_sha256": "module-input-sha"
+                    }
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
     (periodic_dir / "got_audit" / "trajectory_persistence").mkdir(parents=True, exist_ok=True)
     (periodic_dir / "got_audit" / "trajectory_persistence" / "persistence_landscapes.json").write_text(
         json.dumps(
@@ -566,6 +603,7 @@ def test_prepare_review_bundle_defaults_to_periodic_validation_artifacts(tmp_pat
     assert any(path.endswith("periodic/step_00005000/got_audit/got_nll_density_cloud_payload.json") for path in sidecars)
     assert any(path.endswith("periodic/step_00005000/got_audit/chart_bundle_transport_sidecar.json") for path in sidecars)
     assert any(path.endswith("periodic/step_00005000/got_audit/trajectory_persistence/persistence_landscapes.json") for path in sidecars)
+    assert any(path.endswith("periodic/step_00005000/got_audit/trajectory_level_radius_bifiltration.json") for path in sidecars)
     assert any(path.endswith("periodic/step_00005000/got_audit/toric_embedding_sidecar.json") for path in sidecars)
     assert any(path.endswith("periodic/step_00005000/got_audit/tropical_fan_diagnostics.json") for path in sidecars)
     assert bundle["artifact_inventory"]["herschel_required_sidecars_present"]
@@ -592,6 +630,10 @@ def test_prepare_review_bundle_defaults_to_periodic_validation_artifacts(tmp_pat
     )
     assert any(
         path.endswith("periodic/step_00005000/got_audit/trajectory_persistence/persistence_landscapes.json")
+        for path in persisted_contract["artifact_inventory"]["advanced_sidecars_tail"]
+    )
+    assert any(
+        path.endswith("periodic/step_00005000/got_audit/trajectory_level_radius_bifiltration.json")
         for path in persisted_contract["artifact_inventory"]["advanced_sidecars_tail"]
     )
     assert any(
@@ -631,6 +673,12 @@ def test_prepare_review_bundle_defaults_to_periodic_validation_artifacts(tmp_pat
     assert persistence_landscape["unavailable_reason_counts"]["no_finite_persistence_intervals_for_gudhi_landscape"] == 1
     assert persistence_landscape["sources"][0]["not_nll_fitness_landscape"] is True
     assert persistence_landscape["sources"][0]["verified_unavailable"] is True
+    bivariate_module = bundle["herschel_report_summary"]["artifact_evidence"]["bivariate_module_evidence"]
+    assert bivariate_module["available"] is True
+    assert bivariate_module["module_available_source_count"] == 1
+    assert bivariate_module["safe_unavailable_real_free_resolution_source_count"] == 1
+    assert bivariate_module["resolution_status_counts"] == {"certificate_failed": 1}
+    assert bivariate_module["sources"][0]["real_free_resolution_certified"] is False
     chart_bundle = bundle["herschel_report_summary"]["artifact_evidence"]["chart_bundle_transport_evidence"]
     assert chart_bundle["available"] is True
     assert chart_bundle["paper_ready_source_count"] == 0
