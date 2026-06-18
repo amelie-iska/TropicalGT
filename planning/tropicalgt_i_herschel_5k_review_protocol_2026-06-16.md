@@ -50,6 +50,8 @@ Blocked evidence remains blocked. Empty or unavailable checkpoints, missing post
 
 2026-06-18 visual-report follow-up: `write_herschel_5k_report.py` now also writes an optional HTML visual report, and `prepare_5k_review_bundle.py` records it as `herschel_report_html`. The HTML report renders metric cards, a restart-decision flow, sidecar-group bar charts, strict-validator gap bar charts, validator-source tables, blocker/warning panels, and a filterable sidecar list from the existing summary only. It is an evidence visualization layer, not a command runner or substitute for failed validators.
 
+2026-06-18 validator-action follow-up: Herschel now preserves strict-validator `examples` and `required_action` fields as ranked category rows plus top example rows in JSON, Markdown, and HTML. This makes failed validators actionable without relaxing the gate: concrete missing artifacts and repair actions are displayed, but failed validator status still blocks restart/artifact-pass claims.
+
 Validation:
 
 ```text

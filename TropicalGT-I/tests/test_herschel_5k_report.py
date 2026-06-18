@@ -42,8 +42,21 @@ def test_write_herschel_report_preserves_blockers_and_sidecar_groups(tmp_path: P
                     "gap_count": 3,
                     "category_counts": {"analogical_memory": 2, "persistence_landscapes": 1},
                     "categories": [
-                        {"category": "analogical_memory", "count": 2, "examples": [], "required_action": "regenerate"},
-                        {"category": "persistence_landscapes", "count": 1, "examples": [], "required_action": "regenerate"},
+                        {
+                            "category": "analogical_memory",
+                            "count": 2,
+                            "examples": [
+                                "row 0 missing json analogical_simplex_tree_analogy.json",
+                                "row 0 analogical top-k contract is missing or has wrong schema",
+                            ],
+                            "required_action": "regenerate analogical memory sidecars from real probability-vector maps",
+                        },
+                        {
+                            "category": "persistence_landscapes",
+                            "count": 1,
+                            "examples": ["row 0 trajectory persistence landscapes payload is missing"],
+                            "required_action": "rerun persistence landscape backfill from real GUDHI payloads",
+                        },
                     ],
                     "policy": "does not make an artifact valid",
                 },
@@ -143,6 +156,12 @@ def test_write_herschel_report_preserves_blockers_and_sidecar_groups(tmp_path: P
     assert validator_gaps["available"] is True
     assert validator_gaps["source_count"] == 1
     assert validator_gaps["combined_category_counts"] == {"analogical_memory": 2, "persistence_landscapes": 1}
+    assert validator_gaps["ranked_categories"][0]["category"] == "analogical_memory"
+    assert validator_gaps["ranked_categories"][0]["count"] == 2
+    assert validator_gaps["ranked_categories"][0]["required_action"].startswith("regenerate analogical")
+    assert validator_gaps["ranked_categories"][0]["examples"][0]["example"] == "row 0 missing json analogical_simplex_tree_analogy.json"
+    assert validator_gaps["top_examples"][0]["category"] == "analogical_memory"
+    assert validator_gaps["top_examples"][0]["required_action"].startswith("regenerate analogical")
     assert validator_gaps["sources"][0]["gap_count"] == 3
     assert validator_gaps["sources"][0]["validator_ok"] is False
     assert "no training" in summary["policy"]
@@ -151,7 +170,10 @@ def test_write_herschel_report_preserves_blockers_and_sidecar_groups(tmp_path: P
     assert "# Herschel 5K Evidence Report" in markdown
     assert "flowchart TD" in markdown
     assert "## Validator Evidence Gaps" in markdown
+    assert "### Required Actions" in markdown
     assert "analogical_memory" in markdown
+    assert "row 0 missing json analogical_simplex_tree_analogy.json" in markdown
+    assert "regenerate analogical memory sidecars" in markdown
     assert "checkpoint_file_is_empty" in markdown
     assert "blocked_missing_required_evidence_no_restart" in markdown
     html = html_path.read_text(encoding="utf-8")
@@ -159,6 +181,8 @@ def test_write_herschel_report_preserves_blockers_and_sidecar_groups(tmp_path: P
     assert "data-chart='sidecar-groups'" in html
     assert "data-chart='validator-gap-counts'" in html
     assert "Restart Decision Flow" in html
+    assert "Validator Gap Actions" in html
+    assert "row 0 missing json analogical_simplex_tree_analogy.json" in html
     assert "sidecar-filter" in html
     assert "analogical_memory" in html
     assert json.loads(json_path.read_text(encoding="utf-8"))["restart_decision"] == summary["restart_decision"]

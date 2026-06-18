@@ -58,6 +58,8 @@ def _resolve_output_path(path: Path) -> Path:
 def _validator_gap_evidence(bundle: dict[str, Any]) -> dict[str, Any]:
     sources: list[dict[str, Any]] = []
     combined: dict[str, int] = {}
+    ranked_categories: dict[str, dict[str, Any]] = {}
+    top_examples: list[dict[str, Any]] = []
     command_results = [row for row in bundle.get("command_results", []) if isinstance(row, dict)]
     for row in command_results:
         name = str(row.get("name", ""))
@@ -103,6 +105,49 @@ def _validator_gap_evidence(bundle: dict[str, Any]) -> dict[str, Any]:
                     combined[str(category)] = combined.get(str(category), 0) + int(count)
                 except (TypeError, ValueError):
                     continue
+            handled_categories: set[str] = set()
+            for category_row in categories:
+                if not isinstance(category_row, dict):
+                    continue
+                category = str(category_row.get("category", "other") or "other")
+                handled_categories.add(category)
+                try:
+                    count_value = int(category_row.get("count", category_counts.get(category, 0)) or 0)
+                except (TypeError, ValueError):
+                    count_value = 0
+                required_action = str(category_row.get("required_action", "") or "")
+                examples_raw = category_row.get("examples", [])
+                examples = [str(item) for item in examples_raw if str(item)] if isinstance(examples_raw, list) else []
+                aggregate = ranked_categories.setdefault(
+                    category,
+                    {"category": category, "count": 0, "required_action": required_action, "examples": [], "source_names": []},
+                )
+                aggregate["count"] = int(aggregate.get("count", 0) or 0) + count_value
+                if required_action and not aggregate.get("required_action"):
+                    aggregate["required_action"] = required_action
+                source_names = aggregate.setdefault("source_names", [])
+                if isinstance(source_names, list) and name and name not in source_names:
+                    source_names.append(name)
+                for example in examples[:5]:
+                    example_row = {"source": name, "path": source.get("path", ""), "example": example}
+                    category_examples = aggregate.setdefault("examples", [])
+                    if isinstance(category_examples, list) and len(category_examples) < 8:
+                        category_examples.append(example_row)
+                    if len(top_examples) < 24:
+                        top_examples.append({"category": category, "required_action": required_action, **example_row})
+            for category, count in category_counts.items():
+                category_name = str(category)
+                if category_name in handled_categories:
+                    continue
+                try:
+                    count_value = int(count)
+                except (TypeError, ValueError):
+                    count_value = 0
+                aggregate = ranked_categories.setdefault(
+                    category_name,
+                    {"category": category_name, "count": 0, "required_action": "", "examples": [], "source_names": []},
+                )
+                aggregate["count"] = int(aggregate.get("count", 0) or 0) + count_value
             source.update(
                 {
                     "available": bool(inventory),
@@ -117,11 +162,16 @@ def _validator_gap_evidence(bundle: dict[str, Any]) -> dict[str, Any]:
             if not inventory:
                 source["reason"] = "validator_json_lacks_evidence_gap_inventory"
             sources.append(source)
+    ranked_category_rows = sorted(
+        ranked_categories.values(), key=lambda row: (-int(row.get("count", 0) or 0), str(row.get("category", "")))
+    )
     return {
         "schema_version": "tropicalgt.herschel_validator_gap_evidence.v1",
         "available": any(source.get("available") for source in sources),
         "source_count": len(sources),
         "combined_category_counts": {category: count for category, count in sorted(combined.items())},
+        "ranked_categories": ranked_category_rows,
+        "top_examples": top_examples,
         "sources": sources,
         "policy": "Herschel reads validator gap inventories only from recorded validator JSON outputs; missing JSON is unavailable and does not justify a restart or artifact pass.",
     }
@@ -305,6 +355,17 @@ def render_markdown(summary: dict[str, Any]) -> str:
             "",
         ]
     )
+    ranked_validator_categories = validator_gaps.get("ranked_categories", []) if isinstance(validator_gaps.get("ranked_categories"), list) else []
+    if ranked_validator_categories:
+        lines.extend(["### Required Actions", ""])
+        for row in ranked_validator_categories[:12]:
+            if not isinstance(row, dict):
+                continue
+            lines.append(f"- `{row.get('category')}` count=`{row.get('count')}` action={row.get('required_action') or 'unavailable'}")
+            for example_row in row.get("examples", [])[:3] if isinstance(row.get("examples"), list) else []:
+                if not isinstance(example_row, dict):
+                    continue
+                lines.append(f"  - example: `{example_row.get('example')}`")
     for source in validator_gaps.get("sources", []) if isinstance(validator_gaps.get("sources"), list) else []:
         if not isinstance(source, dict):
             continue
@@ -427,6 +488,25 @@ def render_html(summary: dict[str, Any]) -> str:
         )
     if not source_rows:
         source_rows.append("<tr><td colspan='5' class='muted'>No validator JSON sources recorded.</td></tr>")
+    validator_ranked = validator_gaps.get("ranked_categories", []) if isinstance(validator_gaps.get("ranked_categories"), list) else []
+    action_rows = []
+    for row in validator_ranked[:20]:
+        if not isinstance(row, dict):
+            continue
+        examples = row.get("examples", [])
+        example_text = "; ".join(
+            str(example.get("example", "")) for example in examples[:3] if isinstance(example, dict)
+        ) if isinstance(examples, list) else ""
+        action_rows.append(
+            "<tr>"
+            f"<td>{html.escape(str(row.get('category', 'other')))}</td>"
+            f"<td>{html.escape(str(row.get('count', '')))}</td>"
+            f"<td>{html.escape(str(row.get('required_action', '')))}</td>"
+            f"<td><code>{html.escape(example_text)}</code></td>"
+            "</tr>"
+        )
+    if not action_rows:
+        action_rows.append("<tr><td colspan='4' class='muted'>No concrete validator gap examples recorded.</td></tr>")
     sidecar_items = "".join(f"<li data-path='{html.escape(path.lower())}'>{html.escape(path)}</li>" for path in sidecars[:160]) or "<li class='muted'>No sidecar paths recorded.</li>"
     restart_safe = checkpoint.get("restart_safe") and execution.get("ready") and advanced.get("safe_for_restart") and restart.get("step0_restart_allowed")
     return f"""<!doctype html>
@@ -476,6 +556,7 @@ code {{ white-space:break-spaces; }}
 {_bar_chart_svg(sidecar_groups, title='Advanced Sidecar Groups', chart_id='sidecar-groups')}
 {_bar_chart_svg(validator_counts, title='Strict Validator Evidence Gaps', chart_id='validator-gap-counts')}
 <section class="panel"><h2>Validator Sources</h2><table><thead><tr><th>Name</th><th>JSON path</th><th>Available</th><th>Gaps</th><th>Reason</th></tr></thead><tbody>{''.join(source_rows)}</tbody></table></section>
+<section class="panel"><h2>Validator Gap Actions</h2><table><thead><tr><th>Category</th><th>Count</th><th>Required action</th><th>Examples</th></tr></thead><tbody>{''.join(action_rows)}</tbody></table></section>
 <section class="panel"><h2>Blockers And Warnings</h2><div class="grid"><div><h3>Checkpoint</h3><ul>{_html_list(checkpoint.get('warnings', []))}</ul></div><div><h3>Execution</h3><ul>{_html_list(execution.get('issues', []))}</ul></div><div><h3>Advanced BPB</h3><ul>{_html_list(advanced.get('failed_gates', []))}</ul></div><div><h3>Restart</h3><ul>{_html_list(restart.get('blockers', []))}</ul></div></div></section>
 <section class="panel"><h2>Advanced Sidecars Tail</h2><input id="sidecar-filter" type="search" placeholder="Filter sidecar paths"><ul id="sidecar-list">{sidecar_items}</ul></section>
 </main>
