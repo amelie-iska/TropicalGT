@@ -115,3 +115,35 @@ def test_multi_inference_audit_driver_requests_interactive_artifacts(tmp_path: P
     assert "--require-complete-reasoning-steps" in cmd
     trace_index = cmd.index("--trace-limit")
     assert cmd[trace_index + 1] == "64"
+
+
+def test_inference_memory_save_uses_configured_quality_gate():
+    infer = _load_infer_module()
+    scaling_report = {
+        "candidates": [
+            {
+                "record_id": "candidate-without-probability-topology",
+                "score": 10.0,
+                "nll": 0.01,
+                "embedding": [1.0, 0.0, 0.0],
+            }
+        ]
+    }
+
+    records, summary = infer._inference_memory_records_and_gate_summary(
+        scaling_report,
+        {},
+        "inference:test",
+        max_records=16,
+    )
+
+    assert records == []
+    assert summary["policy"] == "store_only_quality_gated_model_probability_trajectory_memories"
+    assert summary["candidate_count"] == 1
+    assert summary["eligible_count"] == 0
+    assert summary["rejected_count"] == 1
+    assert summary["thresholds"]["require_probability_complex"] is True
+    assert summary["thresholds"]["require_topological_algebra"] is True
+    assert summary["reason_counts"]["probability_complex_unavailable"] == 1
+    assert summary["reason_counts"]["topological_algebra_unavailable"] == 1
+    assert summary["rows"][0]["passed"] is False

@@ -14,6 +14,8 @@ from tropicalgt.decoding import meet_in_middle_batch, meet_in_middle_config
 from tropicalgt.diagnostics import gflownet_diagnostics, graphcg_diagnostics, record_diagnostics
 from tropicalgt.memory import (
     AnalogicalMemoryBank,
+    AnalogicalMemoryQualityGate,
+    memory_quality_gate_summary,
     memory_records_from_scaling_report,
     query_probability_complex_from_report,
     query_signature_from_report,
@@ -41,6 +43,31 @@ def _current_scaling_record_ids(result: dict) -> set[str]:
         return set()
     rows = scaling.get("candidates", [])
     return {str(row.get("record_id")) for row in rows if isinstance(row, dict) and row.get("record_id") is not None}
+
+
+def _inference_memory_records_and_gate_summary(
+    scaling_report: dict,
+    cfg: dict,
+    source: str,
+    *,
+    max_records: int,
+):
+    quality_gate = AnalogicalMemoryQualityGate.from_config(cfg)
+    limit = min(max(int(max_records), 0), 16)
+    records = memory_records_from_scaling_report(
+        scaling_report,
+        source=source,
+        min_score=cfg.get("memory_min_score"),
+        max_records=limit,
+        quality_gate=quality_gate,
+    )
+    gate_summary = memory_quality_gate_summary(
+        scaling_report,
+        quality_gate,
+        min_score=cfg.get("memory_min_score"),
+        max_records=limit,
+    )
+    return records, gate_summary
 
 
 def _resolve_render_html(
@@ -278,11 +305,13 @@ def main() -> None:
                 probability_map_weight=probability_map_weight,
             )
         added = 0
+        quality_gate_summary = {}
         if args.memory_save and isinstance(result.get("inference_scaling"), dict):
-            records = memory_records_from_scaling_report(
+            records, quality_gate_summary = _inference_memory_records_and_gate_summary(
                 result["inference_scaling"],
-                source=current_source,
-                max_records=min(args.memory_max_records, 16),
+                cfg,
+                current_source,
+                max_records=args.memory_max_records,
             )
             bank.extend(records)
             bank.save()
@@ -308,6 +337,7 @@ def main() -> None:
             "bank_path": str(bank.path),
             "bank_size": len(bank.records),
             "records_added": added,
+            "quality_gate": quality_gate_summary,
             "top_k": args.memory_retrieve_top_k,
             "retrieval_weights": {
                 "persistence_landscape_weight": float(locals().get("landscape_weight", 0.0)),

@@ -690,3 +690,9 @@ Status: implemented for 5K review bundle preparation.
 - CPU-only prepare-bundle verification passed (`9 passed`).
 
 Next sequential item: return to the remaining visual/math repair queue with the CAS evidence handoff now covered.
+
+### 2026-06-18 analogical memory inference quality-gate repair
+- Completed the remaining analogical-memory storage gap for the inference path: `scripts/infer_tropicalgt_i.py --memory-save` now uses `AnalogicalMemoryQualityGate.from_config(cfg)` plus `memory_quality_gate_summary`, matching the stricter training path instead of the older lax default.
+- Inference memory outputs now carry `analogical_memory_retrieval.quality_gate` with candidate/eligible/rejected counts, reason counts, thresholds, and the `store_only_quality_gated_model_probability_trajectory_memories` policy.
+- Added focused regression coverage in `tests/test_inference_artifact_options.py` proving an inference row without model-probability trajectory topology and topological algebra is rejected, not stored as a future analogy.
+- This closes the no_proxy_or_fallback requirement that analogical memories are stored only above the configured quality/evidence threshold; early training/inference states remain explicit insufficient-memory states rather than embedding-only fallbacks.

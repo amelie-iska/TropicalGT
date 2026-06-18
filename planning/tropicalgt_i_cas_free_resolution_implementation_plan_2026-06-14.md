@@ -934,3 +934,8 @@ CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/scripts:TropicalGT-I/src /home/i
 ```
 
 Next linear item: move from CAS report handoff back to the actual-data-only visual/math repair queue unless a new CAS backend certificate gap appears in tests or live artifacts.
+
+### 2026-06-18 analogical retrieval/storage contract update
+- The analogical retrieval path already uses model-probability Jensen-Shannon assignments, simplex-tree preservation checks, and certified CAS evidence only under exact certificate matches. The remaining inference storage gap is now patched: saved inference memories use the configured `AnalogicalMemoryQualityGate` and report the full gate summary.
+- `--memory-save` no longer admits low-evidence inference-scaling candidates via the default loose gate. Missing probability complexes or missing topological algebra produce explicit rejection reasons and zero saved records.
+- Added regression coverage so analogical memory storage, retrieval, sidecar reporting, and Herschel evidence stay aligned with the no-proxy sidecars and no_proxy_or_fallback CAS/probability-vector contract.
