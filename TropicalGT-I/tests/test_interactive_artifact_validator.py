@@ -207,6 +207,9 @@ def _row(root: Path, name: str) -> Path:
                 "level": candidate["level"],
                 "nll": candidate["nll"],
                 "embedding": candidate["embedding"],
+                "embedding_source": "model graph_state",
+                "depth": candidate["level"],
+                "branch_id": "/".join(candidate["path"]) if candidate["path"] else "root",
                 "embedding_pca": {"pc1": candidate["embedding"][0], "pc2": candidate["embedding"][1], "pc3": candidate["embedding"][2]},
                 "plot": {
                     "x": candidate["embedding"][0],
@@ -381,7 +384,24 @@ def _row(root: Path, name: str) -> Path:
         json.dumps(
             {
                 "coordinate_source": "PCA of model graph_state embeddings; no level/tree layout coordinates are used",
+                "layout_contract": {
+                    "schema_version": "tropicalgt.embedding_trajectory_identity.v1",
+                    "coordinate_source": "model graph_state embeddings",
+                    "branch_depth_metadata_present": True,
+                    "parent_child_transitions_present": True,
+                    "parent_child_transition_count": 3,
+                    "edge_source": "graph_of_thought_parent_edges",
+                    "node_embedding_source": "model graph_state",
+                    "pca_quality_warning": False,
+                    "geometric_separation_overclaim_allowed": False,
+                    "no_proxy_or_fallback": True,
+                },
                 "nodes": nodes,
+                "edges": [
+                    {"source": "root", "target": "a", "edge_source": "graph_of_thought_parent_edges", "transition_kind": "GoT parent-child trajectory", "source_depth": 0, "target_depth": 1, "nll_delta": -0.1},
+                    {"source": "root", "target": "b", "edge_source": "graph_of_thought_parent_edges", "transition_kind": "GoT parent-child trajectory", "source_depth": 0, "target_depth": 1, "nll_delta": 0.1},
+                    {"source": "a", "target": "c", "edge_source": "graph_of_thought_parent_edges", "transition_kind": "GoT parent-child trajectory", "source_depth": 1, "target_depth": 2, "nll_delta": -0.1},
+                ],
                 "filtered_simplicial_objects": [node["filtered_simplicial_object"] for node in nodes],
             }
         ),
@@ -1946,6 +1966,20 @@ def test_validate_audit_root_rejects_missing_graphcg_readability_contract(tmp_pa
     report = validator.validate_audit_root(audit, min_rows=1, min_candidates=4, min_depth=2)
     assert not report["ok"]
     assert any("structured readability contract" in err for err in report["errors"])
+
+
+def test_validate_audit_root_rejects_missing_embedding_trajectory_identity_contract(tmp_path: Path):
+    validator = _load_validator()
+    audit = tmp_path / "step_00000001" / "got_audit"
+    row = _row(audit, ".")
+    payload_path = row / "got_embedding_map_payloads.json"
+    payload = json.loads(payload_path.read_text(encoding="utf-8"))
+    payload.pop("layout_contract")
+    payload_path.write_text(json.dumps(payload), encoding="utf-8")
+    _write(audit / "codex_browser_index.html", _codex_browser_html(_browser_samples(audit, ["."])))
+    report = validator.validate_audit_root(audit, min_rows=1, min_candidates=4, min_depth=2)
+    assert not report["ok"]
+    assert any("trajectory identity contract" in err for err in report["errors"])
 
 
 def test_validate_audit_root_rejects_nll_density_state_provenance_gaps(tmp_path: Path):

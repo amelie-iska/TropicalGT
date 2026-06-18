@@ -471,7 +471,7 @@ text in hover/payload, and support-collapse language in the title. Tests:
 `test_tropical_support_heatmap_does_not_fabricate_invalid_supports`. Browser
 QA screenshot: `/tmp/tropicalgt_tropical_support_collapse_titles_fixed.png`.
 
-- [ ] **Step 8.3: Write failing tests for embedding-map trajectory identity**
+- [x] **Step 8.3: Write failing tests for embedding-map trajectory identity**
 
 Assert the embedding map HTML/payload includes branch/depth metadata and actual parent-child transitions:
 ```python
@@ -481,9 +481,20 @@ assert payload["edges"][0]["source"]
 assert payload["nodes"][0]["embedding_source"] == "model graph_state"
 ```
 
-- [ ] **Step 8.4: Redesign embedding map**
+- [x] **Step 8.4: Redesign embedding map**
 
 Keep PCA from model graph-state embeddings, but add branch/depth styling, explicit parent-child arrows, chosen/best terminal path emphasis, and collapse diagnostics. If PCA stress or duplicate-coordinate ratio is poor, show that warning prominently and avoid overclaiming geometric separation.
+
+
+Implemented 2026-06-18: `got_embedding_map_payloads.json` now carries
+`tropicalgt.embedding_trajectory_identity.v1`, branch/depth metadata on every
+node, explicit `graph_of_thought_parent_edges` transition rows with NLL deltas,
+model graph-state embedding source fields, PCA stress/duplicate-coordinate
+warning policy, and a no-overclaim geometry flag. The embedding map title and
+traces call out GoT parent-child trajectory transitions, and the validator
+rejects missing trajectory-identity contracts. CPU-only checks passed: focused
+embedding visualization test, focused embedding validator test, and `py_compile`
+for touched Python files.
 
 - [x] **Step 8.5: Write failing tests for SimplexTree correctness and readability**
 

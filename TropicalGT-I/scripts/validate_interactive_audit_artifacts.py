@@ -1284,6 +1284,28 @@ def validate_row(row_dir: Path, *, min_candidates: int = 8, min_depth: int = 2, 
 
     _assert(len(embedded_nodes) == len(nodes), errors, "embedding map payload node count differs from trajectory payload")
     _assert(embedding_payload.get("coordinate_source", "").startswith("PCA of model graph_state embeddings"), errors, "embedding map payload has wrong coordinate source")
+    embedding_layout = embedding_payload.get("layout_contract", {}) if isinstance(embedding_payload.get("layout_contract"), dict) else {}
+    embedded_edges = embedding_payload.get("edges", []) if isinstance(embedding_payload.get("edges"), list) else []
+    _assert(embedding_layout.get("schema_version") == "tropicalgt.embedding_trajectory_identity.v1", errors, "embedding map payload lacks trajectory identity contract")
+    _assert(embedding_layout.get("coordinate_source") == "model graph_state embeddings", errors, "embedding map trajectory identity has wrong coordinate source")
+    _assert(embedding_layout.get("branch_depth_metadata_present") is True, errors, "embedding map trajectory identity lacks branch/depth metadata")
+    _assert(embedding_layout.get("parent_child_transitions_present") is True, errors, "embedding map trajectory identity lacks parent-child transitions")
+    _assert(embedding_layout.get("edge_source") == "graph_of_thought_parent_edges", errors, "embedding map trajectory identity has wrong edge source")
+    _assert(embedding_layout.get("node_embedding_source") == "model graph_state", errors, "embedding map trajectory identity has wrong node embedding source")
+    _assert(embedding_layout.get("geometric_separation_overclaim_allowed") is False, errors, "embedding map trajectory identity permits geometric separation overclaims")
+    _assert(embedding_layout.get("no_proxy_or_fallback") is True, errors, "embedding map trajectory identity lacks no-proxy flag")
+    _assert(int(_finite_float(embedding_layout.get("parent_child_transition_count"), -1.0)) == len(embedded_edges), errors, "embedding map parent-child transition count mismatches edges")
+    for index, node in enumerate(embedded_nodes):
+        if not isinstance(node, dict):
+            continue
+        _assert(node.get("embedding_source") == "model graph_state", errors, f"embedding map node {index} lacks model graph_state source")
+        _assert("branch_id" in node and "depth" in node, errors, f"embedding map node {index} lacks branch/depth metadata")
+    for index, edge in enumerate(embedded_edges):
+        if not isinstance(edge, dict):
+            continue
+        _assert(edge.get("edge_source") == "graph_of_thought_parent_edges", errors, f"embedding map edge {index} has wrong source")
+        _assert(edge.get("transition_kind") == "GoT parent-child trajectory", errors, f"embedding map edge {index} has wrong transition kind")
+        _assert(edge.get("source") and edge.get("target"), errors, f"embedding map edge {index} lacks source/target")
     _assert(len(embedding_objects) == len(embedded_nodes), errors, "embedding map payload does not include one filtered simplicial object per node")
     _assert(
         any(isinstance(obj.get("simplices"), list) and obj.get("simplices") for obj in embedding_objects),

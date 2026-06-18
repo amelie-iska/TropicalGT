@@ -710,6 +710,7 @@ def test_got_trajectory_visualization_renders_simplicial_panel_and_nll_surface(t
     paths = write_got_trajectory_visualization(scaling, tmp_path)
     html = Path(paths["got_trajectory_3d"]).read_text(encoding="utf-8")
     embedding_map_html = Path(paths["got_embedding_map_3d"]).read_text(encoding="utf-8")
+    embedding_payload = json.loads(Path(paths["got_embedding_map_payloads"]).read_text(encoding="utf-8"))
     full_complex_html = Path(paths["got_full_trajectory_complex"]).read_text(encoding="utf-8")
     full_tree_html = Path(paths["got_full_trajectory_simplex_tree_3d"]).read_text(encoding="utf-8")
     probability_tree_html = Path(paths["got_full_trajectory_simplex_tree_3d_jensen_shannon"]).read_text(encoding="utf-8")
@@ -846,6 +847,26 @@ def test_got_trajectory_visualization_renders_simplicial_panel_and_nll_surface(t
     assert "Graph-of-thought embedding-space trajectory map" in embedding_map_html
     assert "actual graph_state PCA" in embedding_map_html
     assert "distance corr" in embedding_map_html
+    assert "GoT parent-child trajectory" in embedding_map_html
+    assert ("branch/depth" in embedding_map_html) or ("branch\\u002fdepth" in embedding_map_html)
+    embedding_contract = embedding_payload["layout_contract"]
+    assert embedding_contract["schema_version"] == "tropicalgt.embedding_trajectory_identity.v1"
+    assert embedding_contract["coordinate_source"] == "model graph_state embeddings"
+    assert embedding_contract["branch_depth_metadata_present"] is True
+    assert embedding_contract["parent_child_transitions_present"] is True
+    assert embedding_contract["parent_child_transition_count"] == 3
+    assert embedding_contract["edge_source"] == "graph_of_thought_parent_edges"
+    assert embedding_contract["geometric_separation_overclaim_allowed"] is False
+    assert embedding_contract["no_proxy_or_fallback"] is True
+    assert embedding_payload["nodes"][0]["embedding_source"] == "model graph_state"
+    assert embedding_payload["nodes"][0]["branch_id"] == "root"
+    assert embedding_payload["nodes"][1]["depth"] == 1
+    assert embedding_payload["nodes"][1]["branch_id"] == "verify"
+    assert embedding_payload["edges"][0]["source"] == record.record_id
+    assert embedding_payload["edges"][0]["edge_source"] == "graph_of_thought_parent_edges"
+    assert embedding_payload["edges"][0]["transition_kind"] == "GoT parent-child trajectory"
+    assert embedding_payload["edges"][0]["target_depth"] == 1
+    assert "nll_delta" in embedding_payload["edges"][0]
     overlay_contract = full_complex_payload["trajectory_complex_overlay_contract"]
     assert overlay_contract["schema_version"] == "tropicalgt.trajectory_complex_overlay_contract.v1"
     assert overlay_contract["safe_to_render_available_views"] is True

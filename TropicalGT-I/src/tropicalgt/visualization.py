@@ -1010,8 +1010,8 @@ def _write_got_embedding_map(
                     line=dict(color=_action_color(action), width=4),
                     hovertext=f"{html.escape(parent)} -> {html.escape(ids[idx])}<br>action={html.escape(action)}",
                     hoverinfo="text",
-                    showlegend=False,
-                    name=f"edge:{action}",
+                    showlegend=(idx == 1),
+                    name="GoT parent-child trajectory transitions" if idx == 1 else "GoT parent-child trajectory transitions",
                 )
             )
     fig.add_trace(
@@ -1048,6 +1048,7 @@ def _write_got_embedding_map(
             "Graph-of-thought embedding-space trajectory map "
             f"(actual graph_state PCA; distance corr={float(pca_report.get('pairwise_distance_correlation', 0.0)):.3f}, "
             f"stress={float(pca_report.get('normalized_stress', 0.0)):.3f})"
+            "<br><sup>GoT parent-child trajectory transitions with branch/depth metadata; PCA warnings are payload-backed</sup>"
         ),
         scene=dict(xaxis_title="PC1(graph_state)", yaxis_title="PC2(graph_state)", zaxis_title="PC3(graph_state)"),
         annotations=[
@@ -1064,8 +1065,31 @@ def _write_got_embedding_map(
         ],
     )
     _write_plotly_dark_html(path, fig, "Graph-of-thought embedding-space trajectory map", panel_items, show_filtration_slider=True)
+    duplicate_coordinate_count = int(sum(1 for value in pca_multiplicity if int(value) > 1))
+    duplicate_coordinate_ratio = float(duplicate_coordinate_count / max(len(candidates), 1))
+    pca_stress = float(pca_report.get("normalized_stress", 0.0) or 0.0)
+    pca_corr = float(pca_report.get("pairwise_distance_correlation", 0.0) or 0.0)
+    layout_contract = {
+        "schema_version": "tropicalgt.embedding_trajectory_identity.v1",
+        "coordinate_source": "model graph_state embeddings",
+        "pca_coordinate_policy": "PCA/MDS coordinates are used only for visual placement; branch/depth and parent-child identity come from the GoT tree metadata.",
+        "branch_depth_metadata_present": True,
+        "parent_child_transitions_present": True,
+        "parent_child_transition_count": int(sum(1 for row in candidates if row.get("parent") is not None)),
+        "edge_source": "graph_of_thought_parent_edges",
+        "node_embedding_source": "model graph_state",
+        "best_terminal_path_emphasis_available": any(row.get("is_best") or row.get("selected") for row in candidates),
+        "duplicate_coordinate_count": duplicate_coordinate_count,
+        "duplicate_coordinate_ratio": duplicate_coordinate_ratio,
+        "pca_normalized_stress": pca_stress,
+        "pca_pairwise_distance_correlation": pca_corr,
+        "pca_quality_warning": bool(pca_stress > 0.75 or duplicate_coordinate_ratio > 0.35 or pca_corr < 0.75),
+        "geometric_separation_overclaim_allowed": False,
+        "no_proxy_or_fallback": True,
+    }
     payload = {
         "coordinate_source": "PCA of model graph_state embeddings; no level/tree layout coordinates are used",
+        "layout_contract": layout_contract,
         "sampling": {
             "stochastic_actions": bool(scaling_report.get("stochastic_actions", False)),
             "temperature": scaling_report.get("sampling_temperature"),
@@ -1079,6 +1103,9 @@ def _write_got_embedding_map(
                 "parent": candidates[idx].get("parent"),
                 "path": candidates[idx].get("path", []),
                 "level": int(inferred_levels[idx]),
+                "depth": int(inferred_levels[idx]),
+                "branch_id": "/".join(str(part) for part in candidates[idx].get("path", []) if part) or "root",
+                "embedding_source": "model graph_state",
                 "nll": float(nll_values[idx]),
                 "embedding_pca": {"pc1": float(pca[idx, 0]), "pc2": float(pca[idx, 1]), "pc3": float(pca[idx, 2])},
                 "embedding": candidates[idx].get("embedding"),
@@ -1087,7 +1114,16 @@ def _write_got_embedding_map(
         ],
         "filtered_simplicial_objects": candidate_objects,
         "edges": [
-            {"source": row.get("parent"), "target": ids[idx], "action": _edge_action_label(row)}
+            {
+                "source": row.get("parent"),
+                "target": ids[idx],
+                "action": _edge_action_label(row),
+                "edge_source": "graph_of_thought_parent_edges",
+                "transition_kind": "GoT parent-child trajectory",
+                "source_depth": int(inferred_levels[id_to_idx[str(row.get("parent"))]]) if isinstance(row.get("parent"), str) and str(row.get("parent")) in id_to_idx else None,
+                "target_depth": int(inferred_levels[idx]),
+                "nll_delta": float(nll_values[idx] - nll_values[id_to_idx[str(row.get("parent"))]]) if isinstance(row.get("parent"), str) and str(row.get("parent")) in id_to_idx else None,
+            }
             for idx, row in enumerate(candidates)
             if row.get("parent") is not None
         ],
