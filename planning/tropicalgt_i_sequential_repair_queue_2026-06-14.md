@@ -757,3 +757,12 @@ The live item-by-item repair inventory is maintained in `planning/tropicalgt_i_c
 - [x] Corrected the stale tracked b54 BPB config memory-bank path to live under its own `output_dir` instead of the older b52 restart directory.
 - [x] Added regression coverage proving cross-run memory-bank paths block readiness.
 - [x] Focused verification passed: py-compile for readiness script/test, `git diff --check`, tracked BPB config memory-path scope audit, and `pytest TropicalGT-I/tests/test_readiness_audit.py TropicalGT-I/tests/test_training_metrics.py TropicalGT-I/tests/test_data_loader.py -q` (`33 passed`, two SentencePiece import deprecation warnings).
+
+### Current Objective Update - Analogical Assignment Solver Contract Pass
+
+- [x] Removed the active `greedy_fallback` solver label from analogical model-probability Jensen-Shannon assignment payloads.
+- [x] Added `tropicalgt.probability_assignment_solver_contract.v1` to probability-map diagnostics, vertex-map rows, retrieval summaries, and available/unavailable probability-vector evidence.
+- [x] Marked SciPy `linear_sum_assignment` rows as optimal finite linear-sum assignments over real model probability-vector JS costs.
+- [x] Marked greedy probability assignments as non-optimal diagnostic assignments when the optimal backend is unavailable; they remain real probability-vector evidence but are not optimal-transport, proxy-optimal, simplicial-map, chain-map, or persistence-module certificates by themselves.
+- [x] Updated provenance coverage from a fallback label to an explicit solver-availability contract.
+- [x] Focused verification passed: `pytest TropicalGT-I/tests/test_metrics_and_memory.py TropicalGT-I/tests/test_metric_provenance.py -q` and full provenance audit.

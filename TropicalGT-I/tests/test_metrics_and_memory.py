@@ -513,12 +513,21 @@ def test_probability_simplicial_map_diagnostics_certifies_filtered_chain_map():
     assert report["available"] is True
     assert report["map_source"] == "model_probability_jensen_shannon_assignment"
     assert report["assignment_metric"] == "jensen_shannon_distance_on_model_probability_vectors"
-    assert report["assignment_solver"] in {"scipy_linear_sum_assignment", "greedy_fallback"}
+    assert report["assignment_solver"] in {"scipy_linear_sum_assignment", "greedy_probability_assignment"}
+    assert "fallback" not in report["assignment_solver"]
+    assert report["assignment_is_optimal"] is (report["assignment_solver"] == "scipy_linear_sum_assignment")
+    solver_contract = report["assignment_solver_contract"]
+    assert solver_contract["schema_version"] == "tropicalgt.probability_assignment_solver_contract.v1"
+    assert solver_contract["assignment_solver"] == report["assignment_solver"]
+    assert solver_contract["assignment_is_optimal"] is report["assignment_is_optimal"]
+    assert solver_contract["no_proxy_or_fallback"] is True
     evidence = report["probability_vector_evidence"]
     assert evidence["schema_version"] == "tropicalgt.probability_vector_assignment_evidence.v1"
     assert evidence["available"] is True
     assert evidence["assignment_metric"] == "jensen_shannon_distance_on_model_probability_vectors"
     assert evidence["assignment_solver"] == report["assignment_solver"]
+    assert evidence["assignment_solver_contract"]["assignment_solver"] == report["assignment_solver"]
+    assert evidence["assignment_is_optimal"] is report["assignment_is_optimal"]
     assert evidence["all_displayed_query_vertices_have_probability_vectors"] is True
     assert evidence["all_displayed_memory_vertices_have_probability_vectors"] is True
     assert evidence["embedding_only_assignment_used"] is False
@@ -603,7 +612,9 @@ def test_analogical_memory_retrieval_uses_probability_simplicial_map_weight(tmp_
     assert hits[0]["probability_simplicial_map_available"] is True
     assert hits[0]["probability_simplicial_map_source"] == "model_probability_jensen_shannon_assignment"
     assert hits[0]["probability_simplicial_map_assignment_metric"] == "jensen_shannon_distance_on_model_probability_vectors"
-    assert hits[0]["probability_simplicial_map_assignment_solver"] in {"scipy_linear_sum_assignment", "greedy_fallback"}
+    assert hits[0]["probability_simplicial_map_assignment_solver"] in {"scipy_linear_sum_assignment", "greedy_probability_assignment"}
+    assert hits[0]["probability_simplicial_map_assignment_is_optimal"] is (hits[0]["probability_simplicial_map_assignment_solver"] == "scipy_linear_sum_assignment")
+    assert hits[0]["probability_simplicial_map_assignment_solver_contract"]["assignment_solver"] == hits[0]["probability_simplicial_map_assignment_solver"]
     assert hits[0]["probability_simplicial_map_probability_vector_evidence"]["embedding_only_assignment_used"] is False
     assert hits[0]["retrieval_weights"]["probability_simplicial_map_weight"] == 1.0
     assert hits[0]["retrieval_score_components"]["probability_simplicial_map"] > hits[1]["retrieval_score_components"]["probability_simplicial_map"]

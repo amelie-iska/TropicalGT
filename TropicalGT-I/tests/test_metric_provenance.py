@@ -22,6 +22,7 @@ def test_metric_provenance_registry_covers_current_risky_terms(tmp_path: Path):
         "synthetic_h0_fallback",
         "json_fallback_graph_trace",
         "parameter_golf_token_id_fallback",
+        "analogical_assignment_solver_contract",
         "training_data_budget_estimate",
         "config_default_fallback",
         "wandb_uncategorized_metric_namespace",
@@ -44,6 +45,7 @@ def test_metric_provenance_registry_covers_current_risky_terms(tmp_path: Path):
     assert registry["multipers_optional_signed_measure_backend"]["kind"] == "optional_backend_diagnostic"
     assert registry["buchsbaum_eisenbud_implied_rank_identity_diagnostic"]["kind"] == "diagnostic_rank_identity_not_certificate"
     assert registry["simplicial_projection_display_layout_evidence"]["kind"] == "visual_display_layout_boundary"
+    assert registry["analogical_assignment_solver_contract"]["kind"] == "algorithmic_solver_availability_contract"
 
 
 def test_metric_provenance_audit_writes_json_and_markdown(tmp_path: Path):

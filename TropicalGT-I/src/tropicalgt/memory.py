@@ -380,7 +380,14 @@ def probability_simplicial_map_diagnostics(query_obj: dict[str, Any] | None, mem
         return _empty_probability_map(query_vertices, memory_vertices, "unavailable_no_model_probability_vectors")
     vertex_map = _probability_induced_vertex_assignment(query_vertices, memory_vertices, q_probs, m_probs)
     assignment_solver = str(vertex_map[0].get("assignment_solver", "unavailable")) if vertex_map else "unavailable"
-    probability_vector_evidence = _probability_vector_assignment_evidence(query_vertices, memory_vertices, q_probs, m_probs, assignment_solver)
+    solver_contract = (
+        vertex_map[0].get("assignment_solver_contract")
+        if vertex_map and isinstance(vertex_map[0].get("assignment_solver_contract"), dict)
+        else _probability_assignment_solver_contract(assignment_solver, reason="no_finite_assignment_pairs")
+    )
+    probability_vector_evidence = _probability_vector_assignment_evidence(
+        query_vertices, memory_vertices, q_probs, m_probs, assignment_solver, solver_contract
+    )
     mapping = {str(row["query_vertex"]): str(row["memory_vertex"]) for row in vertex_map}
     q_filtration = _simplex_filtration_lookup(query_obj or {})
     m_filtration = _simplex_filtration_lookup(memory_obj or {})
@@ -400,6 +407,9 @@ def probability_simplicial_map_diagnostics(query_obj: dict[str, Any] | None, mem
         "map_source": "model_probability_jensen_shannon_assignment",
         "assignment_metric": "jensen_shannon_distance_on_model_probability_vectors",
         "assignment_solver": assignment_solver,
+        "assignment_solver_contract": solver_contract,
+        "assignment_is_optimal": bool(solver_contract.get("assignment_is_optimal", False)),
+        "optimal_assignment_backend_available": bool(solver_contract.get("optimal_assignment_backend_available", False)),
         "field": "F2",
         "ring": "F2[x_level,x_radius]",
         "probability_alignment": "zero_pad_to_common_token_index_feature_space_then_renormalize",
@@ -519,6 +529,8 @@ def _probability_simplicial_map_retrieval_fields(
         "probability_simplicial_map_source": source,
         "probability_simplicial_map_assignment_metric": str(report.get("assignment_metric", "unavailable")),
         "probability_simplicial_map_assignment_solver": str(report.get("assignment_solver", "unavailable")),
+        "probability_simplicial_map_assignment_is_optimal": bool(report.get("assignment_is_optimal", False)),
+        "probability_simplicial_map_assignment_solver_contract": report.get("assignment_solver_contract", {}) if isinstance(report.get("assignment_solver_contract"), dict) else {},
         "probability_simplicial_map_vertex_assignment_count": int(len(report.get("vertex_map", [])) if isinstance(report.get("vertex_map"), list) else 0),
         "probability_simplicial_map_checked_simplices": int(report.get("simplex_tree_map_checked", 0) or 0),
         "probability_simplicial_map_preserved_simplices": int(report.get("simplex_tree_map_preserved", 0) or 0),
@@ -658,14 +670,23 @@ def _probability_induced_vertex_assignment(
                 level_penalty = 0.01 * abs(float(q.get("level", 0.0) or 0.0) - float(m.get("level", 0.0) or 0.0))
             costs[qi, mi] = float(dist + type_penalty + level_penalty)
     pairs: list[tuple[int, int]] = []
-    assignment_solver = "greedy_fallback"
+    assignment_solver = "greedy_probability_assignment"
+    solver_contract = _probability_assignment_solver_contract(
+        assignment_solver,
+        reason="scipy_linear_sum_assignment_unavailable",
+    )
     try:
         from scipy.optimize import linear_sum_assignment  # type: ignore
 
         row_ind, col_ind = linear_sum_assignment(costs)
         pairs = [(int(r), int(c)) for r, c in zip(row_ind, col_ind) if math.isfinite(float(costs[int(r), int(c)])) and costs[int(r), int(c)] < 1e5]
         assignment_solver = "scipy_linear_sum_assignment"
-    except Exception:
+        solver_contract = _probability_assignment_solver_contract(assignment_solver)
+    except Exception as exc:
+        solver_contract = _probability_assignment_solver_contract(
+            assignment_solver,
+            reason=f"scipy_linear_sum_assignment_unavailable:{type(exc).__name__}",
+        )
         used: set[int] = set()
         for qi in range(len(query_vertices)):
             order = np.argsort(costs[qi])
@@ -687,6 +708,10 @@ def _probability_induced_vertex_assignment(
                 "jensen_shannon_distance": js_distance,
                 "assignment_metric": "jensen_shannon_distance_on_model_probability_vectors",
                 "assignment_solver": assignment_solver,
+                "assignment_solver_contract": solver_contract,
+                "assignment_is_optimal": bool(solver_contract.get("assignment_is_optimal", False)),
+                "optimal_assignment_backend": solver_contract.get("optimal_assignment_backend"),
+                "optimal_assignment_backend_available": bool(solver_contract.get("optimal_assignment_backend_available", False)),
                 "map_source": "model_probability_jensen_shannon_assignment",
                 "query_probability_source": query_vertices[qi].get("probability_source"),
                 "memory_probability_source": memory_vertices[mi].get("probability_source"),
@@ -695,12 +720,42 @@ def _probability_induced_vertex_assignment(
     return rows
 
 
+def _probability_assignment_solver_contract(
+    assignment_solver: str,
+    *,
+    reason: str | None = None,
+) -> dict[str, Any]:
+    if assignment_solver == "scipy_linear_sum_assignment":
+        return {
+            "schema_version": "tropicalgt.probability_assignment_solver_contract.v1",
+            "assignment_solver": assignment_solver,
+            "assignment_is_optimal": True,
+            "optimal_assignment_backend": "scipy.optimize.linear_sum_assignment",
+            "optimal_assignment_backend_available": True,
+            "greedy_diagnostic_assignment": False,
+            "no_proxy_or_fallback": True,
+            "interpretation": "The vertex assignment is the finite linear-sum optimum over real Jensen-Shannon costs from model probability vectors.",
+        }
+    return {
+        "schema_version": "tropicalgt.probability_assignment_solver_contract.v1",
+        "assignment_solver": assignment_solver,
+        "assignment_is_optimal": False,
+        "optimal_assignment_backend": "scipy.optimize.linear_sum_assignment",
+        "optimal_assignment_backend_available": False,
+        "optimal_assignment_unavailable_reason": reason or "optimal_assignment_backend_unavailable",
+        "greedy_diagnostic_assignment": assignment_solver == "greedy_probability_assignment",
+        "no_proxy_or_fallback": True,
+        "interpretation": "A greedy diagnostic assignment over real model probability-vector Jensen-Shannon costs was recorded because the optimal assignment backend was unavailable; it is not labeled as an optimal transport or certified minimal assignment.",
+    }
+
+
 def _probability_vector_assignment_evidence(
     query_vertices: list[dict[str, Any]],
     memory_vertices: list[dict[str, Any]],
     q_probs: list[list[float] | None],
     m_probs: list[list[float] | None],
     assignment_solver: str,
+    solver_contract: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     query_count = sum(vec is not None for vec in q_probs)
     memory_count = sum(vec is not None for vec in m_probs)
@@ -711,6 +766,9 @@ def _probability_vector_assignment_evidence(
         "probability_vector_source": "model_probability_vectors_on_vertices",
         "assignment_metric": "jensen_shannon_distance_on_model_probability_vectors",
         "assignment_solver": assignment_solver,
+        "assignment_solver_contract": solver_contract or _probability_assignment_solver_contract(assignment_solver),
+        "assignment_is_optimal": bool((solver_contract or {}).get("assignment_is_optimal", False)),
+        "optimal_assignment_backend_available": bool((solver_contract or {}).get("optimal_assignment_backend_available", False)),
         "probability_alignment": "zero_pad_to_common_token_index_feature_space_then_renormalize",
         "displayed_query_vertices": int(len(query_vertices)),
         "displayed_memory_vertices": int(len(memory_vertices)),
@@ -741,6 +799,9 @@ def _unavailable_probability_vector_assignment_evidence(
         "probability_vector_source": "model_probability_vectors_on_vertices",
         "assignment_metric": "jensen_shannon_distance_on_model_probability_vectors",
         "assignment_solver": "unavailable",
+        "assignment_solver_contract": _probability_assignment_solver_contract("unavailable", reason=reason),
+        "assignment_is_optimal": False,
+        "optimal_assignment_backend_available": False,
         "probability_alignment": "zero_pad_to_common_token_index_feature_space_then_renormalize",
         "displayed_query_vertices": int(len(query_vertices)),
         "displayed_memory_vertices": int(len(memory_vertices)),

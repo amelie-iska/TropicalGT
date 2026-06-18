@@ -503,13 +503,13 @@ PROVENANCE_REGISTRY: tuple[ProvenanceEntry, ...] = (
         match_terms=("_safe_int_count", "return int(fallback)"),
     ),
     ProvenanceEntry(
-        name="analogical_assignment_solver_fallback",
-        kind="algorithmic_solver_fallback_label",
+        name="analogical_assignment_solver_contract",
+        kind="algorithmic_solver_availability_contract",
         surface="analogical probability-vector assignment",
         optimize_directly=False,
-        description="Greedy assignment label used when an optimal solver is unavailable for model-probability Jensen-Shannon matching.",
-        replacement_or_guardrail="The assignment remains over real model probability vectors and must report solver identity, costs, preservation diagnostics, and unavailable states; it must not imply a certified simplicial map by itself.",
-        match_terms=("greedy_fallback",),
+        description="Solver-availability contract for model-probability Jensen-Shannon vertex assignments.",
+        replacement_or_guardrail="Use SciPy linear-sum assignment when available; otherwise label the greedy probability assignment as non-optimal diagnostic evidence over real model probability vectors, not a proxy optimal map.",
+        match_terms=("greedy_probability_assignment", "assignment_is_optimal", "optimal_assignment_backend_available"),
     ),
 )
 
