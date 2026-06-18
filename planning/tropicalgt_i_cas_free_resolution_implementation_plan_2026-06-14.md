@@ -716,3 +716,26 @@ CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/scripts:TropicalGT-I/src /home/i
 Operational note: b61 failed at step 500 due to full disk while writing a periodic visualization artifact. The safe cache cleanup removed the old 33GB `~/.cache/tropicalgt/cas_free_resolution` tree and temp scratch directories, then b62 was restarted from step 0 under the always-on 5K gate.
 
 Next linear CAS item: continue expanding certified backend evidence and UI surfaces only from real CAS output; do not reintroduce repository-local CAS caches or substitute unavailable toric/tropical certificates with chain or support-token diagnostics.
+
+## 2026-06-18 CAS Bridge Provenance Contract
+
+Sequential CAS hardening item completed:
+
+- Added `tropicalgt.cas_backend_bridge_provenance.v1` as an explicit adapter-identity contract for Macaulay2, Sage, and Singular backend bridges.
+- `probe_cas_backends()` now records per-backend bridge provenance with executable path, version, availability, unavailable reason, subprocess bridge type, no-proxy policy, and render-safety flags.
+- `cas_execution_manifest()` now carries the same bridge provenance per backend alongside template key/hash/availability and complexity guards. The manifest also records `bridge_provenance_schema` at top level.
+- Legacy cached free-resolution results are hydrated with conservative bridge provenance if the cached manifest is missing it. Hydrated bridge rows remain adapter identity only and are explicitly unsafe to render as free resolutions without backend-emitted exactness/minimality evidence.
+- Regression tests assert that bridge provenance is never treated as a certificate: `adapter_identity_only=true`, `certificate_required_before_rendering=true`, `safe_to_render_without_certificate=false`, `safe_to_render_as_free_resolution=false`, and `no_proxy_or_fallback=true` for fresh probes, execution manifests, deterministic cache hits, complexity guards, disabled CAS reports, and legacy manifest hydration.
+
+Validation:
+
+```text
+CUDA_VISIBLE_DEVICES="" PYTHONPATH=/home/iska/Documents/amelie/bio/TropicalGT/TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest -q TropicalGT-I/tests/test_algebraic_persistence.py -k "backend_probe or disabled_by_environment or deterministic_unavailable_probe or complexity_guard or legacy_cached_resolution_manifest"
+# 7 passed, 25 deselected
+CUDA_VISIBLE_DEVICES="" PYTHONPATH=/home/iska/Documents/amelie/bio/TropicalGT/TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest -q TropicalGT-I/tests/test_algebraic_persistence.py
+# 32 passed
+CUDA_VISIBLE_DEVICES="" /home/iska/miniconda3/envs/tokengt/bin/python -m py_compile TropicalGT-I/src/tropicalgt/cas_free_resolution.py TropicalGT-I/tests/test_algebraic_persistence.py
+# passed
+```
+
+Next linear CAS item: expand certified small-module fixtures for Fitting/minor/Buchsbaum-Eisenbud output while keeping BEMultipliers post-certificate only and never substituting unavailable CAS evidence.

@@ -17,6 +17,7 @@ SCHEMA_VERSION = "tropicalgt.real_free_resolution.v1"
 MODULE_SCHEMA_VERSION = "tropicalgt.level_radius_module.v1"
 CACHE_SCHEMA_VERSION = "tropicalgt.real_free_resolution.cache.v1"
 ADAPTER_CACHE_VERSION = "2026-06-18.cas-free-resolution-cache-v3"
+CAS_BRIDGE_PROVENANCE_SCHEMA_VERSION = "tropicalgt.cas_backend_bridge_provenance.v1"
 SUPPORTED_RINGS = {
     "F2[x_level,x_radius]": ["x_level", "x_radius"],
     "F2[x_filtration,x_dimension]": ["x_filtration", "x_dimension"],
@@ -70,16 +71,115 @@ def module_available(name: str) -> bool:
         return False
 
 
+def _cas_backend_bridge_provenance(
+    name: str,
+    executable: str | None,
+    available: bool,
+    version: str | None,
+    *,
+    template_key: str | None = None,
+    template_available: bool | None = None,
+    timeout_s: float | int | None = None,
+    unavailable_reason: str | None = None,
+) -> dict[str, Any]:
+    reason = None if available else (unavailable_reason or "executable_not_found")
+    return {
+        "schema_version": CAS_BRIDGE_PROVENANCE_SCHEMA_VERSION,
+        "backend_name": str(name),
+        "bridge_type": "subprocess_cli",
+        "executable": executable,
+        "available": bool(available),
+        "version": version,
+        "template_key": template_key,
+        "template_available": None if template_available is None else bool(template_available),
+        "timeout_seconds": None if timeout_s is None else float(timeout_s),
+        "unavailable_reason": reason,
+        "adapter_identity_only": True,
+        "command_template_required_for_execution": True,
+        "certificate_required_before_rendering": True,
+        "safe_to_render_without_certificate": False,
+        "safe_to_render_as_free_resolution": False,
+        "no_proxy_or_fallback": True,
+        "render_rule": (
+            "Bridge provenance identifies the CAS adapter and command bridge only; it is not a mathematical "
+            "certificate, and no free-resolution object may render from it without backend-emitted exactness evidence."
+        ),
+    }
+
+
+def _bridge_provenance_for_manifest_row(row: dict[str, Any], *, command_templates: dict[str, str] | None = None) -> dict[str, Any]:
+    name = str(row.get("name", ""))
+    template_key = row.get("template_key")
+    if template_key is None:
+        template_key = {"M2": "macaulay2", "sage": "sage", "Singular": "singular"}.get(name, name.lower())
+    template_available = row.get("template_available")
+    if template_available is None and command_templates is not None:
+        template_available = bool(command_templates.get(str(template_key)))
+    if "available" in row:
+        available = bool(row.get("available"))
+    else:
+        available = bool(row.get("executable"))
+    reason = None if available else None
+    existing = row.get("bridge_provenance") if isinstance(row.get("bridge_provenance"), dict) else {}
+    if not available and isinstance(existing, dict):
+        reason = existing.get("unavailable_reason")
+    return _cas_backend_bridge_provenance(
+        name,
+        row.get("executable"),
+        available,
+        row.get("version"),
+        template_key=str(template_key) if template_key is not None else None,
+        template_available=None if template_available is None else bool(template_available),
+        timeout_s=row.get("timeout_seconds"),
+        unavailable_reason=reason,
+    )
+
+
+def _hydrate_execution_manifest_bridge_provenance(
+    manifest: dict[str, Any],
+    *,
+    command_templates: dict[str, str] | None = None,
+) -> dict[str, Any]:
+    hydrated = dict(manifest)
+    entries: list[dict[str, Any]] = []
+    raw_entries = hydrated.get("backend_entries", [])
+    if isinstance(raw_entries, list):
+        for raw in raw_entries:
+            if not isinstance(raw, dict):
+                continue
+            row = dict(raw)
+            bridge = row.get("bridge_provenance") if isinstance(row.get("bridge_provenance"), dict) else {}
+            if bridge.get("schema_version") != CAS_BRIDGE_PROVENANCE_SCHEMA_VERSION:
+                row["bridge_provenance"] = _bridge_provenance_for_manifest_row(row, command_templates=command_templates)
+            else:
+                merged = _bridge_provenance_for_manifest_row(row, command_templates=command_templates)
+                merged.update(bridge)
+                merged["schema_version"] = CAS_BRIDGE_PROVENANCE_SCHEMA_VERSION
+                merged["adapter_identity_only"] = True
+                merged["certificate_required_before_rendering"] = True
+                merged["safe_to_render_without_certificate"] = False
+                merged["safe_to_render_as_free_resolution"] = False
+                merged["no_proxy_or_fallback"] = True
+                row["bridge_provenance"] = merged
+            entries.append(row)
+    hydrated["backend_entries"] = entries
+    hydrated["bridge_provenance_schema"] = CAS_BRIDGE_PROVENANCE_SCHEMA_VERSION
+    return hydrated
+
+
 def probe_cas_backends() -> dict[str, Any]:
     backends = []
     for name in ("M2", "Singular", "sage"):
         executable = _candidate_executable(name)
+        available = executable is not None
+        version = _backend_version(executable) if executable else None
         backends.append(
             {
                 "name": name,
                 "executable": executable,
-                "available": executable is not None,
-                "version": _backend_version(executable) if executable else None,
+                "available": available,
+                "version": version,
+                "bridge_provenance": _cas_backend_bridge_provenance(name, executable, available, version),
             }
         )
     return {
@@ -91,6 +191,7 @@ def probe_cas_backends() -> dict[str, Any]:
             "BEMultipliers": module_available("BEMultipliers"),
             "bemultipliers": module_available("bemultipliers"),
         },
+        "bridge_provenance_schema": CAS_BRIDGE_PROVENANCE_SCHEMA_VERSION,
     }
 
 
@@ -604,25 +705,37 @@ def cas_execution_manifest(module_schema: dict[str, Any], *, templates: dict[str
         template_key = template_key_by_backend.get(str(backend_name), str(backend_name).lower())
         template = templates.get(template_key, "")
         guard = _cas_backend_complexity_guard(str(backend_name), module_schema) if module_schema else None
+        executable = probe_row.get("executable")
+        available = bool(probe_row.get("available"))
+        version = probe_row.get("version")
         backend_entries.append(
             {
                 "name": str(backend_name),
                 "template_key": template_key,
                 "template_sha256": sha256(template.encode("utf-8")).hexdigest() if template else None,
                 "template_available": bool(template),
-                "executable": probe_row.get("executable"),
-                "available": bool(probe_row.get("available")),
-                "version": probe_row.get("version"),
+                "executable": executable,
+                "available": available,
+                "version": version,
                 "complexity_guard_status": guard.get("status") if guard else "within_limits",
                 "complexity_guard_reason": guard.get("reason") if guard else "",
-                "safe_to_execute_under_current_limits": bool(probe_row.get("available") and template and guard is None),
+                "safe_to_execute_under_current_limits": bool(available and template and guard is None),
                 "certificate_required_before_rendering": True,
+                "bridge_provenance": _cas_backend_bridge_provenance(
+                    str(backend_name),
+                    executable,
+                    available,
+                    version,
+                    template_key=template_key,
+                    template_available=bool(template),
+                ),
                 "capabilities": capabilities.get(str(backend_name), {}),
             }
         )
     return {
         "schema_version": "tropicalgt.cas_execution_manifest.v1",
         "capability_matrix_schema": "tropicalgt.cas_backend_capabilities.v1",
+        "bridge_provenance_schema": CAS_BRIDGE_PROVENANCE_SCHEMA_VERSION,
         "module_schema_version": module_schema.get("schema_version"),
         "coefficient_ring": module_schema.get("coefficient_ring"),
         "variables": list(module_schema.get("variables", [])),
@@ -2165,8 +2278,8 @@ def _hydrate_cached_result_contracts(result: dict[str, Any]) -> dict[str, Any]:
     else:
         result["certificate_contract"] = current_contract
     result["paper_method_contract"] = result["certificate_contract"]["paper_method_contract"]
+    command_templates = result.get("command_templates") if isinstance(result.get("command_templates"), dict) else {}
     if not isinstance(result.get("cas_execution_manifest"), dict):
-        command_templates = result.get("command_templates") if isinstance(result.get("command_templates"), dict) else {}
         module_schema = {
             "schema_version": result.get("module_schema_version"),
             "coefficient_ring": result.get("coefficient_ring"),
@@ -2188,6 +2301,10 @@ def _hydrate_cached_result_contracts(result: dict[str, Any]) -> dict[str, Any]:
             "no_proxy_or_fallback": True,
             "render_rule": "Hydrated legacy cache entry; rerun CAS probe for full execution manifest details. Do not render a free resolution unless returned safe_to_render flags are true.",
         }
+    result["cas_execution_manifest"] = _hydrate_execution_manifest_bridge_provenance(
+        result["cas_execution_manifest"],
+        command_templates=command_templates,
+    )
     artifacts = result.get("cas_artifacts") if isinstance(result.get("cas_artifacts"), dict) else None
     if artifacts is not None:
         artifacts = dict(artifacts)

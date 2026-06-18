@@ -64,8 +64,24 @@ def _assert_real_resolution_guard(real, expected_ring):
     assert paper["grade_depth_regular_conditions"]["regular_sequence_claim_requires_certificate"] is True
     assert paper["no_proxy_or_fallback"] is True
     assert real["paper_method_contract"] == paper
+    probe = real["backend_probe"]
+    assert probe["bridge_provenance_schema"] == cas_free_resolution.CAS_BRIDGE_PROVENANCE_SCHEMA_VERSION
+    for row in probe["backends"]:
+        bridge = row["bridge_provenance"]
+        assert bridge["schema_version"] == cas_free_resolution.CAS_BRIDGE_PROVENANCE_SCHEMA_VERSION
+        assert bridge["backend_name"] == row["name"]
+        assert bridge["bridge_type"] == "subprocess_cli"
+        assert bridge["adapter_identity_only"] is True
+        assert bridge["certificate_required_before_rendering"] is True
+        assert bridge["safe_to_render_without_certificate"] is False
+        assert bridge["safe_to_render_as_free_resolution"] is False
+        assert bridge["no_proxy_or_fallback"] is True
+        assert "not a mathematical certificate" in bridge["render_rule"]
+        if row["available"] is False:
+            assert bridge["unavailable_reason"] == "executable_not_found"
     manifest = real["cas_execution_manifest"]
     assert manifest["schema_version"] == "tropicalgt.cas_execution_manifest.v1"
+    assert manifest["bridge_provenance_schema"] == cas_free_resolution.CAS_BRIDGE_PROVENANCE_SCHEMA_VERSION
     assert manifest["coefficient_ring"] == expected_ring
     assert manifest["backend_order"] == ["M2", "sage", "Singular"]
     assert manifest["capability_matrix_schema"] == "tropicalgt.cas_backend_capabilities.v1"
@@ -80,6 +96,18 @@ def _assert_real_resolution_guard(real, expected_ring):
     assert "multigraded_syzygies" in entries["sage"]["capabilities"]["unsafe_to_infer"]
     assert "multigraded_syzygies" in entries["Singular"]["capabilities"]["unsafe_to_infer"]
     assert all(row["certificate_required_before_rendering"] is True for row in entries.values())
+    for row in entries.values():
+        bridge = row["bridge_provenance"]
+        assert bridge["schema_version"] == cas_free_resolution.CAS_BRIDGE_PROVENANCE_SCHEMA_VERSION
+        assert bridge["backend_name"] == row["name"]
+        assert bridge["template_key"] == row["template_key"]
+        assert bridge["template_available"] is row["template_available"]
+        assert bridge["adapter_identity_only"] is True
+        assert bridge["certificate_required_before_rendering"] is True
+        assert bridge["safe_to_render_without_certificate"] is False
+        assert bridge["safe_to_render_as_free_resolution"] is False
+        assert bridge["no_proxy_or_fallback"] is True
+        assert "not a mathematical certificate" in bridge["render_rule"]
     assert manifest["bemultipliers_policy"]["is_resolution_backend"] is False
     assert "unavailable" in contract["unavailable_render_rule"]
     for key in (
@@ -178,12 +206,30 @@ def test_cas_backend_probe_reports_detected_executable_paths():
     backends = {row["name"]: row for row in probe["backends"]}
     assert set(backends) == {"M2", "Singular", "sage"}
     assert probe["preferred_order"] == ["M2", "sage", "Singular"]
+    assert probe["bridge_provenance_schema"] == cas_free_resolution.CAS_BRIDGE_PROVENANCE_SCHEMA_VERSION
     for name in ("M2", "Singular", "sage"):
         expected = cas_free_resolution._candidate_executable(name)
         assert backends[name]["available"] is (expected is not None)
         assert backends[name]["executable"] == expected
+        bridge = backends[name]["bridge_provenance"]
+        assert bridge["schema_version"] == cas_free_resolution.CAS_BRIDGE_PROVENANCE_SCHEMA_VERSION
+        assert bridge["backend_name"] == name
+        assert bridge["executable"] == expected
+        assert bridge["available"] is (expected is not None)
+        assert bridge["template_key"] is None
+        assert bridge["template_available"] is None
+        assert bridge["adapter_identity_only"] is True
+        assert bridge["certificate_required_before_rendering"] is True
+        assert bridge["safe_to_render_without_certificate"] is False
+        assert bridge["safe_to_render_as_free_resolution"] is False
+        assert bridge["no_proxy_or_fallback"] is True
+        assert "not a mathematical certificate" in bridge["render_rule"]
         if expected is not None:
             assert backends[name]["version"]
+            assert bridge["version"] == backends[name]["version"]
+            assert bridge["unavailable_reason"] is None
+        else:
+            assert bridge["unavailable_reason"] == "executable_not_found"
     bem = cas_free_resolution.probe_bemultipliers()
     assert bem["is_resolution_backend"] is False
     assert "never substitute" in bem["execution_policy"]
@@ -197,6 +243,42 @@ def test_bemultipliers_probe_reports_local_macaulay2_loader():
     if probe["local_macaulay2_package"]:
         assert probe["macaulay2_loader"].startswith('load "')
         assert probe["local_macaulay2_package"].endswith("BuchsbaumEisenbudMultipliers.m2")
+
+
+def test_legacy_cached_resolution_manifest_hydrates_bridge_provenance_contract():
+    hydrated = cas_free_resolution._hydrate_cached_result_contracts(
+        {
+            "module_schema_version": cas_free_resolution.MODULE_SCHEMA_VERSION,
+            "coefficient_ring": "F2[x_level,x_radius]",
+            "input_sha256": "abc123",
+            "command_templates": {"macaulay2": "M2 script", "sage": "sage script", "singular": "Singular script"},
+            "cas_execution_manifest": {
+                "schema_version": "tropicalgt.cas_execution_manifest.v1",
+                "backend_order": ["M2", "sage", "Singular"],
+                "backend_entries": [
+                    {"name": "M2", "template_key": "macaulay2", "template_available": True},
+                    {"name": "sage", "template_key": "sage", "template_available": True},
+                    {"name": "Singular", "template_key": "singular", "template_available": True},
+                ],
+                "no_proxy_or_fallback": True,
+            },
+        }
+    )
+    manifest = hydrated["cas_execution_manifest"]
+    assert manifest["bridge_provenance_schema"] == cas_free_resolution.CAS_BRIDGE_PROVENANCE_SCHEMA_VERSION
+    for row in manifest["backend_entries"]:
+        bridge = row["bridge_provenance"]
+        assert bridge["schema_version"] == cas_free_resolution.CAS_BRIDGE_PROVENANCE_SCHEMA_VERSION
+        assert bridge["backend_name"] == row["name"]
+        assert bridge["template_key"] == row["template_key"]
+        assert bridge["template_available"] is True
+        assert bridge["adapter_identity_only"] is True
+        assert bridge["certificate_required_before_rendering"] is True
+        assert bridge["safe_to_render_without_certificate"] is False
+        assert bridge["safe_to_render_as_free_resolution"] is False
+        assert bridge["no_proxy_or_fallback"] is True
+        assert bridge["unavailable_reason"] == "executable_not_found"
+        assert "not a mathematical certificate" in bridge["render_rule"]
 
 
 def test_failed_cas_certificate_preserves_module_provenance_without_artifacts():
