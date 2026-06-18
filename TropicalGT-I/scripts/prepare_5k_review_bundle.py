@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import importlib.util
 import json
 from pathlib import Path
 import subprocess
@@ -56,6 +57,24 @@ def _read_json(path: Path | None) -> dict[str, Any]:
     if path is None or not path.exists():
         return {}
     return json.loads(path.read_text(encoding="utf-8"))
+
+
+def _write_herschel_report_artifacts(
+    *,
+    bundle_path: Path,
+    bundle_dir: Path,
+    boundary_step: int,
+) -> tuple[dict[str, Any], Path, Path]:
+    module_path = ROOT / "TropicalGT-I" / "scripts" / "write_herschel_5k_report.py"
+    spec = importlib.util.spec_from_file_location("write_herschel_5k_report", module_path)
+    if spec is None or spec.loader is None:
+        raise RuntimeError(f"cannot_load_herschel_report_module:{_relative_project_path(module_path)}")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    markdown_path = bundle_dir / f"herschel_5k_evidence_report_step_{boundary_step:08d}.md"
+    json_path = bundle_dir / f"herschel_5k_evidence_report_step_{boundary_step:08d}.json"
+    summary = module.write_herschel_report(bundle_path, markdown_path, json_path)
+    return summary, markdown_path, json_path
 
 
 def _shell_join(parts: list[str | Path]) -> str:
@@ -311,9 +330,19 @@ def _bundle_markdown(bundle: dict[str, Any]) -> str:
         lines.extend(["## Command Results", "```json", json.dumps(bundle.get("command_results", []), indent=2), "```", ""])
     lines.extend(
         [
+            "## Bundle Artifacts",
+            "```json",
+            json.dumps(bundle.get("artifacts", {}), indent=2),
+            "```",
+            "",
             "## Artifact Inventory",
             "```json",
             json.dumps(inventory, indent=2),
+            "```",
+            "",
+            "## Herschel Report Summary",
+            "```json",
+            json.dumps(bundle.get("herschel_report_summary", {}), indent=2),
             "```",
             "",
             "## Checkpoint Evidence",
@@ -475,6 +504,15 @@ def prepare_review_bundle(args: argparse.Namespace) -> dict[str, Any]:
         "command_results": command_results,
         "policy": "Path-only review bundle by default; explicit command execution writes logs under the generated review bundle. Legacy audit backfill must run before strict validators when requested and may only write explicit unavailable diagnostics or rerender visual contracts from raw payloads. Do not stage generated run artifacts, checkpoints, datasets, caches, W&B data, or secrets.",
     }
+    bundle_path.write_text(json.dumps(bundle, indent=2), encoding="utf-8")
+    herschel_summary, herschel_md_path, herschel_json_path = _write_herschel_report_artifacts(
+        bundle_path=bundle_path,
+        bundle_dir=bundle_dir,
+        boundary_step=boundary_step,
+    )
+    bundle["artifacts"]["herschel_report_markdown"] = _relative_project_path(herschel_md_path)
+    bundle["artifacts"]["herschel_report_json"] = _relative_project_path(herschel_json_path)
+    bundle["herschel_report_summary"] = herschel_summary
     bundle_path.write_text(json.dumps(bundle, indent=2), encoding="utf-8")
     markdown_path.write_text(_bundle_markdown(bundle), encoding="utf-8")
     return bundle

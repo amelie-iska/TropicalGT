@@ -39,3 +39,18 @@ Each restart decision must consider all implemented paradigms: TokenGT-style gra
 Herschel and any campaign/review-loop automation must not launch, resume, or restart GPU training unless an explicit GPU launch clearance is present. The accepted clearance forms are `--allow-gpu-launch`, `TROPICALGT_ALLOW_GPU_LAUNCH=true`, or a declared `--gpu-memory-budget-mb` / `TROPICALGT_GPU_MEMORY_BUDGET_MB` paired with a human-readable clearance note. CPU-only report generation, checkpoint evidence inspection, prompt writing, and unavailable-evidence recording may proceed without clearance. Any blocked launch must write a `tropicalgt.gpu_launch_safety_contract.v1` JSON record with exact blockers, and no blocked GPU launch may be treated as a failed training result.
 
 The current implementation writes this contract from both `parameter_golf_codex_review_loop.py` and `run_advanced_bpb_campaign.py`; this preserves the user's separate GPU work while keeping Herschel's 5K review/report path available.
+
+## 2026-06-18 CPU-Only Herschel 5K Report Generation
+
+Herschel's 5K evidence report path is now implemented as a deterministic CPU-only artifact generator over the existing post-5K review bundle. `prepare_5k_review_bundle.py` writes the normal no-proxy bundle, calls `write_herschel_5k_report.py`, then records `herschel_report_markdown`, `herschel_report_json`, and `herschel_report_summary` back into the bundle. The report includes run identity, BPB/graph-BPB, checkpoint availability and restart safety, execution readiness, advanced BPB gate failures, grouped advanced sidecar counts, restart blockers, and a Mermaid restart-decision diagram. It does not train, evaluate, browse, validate, load checkpoints, inspect GPUs, or synthesize missing evidence.
+
+Blocked evidence remains blocked. Empty or unavailable checkpoints, missing post-5K command results, failed advanced BPB gates, and failed validators are copied into the report as exact blockers; no checkpoint-backed or sidecar-backed restart can be justified by this report unless the underlying bundle evidence already permits it. This keeps Herschel useful while the user may be running another GPU job.
+
+Validation:
+
+```text
+CUDA_VISIBLE_DEVICES="" python3 -m py_compile TropicalGT-I/scripts/write_herschel_5k_report.py TropicalGT-I/scripts/prepare_5k_review_bundle.py TropicalGT-I/tests/test_herschel_5k_report.py
+# passed
+CUDA_VISIBLE_DEVICES="" /home/iska/miniconda3/bin/conda run -n tokengt python -m pytest -q tests/test_herschel_5k_report.py tests/test_prepare_5k_review_bundle.py tests/test_launch_safety.py tests/test_parameter_golf_review_loop.py
+# 34 passed in 1.17s
+```
