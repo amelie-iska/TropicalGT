@@ -1460,3 +1460,24 @@ CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src:TropicalGT-I/scripts /home/i
 CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src:TropicalGT-I/scripts /home/iska/miniconda3/envs/tokengt/bin/python -m pytest -q TropicalGT-I/tests/test_interactive_artifact_validator.py -k "chart_bundle or vector_bundle"
 # 2 passed
 ```
+
+## 2026-06-18 Tropical/Toric CAS Input Contracts
+
+Sequential tropical/toric no-proxy item completed after vector-bundle paper sidecar completeness tiers:
+
+- Tropical fan sidecars now emit `tropicalgt.tropical_fan_input_contract.v1`, recording whether an explicit model-derived ideal was present, where it came from, required `variables`/`generators`, accepted keys, input hash, and rejected proxy sources.
+- Finite toric-ideal sidecars now emit `tropicalgt.toric_embedding_input_contract.v1`, recording whether an explicit integer exponent matrix was present, where it came from, accepted keys, input hash, and rejected proxy sources.
+- Certified and unavailable browser tables expose the input contract so reviewers can see whether the CAS sidecar is blocked by missing input, missing backend certificate, or a real unavailable state.
+- The interactive artifact validator now requires those contracts for present tropical/toric sidecars and rejects proxy-allowing contracts, missing hashes on available sidecars, or available sidecars without explicit CAS input evidence.
+- This does not promote support-token traces, chart-bundle activations, GraphCG cells, embeddings, chain ranks, or visualization rows into tropical fans or toric ideals. Those remain rejected proxy sources.
+
+Validation:
+
+```text
+CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src:TropicalGT-I/scripts /home/iska/miniconda3/envs/tokengt/bin/python -m py_compile TropicalGT-I/src/tropicalgt/visualization.py TropicalGT-I/scripts/validate_interactive_audit_artifacts.py TropicalGT-I/tests/test_simplicial_visualization.py TropicalGT-I/tests/test_interactive_artifact_validator.py
+# passed
+CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src:TropicalGT-I/scripts /home/iska/miniconda3/envs/tokengt/bin/python -m pytest -q TropicalGT-I/tests/test_simplicial_visualization.py -k "tropical_fan_diagnostics or toric_embedding_sidecar"
+# 4 passed
+CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src:TropicalGT-I/scripts /home/iska/miniconda3/envs/tokengt/bin/python -m pytest -q TropicalGT-I/tests/test_interactive_artifact_validator.py -k "tropical_fan_input_contract or toric_input_contract or accepts_three_interactive_rows"
+# 3 passed
+```

@@ -695,10 +695,18 @@ def validate_row(row_dir: Path, *, min_candidates: int = 8, min_depth: int = 2, 
     tropical_fan_payload = _read_json(row_dir / REQUIRED_JSON["tropical_fan_diagnostics"]) if (row_dir / REQUIRED_JSON["tropical_fan_diagnostics"]).exists() else {}
     if tropical_fan_payload:
         fan_diag = tropical_fan_payload.get("diagnostics", {}) if isinstance(tropical_fan_payload.get("diagnostics"), dict) else {}
+        fan_input = tropical_fan_payload.get("cas_input_contract", {}) if isinstance(tropical_fan_payload.get("cas_input_contract"), dict) else {}
         _assert(tropical_fan_payload.get("schema_version") == "tropicalgt.tropical_fan_visual_audit.v1", errors, "tropical fan diagnostics payload has wrong schema")
         _assert(fan_diag.get("schema_version") == "tropicalgt.cas_tropical_fan.v1", errors, "tropical fan diagnostics payload is missing CAS schema")
+        _assert(fan_input.get("schema_version") == "tropicalgt.tropical_fan_input_contract.v1", errors, "tropical fan diagnostics missing CAS input contract schema")
+        _assert(fan_input.get("actual_data_only") is True, errors, "tropical fan CAS input contract missing actual-data-only flag")
+        _assert(fan_input.get("no_proxy_or_fallback") is True, errors, "tropical fan CAS input contract missing no-proxy flag")
+        _assert(fan_input.get("proxy_substitution_allowed") is False, errors, "tropical fan CAS input contract allows proxy substitution")
         _assert("support-token proxies" in str(tropical_fan_payload.get("render_contract", "")), errors, "tropical fan diagnostics missing no-proxy render contract")
         if tropical_fan_payload.get("available") is True:
+            _assert(fan_input.get("explicit_cas_input_present") is True, errors, "available tropical fan diagnostics missing explicit CAS input evidence")
+            _assert(fan_input.get("safe_to_render_certificate") is True, errors, "available tropical fan diagnostics input contract is not safe to render")
+            _assert(bool(fan_input.get("input_sha256")), errors, "available tropical fan diagnostics missing CAS input hash")
             _assert(fan_diag.get("safe_to_render_as_tropical_fan") is True, errors, "available tropical fan diagnostics are not marked safe to render")
             _assert(fan_diag.get("certificate_attached") is True, errors, "available tropical fan diagnostics missing certificate")
             _assert(fan_diag.get("fan_diagnostics_certified") is True, errors, "available tropical fan diagnostics are not certified")
@@ -706,6 +714,7 @@ def validate_row(row_dir: Path, *, min_candidates: int = 8, min_depth: int = 2, 
             _assert(_finite_float(summary.get("ray_count"), 0.0) > 0, errors, "available tropical fan diagnostics have no rays")
         else:
             _assert(tropical_fan_payload.get("safe_to_render_as_tropical_fan") is False, errors, "unavailable tropical fan diagnostics marked safe to render")
+            _assert(fan_input.get("safe_to_render_certificate") is False, errors, "unavailable tropical fan diagnostics input contract marked safe to render")
             _assert(fan_diag.get("safe_to_render_as_tropical_fan") is False, errors, "unavailable CAS tropical fan report marked safe to render")
 
     toric_sidecar_path = row_dir / "toric_embedding_sidecar.json"
@@ -713,12 +722,20 @@ def validate_row(row_dir: Path, *, min_candidates: int = 8, min_depth: int = 2, 
     if toric_payload:
         toric_diag = toric_payload.get("diagnostics", {}) if isinstance(toric_payload.get("diagnostics"), dict) else {}
         _assert(toric_payload.get("schema_version") == "tropicalgt.toric_embedding_sidecar_visual_audit.v1", errors, "toric embedding sidecar payload has wrong schema")
+        toric_input = toric_payload.get("cas_input_contract", {}) if isinstance(toric_payload.get("cas_input_contract"), dict) else {}
         _assert(toric_diag.get("schema_version") == "tropicalgt.cas_toric_embedding.v1", errors, "toric embedding sidecar payload is missing CAS schema")
+        _assert(toric_input.get("schema_version") == "tropicalgt.toric_embedding_input_contract.v1", errors, "toric embedding sidecar missing CAS input contract schema")
+        _assert(toric_input.get("actual_data_only") is True, errors, "toric embedding CAS input contract missing actual-data-only flag")
+        _assert(toric_input.get("no_proxy_or_fallback") is True, errors, "toric embedding CAS input contract missing no-proxy flag")
+        _assert(toric_input.get("proxy_substitution_allowed") is False, errors, "toric embedding CAS input contract allows proxy substitution")
         _assert("chart-bundle" in str(toric_payload.get("render_contract", "")) and "proxies" in str(toric_payload.get("render_contract", "")), errors, "toric embedding sidecar missing no-proxy render contract")
         _assert(toric_payload.get("safe_to_render_as_tropical_variety_embedding") is False, errors, "toric sidecar incorrectly claims safe tropical-variety embedding")
         _assert(toric_payload.get("safe_to_render_as_global_toric_variety_embedding") is False, errors, "toric sidecar incorrectly claims global toric-variety embedding")
         _assert(toric_payload.get("safe_to_use_as_normal_fan_certificate") is False, errors, "toric sidecar incorrectly claims normal-fan certificate")
         if toric_payload.get("available") is True:
+            _assert(toric_input.get("explicit_cas_input_present") is True, errors, "available toric sidecar missing explicit CAS input evidence")
+            _assert(toric_input.get("safe_to_render_certificate") is True, errors, "available toric sidecar input contract is not safe to render")
+            _assert(bool(toric_input.get("input_sha256")), errors, "available toric sidecar missing CAS input hash")
             _assert(toric_payload.get("safe_to_render_as_finite_toric_ideal_sidecar") is True, errors, "available toric sidecar is not marked safe as finite toric-ideal sidecar")
             _assert(toric_diag.get("certificate_attached") is True, errors, "available toric sidecar missing certificate")
             _assert(toric_diag.get("toric_ideal_certified") is True, errors, "available toric sidecar is not toric-ideal certified")
@@ -728,6 +745,7 @@ def validate_row(row_dir: Path, *, min_candidates: int = 8, min_depth: int = 2, 
             _assert(bool(matrix), errors, "available toric sidecar is missing exponent matrix evidence")
         else:
             _assert(toric_payload.get("safe_to_render_as_finite_toric_ideal_sidecar") is False, errors, "unavailable toric sidecar marked safe to render")
+            _assert(toric_input.get("safe_to_render_certificate") is False, errors, "unavailable toric sidecar input contract marked safe to render")
             _assert(toric_diag.get("safe_to_render_as_toric_embedding") is False, errors, "unavailable CAS toric report marked safe to render")
 
     chart_bundle_path = row_dir / "chart_bundle_transport_sidecar.json"

@@ -5050,6 +5050,71 @@ def _precomputed_tropical_fan_report(result: Mapping[str, Any]) -> tuple[str, Ma
     return None
 
 
+def _json_sha256(value: Any) -> str | None:
+    if value is None:
+        return None
+    try:
+        encoded = json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=True, default=str).encode("utf-8")
+    except Exception:
+        return None
+    return hashlib.sha256(encoded).hexdigest()
+
+
+def _cas_sidecar_input_contract(
+    *,
+    schema_version: str,
+    input_kind: str,
+    source_path: str,
+    spec: Mapping[str, Any] | None,
+    diagnostics: Mapping[str, Any] | None,
+    canonical_schema_key: str,
+    accepted_keys: Sequence[str],
+    required_fields: Sequence[str],
+    safe_to_render_certificate: bool,
+    unavailable_reason: str | None = None,
+) -> dict[str, Any]:
+    spec_map = spec if isinstance(spec, Mapping) else {}
+    diag_map = diagnostics if isinstance(diagnostics, Mapping) else {}
+    canonical = diag_map.get(canonical_schema_key) if isinstance(diag_map.get(canonical_schema_key), Mapping) else {}
+    input_sha256 = diag_map.get("input_sha256") or canonical.get("input_sha256") or _json_sha256(spec_map if spec_map else None)
+    declared_source = canonical.get("source") or spec_map.get("source") or None
+    required_present = all(field in spec_map or field in canonical for field in required_fields)
+    explicit_input_present = bool(required_present and (spec_map or canonical))
+    return {
+        "schema_version": schema_version,
+        "input_kind": input_kind,
+        "source_path": source_path,
+        "accepted_spec_keys": list(accepted_keys),
+        "required_fields": list(required_fields),
+        "required_fields_present": bool(required_present),
+        "explicit_cas_input_present": bool(explicit_input_present),
+        "declared_input_source": declared_source,
+        "canonical_schema_key": canonical_schema_key,
+        "canonical_schema_available": bool(canonical),
+        "canonical_schema_version": canonical.get("schema_version"),
+        "report_schema_version": diag_map.get("schema_version"),
+        "input_sha256": input_sha256,
+        "safe_to_run_cas_from_input": bool(explicit_input_present),
+        "safe_to_render_certificate": bool(safe_to_render_certificate and explicit_input_present and input_sha256),
+        "actual_data_only": True,
+        "no_proxy_or_fallback": True,
+        "proxy_substitution_allowed": False,
+        "rejected_proxy_sources": [
+            "chart_bundle_logits",
+            "toric_active_rows",
+            "support_tokens",
+            "graphcg_cells",
+            "embedding_similarity",
+            "visualization_rows",
+            "chain_rank_diagnostics",
+        ],
+        "unavailable_reason": unavailable_reason,
+    }
+
+
+_TROPICAL_FAN_INPUT_CONTRACT_SCHEMA = "tropicalgt.tropical_fan_input_contract.v1"
+
+
 def _unavailable_tropical_fan_payload(reason: str, *, source_path: str = "unavailable") -> dict[str, Any]:
     diagnostics = {
         "schema_version": "tropicalgt.cas_tropical_fan.v1",
@@ -5073,11 +5138,24 @@ def _unavailable_tropical_fan_payload(reason: str, *, source_path: str = "unavai
             ),
         },
     }
+    input_contract = _cas_sidecar_input_contract(
+        schema_version=_TROPICAL_FAN_INPUT_CONTRACT_SCHEMA,
+        input_kind="explicit_model_derived_tropical_ideal",
+        source_path=source_path,
+        spec=None,
+        diagnostics=diagnostics,
+        canonical_schema_key="ideal_schema",
+        accepted_keys=_TROPICAL_IDEAL_KEYS,
+        required_fields=("variables", "generators"),
+        safe_to_render_certificate=False,
+        unavailable_reason=reason,
+    )
     return {
         "schema_version": "tropicalgt.tropical_fan_visual_audit.v1",
         "available": False,
         "source_path": source_path,
         "ideal_spec": None,
+        "cas_input_contract": input_contract,
         "diagnostics": diagnostics,
         "safe_to_render_as_tropical_fan": False,
         "render_contract": "Tropical fan diagnostics render one dimensional cones only from explicit model-derived ideal specs and real Macaulay2 Tropical certificates; unavailable states are not substituted by support-token proxies.",
@@ -5164,6 +5242,7 @@ def _write_tropical_fan_html(path: Path, payload: Mapping[str, Any]) -> None:
             ("prevariety max cones", _json_clip(prevariety.get("max_cones", []), 180)),
             ("Sage scope", contract.get("sage_scope", "not a substitute certificate for this fan view")),
             ("no-proxy policy", contract.get("no_proxy_policy", "no proxy diagnostics may substitute for the certificate")),
+            ("CAS input contract", _json_clip(payload.get("cas_input_contract", {}), 720)),
             ("warning", diagnostics.get("render_warning", "not a multigraded free-resolution certificate")),
         ]
         fig.add_trace(
@@ -5196,6 +5275,7 @@ def _write_tropical_fan_html(path: Path, payload: Mapping[str, Any]) -> None:
             ("Sage scope", contract.get("sage_scope", "not a substitute certificate for this fan view")),
             ("no-proxy policy", contract.get("no_proxy_policy", "no proxy diagnostics may substitute for the certificate")),
             ("render contract", payload.get("render_contract", "unavailable")),
+            ("CAS input contract", _json_clip(payload.get("cas_input_contract", {}), 720)),
             ("one dimensional cones", "not rendered without a real Macaulay2 Tropical certificate"),
             ("warning", "not a multigraded free-resolution or derived-equivalence certificate"),
         ]
@@ -5251,16 +5331,42 @@ def write_tropical_fan_diagnostics(result: dict[str, object], output_dir: str | 
                 source_path=source_path,
             )
             payload["ideal_spec"] = dict(ideal_spec)
+            diagnostics = payload.get("diagnostics") if isinstance(payload.get("diagnostics"), Mapping) else {}
+            payload["cas_input_contract"] = _cas_sidecar_input_contract(
+                schema_version=_TROPICAL_FAN_INPUT_CONTRACT_SCHEMA,
+                input_kind="explicit_model_derived_tropical_ideal",
+                source_path=source_path,
+                spec=ideal_spec if isinstance(ideal_spec, Mapping) else None,
+                diagnostics=diagnostics,
+                canonical_schema_key="ideal_schema",
+                accepted_keys=_TROPICAL_IDEAL_KEYS,
+                required_fields=("variables", "generators"),
+                safe_to_render_certificate=False,
+                unavailable_reason=str(payload.get("diagnostics", {}).get("reason", "tropical fan diagnostics unavailable")) if isinstance(payload.get("diagnostics"), Mapping) else "tropical fan diagnostics unavailable",
+            )
             payload_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
             _write_tropical_fan_html(html_path, payload)
             return {"tropical_fan_diagnostics": str(html_path), "tropical_fan_diagnostics_payload": str(payload_path)}
 
     safe = bool(isinstance(report, Mapping) and report.get("safe_to_render_as_tropical_fan") is True)
+    input_contract = _cas_sidecar_input_contract(
+        schema_version=_TROPICAL_FAN_INPUT_CONTRACT_SCHEMA,
+        input_kind="explicit_model_derived_tropical_ideal",
+        source_path=source_path,
+        spec=ideal_spec if isinstance(ideal_spec, Mapping) else None,
+        diagnostics=report if isinstance(report, Mapping) else None,
+        canonical_schema_key="ideal_schema",
+        accepted_keys=_TROPICAL_IDEAL_KEYS,
+        required_fields=("variables", "generators"),
+        safe_to_render_certificate=safe,
+        unavailable_reason=None if safe else str(report.get("reason", "tropical fan diagnostics unavailable")) if isinstance(report, Mapping) else "tropical fan diagnostics unavailable",
+    )
     payload = {
         "schema_version": "tropicalgt.tropical_fan_visual_audit.v1",
         "available": safe,
         "source_path": source_path,
         "ideal_spec": dict(ideal_spec) if isinstance(ideal_spec, Mapping) else None,
+        "cas_input_contract": input_contract,
         "diagnostics": dict(report) if isinstance(report, Mapping) else {},
         "safe_to_render_as_tropical_fan": safe,
         "render_contract": "Tropical fan diagnostics render one dimensional cones only from explicit model-derived ideal specs and real Macaulay2 Tropical certificates; unavailable states are not substituted by support-token proxies.",
@@ -5340,6 +5446,9 @@ def _precomputed_toric_embedding_report(result: Mapping[str, Any]) -> tuple[str,
     return None
 
 
+_TORIC_EMBEDDING_INPUT_CONTRACT_SCHEMA = "tropicalgt.toric_embedding_input_contract.v1"
+
+
 def _unavailable_toric_embedding_payload(reason: str, *, source_path: str = "unavailable", exponent_matrix_spec: Mapping[str, Any] | None = None) -> dict[str, Any]:
     try:
         from . import cas_toric
@@ -5369,11 +5478,24 @@ def _unavailable_toric_embedding_payload(reason: str, *, source_path: str = "una
         "certificate_contract": contract,
         "cas_artifacts": {},
     }
+    input_contract = _cas_sidecar_input_contract(
+        schema_version=_TORIC_EMBEDDING_INPUT_CONTRACT_SCHEMA,
+        input_kind="explicit_integer_toric_exponent_matrix",
+        source_path=source_path,
+        spec=exponent_matrix_spec if isinstance(exponent_matrix_spec, Mapping) else None,
+        diagnostics=diagnostics,
+        canonical_schema_key="exponent_matrix_schema",
+        accepted_keys=_TORIC_EXPONENT_SPEC_KEYS,
+        required_fields=("exponent_matrix",),
+        safe_to_render_certificate=False,
+        unavailable_reason=reason,
+    )
     return {
         "schema_version": "tropicalgt.toric_embedding_sidecar_visual_audit.v1",
         "available": False,
         "source_path": source_path,
         "exponent_matrix_spec": dict(exponent_matrix_spec) if isinstance(exponent_matrix_spec, Mapping) else None,
+        "cas_input_contract": input_contract,
         "diagnostics": diagnostics,
         "safe_to_render_as_finite_toric_ideal_sidecar": False,
         "safe_to_render_as_tropical_variety_embedding": False,
@@ -5427,6 +5549,7 @@ def _write_toric_embedding_html(path: Path, payload: Mapping[str, Any]) -> None:
             ("global toric variety embedding", diagnostics.get("safe_to_render_as_global_toric_variety_embedding", False)),
             ("no-proxy policy", contract.get("no_proxy_policy", "no proxy diagnostics may substitute for the certificate")),
             ("warning", diagnostics.get("render_warning", "not a normal-fan or tropical-variety certificate")),
+            ("CAS input contract", _json_clip(payload.get("cas_input_contract", {}), 720)),
         ]
         fig = make_subplots(
             rows=1,
@@ -5478,6 +5601,7 @@ def _write_toric_embedding_html(path: Path, payload: Mapping[str, Any]) -> None:
             ("global toric variety embedding", False),
             ("no-proxy policy", contract.get("no_proxy_policy", "no proxy diagnostics may substitute for the certificate")),
             ("render contract", payload.get("render_contract", "unavailable")),
+            ("CAS input contract", _json_clip(payload.get("cas_input_contract", {}), 720)),
         ]
         fig = go.Figure(
             data=[
@@ -5531,11 +5655,24 @@ def write_toric_embedding_sidecar(result: dict[str, object], output_dir: str | P
             return {"toric_embedding_sidecar": str(html_path), "toric_embedding_sidecar_payload": str(payload_path)}
 
     safe = bool(isinstance(report, Mapping) and report.get("safe_to_render_as_toric_embedding") is True and report.get("toric_ideal_certified") is True)
+    input_contract = _cas_sidecar_input_contract(
+        schema_version=_TORIC_EMBEDDING_INPUT_CONTRACT_SCHEMA,
+        input_kind="explicit_integer_toric_exponent_matrix",
+        source_path=source_path,
+        spec=exponent_spec if isinstance(exponent_spec, Mapping) else None,
+        diagnostics=report if isinstance(report, Mapping) else None,
+        canonical_schema_key="exponent_matrix_schema",
+        accepted_keys=_TORIC_EXPONENT_SPEC_KEYS,
+        required_fields=("exponent_matrix",),
+        safe_to_render_certificate=safe,
+        unavailable_reason=None if safe else str(report.get("reason", "toric embedding certificate unavailable")) if isinstance(report, Mapping) else "toric embedding certificate unavailable",
+    )
     payload = {
         "schema_version": "tropicalgt.toric_embedding_sidecar_visual_audit.v1",
         "available": safe,
         "source_path": source_path,
         "exponent_matrix_spec": dict(exponent_spec) if isinstance(exponent_spec, Mapping) else None,
+        "cas_input_contract": input_contract,
         "diagnostics": dict(report) if isinstance(report, Mapping) else {},
         "safe_to_render_as_finite_toric_ideal_sidecar": safe,
         "safe_to_render_as_tropical_variety_embedding": bool(isinstance(report, Mapping) and report.get("safe_to_render_as_tropical_variety_embedding") is True),

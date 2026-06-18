@@ -491,6 +491,8 @@ PROVENANCE_REGISTRY: tuple[ProvenanceEntry, ...] = (
             "no resolution certificate was fabricated",
             "no-proxy evidence rows were preserved",
             "no probability radius complex, simplex tree, edges, faces, or proxy geometry is fabricated",
+            "proxy_substitution_allowed",
+            "rejected_proxy_sources",
         ),
     ),
     ProvenanceEntry(

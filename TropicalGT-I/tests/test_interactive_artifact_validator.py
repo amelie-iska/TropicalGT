@@ -924,6 +924,28 @@ def _row(root: Path, name: str) -> Path:
                 "available": False,
                 "source_path": "unavailable",
                 "ideal_spec": None,
+                "cas_input_contract": {
+                    "schema_version": "tropicalgt.tropical_fan_input_contract.v1",
+                    "input_kind": "explicit_model_derived_tropical_ideal",
+                    "source_path": "unavailable",
+                    "accepted_spec_keys": ["model_derived_tropical_ideal", "tropical_ideal", "tropical_fan_ideal", "tropical_variety_ideal"],
+                    "required_fields": ["variables", "generators"],
+                    "required_fields_present": False,
+                    "explicit_cas_input_present": False,
+                    "declared_input_source": None,
+                    "canonical_schema_key": "ideal_schema",
+                    "canonical_schema_available": False,
+                    "canonical_schema_version": None,
+                    "report_schema_version": "tropicalgt.cas_tropical_fan.v1",
+                    "input_sha256": None,
+                    "safe_to_run_cas_from_input": False,
+                    "safe_to_render_certificate": False,
+                    "actual_data_only": True,
+                    "no_proxy_or_fallback": True,
+                    "proxy_substitution_allowed": False,
+                    "rejected_proxy_sources": ["chart_bundle_logits", "toric_active_rows", "support_tokens", "graphcg_cells", "embedding_similarity", "visualization_rows", "chain_rank_diagnostics"],
+                    "unavailable_reason": "fixture has no explicit model-derived tropical ideal",
+                },
                 "safe_to_render_as_tropical_fan": False,
                 "render_contract": "Tropical fan diagnostics render one dimensional cones only from explicit model-derived ideal specs and real Macaulay2 Tropical certificates; unavailable states are not substituted by support-token proxies.",
                 "diagnostics": {
@@ -1578,6 +1600,50 @@ def test_validate_audit_root_uses_real_periodic_sibling_rows_without_duplication
     assert coverage["satisfies_min_rows"] is True
     assert coverage["row_paths"] == [str(current.resolve()), str(previous.resolve()), str(older.resolve())]
     assert "Never duplicate rows" in coverage["row_source_policy"]
+
+
+def test_validate_audit_root_rejects_missing_tropical_fan_input_contract(tmp_path: Path):
+    validator = _load_validator()
+    audit = tmp_path / "step_00000001" / "got_audit"
+    row = _row(audit, ".")
+    payload_path = row / "tropical_fan_diagnostics.json"
+    payload = json.loads(payload_path.read_text(encoding="utf-8"))
+    payload.pop("cas_input_contract")
+    payload_path.write_text(json.dumps(payload), encoding="utf-8")
+    _write(audit / "codex_browser_index.html", _codex_browser_html(_browser_samples(audit, ["."])))
+
+    report = validator.validate_audit_root(audit, min_rows=1, min_candidates=4, min_depth=2)
+
+    assert not report["ok"]
+    assert any("tropical fan diagnostics missing CAS input contract schema" in err for err in report["errors"])
+
+
+def test_validate_audit_root_rejects_missing_toric_input_contract(tmp_path: Path):
+    validator = _load_validator()
+    audit = tmp_path / "step_00000001" / "got_audit"
+    row = _row(audit, ".")
+    _write(
+        row / "toric_embedding_sidecar.json",
+        json.dumps(
+            {
+                "schema_version": "tropicalgt.toric_embedding_sidecar_visual_audit.v1",
+                "available": False,
+                "source_path": "unavailable",
+                "safe_to_render_as_finite_toric_ideal_sidecar": False,
+                "safe_to_render_as_tropical_variety_embedding": False,
+                "safe_to_render_as_global_toric_variety_embedding": False,
+                "safe_to_use_as_normal_fan_certificate": False,
+                "render_contract": "Toric sidecar unavailable; chart-bundle proxies are forbidden",
+                "diagnostics": {"schema_version": "tropicalgt.cas_toric_embedding.v1", "safe_to_render_as_toric_embedding": False},
+            }
+        ),
+    )
+    _write(audit / "codex_browser_index.html", _codex_browser_html(_browser_samples(audit, ["."])))
+
+    report = validator.validate_audit_root(audit, min_rows=1, min_candidates=4, min_depth=2)
+
+    assert not report["ok"]
+    assert any("toric embedding sidecar missing CAS input contract schema" in err for err in report["errors"])
 
 
 

@@ -1047,6 +1047,13 @@ def test_tropical_fan_diagnostics_unavailable_without_explicit_ideal(tmp_path: P
     assert payload["diagnostics"]["status"] == "unavailable_no_model_derived_tropical_ideal"
     assert "No support-token" in payload["diagnostics"]["certificate_contract"]["no_proxy_policy"]
     assert "support-token proxies" in payload["render_contract"]
+    input_contract = payload["cas_input_contract"]
+    assert input_contract["schema_version"] == "tropicalgt.tropical_fan_input_contract.v1"
+    assert input_contract["explicit_cas_input_present"] is False
+    assert input_contract["safe_to_render_certificate"] is False
+    assert input_contract["actual_data_only"] is True
+    assert input_contract["no_proxy_or_fallback"] is True
+    assert input_contract["proxy_substitution_allowed"] is False
     assert "Tropical fan diagnostics unavailable" in markup
     assert "Sage tropical polynomial" in markup
     assert "one dimensional cones" in markup
@@ -1109,8 +1116,16 @@ def test_tropical_fan_diagnostics_renders_certified_explicit_ideal(tmp_path: Pat
     assert payload["available"] is True
     assert payload["source_path"] == "result.graph_token_trace.model_derived_tropical_ideal"
     assert payload["diagnostics"]["fan_summary"]["ray_count"] == 3
+    input_contract = payload["cas_input_contract"]
+    assert input_contract["schema_version"] == "tropicalgt.tropical_fan_input_contract.v1"
+    assert input_contract["source_path"] == "result.graph_token_trace.model_derived_tropical_ideal"
+    assert input_contract["explicit_cas_input_present"] is True
+    assert input_contract["safe_to_render_certificate"] is True
+    assert input_contract["input_sha256"]
+    assert input_contract["proxy_substitution_allowed"] is False
     assert payload["safe_to_render_as_tropical_fan"] is True
     assert "Tropical fan diagnostics: real Macaulay2 certificate" in markup
+    assert "CAS input contract" in markup
     assert "rho_0" in markup
     assert "tropical basis check" in markup
     assert "prevariety rays" in markup
@@ -1171,6 +1186,13 @@ def test_toric_embedding_sidecar_unavailable_without_exponent_matrix(tmp_path: P
     assert payload["safe_to_use_as_normal_fan_certificate"] is False
     assert payload["diagnostics"]["schema_version"] == "tropicalgt.cas_toric_embedding.v1"
     assert "chart-bundle" in payload["render_contract"]
+    input_contract = payload["cas_input_contract"]
+    assert input_contract["schema_version"] == "tropicalgt.toric_embedding_input_contract.v1"
+    assert input_contract["explicit_cas_input_present"] is False
+    assert input_contract["safe_to_render_certificate"] is False
+    assert input_contract["actual_data_only"] is True
+    assert input_contract["no_proxy_or_fallback"] is True
+    assert input_contract["proxy_substitution_allowed"] is False
     assert "No finite monomial-map toric ideal" in html
     assert "Toric embedding sidecar unavailable" in html
 
@@ -1187,9 +1209,17 @@ def test_toric_embedding_sidecar_renders_precomputed_finite_toric_ideal_certific
     assert payload["safe_to_use_as_normal_fan_certificate"] is False
     assert payload["diagnostics"]["toric_ideal_certified"] is True
     assert payload["diagnostics"]["monomial_map_summary"]["exponent_matrix"] == [[1, 1, 1], [0, 1, 2]]
+    input_contract = payload["cas_input_contract"]
+    assert input_contract["schema_version"] == "tropicalgt.toric_embedding_input_contract.v1"
+    assert input_contract["source_path"] == "result.toric_embedding_certificate"
+    assert input_contract["explicit_cas_input_present"] is True
+    assert input_contract["safe_to_render_certificate"] is True
+    assert input_contract["input_sha256"] == payload["diagnostics"]["input_sha256"]
+    assert input_contract["proxy_substitution_allowed"] is False
     assert "finite monomial-map toric ideal certificate" in html
     assert "not a normal-fan" in html
     assert "z_1^2-z_0*z_2" in html
+    assert "CAS input contract" in html
     assert "toric_embedding_sidecar_contract" in html
 
 

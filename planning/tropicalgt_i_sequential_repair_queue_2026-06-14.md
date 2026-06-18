@@ -775,3 +775,12 @@ The live item-by-item repair inventory is maintained in `planning/tropicalgt_i_c
 - [x] Kept theorem, toric/tropical embedding, normal-fan, scheme, sheaf, and CAS certificate claims false unless separate certified evidence exists.
 - [x] Extended the strict interactive-artifact validator to reject paper-ready claims with missing required groups or inconsistent paper-ready flags.
 - [x] Focused verification passed: chart-bundle visualization tests (`3 passed`) and chart/vector-bundle validator tests (`2 passed`).
+
+### Current Objective Update - Tropical/Toric CAS Input Contract Pass
+
+- [x] Added `tropicalgt.tropical_fan_input_contract.v1` to tropical fan visual sidecars, recording the exact ideal source path, accepted spec keys, required fields, input hash, and proxy-forbidden policy.
+- [x] Added `tropicalgt.toric_embedding_input_contract.v1` to finite toric-ideal sidecars, recording the exact exponent-matrix source path, accepted spec keys, required fields, input hash, and proxy-forbidden policy.
+- [x] Browser tables now expose the CAS input contracts for both certified and unavailable tropical/toric sidecars.
+- [x] The strict interactive-artifact validator now rejects missing input contracts, proxy-permitting contracts, available sidecars without explicit CAS input evidence, and available sidecars without input hashes.
+- [x] Unavailable sidecars stay unavailable: explicit input presence alone is not enough to render a fan or toric certificate without the real backend certificate.
+- [x] Focused verification passed: tropical/toric visualization tests (`4 passed`) and validator input-contract tests (`3 passed`).
