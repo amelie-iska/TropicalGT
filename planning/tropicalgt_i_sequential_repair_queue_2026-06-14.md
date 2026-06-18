@@ -930,3 +930,12 @@ The live item-by-item repair inventory is maintained in `planning/tropicalgt_i_c
 - [x] Finite multigraded chain-presentation diagnostics remain explicitly `not_a_free_resolution`; missing, failed, or safe-unavailable CAS guards cannot justify free-resolution, derived-equivalence, BPB, or restart claims.
 - [x] Markdown and HTML reports now expose `Bivariate Module Evidence` plus a real-resolution status chart for post-5K review.
 - [x] Verification passed: py-compile; focused Herschel/bundle tests (`11 passed`); broader Herschel/bundle/review-loop/provenance tests (`36 passed`); metric provenance audit (`393 covered, 0 uncovered`).
+
+### Current Objective Update - Herschel Analogical Memory Evidence Pass
+
+- [x] Added `analogical_memory_retrieval.json` and `analogical_simplex_tree_analogy.json` to the Herschel-required audit sidecar inventory when they exist in the latest recorded `got_audit` directory.
+- [x] Added `tropicalgt.herschel_analogical_memory_evidence.v1` to the Herschel 5K summary, sourced only from recorded analogical retrieval, top-k probability-vector simplicial-map, and simplex-tree analogy sidecars.
+- [x] Herschel now reports bank size, records added, retrieved count, top-k requested/rendered, quality-gate reason counts, model-probability contract counts, simplex-tree pair counts, checked/preserved simplex counts, and verified insufficient-memory source counts.
+- [x] Top-k evidence requires `tropicalgt.analogical_topk.v1`, model probability vectors, Jensen-Shannon assignment, no embedding-only assignment, trajectory probability filtered query/codomain complexes, and no-proxy flags.
+- [x] Simplex-tree analogy evidence requires `tropicalgt.analogical_simplex_tree_analogy.v1`, `probability_simplicial_map.simplex_tree_map.rows`, no-proxy flags, and certified-map guards for chain-map or persistence-module-morphism claims.
+- [x] Verification passed: py-compile; focused Herschel/bundle tests (`11 passed`); broader Herschel/bundle/review-loop/provenance tests (`36 passed`); metric provenance audit (`412 covered, 0 uncovered`).

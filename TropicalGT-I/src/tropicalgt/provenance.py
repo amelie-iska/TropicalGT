@@ -613,6 +613,29 @@ PROVENANCE_REGISTRY: tuple[ProvenanceEntry, ...] = (
             "non-probability filtered query fallback",
         ),
     ),
+    ProvenanceEntry(
+        name="herschel_analogical_memory_evidence",
+        kind="evidence_report_contract",
+        surface="analogical memory retrieval and Herschel 5K report",
+        optimize_directly=False,
+        description="Herschel report contract for recorded analogical memory retrieval, top-k probability-vector maps, and simplex-tree analogy sidecars.",
+        replacement_or_guardrail="Report only analogical_memory_retrieval, analogical_simplicial_maps, and analogical_simplex_tree_analogy sidecars with model-probability Jensen-Shannon assignments, no-proxy flags, and explicit insufficient-memory states; never substitute embedding-only retrieval or unsupported chain-map/module-morphism claims.",
+        match_terms=(
+            "tropicalgt.herschel_analogical_memory_evidence.v1",
+            "analogical_memory_retrieval",
+            "analogical_simplex_tree_analogy",
+            "tropicalgt.analogical_topk.v1",
+            "tropicalgt.analogical_simplex_tree_analogy.v1",
+            "jensen_shannon_distance_on_model_probability_vectors",
+            "retrieval_requires_model_probability_vectors",
+            "verified_insufficient_memory",
+            "no_proxy_contract_source_count",
+            "no_proxy_or_fallback",
+            "missing_analogical_topk_no_proxy_contract",
+            "missing_simplex_tree_analogy_no_proxy_contract",
+            "not a proxy analogy",
+        ),
+    ),
 )
 
 

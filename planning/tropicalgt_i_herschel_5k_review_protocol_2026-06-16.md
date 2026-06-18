@@ -198,3 +198,22 @@ CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src:TropicalGT-I/scripts /home/i
 CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src:TropicalGT-I/scripts /home/iska/miniconda3/envs/tokengt/bin/python TropicalGT-I/scripts/audit_metric_provenance.py --fail-on-uncovered
 # findings=393 covered=393 uncovered=0
 ```
+
+## 2026-06-18 Analogical Memory And Simplex-Tree Evidence Follow-Up
+
+Herschel now treats `analogical_memory_retrieval.json` and `analogical_simplex_tree_analogy.json` as Herschel-required recorded GoT audit sidecars alongside `analogical_simplicial_maps.json` when those files exist in the latest `got_audit` directory. `write_herschel_5k_report.py` exposes `tropicalgt.herschel_analogical_memory_evidence.v1`, sourced only from recorded analogical retrieval, top-k probability-vector simplicial-map, and simplex-tree analogy sidecars.
+
+Availability is deliberately conservative. Top-k analogical evidence requires `tropicalgt.analogical_topk.v1`, model-probability-vector retrieval, Jensen-Shannon assignment on model probability vectors, rejection of embedding-only assignment, `trajectory_probability_filtered_simplicial_object` query and codomain complexes, and no-proxy/no-fallback flags. Simplex-tree analogy evidence requires `tropicalgt.analogical_simplex_tree_analogy.v1`, source rows from `probability_simplicial_map.simplex_tree_map.rows`, no-proxy flags, and chain-map or persistence-module-morphism claims guarded by certified filtered simplicial maps. Empty or unqualified memory banks are reported as verified insufficient-memory states, not proxy analogies or restart evidence.
+
+Validation:
+
+```text
+CUDA_VISIBLE_DEVICES="" /home/iska/miniconda3/envs/tokengt/bin/python -m py_compile TropicalGT-I/scripts/write_herschel_5k_report.py TropicalGT-I/scripts/prepare_5k_review_bundle.py TropicalGT-I/src/tropicalgt/provenance.py TropicalGT-I/tests/test_herschel_5k_report.py TropicalGT-I/tests/test_prepare_5k_review_bundle.py
+# passed
+CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src:TropicalGT-I/scripts /home/iska/miniconda3/envs/tokengt/bin/python -m pytest -q TropicalGT-I/tests/test_herschel_5k_report.py TropicalGT-I/tests/test_prepare_5k_review_bundle.py
+# 11 passed
+CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src:TropicalGT-I/scripts /home/iska/miniconda3/envs/tokengt/bin/python -m pytest -q TropicalGT-I/tests/test_herschel_5k_report.py TropicalGT-I/tests/test_prepare_5k_review_bundle.py TropicalGT-I/tests/test_parameter_golf_review_loop.py TropicalGT-I/tests/test_metric_provenance.py
+# 36 passed
+CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src:TropicalGT-I/scripts /home/iska/miniconda3/envs/tokengt/bin/python TropicalGT-I/scripts/audit_metric_provenance.py --fail-on-uncovered
+# findings=412 covered=412 uncovered=0
+```

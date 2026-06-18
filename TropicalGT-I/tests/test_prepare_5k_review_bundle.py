@@ -155,11 +155,84 @@ def test_prepare_review_bundle_defaults_to_periodic_validation_artifacts(tmp_pat
     (periodic_dir / "got_audit" / "analogical_simplicial_maps.json").write_text(
         json.dumps(
             {
+                "available": False,
+                "reason": "no_non_self_model_memory",
+                "reason_detail": "No non-self model-probability analogical memories retrieved; no analogical correspondence certificate is rendered.",
+                "maps": [],
                 "query_context_contract": query_context_contract,
                 "topk_contract": {
+                    "schema_version": "tropicalgt.analogical_topk.v1",
+                    "status": "unavailable_no_non_self_model_memory",
+                    "no_proxy_or_fallback": True,
+                    "retrieval_requires_model_probability_vectors": True,
+                    "embedding_only_assignment_allowed": False,
+                    "assignment_metric": "jensen_shannon_distance_on_model_probability_vectors",
+                    "query_complex_required": "trajectory_probability_filtered_simplicial_object",
+                    "codomain_complex_required": "trajectory_probability_filtered_simplicial_object",
                     "query_context_contract_schema_version": "tropicalgt.analogical_query_context_conversion.v1",
                     "query_context_contract": query_context_contract,
+                    "top_k_requested": 12,
+                    "top_k_rendered": 0,
+                    "raw_retrieved_count": 0,
+                    "qualified_model_probability_memory_count": 0,
+                    "rejected_retrieved_count": 0,
+                    "readability_contract": {
+                        "schema_version": "tropicalgt.analogical_topk_readability.v1",
+                        "no_proxy_or_fallback": True,
+                        "insufficient_memory_state_explicit": True,
+                    },
                 },
+            }
+        ),
+        encoding="utf-8",
+    )
+    (periodic_dir / "got_audit" / "analogical_memory_retrieval.json").write_text(
+        json.dumps(
+            {
+                "bank_path": str(output_dir / "memory_bank" / "trajectory_memories.jsonl"),
+                "bank_size": 0,
+                "records_added": 0,
+                "top_k": 12,
+                "retrieved": [],
+                "quality_gate": {
+                    "candidate_count": 0,
+                    "eligible_count": 0,
+                    "rejected_count": 0,
+                    "policy": "store memories only above quality threshold",
+                    "reason_counts": {"no_non_self_model_memory": 1},
+                    "thresholds": {"min_quality": 0.72},
+                    "rows": [],
+                },
+                "retrieval_weights": {
+                    "probability_simplicial_map_weight": 1.0,
+                    "persistence_landscape_weight": 0.2,
+                    "certified_cas_weight": 0.1,
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    (periodic_dir / "got_audit" / "analogical_simplex_tree_analogy.json").write_text(
+        json.dumps(
+            {
+                "contract": {
+                    "schema_version": "tropicalgt.analogical_simplex_tree_analogy.v1",
+                    "available": False,
+                    "status": "unavailable_no_non_self_model_memory",
+                    "no_proxy_or_fallback": True,
+                    "compares_query_and_memory_simplex_trees": True,
+                    "renders_hasse_face_to_coface_rows": True,
+                    "preserved_face_coface_chains_highlighted": True,
+                    "failed_or_distorted_chains_labeled_not_maps": True,
+                    "chain_map_claim_requires_certified_filtered_simplicial_map": True,
+                    "persistence_module_morphism_claim_requires_certified_filtered_simplicial_map": True,
+                    "source": "probability_simplicial_map.simplex_tree_map.rows",
+                    "pair_count": 0,
+                    "total_checked_simplices": 0,
+                    "total_preserved_simplices": 0,
+                    "reason_detail": "No certified probability simplicial maps available for simplex-tree analogy rows.",
+                },
+                "pairs": [],
             }
         ),
         encoding="utf-8",
@@ -597,6 +670,8 @@ def test_prepare_review_bundle_defaults_to_periodic_validation_artifacts(tmp_pat
     assert bundle["commands"]["interactive_audit_validators"]
     sidecars = bundle["artifact_inventory"]["advanced_sidecars_tail"]
     assert any(path.endswith("periodic/step_00005000/got_audit/analogical_simplicial_maps.json") for path in sidecars)
+    assert any(path.endswith("periodic/step_00005000/got_audit/analogical_memory_retrieval.json") for path in sidecars)
+    assert any(path.endswith("periodic/step_00005000/got_audit/analogical_simplex_tree_analogy.json") for path in sidecars)
     assert any(path.endswith("periodic/step_00005000/got_audit/inference_scaling_tree.json") for path in sidecars)
     assert any(path.endswith("periodic/step_00005000/got_audit/tropical_support_payload.json") for path in sidecars)
     assert any(path.endswith("periodic/step_00005000/got_audit/graphcg_direction_cosines_payload.json") for path in sidecars)
@@ -610,6 +685,14 @@ def test_prepare_review_bundle_defaults_to_periodic_validation_artifacts(tmp_pat
     persisted_contract = json.loads((module.ROOT / bundle["artifacts"]["contract_json"]).read_text(encoding="utf-8"))
     assert any(
         path.endswith("periodic/step_00005000/got_audit/analogical_simplicial_maps.json")
+        for path in persisted_contract["artifact_inventory"]["advanced_sidecars_tail"]
+    )
+    assert any(
+        path.endswith("periodic/step_00005000/got_audit/analogical_memory_retrieval.json")
+        for path in persisted_contract["artifact_inventory"]["advanced_sidecars_tail"]
+    )
+    assert any(
+        path.endswith("periodic/step_00005000/got_audit/analogical_simplex_tree_analogy.json")
         for path in persisted_contract["artifact_inventory"]["advanced_sidecars_tail"]
     )
     assert any(
@@ -702,6 +785,16 @@ def test_prepare_review_bundle_defaults_to_periodic_validation_artifacts(tmp_pat
     assert analogical_query["available"] is True
     assert analogical_query["sources"][0]["selected_query_complex_source"] == "trajectory_probability_filtered_simplicial_object"
     assert analogical_query["sources"][0]["selected_query_probability_vertex_count"] == 4
+    analogical_memory = bundle["herschel_report_summary"]["artifact_evidence"]["analogical_memory_evidence"]
+    assert analogical_memory["available"] is False
+    assert analogical_memory["source_count"] == 3
+    assert analogical_memory["verified_insufficient_memory_source_count"] == 3
+    assert analogical_memory["total_bank_size"] == 0
+    assert analogical_memory["total_retrieved_count"] == 0
+    assert analogical_memory["total_top_k_rendered"] == 0
+    assert analogical_memory["total_simplex_tree_pair_count"] == 0
+    assert analogical_memory["quality_gate_reason_counts"] == {"no_non_self_model_memory": 1}
+    assert analogical_memory["status_counts"] == {"unavailable_no_non_self_model_memory": 2, "unavailable_insufficient_model_probability_memory": 1}
 
 def test_prepare_review_bundle_blocks_command_execution_without_checkpoint(tmp_path: Path):
     module = _load_bundle_module()

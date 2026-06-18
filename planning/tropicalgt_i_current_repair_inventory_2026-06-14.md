@@ -575,3 +575,21 @@ Next sequential item: continue post-5K evidence/report surfacing and validator/b
 - [x] Finite multigraded chain-presentation diagnostics remain explicitly `not_a_free_resolution`; missing, failed, or safe-unavailable CAS guards cannot justify free-resolution, derived-equivalence, BPB, or restart claims.
 - [x] Markdown and HTML reports now expose `Bivariate Module Evidence` plus a real-resolution status chart for post-5K review.
 - [x] Verification passed: py-compile; focused Herschel/bundle tests (`11 passed`); broader Herschel/bundle/review-loop/provenance tests (`36 passed`); metric provenance audit (`393 covered, 0 uncovered`).
+
+## 2026-06-18 Herschel Analogical Memory Evidence Pass
+
+Status: implemented and pushed-ready for the current sequential item.
+
+Changes made:
+- The 5K review bundle now discovers `analogical_memory_retrieval.json` and `analogical_simplex_tree_analogy.json` from the latest recorded GoT audit directory when present.
+- Herschel's report summary now includes `tropicalgt.herschel_analogical_memory_evidence.v1` with real retrieval, top-k, simplex-tree analogy, quality-gate, and insufficient-memory fields.
+- Report availability remains no-proxy: model-probability Jensen-Shannon assignments are required, embedding-only assignments are rejected, and chain-map/module-morphism claims require certified filtered simplicial maps.
+- The provenance registry now classifies the new analogical memory report contract and no-proxy guard strings.
+
+Verification:
+- `CUDA_VISIBLE_DEVICES="" ... py_compile ...` passed for touched source and tests.
+- Focused Herschel/bundle tests passed: `11 passed`.
+- Broader Herschel/bundle/review-loop/provenance tests passed: `36 passed`.
+- Metric provenance audit passed: `findings=412 covered=412 uncovered=0`.
+
+Next sequential item: continue the Herschel evidence family queue by selecting the next missing implemented sidecar or move to the next source-side repair item if all current Herschel 5K evidence slices are surfaced.

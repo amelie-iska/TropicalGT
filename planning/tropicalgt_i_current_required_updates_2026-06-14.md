@@ -1158,3 +1158,15 @@ CUDA_VISIBLE_DEVICES="" /home/iska/miniconda3/bin/conda run -n tokengt python -m
 - [x] Finite multigraded chain-presentation diagnostics remain explicitly `not_a_free_resolution`; missing, failed, or safe-unavailable CAS guards cannot justify free-resolution, derived-equivalence, BPB, or restart claims.
 - [x] Markdown and HTML reports now expose `Bivariate Module Evidence` plus a real-resolution status chart for post-5K review.
 - [x] Verification passed: py-compile; focused Herschel/bundle tests (`11 passed`); broader Herschel/bundle/review-loop/provenance tests (`36 passed`); metric provenance audit (`393 covered, 0 uncovered`).
+
+## 2026-06-18 Herschel Analogical Memory Evidence Update
+
+Status: complete for the Herschel 5K report and bundle contract layer.
+
+- `prepare_5k_review_bundle.py` now carries real `analogical_memory_retrieval.json` and `analogical_simplex_tree_analogy.json` sidecars from the latest recorded `got_audit` directory into `advanced_sidecars_tail` and `herschel_required_sidecars_present`, alongside `analogical_simplicial_maps.json`.
+- `write_herschel_5k_report.py` now emits `tropicalgt.herschel_analogical_memory_evidence.v1` under `artifact_evidence`.
+- The report distinguishes retrieval-bank telemetry, top-k model-probability simplicial-map contracts, simplex-tree analogy contracts, quality-gate counts, no-proxy contract counts, rendered top-k counts, simplex-tree pair counts, and verified insufficient-memory states.
+- Availability requires model-predicted probability-vector retrieval, Jensen-Shannon assignment, no embedding-only assignment, trajectory probability filtered complexes for query and codomain, and certified filtered-simplicial-map guards before chain-map or persistence-module-morphism claims.
+- Empty or unqualified memory banks remain explicit unavailable/insufficient-memory evidence and cannot justify a restart, analogy claim, derived-category claim, or hyperparameter promotion.
+
+Verification passed: py-compile for touched source/tests; focused Herschel/bundle tests (`11 passed`); broader Herschel/bundle/review-loop/provenance tests (`36 passed`); metric provenance audit (`findings=412 covered=412 uncovered=0`).

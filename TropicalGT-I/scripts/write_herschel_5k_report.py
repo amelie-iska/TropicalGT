@@ -1314,6 +1314,269 @@ def _analogical_query_context_evidence(sidecar_paths: list[str]) -> dict[str, An
     }
 
 
+def _analogical_memory_evidence(sidecar_paths: list[str]) -> dict[str, Any]:
+    sources: list[dict[str, Any]] = []
+    status_counts: dict[str, int] = {}
+    quality_gate_reason_counts: dict[str, int] = {}
+    total_bank_size = 0
+    total_records_added = 0
+    total_retrieved_count = 0
+    total_top_k_requested = 0
+    total_top_k_rendered = 0
+    total_simplex_tree_pair_count = 0
+    total_checked_simplices = 0
+    total_preserved_simplices = 0
+    no_proxy_contract_source_count = 0
+    probability_vector_contract_source_count = 0
+    verified_insufficient_memory_source_count = 0
+
+    def _count(mapping: dict[str, int], key: str, amount: int = 1) -> None:
+        if not key:
+            return
+        mapping[str(key)] = mapping.get(str(key), 0) + int(amount)
+
+    for raw_path in sidecar_paths:
+        lower = raw_path.lower()
+        if "analogical_memory_retrieval" in lower and lower.endswith(".json"):
+            kind = "retrieval"
+        elif "analogical_simplicial_maps" in lower and lower.endswith(".json"):
+            kind = "topk_maps"
+        elif "analogical_simplex_tree_analogy" in lower and lower.endswith(".json"):
+            kind = "simplex_tree_analogy"
+        else:
+            continue
+        resolved = _resolve_output_path(Path(raw_path))
+        source: dict[str, Any] = {
+            "kind": kind,
+            "path": _project_path(resolved),
+            "available": False,
+            "verified_insufficient_memory": False,
+        }
+        if not resolved.exists():
+            source["reason"] = f"{kind}_sidecar_missing"
+            _count(status_counts, source["reason"])
+            sources.append(source)
+            continue
+        try:
+            payload = json.loads(resolved.read_text(encoding="utf-8"))
+        except Exception as exc:  # pragma: no cover - parse text is platform-dependent
+            source["reason"] = f"{kind}_sidecar_parse_error:{exc}"
+            _count(status_counts, f"{kind}_sidecar_parse_error")
+            sources.append(source)
+            continue
+        if not isinstance(payload, dict):
+            source["reason"] = f"{kind}_sidecar_not_object"
+            _count(status_counts, source["reason"])
+            sources.append(source)
+            continue
+
+        if kind == "retrieval":
+            retrieved = payload.get("retrieved", []) if isinstance(payload.get("retrieved"), list) else []
+            quality_gate = payload.get("quality_gate", {}) if isinstance(payload.get("quality_gate"), dict) else {}
+            retrieval_weights = payload.get("retrieval_weights", {}) if isinstance(payload.get("retrieval_weights"), dict) else {}
+            reason_counts = quality_gate.get("reason_counts", {}) if isinstance(quality_gate.get("reason_counts"), dict) else {}
+            bank_size = _optional_int(payload.get("bank_size")) or 0
+            records_added = _optional_int(payload.get("records_added")) or 0
+            top_k = _optional_int(payload.get("top_k")) or 0
+            candidate_count = _optional_int(quality_gate.get("candidate_count")) or 0
+            eligible_count = _optional_int(quality_gate.get("eligible_count")) or 0
+            rejected_count = _optional_int(quality_gate.get("rejected_count")) or 0
+            retrieved_count = len(retrieved)
+            total_bank_size += bank_size
+            total_records_added += records_added
+            total_retrieved_count += retrieved_count
+            total_top_k_requested += top_k
+            for reason, count in reason_counts.items():
+                _count(quality_gate_reason_counts, str(reason), _optional_int(count) or 0)
+            probability_map_rows = [row for row in retrieved if isinstance(row, dict) and row.get("probability_simplicial_map_available") is True]
+            available = bool(retrieved_count > 0 and probability_map_rows)
+            insufficient = bool(not available and retrieved_count == 0 and (bank_size == 0 or eligible_count == 0 or rejected_count >= candidate_count))
+            status = "retrieval_available" if available else "unavailable_insufficient_model_probability_memory"
+            source.update(
+                {
+                    "available": available,
+                    "status": status,
+                    "bank_path": payload.get("bank_path", ""),
+                    "bank_size": bank_size,
+                    "records_added": records_added,
+                    "top_k_requested": top_k,
+                    "retrieved_count": retrieved_count,
+                    "candidate_count": candidate_count,
+                    "eligible_count": eligible_count,
+                    "rejected_count": rejected_count,
+                    "quality_gate_policy": quality_gate.get("policy", "unavailable"),
+                    "quality_gate_reason_counts": {str(key): _optional_int(value) or 0 for key, value in reason_counts.items()},
+                    "retrieval_weight_keys": sorted(str(key) for key in retrieval_weights.keys()),
+                    "probability_simplicial_map_available_count": len(probability_map_rows),
+                    "verified_insufficient_memory": insufficient,
+                }
+            )
+            if insufficient:
+                verified_insufficient_memory_source_count += 1
+                source["reason"] = "no_qualified_model_probability_memory_retrieved"
+            elif not available:
+                source["reason"] = "retrieved_rows_lack_probability_simplicial_maps"
+            _count(status_counts, status)
+        elif kind == "topk_maps":
+            maps = payload.get("maps", []) if isinstance(payload.get("maps"), list) else []
+            topk = payload.get("topk_contract", {}) if isinstance(payload.get("topk_contract"), dict) else {}
+            schema_ok = topk.get("schema_version") == "tropicalgt.analogical_topk.v1"
+            no_proxy_ok = topk.get("no_proxy_or_fallback") is True
+            probability_required = topk.get("retrieval_requires_model_probability_vectors") is True
+            embedding_rejected = topk.get("embedding_only_assignment_allowed") is False
+            metric_ok = topk.get("assignment_metric") == "jensen_shannon_distance_on_model_probability_vectors"
+            query_ok = topk.get("query_complex_required") == "trajectory_probability_filtered_simplicial_object"
+            codomain_ok = topk.get("codomain_complex_required") == "trajectory_probability_filtered_simplicial_object"
+            map_count = len(maps)
+            rendered = _optional_int(topk.get("top_k_rendered"))
+            requested = _optional_int(topk.get("top_k_requested"))
+            raw_count = _optional_int(topk.get("raw_retrieved_count")) or 0
+            qualified_count = _optional_int(topk.get("qualified_model_probability_memory_count")) or 0
+            rejected_count = _optional_int(topk.get("rejected_retrieved_count")) or 0
+            if rendered is None:
+                rendered = map_count
+            if requested is not None:
+                total_top_k_requested += requested
+            total_top_k_rendered += rendered
+            if no_proxy_ok:
+                no_proxy_contract_source_count += 1
+            if probability_required and embedding_rejected and metric_ok:
+                probability_vector_contract_source_count += 1
+            available = bool(payload.get("available") is True and map_count > 0 and schema_ok and no_proxy_ok and probability_required and embedding_rejected and metric_ok and query_ok and codomain_ok)
+            insufficient = bool(not available and no_proxy_ok and probability_required and embedding_rejected and qualified_count == 0)
+            status = str(topk.get("status") or payload.get("reason") or ("topk_maps_available" if available else "unavailable_insufficient_model_probability_memory"))
+            source.update(
+                {
+                    "available": available,
+                    "status": status,
+                    "topk_schema_version": topk.get("schema_version", "unavailable"),
+                    "map_count": map_count,
+                    "top_k_requested": requested,
+                    "top_k_rendered": rendered,
+                    "raw_retrieved_count": raw_count,
+                    "qualified_model_probability_memory_count": qualified_count,
+                    "rejected_retrieved_count": rejected_count,
+                    "retrieval_requires_model_probability_vectors": probability_required,
+                    "embedding_only_assignment_allowed": bool(topk.get("embedding_only_assignment_allowed", True)),
+                    "assignment_metric": topk.get("assignment_metric", "unavailable"),
+                    "query_complex_required": topk.get("query_complex_required", "unavailable"),
+                    "codomain_complex_required": topk.get("codomain_complex_required", "unavailable"),
+                    "query_context_contract_schema_version": topk.get("query_context_contract_schema_version", "unavailable"),
+                    "no_proxy_or_fallback": no_proxy_ok,
+                    "verified_insufficient_memory": insufficient,
+                    "reason_detail": payload.get("reason_detail") or topk.get("reason_detail") or "",
+                }
+            )
+            if insufficient:
+                verified_insufficient_memory_source_count += 1
+            if not available:
+                reasons = []
+                if not schema_ok:
+                    reasons.append("missing_analogical_topk_schema")
+                if not no_proxy_ok:
+                    reasons.append("missing_analogical_topk_no_proxy_contract")
+                if not probability_required:
+                    reasons.append("model_probability_vector_retrieval_not_required")
+                if not embedding_rejected:
+                    reasons.append("embedding_only_assignment_not_rejected")
+                if not metric_ok:
+                    reasons.append("wrong_probability_assignment_metric")
+                if not query_ok:
+                    reasons.append("wrong_query_complex_requirement")
+                if not codomain_ok:
+                    reasons.append("wrong_codomain_complex_requirement")
+                if map_count <= 0:
+                    reasons.append("no_rendered_analogical_maps")
+                source["reason"] = ";".join(reasons) or status
+            _count(status_counts, status)
+        else:
+            contract = payload.get("contract", {}) if isinstance(payload.get("contract"), dict) else {}
+            pairs = payload.get("pairs", []) if isinstance(payload.get("pairs"), list) else []
+            schema_ok = contract.get("schema_version") == "tropicalgt.analogical_simplex_tree_analogy.v1"
+            no_proxy_ok = contract.get("no_proxy_or_fallback") is True
+            source_ok = contract.get("source") == "probability_simplicial_map.simplex_tree_map.rows"
+            compares_trees = contract.get("compares_query_and_memory_simplex_trees") is True
+            chain_guard = contract.get("chain_map_claim_requires_certified_filtered_simplicial_map") is True
+            morphism_guard = contract.get("persistence_module_morphism_claim_requires_certified_filtered_simplicial_map") is True
+            pair_count = _optional_int(contract.get("pair_count"))
+            if pair_count is None:
+                pair_count = len(pairs)
+            checked = _optional_int(contract.get("total_checked_simplices")) or 0
+            preserved = _optional_int(contract.get("total_preserved_simplices")) or 0
+            total_simplex_tree_pair_count += pair_count
+            total_checked_simplices += checked
+            total_preserved_simplices += preserved
+            if no_proxy_ok:
+                no_proxy_contract_source_count += 1
+            available = bool(contract.get("available") is True and pair_count > 0 and schema_ok and no_proxy_ok and source_ok and compares_trees and chain_guard and morphism_guard)
+            insufficient = bool(not available and no_proxy_ok and pair_count == 0 and str(contract.get("status", "")).startswith("unavailable"))
+            status = str(contract.get("status") or ("simplex_tree_analogy_available" if available else "unavailable_insufficient_model_probability_memory"))
+            source.update(
+                {
+                    "available": available,
+                    "status": status,
+                    "contract_schema_version": contract.get("schema_version", "unavailable"),
+                    "contract_available": bool(contract.get("available", False)),
+                    "pair_count": pair_count,
+                    "total_checked_simplices": checked,
+                    "total_preserved_simplices": preserved,
+                    "source_rows": contract.get("source", "unavailable"),
+                    "no_proxy_or_fallback": no_proxy_ok,
+                    "compares_query_and_memory_simplex_trees": compares_trees,
+                    "renders_hasse_face_to_coface_rows": bool(contract.get("renders_hasse_face_to_coface_rows", False)),
+                    "preserved_face_coface_chains_highlighted": bool(contract.get("preserved_face_coface_chains_highlighted", False)),
+                    "failed_or_distorted_chains_labeled_not_maps": bool(contract.get("failed_or_distorted_chains_labeled_not_maps", False)),
+                    "chain_map_claim_requires_certified_filtered_simplicial_map": chain_guard,
+                    "persistence_module_morphism_claim_requires_certified_filtered_simplicial_map": morphism_guard,
+                    "verified_insufficient_memory": insufficient,
+                    "reason_detail": contract.get("reason_detail", ""),
+                }
+            )
+            if insufficient:
+                verified_insufficient_memory_source_count += 1
+            if not available:
+                reasons = []
+                if not schema_ok:
+                    reasons.append("missing_simplex_tree_analogy_schema")
+                if not no_proxy_ok:
+                    reasons.append("missing_simplex_tree_analogy_no_proxy_contract")
+                if not source_ok:
+                    reasons.append("wrong_simplex_tree_source_rows")
+                if pair_count <= 0:
+                    reasons.append("no_simplex_tree_analogy_pairs")
+                if not chain_guard or not morphism_guard:
+                    reasons.append("uncertified_chain_or_morphism_claims_allowed")
+                source["reason"] = ";".join(reasons) or status
+            _count(status_counts, status)
+        sources.append(source)
+
+    available_sources = [row for row in sources if row.get("available")]
+    return {
+        "schema_version": "tropicalgt.herschel_analogical_memory_evidence.v1",
+        "available": bool(available_sources),
+        "source_count": len(sources),
+        "available_source_count": len(available_sources),
+        "verified_insufficient_memory_source_count": verified_insufficient_memory_source_count,
+        "total_bank_size": total_bank_size,
+        "total_records_added": total_records_added,
+        "total_retrieved_count": total_retrieved_count,
+        "total_top_k_requested": total_top_k_requested,
+        "total_top_k_rendered": total_top_k_rendered,
+        "total_simplex_tree_pair_count": total_simplex_tree_pair_count,
+        "total_checked_simplices": total_checked_simplices,
+        "total_preserved_simplices": total_preserved_simplices,
+        "no_proxy_contract_source_count": no_proxy_contract_source_count,
+        "probability_vector_contract_source_count": probability_vector_contract_source_count,
+        "required_topk_schema": "tropicalgt.analogical_topk.v1",
+        "required_simplex_tree_schema": "tropicalgt.analogical_simplex_tree_analogy.v1",
+        "required_assignment_metric": "jensen_shannon_distance_on_model_probability_vectors",
+        "status_counts": {key: status_counts[key] for key in sorted(status_counts)},
+        "quality_gate_reason_counts": {key: quality_gate_reason_counts[key] for key in sorted(quality_gate_reason_counts)},
+        "sources": sources,
+        "policy": "Herschel reports analogical memory only from recorded retrieval, top-k simplicial-map, and simplex-tree analogy sidecars. Empty or unqualified memory banks are explicit insufficient-memory evidence, not a proxy analogy or restart justification.",
+    }
+
+
 def summarize_bundle(bundle: dict[str, Any], *, bundle_path: Path | None = None) -> dict[str, Any]:
     decision = bundle.get("decision") if isinstance(bundle.get("decision"), dict) else {}
     gate = bundle.get("restart_evidence_gate") if isinstance(bundle.get("restart_evidence_gate"), dict) else {}
@@ -1380,6 +1643,7 @@ def summarize_bundle(bundle: dict[str, Any], *, bundle_path: Path | None = None)
             "persistence_landscape_evidence": _persistence_landscape_evidence(sidecars),
             "toric_tropical_cas_evidence": _toric_tropical_cas_evidence(sidecars),
             "analogical_query_context_evidence": _analogical_query_context_evidence(sidecars),
+            "analogical_memory_evidence": _analogical_memory_evidence(sidecars),
         },
         "restart_decision": {
             "action": gate.get("restart_action", "unavailable"),
@@ -1685,6 +1949,36 @@ def render_markdown(summary: dict[str, Any]) -> str:
         )
         if source.get("reason"):
             lines.append(f"  - reason: `{source.get('reason')}`")
+    analogical_memory = artifacts.get("analogical_memory_evidence", {}) if isinstance(artifacts.get("analogical_memory_evidence"), dict) else {}
+    lines.extend(
+        [
+            "## Analogical Memory Evidence",
+            "",
+            f"- Available: `{analogical_memory.get('available', False)}`",
+            f"- Sources: `{analogical_memory.get('source_count', 0)}`",
+            f"- Verified insufficient-memory sources: `{analogical_memory.get('verified_insufficient_memory_source_count', 0)}`",
+            f"- Retrieved memories: `{analogical_memory.get('total_retrieved_count', 0)}`",
+            f"- Rendered top-k maps: `{analogical_memory.get('total_top_k_rendered', 0)}`",
+            f"- Simplex-tree analogy pairs: `{analogical_memory.get('total_simplex_tree_pair_count', 0)}`",
+            f"- Required assignment metric: `{analogical_memory.get('required_assignment_metric', 'unavailable')}`",
+            "",
+            "```json",
+            json.dumps(analogical_memory.get("status_counts", {}) or analogical_memory.get("quality_gate_reason_counts", {}), indent=2),
+            "```",
+            "",
+        ]
+    )
+    for source in analogical_memory.get("sources", []) if isinstance(analogical_memory.get("sources"), list) else []:
+        if not isinstance(source, dict):
+            continue
+        lines.append(
+            f"- `{source.get('path', '')}` kind=`{source.get('kind', 'unavailable')}` available=`{source.get('available')}` "
+            f"status=`{source.get('status', 'unavailable')}` retrieved=`{source.get('retrieved_count', source.get('raw_retrieved_count', 0))}` "
+            f"topk_rendered=`{source.get('top_k_rendered', 0)}` pairs=`{source.get('pair_count', 0)}` "
+            f"verified_insufficient=`{source.get('verified_insufficient_memory')}`"
+        )
+        if source.get("reason"):
+            lines.append(f"  - reason: `{source.get('reason')}`")
     ranked_validator_categories = validator_gaps.get("ranked_categories", []) if isinstance(validator_gaps.get("ranked_categories"), list) else []
     if ranked_validator_categories:
         lines.extend(["### Required Actions", ""])
@@ -1810,6 +2104,7 @@ def render_html(summary: dict[str, Any]) -> str:
     persistence_landscape = artifacts.get("persistence_landscape_evidence", {}) if isinstance(artifacts.get("persistence_landscape_evidence"), dict) else {}
     toric_tropical_cas = artifacts.get("toric_tropical_cas_evidence", {}) if isinstance(artifacts.get("toric_tropical_cas_evidence"), dict) else {}
     analogical_query_context = artifacts.get("analogical_query_context_evidence", {}) if isinstance(artifacts.get("analogical_query_context_evidence"), dict) else {}
+    analogical_memory = artifacts.get("analogical_memory_evidence", {}) if isinstance(artifacts.get("analogical_memory_evidence"), dict) else {}
     validator_sources = validator_gaps.get("sources", []) if isinstance(validator_gaps.get("sources"), list) else []
     sidecars = [str(path) for path in artifacts.get("advanced_sidecars_tail", [])]
     source_rows = []
@@ -2009,6 +2304,26 @@ def render_html(summary: dict[str, Any]) -> str:
         )
     if not analogical_query_rows:
         analogical_query_rows.append("<tr><td colspan='7' class='muted'>No analogical query-context sidecar paths recorded.</td></tr>")
+    analogical_memory_rows = []
+    for source in analogical_memory.get("sources", []) if isinstance(analogical_memory.get("sources"), list) else []:
+        if not isinstance(source, dict):
+            continue
+        analogical_memory_rows.append(
+            "<tr>"
+            f"<td>{html.escape(str(source.get('path', '')))}</td>"
+            f"<td>{html.escape(str(source.get('kind', 'unavailable')))}</td>"
+            f"<td>{html.escape(str(source.get('available')))}</td>"
+            f"<td>{html.escape(str(source.get('status', 'unavailable')))}</td>"
+            f"<td>{html.escape(str(source.get('retrieved_count', source.get('raw_retrieved_count', 0))))}</td>"
+            f"<td>{html.escape(str(source.get('qualified_model_probability_memory_count', source.get('eligible_count', 0))))}</td>"
+            f"<td>{html.escape(str(source.get('top_k_rendered', 0)))}</td>"
+            f"<td>{html.escape(str(source.get('pair_count', 0)))}</td>"
+            f"<td>{html.escape(str(source.get('verified_insufficient_memory')))}</td>"
+            f"<td>{html.escape(str(source.get('reason', '')))}</td>"
+            "</tr>"
+        )
+    if not analogical_memory_rows:
+        analogical_memory_rows.append("<tr><td colspan='10' class='muted'>No analogical memory retrieval or simplex-tree analogy sidecar paths recorded.</td></tr>")
     sidecar_items = "".join(f"<li data-path='{html.escape(path.lower())}'>{html.escape(path)}</li>" for path in sidecars[:160]) or "<li class='muted'>No sidecar paths recorded.</li>"
     restart_safe = checkpoint.get("restart_safe") and execution.get("ready") and advanced.get("safe_for_restart") and restart.get("step0_restart_allowed")
     return f"""<!doctype html>
@@ -2053,6 +2368,7 @@ code {{ white-space:break-spaces; }}
 <span class="badge {'ok' if persistence_landscape.get('available') else 'warn'}">persistence_landscape_evidence={html.escape(str(bool(persistence_landscape.get('available'))))}</span>
 <span class="badge {'ok' if chart_bundle_transport.get('available') else 'warn'}">chart_bundle_evidence={html.escape(str(bool(chart_bundle_transport.get('available'))))}</span>
 <span class="badge {'ok' if toric_tropical_cas.get('available') else 'warn'}">toric_tropical_cas_evidence={html.escape(str(bool(toric_tropical_cas.get('available'))))}</span>
+<span class="badge {'ok' if analogical_memory.get('available') else 'warn'}">analogical_memory_evidence={html.escape(str(bool(analogical_memory.get('available'))))}</span>
 </header>
 <main>
 <section class="grid">
@@ -2072,6 +2388,7 @@ code {{ white-space:break-spaces; }}
 {_bar_chart_svg(persistence_landscape.get('backend_counts', {}) or persistence_landscape.get('unavailable_reason_counts', {}) if isinstance(persistence_landscape, dict) else {}, title='Persistence Landscape Backends Or Unavailable Reasons', chart_id='persistence-landscape-backends')}
 {_bar_chart_svg(chart_bundle_transport.get('completeness_tier_counts', {}) if isinstance(chart_bundle_transport, dict) else {}, title='Chart/Vector-Bundle Completeness Tiers', chart_id='chart-vector-bundle-completeness-tiers')}
 {_bar_chart_svg(toric_tropical_cas.get('status_counts', {}) if isinstance(toric_tropical_cas, dict) else {}, title='Toric/Tropical CAS Statuses', chart_id='toric-tropical-cas-statuses')}
+{_bar_chart_svg(analogical_memory.get('status_counts', {}) or analogical_memory.get('quality_gate_reason_counts', {}) if isinstance(analogical_memory, dict) else {}, title='Analogical Memory Statuses', chart_id='analogical-memory-statuses')}
 <section class="panel"><h2>Validator Sources</h2><table><thead><tr><th>Name</th><th>JSON path</th><th>Available</th><th>Gaps</th><th>Reason</th></tr></thead><tbody>{''.join(source_rows)}</tbody></table></section>
 <section class="panel"><h2>Validator Gap Actions</h2><table><thead><tr><th>Category</th><th>Count</th><th>Required action</th><th>Examples</th></tr></thead><tbody>{''.join(action_rows)}</tbody></table></section>
 <section class="panel"><h2>GFlowNet Branch Selection Evidence</h2><table><thead><tr><th>Sidecar</th><th>Available</th><th>Valid rows</th><th>Selected actions</th><th>Policies</th><th>Reason</th></tr></thead><tbody>{''.join(gflownet_branch_rows)}</tbody></table></section>
@@ -2083,6 +2400,7 @@ code {{ white-space:break-spaces; }}
 <section class="panel"><h2>Chart/Vector-Bundle Evidence</h2><table><thead><tr><th>Sidecar</th><th>Available</th><th>Completeness tier</th><th>Paper-ready telemetry</th><th>Charts</th><th>Transports</th><th>Missing groups</th><th>Reason</th></tr></thead><tbody>{''.join(chart_bundle_rows)}</tbody></table></section>
 <section class="panel"><h2>Toric/Tropical CAS Evidence</h2><table><thead><tr><th>Sidecar</th><th>Kind</th><th>Available</th><th>Status</th><th>Backend</th><th>Finite toric ideal</th><th>Tropical fan</th><th>Rays</th><th>Reason</th></tr></thead><tbody>{''.join(toric_tropical_rows)}</tbody></table></section>
 <section class="panel"><h2>Analogical Query Context Evidence</h2><table><thead><tr><th>Sidecar</th><th>Available</th><th>Selected source</th><th>Status</th><th>Probability vertices</th><th>Rejected keys</th><th>Reason</th></tr></thead><tbody>{''.join(analogical_query_rows)}</tbody></table></section>
+<section class="panel"><h2>Analogical Memory Evidence</h2><table><thead><tr><th>Sidecar</th><th>Kind</th><th>Available</th><th>Status</th><th>Retrieved</th><th>Qualified</th><th>Top-k rendered</th><th>Pairs</th><th>Insufficient memory</th><th>Reason</th></tr></thead><tbody>{''.join(analogical_memory_rows)}</tbody></table></section>
 <section class="panel"><h2>Blockers And Warnings</h2><div class="grid"><div><h3>Checkpoint</h3><ul>{_html_list(checkpoint.get('warnings', []))}</ul></div><div><h3>Execution</h3><ul>{_html_list(execution.get('issues', []))}</ul></div><div><h3>Advanced BPB</h3><ul>{_html_list(advanced.get('failed_gates', []))}</ul></div><div><h3>Restart</h3><ul>{_html_list(restart.get('blockers', []))}</ul></div></div></section>
 <section class="panel"><h2>Advanced Sidecars Tail</h2><input id="sidecar-filter" type="search" placeholder="Filter sidecar paths"><ul id="sidecar-list">{sidecar_items}</ul></section>
 </main>

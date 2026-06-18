@@ -53,7 +53,95 @@ def test_write_herschel_report_preserves_blockers_and_sidecar_groups(tmp_path: P
     }
     analogical_maps_path = tmp_path / "analogical_simplicial_maps.json"
     analogical_maps_path.write_text(
-        json.dumps({"query_context_contract": query_context_contract, "topk_contract": {"query_context_contract_schema_version": "tropicalgt.analogical_query_context_conversion.v1", "query_context_contract": query_context_contract}}),
+        json.dumps(
+            {
+                "available": True,
+                "maps": [{"rank": 0, "probability_simplicial_map_available": True}],
+                "query_context_contract": query_context_contract,
+                "topk_contract": {
+                    "schema_version": "tropicalgt.analogical_topk.v1",
+                    "status": "topk_maps_available",
+                    "no_proxy_or_fallback": True,
+                    "retrieval_requires_model_probability_vectors": True,
+                    "embedding_only_assignment_allowed": False,
+                    "assignment_metric": "jensen_shannon_distance_on_model_probability_vectors",
+                    "query_complex_required": "trajectory_probability_filtered_simplicial_object",
+                    "codomain_complex_required": "trajectory_probability_filtered_simplicial_object",
+                    "query_context_contract_schema_version": "tropicalgt.analogical_query_context_conversion.v1",
+                    "query_context_contract": query_context_contract,
+                    "top_k_requested": 12,
+                    "top_k_rendered": 1,
+                    "raw_retrieved_count": 2,
+                    "qualified_model_probability_memory_count": 1,
+                    "rejected_retrieved_count": 1,
+                    "readability_contract": {
+                        "schema_version": "tropicalgt.analogical_topk_readability.v1",
+                        "no_proxy_or_fallback": True,
+                    },
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    analogical_memory_path = tmp_path / "analogical_memory_retrieval.json"
+    analogical_memory_path.write_text(
+        json.dumps(
+            {
+                "bank_path": "outputs/unit/memory_bank/trajectory_memories.jsonl",
+                "bank_size": 3,
+                "records_added": 1,
+                "top_k": 12,
+                "retrieved": [
+                    {
+                        "retrieval_score": 0.82,
+                        "probability_simplicial_map_available": True,
+                        "probability_simplicial_map_preservation_rate": 1.0,
+                        "probability_simplicial_map_source": "model_probability_jensen_shannon_assignment",
+                        "probability_simplicial_map_chain_map_certified": True,
+                        "probability_simplicial_map_persistence_morphism_certified": True,
+                    }
+                ],
+                "quality_gate": {
+                    "candidate_count": 2,
+                    "eligible_count": 1,
+                    "rejected_count": 1,
+                    "policy": "store memories only above quality threshold",
+                    "reason_counts": {"below_quality_threshold": 1},
+                    "thresholds": {"min_quality": 0.72},
+                    "rows": [],
+                },
+                "retrieval_weights": {
+                    "probability_simplicial_map_weight": 1.0,
+                    "persistence_landscape_weight": 0.2,
+                    "certified_cas_weight": 0.1,
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    analogical_simplex_path = tmp_path / "analogical_simplex_tree_analogy.json"
+    analogical_simplex_path.write_text(
+        json.dumps(
+            {
+                "contract": {
+                    "schema_version": "tropicalgt.analogical_simplex_tree_analogy.v1",
+                    "available": True,
+                    "status": "simplex_tree_analogy_available",
+                    "no_proxy_or_fallback": True,
+                    "compares_query_and_memory_simplex_trees": True,
+                    "renders_hasse_face_to_coface_rows": True,
+                    "preserved_face_coface_chains_highlighted": True,
+                    "failed_or_distorted_chains_labeled_not_maps": True,
+                    "chain_map_claim_requires_certified_filtered_simplicial_map": True,
+                    "persistence_module_morphism_claim_requires_certified_filtered_simplicial_map": True,
+                    "source": "probability_simplicial_map.simplex_tree_map.rows",
+                    "pair_count": 1,
+                    "total_checked_simplices": 2,
+                    "total_preserved_simplices": 2,
+                },
+                "pairs": [{"rank": 0, "query_simplex": [0], "memory_simplex": [1], "preserved": True}],
+            }
+        ),
         encoding="utf-8",
     )
     action_selection_contract = {
@@ -534,6 +622,8 @@ def test_write_herschel_report_preserves_blockers_and_sidecar_groups(tmp_path: P
                 str(persistence_landscape_path),
                 "got_audit/analogical_memory_report.json",
                 str(analogical_maps_path),
+                str(analogical_memory_path),
+                str(analogical_simplex_path),
                 str(inference_scaling_tree_path),
                 str(tropical_support_path),
                 str(graphcg_direction_path),
@@ -578,8 +668,8 @@ def test_write_herschel_report_preserves_blockers_and_sidecar_groups(tmp_path: P
     assert "checkpoint_file_is_empty" in " ".join(summary["restart_decision"]["blockers"])
     groups = summary["artifact_evidence"]["sidecar_groups"]
     assert groups["cas_algebra"] == 2
-    assert groups["topology_persistence"] == 2
-    assert groups["analogical_memory"] == 2
+    assert groups["topology_persistence"] == 3
+    assert groups["analogical_memory"] == 4
     assert groups["tropical_toric"] == 3
     assert groups["graphcg"] == 1
     assert groups["gflownet"] == 1
@@ -710,6 +800,21 @@ def test_write_herschel_report_preserves_blockers_and_sidecar_groups(tmp_path: P
     assert analogical_query["sources"][0]["conversion_status"] == "valid_query_probability_trajectory_complex"
     assert analogical_query["sources"][0]["rejected_query_context_keys"] == ["probability_filtered_simplicial_object"]
     assert analogical_query["sources"][0]["embedding_only_assignment_allowed"] is False
+    analogical_memory = summary["artifact_evidence"]["analogical_memory_evidence"]
+    assert analogical_memory["schema_version"] == "tropicalgt.herschel_analogical_memory_evidence.v1"
+    assert analogical_memory["available"] is True
+    assert analogical_memory["source_count"] == 3
+    assert analogical_memory["available_source_count"] == 3
+    assert analogical_memory["verified_insufficient_memory_source_count"] == 0
+    assert analogical_memory["total_bank_size"] == 3
+    assert analogical_memory["total_retrieved_count"] == 1
+    assert analogical_memory["total_top_k_rendered"] == 1
+    assert analogical_memory["total_simplex_tree_pair_count"] == 1
+    assert analogical_memory["total_checked_simplices"] == 2
+    assert analogical_memory["total_preserved_simplices"] == 2
+    assert analogical_memory["probability_vector_contract_source_count"] == 1
+    assert analogical_memory["quality_gate_reason_counts"] == {"below_quality_threshold": 1}
+    assert analogical_memory["status_counts"] == {"retrieval_available": 1, "simplex_tree_analogy_available": 1, "topk_maps_available": 1}
     assert "no training" in summary["policy"]
 
     markdown = markdown_path.read_text(encoding="utf-8")
@@ -738,6 +843,8 @@ def test_write_herschel_report_preserves_blockers_and_sidecar_groups(tmp_path: P
     assert "## Toric/Tropical CAS Evidence" in markdown
     assert "toric_embedding_sidecar:certified" in markdown
     assert "## Analogical Query Context Evidence" in markdown
+    assert "## Analogical Memory Evidence" in markdown
+    assert "topk_maps_available" in markdown
     assert "trajectory_probability_filtered_simplicial_object" in markdown
     assert "probability_filtered_simplicial_object" in markdown
     assert "checkpoint_file_is_empty" in markdown
@@ -773,6 +880,8 @@ def test_write_herschel_report_preserves_blockers_and_sidecar_groups(tmp_path: P
     assert "data-chart='toric-tropical-cas-statuses'" in html
     assert "toric_embedding_sidecar" in html
     assert "Analogical Query Context Evidence" in html
+    assert "Analogical Memory Evidence" in html
+    assert "analogical-memory-statuses" in html
     assert "valid_query_probability_trajectory_complex" in html
     assert "row 0 missing json analogical_simplex_tree_analogy.json" in html
     assert "sidecar-filter" in html

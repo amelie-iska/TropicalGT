@@ -22,6 +22,8 @@ from tropicalgt.run import load_config  # noqa: E402
 
 HERSCHEL_REQUIRED_AUDIT_SIDECARS = (
     "analogical_simplicial_maps.json",
+    "analogical_memory_retrieval.json",
+    "analogical_simplex_tree_analogy.json",
     "inference_scaling_tree.json",
     "tropical_support_payload.json",
     "graphcg_direction_cosines_payload.json",
