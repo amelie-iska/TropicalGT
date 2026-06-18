@@ -37,7 +37,7 @@
 - [x] **Analogical simplicial maps:** A displayed map must check vertex assignment, edge preservation, face preservation, filtration monotonicity, and probability/JS assignment cost. If preservation fails, render it as a correspondence rather than a simplicial map. (2026-06-18 implemented/verified by retrieval map certificates.)
 - [x] **Simplex-tree analogies:** Add a comparison of query and memory simplex-tree Hasse/trie diagrams, with preserved face/coface chains highlighted. Treat this separately from geometric PCA views. (2026-06-18 verified by `analogical_simplex_tree_analogy.html/json`.)
 - [x] **Persistence landscapes:** Render actual GUDHI landscape vectors with legible small multiples or tabs. Avoid overlapping titles, unreadable heatmaps, and hover-only explanations. Completed 2026-06-18: added stacked 2D small multiples sourced from `gudhi.representations.Landscape.vector`, preserved the 3D curve and lambda_1 heatmap diagnostics, and recorded the exact no-proxy small-multiple contract in `persistence_landscapes.json`.
-- [ ] **Tropical support heatmap:** Improve compact labels, split support strip from margin/profile panels, show token categories and support collapse diagnostics without overlapping axes or legends.
+- [x] **Tropical support heatmap:** Improve compact labels, split support strip from margin/profile panels, show token categories and support collapse diagnostics without overlapping axes or legends. Completed 2026-06-18: the observed-support view now splits assignment, support frequency, mean selected margin, query-token category strip, and margin profile into separate coordinated panels; collapse views retain the compact diagnostic/table layout, and validators require the split roles for observed-support artifacts.
 - [ ] **GraphCG directions:** Re-layout full-rank direction spectra, top active directions, candidate activity, and signed bias into separate coordinated panels. Labels must be compact and hover must contain full path/action text.
 
 ## Implementation Tasks
@@ -225,7 +225,7 @@
 - Simplex-tree pages still need a genuine connected trie/face-coface-poset view instead of disconnected columns.
 - 2-parameter module pages must show an honest `(level, radius)` lattice/grid with fiber ranks, structure-map diagnostics, and downloadable JSON.
 - Analogical maps must compare probability-vector complexes with Jensen-Shannon assignment and must explain any non-preserved edges/faces instead of reporting high derived similarity with zero free-resolution support.
-- Tropical support heatmaps need grouped labels, top-support summaries, margin profile readability, and collapse diagnostics without jammed axes.
+- Tropical support heatmaps now have grouped labels, top-support summaries, split support-frequency/mean-margin panels, a query-token category strip, separate margin profiles, and compact collapse diagnostics. Remaining work is browser regeneration/inspection when safe, not source-level layout plumbing.
 
 ## 2026-06-16 Main-Agent Status Addendum: b62 Always-On Restart And Cleanup
 

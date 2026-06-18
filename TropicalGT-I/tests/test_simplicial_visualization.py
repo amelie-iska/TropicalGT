@@ -1441,13 +1441,25 @@ def test_tropical_support_heatmap_layout_keeps_legend_out_of_margin(tmp_path: Pa
     assert readability["panels_are_separate"] is True
     assert readability["assignment_and_margin_panels_separated"] is True
     assert readability["support_strip_split_from_margin_profile"] is True
+    assert readability["support_frequency_and_mean_margin_split"] is True
+    assert readability["query_token_category_strip_visible"] is True
     assert readability["full_token_text_preserved_in_hover_and_payload"] is True
     assert readability["invalid_active_support_indices_not_fabricated"] is True
     assert set(readability["required_panel_roles"]).issubset(set(readability["panel_roles"]))
-    assert "support_frequency_mean_margin" in readability["panel_roles"]
+    assert set(readability["observed_layout_required_panel_roles"]).issubset(set(readability["panel_roles"]))
+    assert "support_frequency" in readability["panel_roles"]
+    assert "mean_selected_margin_by_support" in readability["panel_roles"]
+    assert "query_token_category_strip" in readability["panel_roles"]
+    assert "support_frequency_mean_margin" not in readability["panel_roles"]
     assert payload["metrics"]["render_contract_schema_version"] == contract["schema_version"]
     assert payload["metrics"]["readability_contract_schema_version"] == readability["schema_version"]
     assert payload["metrics"]["readability_panel_roles"] == readability["panel_roles"]
+    assert payload["metrics"]["query_token_category_strip_available"] is True
+    assert payload["metrics"]["query_token_category_count"] == 4
+    assert set(payload["metrics"]["query_token_category_labels"]) >= {"graph:graph", "node:problem", "node:answer", "edge:edge"}
+    assert len(payload["query_token_category_strip"]) == 4
+    assert payload["query_token_category_strip"][0]["token_group"] == "graph:graph"
+    assert payload["query_token_category_strip"][0]["no_proxy_or_fallback"] is True
     assert payload["metrics"]["no_proxy_or_fallback"] is True
     audit = payload["metrics"]["wall_margin_audit"]
     assert audit["strict_wall_hit_count"] == 1
@@ -1469,8 +1481,11 @@ def test_tropical_support_heatmap_layout_keeps_legend_out_of_margin(tmp_path: Pa
     assert "tropical_support_readability_contract" in html
     compact = html.replace(" ", "")
     assert '"showlegend":false' in compact
-    assert '"r":190' in compact
-    assert "Support frequency and mean selected margin" in html
+    assert '"r":220' in compact
+    assert "Support frequency by observed support" in html
+    assert "Mean selected margin by observed support" in html
+    assert "Query token categories from graph-token trace" in html
+    assert "Support frequency and mean selected margin" not in html
 
 
 def test_tropical_support_mixed_invalid_active_support_indices_are_not_fabricated(tmp_path: Path):

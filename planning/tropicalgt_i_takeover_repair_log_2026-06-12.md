@@ -296,3 +296,20 @@ CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/t
 CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_interactive_artifact_validator.py -q
 CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m py_compile TropicalGT-I/src/tropicalgt/visualization.py TropicalGT-I/tests/test_simplicial_visualization.py
 ```
+
+## 2026-06-18 Tropical Support Heatmap Split-Panel Repair
+
+- Reworked the standard tropical active-support artifact into separate coordinated panels: binary observed-support assignment matrix, support-frequency bars, mean selected-margin bars, query-token category strip, and graph-token margin profile with wall-threshold overlays.
+- Category-strip rows are sourced only from graph-token trace fields (`kind`, `node_type`, `edge_type`, `active_support_kind`, `label`) and are persisted in `query_token_category_strip` with `no_proxy_or_fallback=true`.
+- Tightened the readability contract and validator: observed-support artifacts must expose `support_frequency`, `mean_selected_margin_by_support`, and `query_token_category_strip` roles and must mark frequency/margin as split; the legacy combined `support_frequency_mean_margin` role is rejected by the writer regression.
+- Collapse-diagnostic layouts remain compact and separate assignment, margin profile, margin distribution, and collapse-metric table while preserving the existing no-proxy support-index policy.
+
+Verification:
+
+```bash
+CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_simplicial_visualization.py -k "tropical_support" -q
+CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_simplicial_visualization.py -q
+CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_interactive_artifact_validator.py -q
+CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m py_compile TropicalGT-I/src/tropicalgt/visualization.py TropicalGT-I/scripts/validate_interactive_audit_artifacts.py TropicalGT-I/tests/test_simplicial_visualization.py
+git diff --check
+```

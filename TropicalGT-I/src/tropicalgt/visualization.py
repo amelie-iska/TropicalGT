@@ -4176,6 +4176,31 @@ def write_tropical_support_heatmap(result: dict[str, object], output_dir: str | 
 
     query_token_group_summary = grouped_token_summary(range(n))
     support_token_group_summary = grouped_token_summary(support_indices)
+    query_token_groups = [
+        token_group_label(token) if isinstance(token, dict) else "unknown:unknown"
+        for token in tokens
+    ]
+    query_group_counts = {group: query_token_groups.count(group) for group in sorted(set(query_token_groups))}
+    query_group_order = sorted(query_group_counts, key=lambda group: (-int(query_group_counts[group]), str(group)))
+    query_group_id_by_name = {group: idx for idx, group in enumerate(query_group_order)}
+    query_group_ids = [int(query_group_id_by_name[group]) for group in query_token_groups]
+    query_group_tick_text = [_short_label(group, 24) for group in query_group_order]
+    query_token_category_strip = []
+    for idx, group in enumerate(query_token_groups):
+        token = tokens[idx] if isinstance(tokens[idx], dict) else {}
+        semantic_type = group.split(":", 1)[1] if ":" in group else group
+        query_token_category_strip.append(
+            {
+                "query_index": int(idx),
+                "query_label": _support_token_label(idx, token if isinstance(token, dict) else {}),
+                "token_group": str(group),
+                "token_category_id": int(query_group_id_by_name[group]),
+                "kind": str(token.get("kind", "?")) if isinstance(token, dict) else "?",
+                "semantic_type": str(semantic_type),
+                "source_fields": ["kind", "node_type", "edge_type", "active_support_kind", "label"],
+                "no_proxy_or_fallback": True,
+            }
+        )
     top_support_position = int(np.argmax(counts)) if counts.size else -1
     top_support_index = int(support_indices[top_support_position]) if top_support_position >= 0 else -1
     top_support_token = tokens[top_support_index] if 0 <= top_support_index < n and isinstance(tokens[top_support_index], dict) else {}
@@ -4331,7 +4356,7 @@ def write_tropical_support_heatmap(result: dict[str, object], output_dir: str | 
     if collapse_like_layout:
         support_panel_roles.extend(["margin_distribution", "collapse_metrics_table"])
     else:
-        support_panel_roles.append("support_frequency_mean_margin")
+        support_panel_roles.extend(["support_frequency", "mean_selected_margin_by_support", "query_token_category_strip"])
     support_readability_contract = {
         "schema_version": "tropicalgt.tropical_support_readability.v1",
         "source_trace": "graph_token_trace.tokens",
@@ -4345,8 +4370,15 @@ def write_tropical_support_heatmap(result: dict[str, object], output_dir: str | 
             "wall_margin_threshold_overlays",
             "token_group_summary",
         ],
+        "observed_layout_required_panel_roles": [
+            "support_frequency",
+            "mean_selected_margin_by_support",
+            "query_token_category_strip",
+        ],
         "assignment_and_margin_panels_separated": True,
         "support_strip_split_from_margin_profile": True,
+        "support_frequency_and_mean_margin_split": bool(not collapse_like_layout),
+        "query_token_category_strip_visible": bool(not collapse_like_layout),
         "model_probability_summaries_separate_from_assignment_matrix": True,
         "compact_tick_labels": True,
         "full_token_text_preserved_in_hover_and_payload": True,
@@ -4395,6 +4427,9 @@ def write_tropical_support_heatmap(result: dict[str, object], output_dir: str | 
         "support_columns_policy": "observed_valid_active_support_indices_only",
         "query_token_group_summary": query_token_group_summary,
         "support_token_group_summary": support_token_group_summary,
+        "query_token_category_count": int(len(query_group_order)),
+        "query_token_category_labels": query_group_order,
+        "query_token_category_strip_available": bool(query_token_category_strip),
         "top_support_summary": top_support_summary,
         "grouped_token_label_policy": "query/support labels are grouped by model graph-token kind plus node_type/edge_type/semantic label; no labels are fabricated beyond graph_token_trace fields",
         "margin_summary": margin_summary,
@@ -4429,6 +4464,7 @@ def write_tropical_support_heatmap(result: dict[str, object], output_dir: str | 
                 "selected_margin_matrix": [[None if not np.isfinite(value) else float(value) for value in row] for row in selected_margin_matrix.tolist()],
                 "margin_matrix": z.tolist(),
                 "tokens": tokens,
+                "query_token_category_strip": query_token_category_strip,
                 "support_assignment_status_by_token": support_assignment_status_by_token,
                 "support_flow_edges": support_flow_edges,
             },
@@ -4582,14 +4618,16 @@ def write_tropical_support_heatmap(result: dict[str, object], output_dir: str | 
     token_kinds = [str(token.get("kind", "?")) for token in tokens]
     token_margins = [float(value) for value in margin_values.tolist()]
     fig = make_subplots(
-        rows=3,
+        rows=5,
         cols=1,
-        specs=[[{"type": "heatmap"}], [{"type": "bar"}], [{"type": "scatter"}]],
-        row_heights=[0.48, 0.24, 0.28],
-        vertical_spacing=0.09,
+        specs=[[{"type": "heatmap"}], [{"type": "bar"}], [{"type": "bar"}], [{"type": "heatmap"}], [{"type": "scatter"}]],
+        row_heights=[0.38, 0.16, 0.16, 0.10, 0.20],
+        vertical_spacing=0.055,
         subplot_titles=(
             "Active-support assignment matrix",
-            "Support frequency and mean selected margin",
+            "Support frequency by observed support",
+            "Mean selected margin by observed support",
+            "Query token categories from graph-token trace",
             "Margin profile by graph-token order",
         ),
     )
@@ -4612,15 +4650,59 @@ def write_tropical_support_heatmap(result: dict[str, object], output_dir: str | 
         go.Bar(
             x=support_labels,
             y=counts.tolist(),
-            marker=dict(color=mean_margins, colorscale="Turbo", line=dict(color="#e8eef8", width=0.8)),
-            text=[f"n={int(c)}<br>m={m:.3f}" for c, m in zip(counts.tolist(), mean_margins)],
+            marker=dict(color="#38bdf8", line=dict(color="#e8eef8", width=0.8)),
+            text=[f"n={int(c)}" for c in counts.tolist()],
             textposition="outside",
-            hovertext=[f"support={html.escape(label)}<br>count={int(c)}<br>mean margin={m:.4f}" for label, c, m in zip(support_labels, counts.tolist(), mean_margins)],
+            hovertext=[f"support={html.escape(label)}<br>selected query count={int(c)}" for label, c in zip(support_labels, counts.tolist())],
             hoverinfo="text",
             name="support frequency",
             showlegend=False,
         ),
         row=2,
+        col=1,
+    )
+    fig.add_trace(
+        go.Bar(
+            x=support_labels,
+            y=mean_margins,
+            marker=dict(color=mean_margins, colorscale="Turbo", line=dict(color="#e8eef8", width=0.8)),
+            text=[f"m={m:.3f}" for m in mean_margins],
+            textposition="outside",
+            hovertext=[f"support={html.escape(label)}<br>mean selected margin={m:.4f}<br>selected query count={int(c)}" for label, m, c in zip(support_labels, mean_margins, counts.tolist())],
+            hoverinfo="text",
+            name="mean selected margin",
+            showlegend=False,
+        ),
+        row=3,
+        col=1,
+    )
+    fig.add_trace(
+        go.Heatmap(
+            z=[query_group_ids],
+            x=row_numbers,
+            y=["token category"],
+            colorscale="Turbo",
+            zmin=0,
+            zmax=max(len(query_group_order) - 1, 1),
+            colorbar=dict(
+                title="category",
+                x=1.08,
+                y=0.33,
+                len=0.16,
+                thickness=10,
+                tickmode="array",
+                tickvals=list(range(len(query_group_order))),
+                ticktext=query_group_tick_text,
+            ),
+            customdata=[[
+                f"token={html.escape(query_labels[i])}<br>category={html.escape(query_token_groups[i])}<br>category id={query_group_ids[i]}<br>text={_html_clip(tokens[i].get('text', '') if isinstance(tokens[i], dict) else '', 280)}"
+                for i in range(n)
+            ]],
+            hovertemplate="%{customdata}<extra></extra>",
+            name="query token category strip",
+            showscale=True,
+        ),
+        row=4,
         col=1,
     )
     fig.add_trace(
@@ -4644,7 +4726,7 @@ def write_tropical_support_heatmap(result: dict[str, object], output_dir: str | 
             hovertemplate="%{customdata}<extra></extra>",
             name="margin profile",
         ),
-        row=3,
+        row=5,
         col=1,
     )
     for threshold_value, threshold_name, threshold_color, threshold_dash in (
@@ -4661,7 +4743,7 @@ def write_tropical_support_heatmap(result: dict[str, object], output_dir: str | 
                 name=threshold_name,
                 showlegend=False,
             ),
-            row=3,
+            row=5,
             col=1,
         )
     fig.update_layout(
@@ -4671,8 +4753,8 @@ def write_tropical_support_heatmap(result: dict[str, object], output_dir: str | 
             f"<br><sup>observed supports={len(support_indices)}/{n}; top-support collapse rate={collapse_rate:.3f}; effective={effective_supports:.2f}; entropy={support_entropy:.3f} bits. Grouped token labels: {html.escape(grouped_label_summary or 'unavailable')}; top support group={html.escape(str(top_support_summary.get('support_group', 'unavailable')))}. Strict wall-hit rate={wall_margin_audit['strict_wall_hit_rate']:.3f}; near-wall hit rate={wall_margin_audit['near_wall_hit_rate']:.3f}. Wall audit scope: {html.escape(str(wall_margin_audit.get('metric_scope', 'unavailable')))}; interpretation: {html.escape(str(wall_margin_audit.get('low_strict_wall_interpretation_status', 'unavailable')))}. Yellow cells mark selected support assignments only. No support-token proxies.</sup>"
         ),
         meta={"tropical_support_render_contract": support_render_contract, "tropical_support_readability_contract": support_readability_contract},
-        height=max(1040, min(1660, 700 + 12 * n)),
-        margin=dict(t=150, l=112, r=190, b=124),
+        height=max(1240, min(1980, 860 + 14 * n)),
+        margin=dict(t=166, l=112, r=220, b=128),
         showlegend=False,
     )
     if collapse_rate >= 0.95:
@@ -4695,9 +4777,13 @@ def write_tropical_support_heatmap(result: dict[str, object], output_dir: str | 
     fig.update_xaxes(title_text="active support token", tickangle=38, automargin=True, row=1, col=1)
     fig.update_yaxes(title_text="query token", automargin=True, row=1, col=1)
     fig.update_xaxes(title_text="support token", tickangle=28, automargin=True, row=2, col=1)
-    fig.update_yaxes(title_text="query count", automargin=True, row=2, col=1)
-    fig.update_xaxes(title_text="graph-token index", automargin=True, row=3, col=1)
-    fig.update_yaxes(title_text="active-support margin", automargin=True, row=3, col=1)
+    fig.update_yaxes(title_text="selected query count", automargin=True, row=2, col=1)
+    fig.update_xaxes(title_text="support token", tickangle=28, automargin=True, row=3, col=1)
+    fig.update_yaxes(title_text="mean selected margin", automargin=True, row=3, col=1)
+    fig.update_xaxes(title_text="graph-token index", automargin=True, row=4, col=1)
+    fig.update_yaxes(title_text="trace category", automargin=True, row=4, col=1)
+    fig.update_xaxes(title_text="graph-token index", automargin=True, row=5, col=1)
+    fig.update_yaxes(title_text="active-support margin", automargin=True, row=5, col=1)
     _write_plotly_dark_html(path, fig, "Tropical active-support heatmap")
     return {"tropical_support_heatmap": str(path), "tropical_support_payload": str(payload_path)}
 

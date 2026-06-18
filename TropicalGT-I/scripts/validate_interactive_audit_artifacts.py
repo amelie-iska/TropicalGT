@@ -1050,7 +1050,10 @@ def validate_row(row_dir: Path, *, min_candidates: int = 8, min_depth: int = 2, 
         _assert(support_readability_contract.get("invalid_active_support_indices_not_fabricated") is True, errors, "tropical support readability contract allows fabricated invalid support cells")
         _assert(support_readability_contract.get("normal_fan_wall_crossing_certified") is False, errors, "tropical support readability contract incorrectly certifies normal-fan walls")
         if layout_mode == "observed_support_matrix":
-            _assert("support_frequency_mean_margin" in panel_roles, errors, "tropical support observed-support layout is missing support-frequency panel")
+            observed_roles = {"support_frequency", "mean_selected_margin_by_support", "query_token_category_strip"}
+            _assert(observed_roles.issubset(panel_roles), errors, "tropical support observed-support layout is missing split support/category panels")
+            _assert(support_readability_contract.get("support_frequency_and_mean_margin_split") is True, errors, "tropical support observed-support layout merges frequency and margin panels")
+            _assert(support_readability_contract.get("query_token_category_strip_visible") is True, errors, "tropical support observed-support layout hides token categories")
         if layout_mode == "collapse_diagnostic":
             _assert({"margin_distribution", "collapse_metrics_table"}.issubset(panel_roles), errors, "tropical support collapse layout is missing diagnostic panels")
             _assert(support_readability_contract.get("collapse_diagnostic_visible") is True, errors, "tropical support collapse layout hides collapse diagnostics")
