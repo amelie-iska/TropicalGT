@@ -46,6 +46,8 @@ Herschel's 5K evidence report path is now implemented as a deterministic CPU-onl
 
 Blocked evidence remains blocked. Empty or unavailable checkpoints, missing post-5K command results, failed advanced BPB gates, and failed validators are copied into the report as exact blockers; no checkpoint-backed or sidecar-backed restart can be justified by this report unless the underlying bundle evidence already permits it. This keeps Herschel useful while the user may be running another GPU job.
 
+2026-06-18 follow-up: Herschel report summaries now also read strict interactive-validator `--json-output` files from recorded validator command results and expose `validator_gap_evidence` under `artifact_evidence`. This carries the validator `evidence_gap_inventory` into Herschel's JSON/markdown report with combined category counts and per-source availability, while preserving failed validator status. Missing validator JSON is recorded as unavailable and cannot justify a restart, artifact pass, or hyperparameter change.
+
 Validation:
 
 ```text

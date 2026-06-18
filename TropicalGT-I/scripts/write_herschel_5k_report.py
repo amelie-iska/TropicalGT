@@ -5,6 +5,7 @@ import argparse
 from datetime import datetime, timezone
 import json
 from pathlib import Path
+import shlex
 from typing import Any
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -32,6 +33,97 @@ def _fmt(value: Any) -> str:
     if value is None:
         return "unavailable"
     return str(value)
+
+
+
+def _json_output_paths(command: str) -> list[Path]:
+    try:
+        parts = shlex.split(command)
+    except ValueError:
+        return []
+    paths: list[Path] = []
+    for index, part in enumerate(parts):
+        if part == "--json-output" and index + 1 < len(parts):
+            paths.append(Path(parts[index + 1]))
+        elif part.startswith("--json-output="):
+            paths.append(Path(part.split("=", 1)[1]))
+    return paths
+
+
+def _resolve_output_path(path: Path) -> Path:
+    return path if path.is_absolute() else ROOT / path
+
+
+def _validator_gap_evidence(bundle: dict[str, Any]) -> dict[str, Any]:
+    sources: list[dict[str, Any]] = []
+    combined: dict[str, int] = {}
+    command_results = [row for row in bundle.get("command_results", []) if isinstance(row, dict)]
+    for row in command_results:
+        name = str(row.get("name", ""))
+        command = str(row.get("command", ""))
+        if "interactive_audit_validator" not in name and "validate_interactive_audit_artifacts.py" not in command:
+            continue
+        paths = _json_output_paths(command)
+        if not paths:
+            sources.append(
+                {
+                    "name": name,
+                    "available": False,
+                    "reason": "validator_command_lacks_json_output_path",
+                    "returncode": row.get("returncode"),
+                    "timed_out": bool(row.get("timed_out", False)),
+                }
+            )
+            continue
+        for path in paths:
+            resolved = _resolve_output_path(path)
+            source: dict[str, Any] = {
+                "name": name,
+                "path": _project_path(resolved),
+                "available": False,
+                "returncode": row.get("returncode"),
+                "timed_out": bool(row.get("timed_out", False)),
+            }
+            if not resolved.exists():
+                source["reason"] = "validator_json_output_missing"
+                sources.append(source)
+                continue
+            try:
+                payload = json.loads(resolved.read_text(encoding="utf-8"))
+            except Exception as exc:  # pragma: no cover - parser message is platform-dependent
+                source["reason"] = f"validator_json_parse_error:{exc}"
+                sources.append(source)
+                continue
+            inventory = payload.get("evidence_gap_inventory", {}) if isinstance(payload, dict) else {}
+            categories = inventory.get("categories", []) if isinstance(inventory.get("categories"), list) else []
+            category_counts = inventory.get("category_counts", {}) if isinstance(inventory.get("category_counts"), dict) else {}
+            for category, count in category_counts.items():
+                try:
+                    combined[str(category)] = combined.get(str(category), 0) + int(count)
+                except (TypeError, ValueError):
+                    continue
+            source.update(
+                {
+                    "available": bool(inventory),
+                    "validator_ok": bool(payload.get("ok")) if isinstance(payload, dict) else False,
+                    "error_count": len(payload.get("errors", [])) if isinstance(payload, dict) and isinstance(payload.get("errors"), list) else None,
+                    "gap_count": inventory.get("gap_count"),
+                    "category_counts": category_counts,
+                    "categories": categories[:16],
+                    "policy": inventory.get("policy", ""),
+                }
+            )
+            if not inventory:
+                source["reason"] = "validator_json_lacks_evidence_gap_inventory"
+            sources.append(source)
+    return {
+        "schema_version": "tropicalgt.herschel_validator_gap_evidence.v1",
+        "available": any(source.get("available") for source in sources),
+        "source_count": len(sources),
+        "combined_category_counts": {category: count for category, count in sorted(combined.items())},
+        "sources": sources,
+        "policy": "Herschel reads validator gap inventories only from recorded validator JSON outputs; missing JSON is unavailable and does not justify a restart or artifact pass.",
+    }
 
 
 def _sidecar_groups(paths: list[str]) -> dict[str, int]:
@@ -90,6 +182,7 @@ def summarize_bundle(bundle: dict[str, Any], *, bundle_path: Path | None = None)
     inventory = bundle.get("artifact_inventory") if isinstance(bundle.get("artifact_inventory"), dict) else {}
     advanced = bundle.get("advanced_bpb_contract") if isinstance(bundle.get("advanced_bpb_contract"), dict) else {}
     sidecars = [str(path) for path in inventory.get("advanced_sidecars_tail", []) if str(path)]
+    validator_gap_evidence = _validator_gap_evidence(bundle)
     command_results = [row for row in bundle.get("command_results", []) if isinstance(row, dict)]
     failed_commands = [row for row in command_results if row.get("returncode") not in (0, None) or row.get("timed_out")]
     blockers = [str(item) for item in gate.get("blockers", []) if str(item)]
@@ -137,6 +230,7 @@ def summarize_bundle(bundle: dict[str, Any], *, bundle_path: Path | None = None)
             "advanced_sidecar_count": len(sidecars),
             "sidecar_groups": _sidecar_groups(sidecars),
             "advanced_sidecars_tail": sidecars[:120],
+            "validator_gap_evidence": validator_gap_evidence,
         },
         "restart_decision": {
             "action": gate.get("restart_action", "unavailable"),
@@ -195,7 +289,31 @@ def render_markdown(summary: dict[str, Any]) -> str:
         json.dumps(artifacts.get("sidecar_groups", {}), indent=2),
         "```",
         "",
-        "## Restart Decision",
+        "## Validator Evidence Gaps",
+        "",
+    ]
+    validator_gaps = artifacts.get("validator_gap_evidence", {}) if isinstance(artifacts.get("validator_gap_evidence"), dict) else {}
+    lines.extend(
+        [
+            f"- Available: `{validator_gaps.get('available', False)}`",
+            f"- Sources: `{validator_gaps.get('source_count', 0)}`",
+            "",
+            "```json",
+            json.dumps(validator_gaps.get("combined_category_counts", {}), indent=2),
+            "```",
+            "",
+        ]
+    )
+    for source in validator_gaps.get("sources", []) if isinstance(validator_gaps.get("sources"), list) else []:
+        if not isinstance(source, dict):
+            continue
+        lines.append(f"- `{source.get('name', 'validator')}` path=`{source.get('path', '')}` available=`{source.get('available')}` gaps=`{source.get('gap_count')}`")
+        if source.get("reason"):
+            lines.append(f"  - reason: `{source.get('reason')}`")
+    lines.extend(
+        [
+            "",
+            "## Restart Decision",
         "",
         f"- Action: `{restart.get('action')}`",
         f"- Step-0 restart allowed: `{restart.get('step0_restart_allowed')}`",
@@ -212,7 +330,8 @@ def render_markdown(summary: dict[str, Any]) -> str:
         "",
         "## Blockers And Warnings",
         "",
-    ]
+        ]
+    )
     for label, values in (
         ("checkpoint warnings", checkpoint.get("warnings", [])),
         ("execution issues", execution.get("issues", [])),
