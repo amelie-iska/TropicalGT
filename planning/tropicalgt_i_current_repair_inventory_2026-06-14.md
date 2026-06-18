@@ -648,3 +648,14 @@ Validation: py-compile passed for touched scripts/source/tests; focused Herschel
 Next sequential item: after verification and push, inspect whether any remaining implemented 5K sidecars are still unsummarized; otherwise resume source-side CAS/tropical/visual repair work.
 
 Validation: py-compile passed for touched scripts/source/tests; focused Herschel/bundle tests passed (`11 passed`); broader Herschel/bundle/review-loop/provenance tests passed (`36 passed`); metric provenance audit passed (`436 covered`). Live b60 bundle sanity check reports `inference_audit_available` with 12 inference candidates from the existing bundle sidecar list.
+
+## 2026-06-18 Optional Macaulay2 Tropical Side Diagnostics
+
+Status: implemented for the CAS/tropical adapter and regression suite.
+
+- Added optional Macaulay2 Tropical side probes for `cones T`, `tropicalCycle I`, `BergmanFan I`, `stableIntersection(T, T)`, and `visualizeHypersurface first G`.
+- Side diagnostics are parsed into `optional_method_diagnostics` with explicit availability, method identity, raw text or error reason, and `side_diagnostic_only_not_a_replacement_for_tropicalVariety_certificate` as the gate string.
+- Primary safe rendering still requires the model-derived ideal contract plus the `tropicalVariety I` fan/cycle certificate. Optional side methods cannot certify tropical fans, normal fans, toric embeddings, tropical embeddings, vector bundles, derived equivalence, BPB quality, or restart permission by themselves.
+- Validation passed CPU-only: py-compile for `cas_tropical.py`; focused tropical fan tests (`4 passed, 28 deselected`); full algebraic persistence tests (`32 passed`); metric provenance audit (`436 covered, 0 uncovered`).
+
+Next sequential item: surface the optional side diagnostics in relevant CAS/tropical visual and Herschel report paths only when present, otherwise render exact unavailable states; then continue the remaining real-CAS and visual repair queue.

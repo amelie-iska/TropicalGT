@@ -845,3 +845,28 @@ Sequential two-parameter QA item completed:
 Validation: py-compile passed; focused validator regressions passed (`3 passed, 45 deselected`); full interactive artifact validator passed (`48 passed`); metric provenance audit passed (`332 covered, 0 uncovered`).
 
 Next linear item: continue through the simplex-tree/NLL/tropical-support repair queue and preserve actual-data-only browser/validator contracts.
+
+## 2026-06-18 Optional Macaulay2 Tropical Side Diagnostics
+
+Sequential CAS/tropical hardening item completed:
+
+- The Macaulay2 Tropical adapter now probes additional optional methods after the primary `tropicalVariety I` certificate path: `cones T`, `tropicalCycle I`, `BergmanFan I`, `stableIntersection(T, T)`, and `visualizeHypersurface first G`.
+- These outputs are recorded under `optional_method_diagnostics` and clipped raw `cas_artifacts` only when Macaulay2 actually emits them.
+- Unavailable or unsupported methods render as explicit unavailable side diagnostics with backend reasons; they never replace the `tropicalVariety` fan/cycle certificate gate.
+- The certificate contract now lists the additional methods as side diagnostics and preserves the no-proxy rule that support-token, chain, toric, or normal-fan substitutes cannot certify tropical fan evidence.
+- Regression coverage checks script generation, tagged-parser behavior, available/unavailable side diagnostics, raw artifact pass-through, and the certificate-gate string for each optional method.
+
+Validation:
+
+```text
+CUDA_VISIBLE_DEVICES="" /home/iska/miniconda3/envs/tokengt/bin/python -m py_compile TropicalGT-I/src/tropicalgt/cas_tropical.py
+# passed
+CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest -q TropicalGT-I/tests/test_algebraic_persistence.py -k "tropical_fan"
+# 4 passed, 28 deselected
+CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest -q TropicalGT-I/tests/test_algebraic_persistence.py
+# 32 passed
+CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src:TropicalGT-I/scripts /home/iska/miniconda3/envs/tokengt/bin/python TropicalGT-I/scripts/audit_metric_provenance.py --fail-on-uncovered
+# findings=436 covered=436 uncovered=0
+```
+
+Next linear CAS item: connect optional tropical side diagnostics into visual/report surfaces only as side evidence when present; continue real CAS wrapper expansion for certified resolutions, Fitting/minor evidence, and derived/analogical comparisons without proxy substitutions.

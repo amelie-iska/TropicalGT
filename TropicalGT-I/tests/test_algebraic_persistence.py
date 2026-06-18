@@ -1033,6 +1033,11 @@ def test_macaulay2_tropical_fan_diagnostic_parser_and_script():
     assert 'needsPackage "Tropical"' in script
     assert "tropicalVariety I" in script
     assert "rays T" in script
+    assert "cones T" in script
+    assert "tropicalCycle I" in script
+    assert "BergmanFan I" in script
+    assert "stableIntersection(T, T)" in script
+    assert "visualizeHypersurface first G" in script
     tagged = "\n".join([
         "backend=Macaulay2",
         "tropical_package_available=true",
@@ -1058,6 +1063,16 @@ def test_macaulay2_tropical_fan_diagnostic_parser_and_script():
         "prevariety_is_balanced=true",
         "prevariety_is_pure=true",
         "prevariety_is_simplicial=true",
+        "cones_available=true",
+        "cones_text={{0, 1}, {1, 2}}",
+        "tropical_cycle_direct_available=true",
+        "tropical_cycle_direct_text=TropicalCycle{line}",
+        "bergman_fan_available=false",
+        "bergman_fan_error=not a matroid ideal",
+        "stable_intersection_self_available=true",
+        "stable_intersection_self_text=StableIntersection{self}",
+        "visualize_hypersurface_available=false",
+        "visualize_hypersurface_error=not a hypersurface generator",
     ])
     parsed = cas_free_resolution._parse_key_value_lines(tagged)
     report = cas_tropical._certified_tropical_result(schema, parsed, tagged, attempts=[{"backend": "Macaulay2", "status": "ran"}])
@@ -1085,11 +1100,23 @@ def test_macaulay2_tropical_fan_diagnostic_parser_and_script():
     assert pre["ray_count"] == 3
     assert pre["max_cones"] == [[1], [0], [2]]
     assert pre["is_simplicial"] is True
+    optional = report["optional_method_diagnostics"]
+    assert optional["cones"]["available"] is True
+    assert optional["cones"]["text"] == "{{0, 1}, {1, 2}}"
+    assert optional["tropical_cycle_direct"]["available"] is True
+    assert optional["tropical_cycle_direct"]["certificate_gate"] == "side_diagnostic_only_not_a_replacement_for_tropicalVariety_certificate"
+    assert optional["bergman_fan"]["available"] is False
+    assert optional["bergman_fan"]["error"] == "not a matroid ideal"
+    assert optional["stable_intersection_self"]["available"] is True
+    assert optional["visualize_hypersurface"]["available"] is False
+    assert report["cas_artifacts"]["tropical_cycle_direct_text"] == "TropicalCycle{line}"
     assert "not a multigraded free-resolution" in report["render_warning"]
     contract = report["certificate_contract"]
     assert contract["certificate_source"].startswith("Macaulay2 Tropical tropicalVariety")
     assert "tropicalVariety" in contract["required_macaulay2_methods"]
     assert "tropicalPrevariety" in contract["side_diagnostic_methods"]
+    assert "BergmanFan" in contract["side_diagnostic_methods"]
+    assert "stableIntersection" in contract["side_diagnostic_methods"]
     assert "not accepted" in contract["sage_scope"]
     assert "No support-token" in contract["no_proxy_policy"]
 

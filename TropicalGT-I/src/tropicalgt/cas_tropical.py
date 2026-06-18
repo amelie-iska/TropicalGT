@@ -17,7 +17,7 @@ from .cas_free_resolution import (
 
 TROPICAL_SCHEMA_VERSION = "tropicalgt.cas_tropical_fan.v1"
 TROPICAL_CACHE_SCHEMA_VERSION = "tropicalgt.cas_tropical_fan.cache.v1"
-TROPICAL_CACHE_VERSION = "2026-06-16.macaulay2-tropical-contract-v3"
+TROPICAL_CACHE_VERSION = "2026-06-18.macaulay2-tropical-optional-diagnostics-v4"
 _ALLOWED_M2_POLYNOMIAL_CHARS = frozenset(
     "abcdefghijklmnopqrstuvwxyz"
     "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
@@ -44,7 +44,7 @@ TROPICAL_FAN_CERTIFICATE_CONTRACT = {
         "isSimplicial",
         "fan",
     ],
-    "side_diagnostic_methods": ["isTropicalBasis", "tropicalPrevariety"],
+    "side_diagnostic_methods": ["isTropicalBasis", "tropicalPrevariety", "cones", "tropicalCycle", "BergmanFan", "stableIntersection", "visualizeHypersurface"],
     "sage_scope": (
         "Sage tropical polynomial/variety APIs may support polynomial, curve, hypersurface, and plotting "
         "checks, but are not accepted here as a replacement for the Macaulay2 ideal-to-tropical-cycle fan certificate."
@@ -228,6 +228,21 @@ def build_macaulay2_tropical_script(schema: dict[str, Any]) -> str:
         'print concatenate("is_pure=", toString isPure T)',
         'print concatenate("is_simplicial=", toString isSimplicial T)',
         'print concatenate("fan_text=", replace("\\n", " || ", toString fan T))',
+        "conesOk = try (conesResult = cones T; true) else false",
+        'print concatenate("cones_available=", toString conesOk)',
+        'if conesOk then print concatenate("cones_text=", replace("\\n", " || ", toString conesResult)) else print "cones_error=not computed by Macaulay2 Tropical for this certificate"',
+        "cycleOk = try (cycleResult = tropicalCycle I; true) else false",
+        'print concatenate("tropical_cycle_direct_available=", toString cycleOk)',
+        'if cycleOk then print concatenate("tropical_cycle_direct_text=", replace("\\n", " || ", toString cycleResult)) else print "tropical_cycle_direct_error=not computed by Macaulay2 Tropical for this ideal"',
+        "bergmanOk = try (bergmanResult = BergmanFan I; true) else false",
+        'print concatenate("bergman_fan_available=", toString bergmanOk)',
+        'if bergmanOk then print concatenate("bergman_fan_text=", replace("\\n", " || ", toString bergmanResult)) else print "bergman_fan_error=not computed by Macaulay2 Tropical for this ideal"',
+        "stableOk = try (stableResult = stableIntersection(T, T); true) else false",
+        'print concatenate("stable_intersection_self_available=", toString stableOk)',
+        'if stableOk then print concatenate("stable_intersection_self_text=", replace("\\n", " || ", toString stableResult)) else print "stable_intersection_self_error=not computed by Macaulay2 Tropical for this fan"',
+        "hypersurfaceOk = try (hypersurfaceResult = visualizeHypersurface first G; true) else false",
+        'print concatenate("visualize_hypersurface_available=", toString hypersurfaceOk)',
+        'if hypersurfaceOk then print concatenate("visualize_hypersurface_text=", replace("\\n", " || ", toString hypersurfaceResult)) else print "visualize_hypersurface_error=not computed by Macaulay2 Tropical for this generator"',
         'print "TROPICALGT_RESOLUTION_END"',
         "exit 0",
     ]
@@ -255,6 +270,7 @@ def _certified_tropical_result(schema: dict[str, Any], parsed: dict[str, Any], t
     prevariety_max_cones = _parse_m2_index_sets(parsed.get("prevariety_max_cones", "")) if prevariety_available else []
     prevariety_lineality = _parse_m2_matrix_rows(parsed.get("prevariety_lineality_space", "")) if prevariety_available else []
     prevariety_multiplicities = _parse_m2_int_list(parsed.get("prevariety_multiplicities", "")) if prevariety_available else []
+    optional_method_diagnostics = _optional_tropical_method_diagnostics(parsed)
     return {
         "schema_version": TROPICAL_SCHEMA_VERSION,
         "available": True,
@@ -285,7 +301,13 @@ def _certified_tropical_result(schema: dict[str, Any], parsed: dict[str, Any], t
             "prevariety_max_cones_text": str(parsed.get("prevariety_max_cones", "") or ""),
             "prevariety_lineality_space_text": str(parsed.get("prevariety_lineality_space", "") or ""),
             "prevariety_multiplicities_text": str(parsed.get("prevariety_multiplicities", "") or ""),
+            "cones_text": str(parsed.get("cones_text", "") or ""),
+            "tropical_cycle_direct_text": str(parsed.get("tropical_cycle_direct_text", "") or ""),
+            "bergman_fan_text": str(parsed.get("bergman_fan_text", "") or ""),
+            "stable_intersection_self_text": str(parsed.get("stable_intersection_self_text", "") or ""),
+            "visualize_hypersurface_text": str(parsed.get("visualize_hypersurface_text", "") or ""),
         },
+        "optional_method_diagnostics": optional_method_diagnostics,
         "tropical_basis_check": {
             "available": bool(basis_available),
             "is_tropical_basis": _parse_bool(parsed.get("is_tropical_basis")) if basis_available else None,
@@ -328,6 +350,27 @@ def _certified_tropical_result(schema: dict[str, Any], parsed: dict[str, Any], t
         "render_warning": "Certified tropical fan diagnostics only. This is not a multigraded free-resolution or derived-equivalence certificate.",
     }
 
+
+
+def _optional_tropical_method_diagnostics(parsed: dict[str, Any]) -> dict[str, Any]:
+    specs = {
+        "cones": ("cones_available", "cones_text", "cones_error", "Macaulay2 Tropical cones T"),
+        "tropical_cycle_direct": ("tropical_cycle_direct_available", "tropical_cycle_direct_text", "tropical_cycle_direct_error", "Macaulay2 Tropical tropicalCycle I"),
+        "bergman_fan": ("bergman_fan_available", "bergman_fan_text", "bergman_fan_error", "Macaulay2 Tropical BergmanFan I"),
+        "stable_intersection_self": ("stable_intersection_self_available", "stable_intersection_self_text", "stable_intersection_self_error", "Macaulay2 Tropical stableIntersection(T,T)"),
+        "visualize_hypersurface": ("visualize_hypersurface_available", "visualize_hypersurface_text", "visualize_hypersurface_error", "Macaulay2 Tropical visualizeHypersurface first gens I"),
+    }
+    diagnostics: dict[str, Any] = {}
+    for name, (available_key, text_key, error_key, method) in specs.items():
+        available = bool(_parse_bool(parsed.get(available_key)))
+        diagnostics[name] = {
+            "available": available,
+            "method": method,
+            "text": str(parsed.get(text_key, "") or "") if available else "",
+            "error": "" if available else str(parsed.get(error_key, "not computed") or "not computed"),
+            "certificate_gate": "side_diagnostic_only_not_a_replacement_for_tropicalVariety_certificate",
+        }
+    return diagnostics
 
 def _parse_m2_matrix_rows(text: Any) -> list[list[int]]:
     raw = str(text or "")
