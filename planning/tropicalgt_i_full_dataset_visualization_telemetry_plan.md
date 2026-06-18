@@ -728,11 +728,27 @@ Document fresh step-0 Parameter-Golf BPB run config, scalar-only W&B default, op
 
 Implemented 2026-06-18: `README.md` and `TropicalGT-I/README.md` now document the b60 step-0 5K-gate run, BPB `<1.12` target, zero-byte checkpoint block, current GPU-safety hold, scalar-first W&B default, opt-in HTML/media upload, nonempty-checkpoint requirement for restart/eval, sample-first browser catalog, and the current no-proxy visualization contracts for local NLL, analogical maps, persistence landscapes, embedding trajectory identity, and SimplexTree readability.
 
-- [ ] **Step 9.2: Regenerate browser bundle**
+- [x] **Step 9.2: Regenerate browser bundle**
 
 Run multi-sample audit using a checkpoint snapshot and open `browser_index.html`. Verify the catalog link, NLL page, embedding map, full complex page, Euclidean simplex tree, probability complex, JS simplex tree, analogical maps, persistence landscapes, GraphCG, and tropical support.
 
-- [ ] **Step 9.3: Run extensive tests**
+Completed safe subset 2026-06-18: checkpoint-backed regeneration is blocked
+because the b60 latest checkpoint is missing/empty and GPU work remains under
+explicit safety hold. CPU-only work refreshed the existing b60 step-5000 sample
+index at
+`TropicalGT-I/outputs/tropicalgt_i_pg_bpb_step0_full24b_b60_20260616T053631Z_fresh_bpb112_casrows_5k_gate/periodic/step_00005000/got_audit/codex_browser_index.html`,
+then ran bounded legacy backfill with `--overwrite`. Backfill actions were
+limited to explicit no-proxy tropical-fan unavailable diagnostics, toric-sidecar
+unavailable diagnostics, the two-parameter bifiltration visual contract rerender
+from `trajectory_level_radius_bifiltration.json`, and dashboard relinking. Strict
+validator output still fails for legacy b60 artifacts: missing analogical
+simplex-tree pages, missing trajectory persistence landscape payload, stale NLL
+surface/density contracts, tropical-support readability contracts, GraphCG
+readability rows, embedding trajectory identity, full/probability complex slider
+sidecars, per-step source/slider/simplex-tree contracts, and analogical top-k
+contracts. No browser bundle was presented as current acceptance evidence.
+
+- [x] **Step 9.3: Run extensive tests**
 
 Run:
 ```bash
@@ -741,6 +757,21 @@ PYTHONPATH=TropicalGT-I/src python TropicalGT-I/scripts/audit_metric_provenance.
 PYTHONPATH=TropicalGT-I/src python TropicalGT-I/scripts/validate_interactive_audit_artifacts.py --audit-root TropicalGT-I/outputs/multi_sample_browser/latest --min-rows 3 --min-candidates 8 --min-depth 2
 git diff --check
 ```
+
+Completed 2026-06-18: CPU-only `pytest -q TropicalGT-I/tests` passes
+`291 passed, 2 warnings`; focused `test_metric_provenance.py` passes `7 passed`;
+`audit_metric_provenance.py --fail-on-uncovered` now passes with
+`findings=298 covered=298 uncovered=0` after extending the provenance registry
+for no-proxy contract flags, solver fallback labels, guarded graph-json counters,
+and defensive parser defaults; `py_compile` and `git diff --check` pass. The
+requested interactive-artifact validator command was run and correctly fails on
+`TropicalGT-I/outputs/multi_sample_browser/latest`, which resolves to stale
+`vector_persistence_latest`: only one row is available versus three required,
+candidate/depth thresholds are below the acceptance floor, and the bundle lacks
+new no-proxy contracts for persistence landscapes, local NLL/density, tropical
+support, GraphCG, embedding trajectory identity, slider/poset sidecars,
+reasoning-step manifests, and analogical maps. This stale generated bundle is
+not acceptance evidence.
 
 - [ ] **Step 9.4: Push**
 
