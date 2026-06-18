@@ -43,25 +43,41 @@ def _sidecar_groups(paths: list[str]) -> dict[str, int]:
         "graphcg": 0,
         "nll_density": 0,
         "chart_bundle": 0,
+        "vector_bundle": 0,
+        "sheaf_derived": 0,
         "other": 0,
     }
     for path in paths:
         lower = path.lower()
+        matched = False
         if any(term in lower for term in ("cas", "betti", "fitting", "minor", "free_resolution", "buchsbaum", "be_")):
             groups["cas_algebra"] += 1
-        elif any(term in lower for term in ("persistence", "bifiltration", "simplex", "barcode", "landscape")):
+            matched = True
+        if any(term in lower for term in ("persistence", "bifiltration", "simplex", "barcode", "landscape")):
             groups["topology_persistence"] += 1
-        elif "analogical" in lower or "memory" in lower:
+            matched = True
+        if "analogical" in lower or "memory" in lower:
             groups["analogical_memory"] += 1
-        elif any(term in lower for term in ("tropical", "toric", "fan")):
+            matched = True
+        if any(term in lower for term in ("tropical", "toric", "fan")):
             groups["tropical_toric"] += 1
-        elif "graphcg" in lower:
+            matched = True
+        if "graphcg" in lower:
             groups["graphcg"] += 1
-        elif "nll" in lower or "density" in lower:
+            matched = True
+        if "nll" in lower or "density" in lower:
             groups["nll_density"] += 1
-        elif "chart_bundle" in lower or "bundle" in lower:
+            matched = True
+        if "chart_bundle" in lower or "bundle" in lower:
             groups["chart_bundle"] += 1
-        else:
+            matched = True
+        if any(term in lower for term in ("vector_bundle", "vector-bundle", "chart_bundle_transport_sidecar", "bundle_toric", "paper_sidecar")):
+            groups["vector_bundle"] += 1
+            matched = True
+        if any(term in lower for term in ("sheaf", "derived", "chain_map", "derived_category")):
+            groups["sheaf_derived"] += 1
+            matched = True
+        if not matched:
             groups["other"] += 1
     return groups
 

@@ -63,6 +63,8 @@ def test_write_herschel_report_preserves_blockers_and_sidecar_groups(tmp_path: P
                 "got_audit/graphcg_report.json",
                 "got_audit/nll_density_grid.json",
                 "got_audit/chart_bundle_metrics.json",
+                "got_audit/chart_bundle_transport_sidecar.json",
+                "got_audit/derived_category_chain_map_report.json",
             ],
         },
         "restart_evidence_gate": {
@@ -95,7 +97,9 @@ def test_write_herschel_report_preserves_blockers_and_sidecar_groups(tmp_path: P
     assert groups["tropical_toric"] == 1
     assert groups["graphcg"] == 1
     assert groups["nll_density"] == 1
-    assert groups["chart_bundle"] == 1
+    assert groups["chart_bundle"] == 2
+    assert groups["vector_bundle"] == 1
+    assert groups["sheaf_derived"] == 1
     assert "no training" in summary["policy"]
 
     markdown = markdown_path.read_text(encoding="utf-8")

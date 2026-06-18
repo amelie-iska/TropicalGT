@@ -1380,3 +1380,21 @@ CUDA_VISIBLE_DEVICES="" python3 -m py_compile TropicalGT-I/src/tropicalgt/readin
 CUDA_VISIBLE_DEVICES="" /home/iska/miniconda3/bin/conda run -n tokengt python -m pytest -q tests/test_readiness_audit.py tests/test_prepare_5k_review_bundle.py tests/test_parameter_golf_review_loop.py tests/test_training_resume.py
 # 45 passed in 2.96s
 ```
+
+## 2026-06-18 Herschel Vector-Bundle And Sheaf-Derived Sidecar Inventory
+
+Sequential 5K-review/reporting item completed after the vector-bundle paper-sidecar repair:
+
+- `write_herschel_5k_report.py` now uses multi-label advanced sidecar grouping instead of a single exclusive bucket.
+- The CPU-only 5K report keeps existing CAS/topology/analogical/tropical/GraphCG/NLL/chart-bundle counts and now adds explicit `vector_bundle` and `sheaf_derived` group counts.
+- `chart_bundle_transport_sidecar.json` is counted as both chart-bundle transport evidence and vector-bundle paper-sidecar evidence, so Herschel can inventory the new paper-sidecar fields at the next 5K review without reading the full report manually.
+- Derived/sheaf/chain-map sidecars are counted under `sheaf_derived`, while unmatched paths remain in `other`; no GPU, browser, checkpoint, validator, or training work is executed by the report generator.
+
+Validation:
+
+```text
+CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/scripts:TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_herschel_5k_report.py -q
+# 2 passed
+CUDA_VISIBLE_DEVICES="" /home/iska/miniconda3/envs/tokengt/bin/python -m py_compile TropicalGT-I/scripts/write_herschel_5k_report.py TropicalGT-I/tests/test_herschel_5k_report.py
+# passed
+```
