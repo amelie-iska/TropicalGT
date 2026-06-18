@@ -237,6 +237,107 @@ def test_prepare_review_bundle_defaults_to_periodic_validation_artifacts(tmp_pat
         ),
         encoding="utf-8",
     )
+    (periodic_dir / "got_audit" / "got_full_trajectory_complex_payload.json").write_text(
+        json.dumps(
+            {
+                "trajectory_complex_overlay_contract": {
+                    "schema_version": "tropicalgt.trajectory_complex_overlay_contract.v1",
+                    "actual_data_only": True,
+                    "no_proxy_or_fallback": True,
+                    "solid_lines_reserved_for_radius_simplices": True,
+                    "filled_faces_reserved_for_radius_simplices": True,
+                    "dotted_lines_reserved_for_trajectory_decoding_order_overlays": True,
+                    "safe_to_render_available_views": True,
+                    "embedding_view": {"available": True, "actual_data_only": True, "no_proxy_or_fallback": True, "safe_to_render_overlay_semantics": True},
+                    "probability_view": {"available": True, "actual_data_only": True, "no_proxy_or_fallback": True, "safe_to_render_overlay_semantics": True},
+                },
+                "filtered_simplicial_object": {
+                    "available": True,
+                    "summary": {"num_vertices": 4, "num_edges": 5, "num_two_simplices": 2},
+                    "simplex_tree": {"backend": "gudhi.SimplexTree", "available": True, "num_simplices": 11},
+                },
+                "probability_filtered_simplicial_object": {
+                    "available": True,
+                    "summary": {"num_vertices": 4, "num_edges": 5, "num_two_simplices": 2},
+                    "simplex_tree": {"backend": "gudhi.SimplexTree", "available": True, "num_simplices": 11},
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    slider_payload = {
+        "schema_version": "tropicalgt.radius_filtration_slider_contract.v1",
+        "actual_data_only": True,
+        "no_proxy_or_fallback": True,
+        "radius_filtration": True,
+        "threshold_order": "ascending_min_to_max",
+        "thresholds_ascending": True,
+        "first_frame_disjoint_vertices_only": True,
+        "initial_radius_frame_hides_solid_edges_and_faces": True,
+        "monotone_visible_counts": True,
+        "monotone_solid_radius_edges": True,
+        "monotone_filled_radius_faces": True,
+        "threshold_count": 5,
+        "frame_count": 5,
+        "first_frame_vertex_count": 4,
+        "last_frame_solid_edge_count": 5,
+        "last_frame_filled_face_count": 2,
+    }
+    (periodic_dir / "got_audit" / "got_full_trajectory_complex_slider_contract.json").write_text(json.dumps(slider_payload), encoding="utf-8")
+    (periodic_dir / "got_audit" / "got_full_trajectory_complex_jensen_shannon_slider_contract.json").write_text(json.dumps(slider_payload), encoding="utf-8")
+    simplex_poset_payload = {
+        "schema_version": "tropicalgt.simplex_tree_poset.v1",
+        "available": True,
+        "actual_data_only": True,
+        "no_proxy_or_fallback": True,
+        "backend": "gudhi.SimplexTree",
+        "safe_to_render_simplex_tree": True,
+        "not_disconnected_simplex_columns": True,
+        "primary_edges": "actual_face_to_coface_covers",
+        "all_non_vertex_simplices_have_face_cover_edges": True,
+        "displayed_simplex_count": 8,
+        "source_simplex_count": 11,
+        "actual_face_to_coface_cover_edges": 9,
+        "empty_simplex_root_present": True,
+        "truncated": False,
+    }
+    (periodic_dir / "got_audit" / "got_full_trajectory_simplex_tree_3d_simplex_tree_poset_contract.json").write_text(json.dumps(simplex_poset_payload), encoding="utf-8")
+    (periodic_dir / "got_audit" / "got_full_trajectory_simplex_tree_3d_jensen_shannon_simplex_tree_poset_contract.json").write_text(json.dumps(simplex_poset_payload), encoding="utf-8")
+    (periodic_dir / "got_audit" / "reasoning_step_complex_maps").mkdir()
+    (periodic_dir / "got_audit" / "reasoning_step_complex_maps" / "manifest.json").write_text(
+        json.dumps(
+            {
+                "contract": {
+                    "schema_version": "tropicalgt.reasoning_step_complex_maps.v1",
+                    "available": True,
+                    "actual_data_only": True,
+                    "no_proxy_or_fallback": True,
+                    "step_count": 3,
+                    "rendered_complex_pages": 3,
+                    "rendered_simplex_tree_pages": 3,
+                    "rendered_slider_contracts": 3,
+                    "rendered_simplex_tree_poset_contracts": 3,
+                    "gudhi_simplex_tree_step_count": 3,
+                    "all_steps_have_source_contracts": True,
+                    "all_step_complex_source_contracts_safe": True,
+                    "all_step_radius_sliders_start_disjoint_vertices": True,
+                    "all_step_radius_sliders_monotone": True,
+                    "all_step_radius_sliders_safe_to_render": True,
+                    "all_step_simplex_tree_posets_use_gudhi": True,
+                    "all_step_simplex_tree_posets_face_coface_primary": True,
+                    "all_step_simplex_tree_posets_safe_to_render": True,
+                    "radius_slider_unavailable_count": 0,
+                    "simplex_tree_poset_unavailable_count": 0,
+                    "source_contract_unavailable_count": 0,
+                    "all_step_complex_fingerprints_present": True,
+                    "all_step_complex_fingerprints_unique": True,
+                },
+                "steps": [{"index": 0}, {"index": 1}, {"index": 2}],
+            }
+        ),
+        encoding="utf-8",
+    )
+
     action_selection_contract = {
         "schema_version": "tropicalgt.gflownet_action_selection_contract.v1",
         "source": "gflownet_action_probs",
@@ -672,6 +773,12 @@ def test_prepare_review_bundle_defaults_to_periodic_validation_artifacts(tmp_pat
     assert any(path.endswith("periodic/step_00005000/got_audit/analogical_simplicial_maps.json") for path in sidecars)
     assert any(path.endswith("periodic/step_00005000/got_audit/analogical_memory_retrieval.json") for path in sidecars)
     assert any(path.endswith("periodic/step_00005000/got_audit/analogical_simplex_tree_analogy.json") for path in sidecars)
+    assert any(path.endswith("periodic/step_00005000/got_audit/got_full_trajectory_complex_payload.json") for path in sidecars)
+    assert any(path.endswith("periodic/step_00005000/got_audit/got_full_trajectory_complex_slider_contract.json") for path in sidecars)
+    assert any(path.endswith("periodic/step_00005000/got_audit/got_full_trajectory_complex_jensen_shannon_slider_contract.json") for path in sidecars)
+    assert any(path.endswith("periodic/step_00005000/got_audit/got_full_trajectory_simplex_tree_3d_simplex_tree_poset_contract.json") for path in sidecars)
+    assert any(path.endswith("periodic/step_00005000/got_audit/got_full_trajectory_simplex_tree_3d_jensen_shannon_simplex_tree_poset_contract.json") for path in sidecars)
+    assert any(path.endswith("periodic/step_00005000/got_audit/reasoning_step_complex_maps/manifest.json") for path in sidecars)
     assert any(path.endswith("periodic/step_00005000/got_audit/inference_scaling_tree.json") for path in sidecars)
     assert any(path.endswith("periodic/step_00005000/got_audit/tropical_support_payload.json") for path in sidecars)
     assert any(path.endswith("periodic/step_00005000/got_audit/graphcg_direction_cosines_payload.json") for path in sidecars)
@@ -693,6 +800,14 @@ def test_prepare_review_bundle_defaults_to_periodic_validation_artifacts(tmp_pat
     )
     assert any(
         path.endswith("periodic/step_00005000/got_audit/analogical_simplex_tree_analogy.json")
+        for path in persisted_contract["artifact_inventory"]["advanced_sidecars_tail"]
+    )
+    assert any(
+        path.endswith("periodic/step_00005000/got_audit/got_full_trajectory_complex_payload.json")
+        for path in persisted_contract["artifact_inventory"]["advanced_sidecars_tail"]
+    )
+    assert any(
+        path.endswith("periodic/step_00005000/got_audit/reasoning_step_complex_maps/manifest.json")
         for path in persisted_contract["artifact_inventory"]["advanced_sidecars_tail"]
     )
     assert any(
@@ -795,6 +910,16 @@ def test_prepare_review_bundle_defaults_to_periodic_validation_artifacts(tmp_pat
     assert analogical_memory["total_simplex_tree_pair_count"] == 0
     assert analogical_memory["quality_gate_reason_counts"] == {"no_non_self_model_memory": 1}
     assert analogical_memory["status_counts"] == {"unavailable_no_non_self_model_memory": 2, "unavailable_insufficient_model_probability_memory": 1}
+    simplicial_complex = bundle["herschel_report_summary"]["artifact_evidence"]["simplicial_complex_evidence"]
+    assert simplicial_complex["available"] is True
+    assert simplicial_complex["source_count"] == 6
+    assert simplicial_complex["available_source_count"] == 6
+    assert simplicial_complex["total_view_count"] == 2
+    assert simplicial_complex["total_step_count"] == 3
+    assert simplicial_complex["total_radius_slider_contracts"] == 2
+    assert simplicial_complex["total_simplex_tree_poset_contracts"] == 2
+    assert simplicial_complex["total_source_simplices"] == 44
+    assert simplicial_complex["total_displayed_simplices"] == 16
 
 def test_prepare_review_bundle_blocks_command_execution_without_checkpoint(tmp_path: Path):
     module = _load_bundle_module()

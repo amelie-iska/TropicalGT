@@ -1170,3 +1170,15 @@ Status: complete for the Herschel 5K report and bundle contract layer.
 - Empty or unqualified memory banks remain explicit unavailable/insufficient-memory evidence and cannot justify a restart, analogy claim, derived-category claim, or hyperparameter promotion.
 
 Verification passed: py-compile for touched source/tests; focused Herschel/bundle tests (`11 passed`); broader Herschel/bundle/review-loop/provenance tests (`36 passed`); metric provenance audit (`findings=412 covered=412 uncovered=0`).
+
+## 2026-06-18 Herschel Simplicial Complex Evidence Update
+
+Status: complete for the Herschel 5K report and bundle contract layer.
+
+- `prepare_5k_review_bundle.py` now carries recorded full-trajectory complex payloads, radius-slider contracts, SimplexTree poset contracts, and `reasoning_step_complex_maps/manifest.json` into `advanced_sidecars_tail` when present.
+- `write_herschel_5k_report.py` now emits `tropicalgt.herschel_simplicial_complex_evidence.v1` under `artifact_evidence`.
+- The report summarizes available views, radius-slider contract counts, SimplexTree poset contract counts, reasoning-step counts, vertex/edge/face totals, source/displayed simplex totals, status counts, and unsafe/unavailable reasons.
+- Availability requires real contract evidence: no-proxy trajectory overlay contracts, min-to-max radius sliders starting as disjoint vertices, GUDHI face-to-coface SimplexTree posets, and per-step manifests that confirm each reasoning step has its own safe source, slider, and simplex-tree contract.
+- Global trajectory plots, embedding trajectory maps, or static probability complexes cannot substitute for per-step filtered complexes.
+
+Verification passed: py-compile for touched source/tests; focused Herschel/bundle tests (`11 passed`); broader Herschel/bundle/review-loop/provenance tests (`36 passed`); metric provenance audit (`findings=423 covered=423 uncovered=0`).

@@ -939,3 +939,11 @@ The live item-by-item repair inventory is maintained in `planning/tropicalgt_i_c
 - [x] Top-k evidence requires `tropicalgt.analogical_topk.v1`, model probability vectors, Jensen-Shannon assignment, no embedding-only assignment, trajectory probability filtered query/codomain complexes, and no-proxy flags.
 - [x] Simplex-tree analogy evidence requires `tropicalgt.analogical_simplex_tree_analogy.v1`, `probability_simplicial_map.simplex_tree_map.rows`, no-proxy flags, and certified-map guards for chain-map or persistence-module-morphism claims.
 - [x] Verification passed: py-compile; focused Herschel/bundle tests (`11 passed`); broader Herschel/bundle/review-loop/provenance tests (`36 passed`); metric provenance audit (`412 covered, 0 uncovered`).
+
+### Current Objective Update - Herschel Simplicial Complex/Simplex-Tree Evidence Pass
+
+- [x] Added full-trajectory complex payloads, radius-slider contracts, SimplexTree poset contracts, and `reasoning_step_complex_maps/manifest.json` to the Herschel-required sidecar inventory when present.
+- [x] Added `tropicalgt.herschel_simplicial_complex_evidence.v1` to the Herschel 5K summary, sourced only from recorded contract sidecars.
+- [x] Herschel now reports available trajectory views, radius-slider contract counts, simplex-tree poset contract counts, per-step manifest counts, vertex/edge/face totals, source/displayed simplex totals, and status counts.
+- [x] Availability requires actual-data/no-proxy contracts, disjoint-vertex first frames, monotone min-to-max radius growth, GUDHI face-to-coface SimplexTree posets, and per-step source/slider/poset contracts.
+- [x] Verification passed: py-compile; focused Herschel/bundle tests (`11 passed`); broader Herschel/bundle/review-loop/provenance tests (`36 passed`); metric provenance audit (`423 covered, 0 uncovered`).

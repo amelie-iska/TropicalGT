@@ -593,3 +593,19 @@ Verification:
 - Metric provenance audit passed: `findings=412 covered=412 uncovered=0`.
 
 Next sequential item: continue the Herschel evidence family queue by selecting the next missing implemented sidecar or move to the next source-side repair item if all current Herschel 5K evidence slices are surfaced.
+
+## 2026-06-18 Herschel Simplicial Complex/Simplex-Tree Evidence Pass
+
+Status: implemented for the current sequential item.
+
+Changes made:
+- The 5K review bundle now discovers real radius-complex and SimplexTree sidecars from the latest GoT audit directory when present.
+- Herschel's report summary now includes `tropicalgt.herschel_simplicial_complex_evidence.v1` with full-trajectory complex, radius-slider, SimplexTree poset, and per-step manifest evidence.
+- The report remains strict: unsafe or missing contract sidecars are unavailable, and no global trajectory surface or static probability object is substituted for per-step filtered complexes.
+
+Verification:
+- Focused Herschel/bundle tests passed: `11 passed`.
+- Broader Herschel/bundle/review-loop/provenance tests passed: `36 passed`.
+- Metric provenance audit passed: `findings=423 covered=423 uncovered=0`.
+
+Next sequential item: continue surfacing remaining real 5K sidecars into Herschel, with likely candidates `trajectory_growth_topology.json`, `inference_topology.json`, `inference_algebra.json`, and `trajectory_topological_algebra.json`, or move to source-side repair when the current report evidence family is complete.

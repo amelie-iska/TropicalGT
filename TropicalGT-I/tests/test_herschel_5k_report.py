@@ -144,6 +144,123 @@ def test_write_herschel_report_preserves_blockers_and_sidecar_groups(tmp_path: P
         ),
         encoding="utf-8",
     )
+    full_complex_payload_path = tmp_path / "got_full_trajectory_complex_payload.json"
+    full_complex_payload_path.write_text(
+        json.dumps(
+            {
+                "trajectory_complex_overlay_contract": {
+                    "schema_version": "tropicalgt.trajectory_complex_overlay_contract.v1",
+                    "actual_data_only": True,
+                    "no_proxy_or_fallback": True,
+                    "solid_lines_reserved_for_radius_simplices": True,
+                    "filled_faces_reserved_for_radius_simplices": True,
+                    "dotted_lines_reserved_for_trajectory_decoding_order_overlays": True,
+                    "safe_to_render_available_views": True,
+                    "embedding_view": {
+                        "available": True,
+                        "actual_data_only": True,
+                        "no_proxy_or_fallback": True,
+                        "safe_to_render_overlay_semantics": True,
+                    },
+                    "probability_view": {
+                        "available": True,
+                        "actual_data_only": True,
+                        "no_proxy_or_fallback": True,
+                        "safe_to_render_overlay_semantics": True,
+                    },
+                },
+                "filtered_simplicial_object": {
+                    "available": True,
+                    "summary": {"num_vertices": 3, "num_edges": 3, "num_two_simplices": 1},
+                    "simplex_tree": {"backend": "gudhi.SimplexTree", "available": True, "num_simplices": 7},
+                },
+                "probability_filtered_simplicial_object": {
+                    "available": True,
+                    "summary": {"num_vertices": 3, "num_edges": 3, "num_two_simplices": 1},
+                    "simplex_tree": {"backend": "gudhi.SimplexTree", "available": True, "num_simplices": 7},
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    slider_payload = {
+        "schema_version": "tropicalgt.radius_filtration_slider_contract.v1",
+        "actual_data_only": True,
+        "no_proxy_or_fallback": True,
+        "radius_filtration": True,
+        "threshold_order": "ascending_min_to_max",
+        "thresholds_ascending": True,
+        "first_frame_disjoint_vertices_only": True,
+        "initial_radius_frame_hides_solid_edges_and_faces": True,
+        "monotone_visible_counts": True,
+        "monotone_solid_radius_edges": True,
+        "monotone_filled_radius_faces": True,
+        "threshold_count": 4,
+        "frame_count": 4,
+        "first_frame_vertex_count": 3,
+        "last_frame_solid_edge_count": 3,
+        "last_frame_filled_face_count": 1,
+    }
+    full_slider_path = tmp_path / "got_full_trajectory_complex_slider_contract.json"
+    full_slider_path.write_text(json.dumps(slider_payload), encoding="utf-8")
+    probability_slider_path = tmp_path / "got_full_trajectory_complex_jensen_shannon_slider_contract.json"
+    probability_slider_path.write_text(json.dumps(slider_payload), encoding="utf-8")
+    simplex_poset_payload = {
+        "schema_version": "tropicalgt.simplex_tree_poset.v1",
+        "available": True,
+        "actual_data_only": True,
+        "no_proxy_or_fallback": True,
+        "backend": "gudhi.SimplexTree",
+        "safe_to_render_simplex_tree": True,
+        "not_disconnected_simplex_columns": True,
+        "primary_edges": "actual_face_to_coface_covers",
+        "all_non_vertex_simplices_have_face_cover_edges": True,
+        "displayed_simplex_count": 5,
+        "source_simplex_count": 7,
+        "actual_face_to_coface_cover_edges": 6,
+        "empty_simplex_root_present": True,
+        "truncated": False,
+    }
+    full_simplex_poset_path = tmp_path / "got_full_trajectory_simplex_tree_3d_simplex_tree_poset_contract.json"
+    full_simplex_poset_path.write_text(json.dumps(simplex_poset_payload), encoding="utf-8")
+    probability_simplex_poset_path = tmp_path / "got_full_trajectory_simplex_tree_3d_jensen_shannon_simplex_tree_poset_contract.json"
+    probability_simplex_poset_path.write_text(json.dumps(simplex_poset_payload), encoding="utf-8")
+    step_manifest_path = tmp_path / "reasoning_step_complex_maps" / "manifest.json"
+    step_manifest_path.parent.mkdir()
+    step_manifest_path.write_text(
+        json.dumps(
+            {
+                "contract": {
+                    "schema_version": "tropicalgt.reasoning_step_complex_maps.v1",
+                    "available": True,
+                    "actual_data_only": True,
+                    "no_proxy_or_fallback": True,
+                    "step_count": 2,
+                    "rendered_complex_pages": 2,
+                    "rendered_simplex_tree_pages": 2,
+                    "rendered_slider_contracts": 2,
+                    "rendered_simplex_tree_poset_contracts": 2,
+                    "gudhi_simplex_tree_step_count": 2,
+                    "all_steps_have_source_contracts": True,
+                    "all_step_complex_source_contracts_safe": True,
+                    "all_step_radius_sliders_start_disjoint_vertices": True,
+                    "all_step_radius_sliders_monotone": True,
+                    "all_step_radius_sliders_safe_to_render": True,
+                    "all_step_simplex_tree_posets_use_gudhi": True,
+                    "all_step_simplex_tree_posets_face_coface_primary": True,
+                    "all_step_simplex_tree_posets_safe_to_render": True,
+                    "radius_slider_unavailable_count": 0,
+                    "simplex_tree_poset_unavailable_count": 0,
+                    "source_contract_unavailable_count": 0,
+                    "all_step_complex_fingerprints_present": True,
+                    "all_step_complex_fingerprints_unique": True,
+                },
+                "steps": [{"index": 0}, {"index": 1}],
+            }
+        ),
+        encoding="utf-8",
+    )
+
     action_selection_contract = {
         "schema_version": "tropicalgt.gflownet_action_selection_contract.v1",
         "source": "gflownet_action_probs",
@@ -624,6 +741,12 @@ def test_write_herschel_report_preserves_blockers_and_sidecar_groups(tmp_path: P
                 str(analogical_maps_path),
                 str(analogical_memory_path),
                 str(analogical_simplex_path),
+                str(full_complex_payload_path),
+                str(full_slider_path),
+                str(probability_slider_path),
+                str(full_simplex_poset_path),
+                str(probability_simplex_poset_path),
+                str(step_manifest_path),
                 str(inference_scaling_tree_path),
                 str(tropical_support_path),
                 str(graphcg_direction_path),
@@ -668,7 +791,7 @@ def test_write_herschel_report_preserves_blockers_and_sidecar_groups(tmp_path: P
     assert "checkpoint_file_is_empty" in " ".join(summary["restart_decision"]["blockers"])
     groups = summary["artifact_evidence"]["sidecar_groups"]
     assert groups["cas_algebra"] == 2
-    assert groups["topology_persistence"] == 3
+    assert groups["topology_persistence"] == 5
     assert groups["analogical_memory"] == 4
     assert groups["tropical_toric"] == 3
     assert groups["graphcg"] == 1
@@ -815,6 +938,26 @@ def test_write_herschel_report_preserves_blockers_and_sidecar_groups(tmp_path: P
     assert analogical_memory["probability_vector_contract_source_count"] == 1
     assert analogical_memory["quality_gate_reason_counts"] == {"below_quality_threshold": 1}
     assert analogical_memory["status_counts"] == {"retrieval_available": 1, "simplex_tree_analogy_available": 1, "topk_maps_available": 1}
+    simplicial_complex = summary["artifact_evidence"]["simplicial_complex_evidence"]
+    assert simplicial_complex["schema_version"] == "tropicalgt.herschel_simplicial_complex_evidence.v1"
+    assert simplicial_complex["available"] is True
+    assert simplicial_complex["source_count"] == 6
+    assert simplicial_complex["available_source_count"] == 6
+    assert simplicial_complex["total_view_count"] == 2
+    assert simplicial_complex["total_step_count"] == 2
+    assert simplicial_complex["total_radius_slider_contracts"] == 2
+    assert simplicial_complex["total_simplex_tree_poset_contracts"] == 2
+    assert simplicial_complex["total_vertices"] == 12
+    assert simplicial_complex["total_edges"] == 12
+    assert simplicial_complex["total_faces"] == 4
+    assert simplicial_complex["total_source_simplices"] == 28
+    assert simplicial_complex["total_displayed_simplices"] == 10
+    assert simplicial_complex["status_counts"] == {
+        "full_trajectory_complex_available": 1,
+        "radius_slider_available": 2,
+        "reasoning_step_manifest_available": 1,
+        "simplex_tree_poset_available": 2,
+    }
     assert "no training" in summary["policy"]
 
     markdown = markdown_path.read_text(encoding="utf-8")
@@ -844,6 +987,7 @@ def test_write_herschel_report_preserves_blockers_and_sidecar_groups(tmp_path: P
     assert "toric_embedding_sidecar:certified" in markdown
     assert "## Analogical Query Context Evidence" in markdown
     assert "## Analogical Memory Evidence" in markdown
+    assert "## Simplicial Complex And Simplex-Tree Evidence" in markdown
     assert "topk_maps_available" in markdown
     assert "trajectory_probability_filtered_simplicial_object" in markdown
     assert "probability_filtered_simplicial_object" in markdown
@@ -882,6 +1026,8 @@ def test_write_herschel_report_preserves_blockers_and_sidecar_groups(tmp_path: P
     assert "Analogical Query Context Evidence" in html
     assert "Analogical Memory Evidence" in html
     assert "analogical-memory-statuses" in html
+    assert "Simplicial Complex And Simplex-Tree Evidence" in html
+    assert "simplicial-complex-statuses" in html
     assert "valid_query_probability_trajectory_complex" in html
     assert "row 0 missing json analogical_simplex_tree_analogy.json" in html
     assert "sidecar-filter" in html

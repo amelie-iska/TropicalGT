@@ -1577,6 +1577,200 @@ def _analogical_memory_evidence(sidecar_paths: list[str]) -> dict[str, Any]:
     }
 
 
+def _simplicial_complex_evidence(sidecar_paths: list[str]) -> dict[str, Any]:
+    sources: list[dict[str, Any]] = []
+    status_counts: dict[str, int] = {}
+    total_view_count = 0
+    total_step_count = 0
+    total_vertices = 0
+    total_edges = 0
+    total_faces = 0
+    total_source_simplices = 0
+    total_displayed_simplices = 0
+    total_radius_slider_contracts = 0
+    total_simplex_tree_poset_contracts = 0
+
+    def _count(key: str) -> None:
+        if key:
+            status_counts[str(key)] = status_counts.get(str(key), 0) + 1
+
+    def _int(value: Any) -> int:
+        return _optional_int(value) or 0
+
+    for raw_path in sidecar_paths:
+        lower = raw_path.lower()
+        if lower.endswith("got_full_trajectory_complex_payload.json"):
+            kind = "full_trajectory_complex_payload"
+        elif lower.endswith("slider_contract.json") and "trajectory_complex" in lower:
+            kind = "radius_slider_contract"
+        elif lower.endswith("simplex_tree_poset_contract.json"):
+            kind = "simplex_tree_poset_contract"
+        elif lower.endswith("reasoning_step_complex_maps/manifest.json"):
+            kind = "reasoning_step_manifest"
+        else:
+            continue
+        resolved = _resolve_output_path(Path(raw_path))
+        source: dict[str, Any] = {"kind": kind, "path": _project_path(resolved), "available": False}
+        if not resolved.exists():
+            source["reason"] = f"{kind}_sidecar_missing"
+            _count(source["reason"])
+            sources.append(source)
+            continue
+        try:
+            payload = json.loads(resolved.read_text(encoding="utf-8"))
+        except Exception as exc:  # pragma: no cover - parser message is platform-dependent
+            source["reason"] = f"{kind}_sidecar_parse_error:{exc}"
+            _count(f"{kind}_sidecar_parse_error")
+            sources.append(source)
+            continue
+        if not isinstance(payload, dict):
+            source["reason"] = f"{kind}_sidecar_not_object"
+            _count(source["reason"])
+            sources.append(source)
+            continue
+
+        if kind == "full_trajectory_complex_payload":
+            contract = payload.get("trajectory_complex_overlay_contract", {}) if isinstance(payload.get("trajectory_complex_overlay_contract"), dict) else {}
+            views = [view for view in (contract.get("embedding_view"), contract.get("probability_view")) if isinstance(view, dict)]
+            available_views = [view for view in views if view.get("available") is True and view.get("actual_data_only") is True and view.get("no_proxy_or_fallback") is True and view.get("safe_to_render_overlay_semantics") is True]
+            objects = [payload.get("filtered_simplicial_object"), payload.get("probability_filtered_simplicial_object")]
+            object_summaries = [obj.get("summary", {}) for obj in objects if isinstance(obj, dict) and isinstance(obj.get("summary"), dict)]
+            simplex_trees = [obj.get("simplex_tree", {}) for obj in objects if isinstance(obj, dict) and isinstance(obj.get("simplex_tree"), dict)]
+            vertex_count = sum(_int(summary.get("num_vertices")) for summary in object_summaries)
+            edge_count = sum(_int(summary.get("num_edges")) for summary in object_summaries)
+            face_count = sum(_int(summary.get("num_two_simplices")) for summary in object_summaries)
+            source_simplices = sum(_int(tree.get("num_simplices")) for tree in simplex_trees)
+            total_view_count += len(available_views)
+            total_vertices += vertex_count
+            total_edges += edge_count
+            total_faces += face_count
+            total_source_simplices += source_simplices
+            schema_ok = contract.get("schema_version") == "tropicalgt.trajectory_complex_overlay_contract.v1"
+            safe = bool(schema_ok and contract.get("actual_data_only") is True and contract.get("no_proxy_or_fallback") is True and contract.get("safe_to_render_available_views") is True and contract.get("solid_lines_reserved_for_radius_simplices") is True and contract.get("filled_faces_reserved_for_radius_simplices") is True and contract.get("dotted_lines_reserved_for_trajectory_decoding_order_overlays") is True and len(available_views) > 0)
+            source.update(
+                {
+                    "available": safe,
+                    "status": "full_trajectory_complex_available" if safe else "full_trajectory_complex_unavailable",
+                    "contract_schema_version": contract.get("schema_version", "unavailable"),
+                    "available_view_count": len(available_views),
+                    "view_count": len(views),
+                    "vertex_count": vertex_count,
+                    "edge_count": edge_count,
+                    "face_count": face_count,
+                    "source_simplex_count": source_simplices,
+                    "safe_to_render_available_views": bool(contract.get("safe_to_render_available_views", False)),
+                    "no_proxy_or_fallback": bool(contract.get("no_proxy_or_fallback", False)),
+                }
+            )
+            if not safe:
+                source["reason"] = "trajectory_complex_overlay_contract_unavailable_or_unsafe"
+            _count(str(source["status"]))
+        elif kind == "radius_slider_contract":
+            total_radius_slider_contracts += 1
+            safe = bool(payload.get("schema_version") == "tropicalgt.radius_filtration_slider_contract.v1" and payload.get("actual_data_only") is True and payload.get("no_proxy_or_fallback") is True and payload.get("radius_filtration") is True and payload.get("threshold_order") == "ascending_min_to_max" and payload.get("thresholds_ascending") is True and payload.get("first_frame_disjoint_vertices_only") is True and payload.get("initial_radius_frame_hides_solid_edges_and_faces") is True and payload.get("monotone_visible_counts") is True and payload.get("monotone_solid_radius_edges") is True and payload.get("monotone_filled_radius_faces") is True)
+            total_vertices += _int(payload.get("first_frame_vertex_count"))
+            total_edges += _int(payload.get("last_frame_solid_edge_count"))
+            total_faces += _int(payload.get("last_frame_filled_face_count"))
+            source.update(
+                {
+                    "available": safe,
+                    "status": "radius_slider_available" if safe else "radius_slider_unavailable",
+                    "contract_schema_version": payload.get("schema_version", "unavailable"),
+                    "threshold_count": _int(payload.get("threshold_count")),
+                    "frame_count": _int(payload.get("frame_count")),
+                    "first_frame_vertex_count": _int(payload.get("first_frame_vertex_count")),
+                    "last_frame_solid_edge_count": _int(payload.get("last_frame_solid_edge_count")),
+                    "last_frame_filled_face_count": _int(payload.get("last_frame_filled_face_count")),
+                    "first_frame_disjoint_vertices_only": bool(payload.get("first_frame_disjoint_vertices_only", False)),
+                    "thresholds_ascending": bool(payload.get("thresholds_ascending", False)),
+                    "monotone_visible_counts": bool(payload.get("monotone_visible_counts", False)),
+                    "no_proxy_or_fallback": bool(payload.get("no_proxy_or_fallback", False)),
+                }
+            )
+            if not safe:
+                source["reason"] = "radius_slider_contract_unavailable_or_unsafe"
+            _count(str(source["status"]))
+        elif kind == "simplex_tree_poset_contract":
+            total_simplex_tree_poset_contracts += 1
+            safe = bool(payload.get("schema_version") == "tropicalgt.simplex_tree_poset.v1" and payload.get("available") is True and payload.get("actual_data_only") is True and payload.get("no_proxy_or_fallback") is True and payload.get("backend") == "gudhi.SimplexTree" and payload.get("safe_to_render_simplex_tree") is True and payload.get("not_disconnected_simplex_columns") is True and payload.get("primary_edges") == "actual_face_to_coface_covers" and payload.get("all_non_vertex_simplices_have_face_cover_edges") is True)
+            displayed = _int(payload.get("displayed_simplex_count"))
+            source_count = _int(payload.get("source_simplex_count"))
+            total_displayed_simplices += displayed
+            total_source_simplices += source_count
+            source.update(
+                {
+                    "available": safe,
+                    "status": "simplex_tree_poset_available" if safe else "simplex_tree_poset_unavailable",
+                    "contract_schema_version": payload.get("schema_version", "unavailable"),
+                    "backend": payload.get("backend", "unavailable"),
+                    "displayed_simplex_count": displayed,
+                    "source_simplex_count": source_count,
+                    "actual_face_to_coface_cover_edges": _int(payload.get("actual_face_to_coface_cover_edges")),
+                    "empty_simplex_root_present": bool(payload.get("empty_simplex_root_present", False)),
+                    "not_disconnected_simplex_columns": bool(payload.get("not_disconnected_simplex_columns", False)),
+                    "primary_edges": payload.get("primary_edges", "unavailable"),
+                    "truncated": bool(payload.get("truncated", False)),
+                    "no_proxy_or_fallback": bool(payload.get("no_proxy_or_fallback", False)),
+                }
+            )
+            if not safe:
+                source["reason"] = "simplex_tree_poset_contract_unavailable_or_unsafe"
+            _count(str(source["status"]))
+        else:
+            contract = payload.get("contract", {}) if isinstance(payload.get("contract"), dict) else {}
+            steps = payload.get("steps", []) if isinstance(payload.get("steps"), list) else []
+            step_count = _int(contract.get("step_count")) or len(steps)
+            total_step_count += step_count
+            safe = bool(contract.get("schema_version") == "tropicalgt.reasoning_step_complex_maps.v1" and contract.get("available") is True and contract.get("actual_data_only") is True and contract.get("no_proxy_or_fallback") is True and contract.get("all_steps_have_source_contracts") is True and contract.get("all_step_complex_source_contracts_safe") is True and contract.get("all_step_radius_sliders_start_disjoint_vertices") is True and contract.get("all_step_radius_sliders_monotone") is True and contract.get("all_step_radius_sliders_safe_to_render") is True and contract.get("all_step_simplex_tree_posets_use_gudhi") is True and contract.get("all_step_simplex_tree_posets_face_coface_primary") is True and contract.get("all_step_simplex_tree_posets_safe_to_render") is True and _int(contract.get("radius_slider_unavailable_count")) == 0 and _int(contract.get("simplex_tree_poset_unavailable_count")) == 0 and _int(contract.get("source_contract_unavailable_count")) == 0)
+            source.update(
+                {
+                    "available": safe,
+                    "status": "reasoning_step_manifest_available" if safe else "reasoning_step_manifest_unavailable",
+                    "contract_schema_version": contract.get("schema_version", "unavailable"),
+                    "step_count": step_count,
+                    "rendered_complex_pages": _int(contract.get("rendered_complex_pages")),
+                    "rendered_simplex_tree_pages": _int(contract.get("rendered_simplex_tree_pages")),
+                    "rendered_slider_contracts": _int(contract.get("rendered_slider_contracts")),
+                    "rendered_simplex_tree_poset_contracts": _int(contract.get("rendered_simplex_tree_poset_contracts")),
+                    "gudhi_simplex_tree_step_count": _int(contract.get("gudhi_simplex_tree_step_count")),
+                    "radius_slider_unavailable_count": _int(contract.get("radius_slider_unavailable_count")),
+                    "simplex_tree_poset_unavailable_count": _int(contract.get("simplex_tree_poset_unavailable_count")),
+                    "source_contract_unavailable_count": _int(contract.get("source_contract_unavailable_count")),
+                    "all_step_complex_fingerprints_present": bool(contract.get("all_step_complex_fingerprints_present", False)),
+                    "all_step_complex_fingerprints_unique": bool(contract.get("all_step_complex_fingerprints_unique", False)),
+                    "no_proxy_or_fallback": bool(contract.get("no_proxy_or_fallback", False)),
+                }
+            )
+            if not safe:
+                source["reason"] = "reasoning_step_complex_manifest_unavailable_or_unsafe"
+            _count(str(source["status"]))
+        sources.append(source)
+
+    available_sources = [row for row in sources if row.get("available")]
+    return {
+        "schema_version": "tropicalgt.herschel_simplicial_complex_evidence.v1",
+        "available": bool(available_sources),
+        "source_count": len(sources),
+        "available_source_count": len(available_sources),
+        "total_view_count": total_view_count,
+        "total_step_count": total_step_count,
+        "total_vertices": total_vertices,
+        "total_edges": total_edges,
+        "total_faces": total_faces,
+        "total_source_simplices": total_source_simplices,
+        "total_displayed_simplices": total_displayed_simplices,
+        "total_radius_slider_contracts": total_radius_slider_contracts,
+        "total_simplex_tree_poset_contracts": total_simplex_tree_poset_contracts,
+        "required_overlay_schema": "tropicalgt.trajectory_complex_overlay_contract.v1",
+        "required_slider_schema": "tropicalgt.radius_filtration_slider_contract.v1",
+        "required_simplex_tree_schema": "tropicalgt.simplex_tree_poset.v1",
+        "required_step_manifest_schema": "tropicalgt.reasoning_step_complex_maps.v1",
+        "status_counts": {key: status_counts[key] for key in sorted(status_counts)},
+        "sources": sources,
+        "policy": "Herschel reports simplicial/radius/simplex-tree evidence only from recorded trajectory-complex payloads, radius-slider contracts, simplex-tree poset contracts, and reasoning-step complex manifests. Unsafe or missing contracts remain unavailable and are not replaced by global trajectory proxies.",
+    }
+
+
 def summarize_bundle(bundle: dict[str, Any], *, bundle_path: Path | None = None) -> dict[str, Any]:
     decision = bundle.get("decision") if isinstance(bundle.get("decision"), dict) else {}
     gate = bundle.get("restart_evidence_gate") if isinstance(bundle.get("restart_evidence_gate"), dict) else {}
@@ -1644,6 +1838,7 @@ def summarize_bundle(bundle: dict[str, Any], *, bundle_path: Path | None = None)
             "toric_tropical_cas_evidence": _toric_tropical_cas_evidence(sidecars),
             "analogical_query_context_evidence": _analogical_query_context_evidence(sidecars),
             "analogical_memory_evidence": _analogical_memory_evidence(sidecars),
+            "simplicial_complex_evidence": _simplicial_complex_evidence(sidecars),
         },
         "restart_decision": {
             "action": gate.get("restart_action", "unavailable"),
@@ -1979,6 +2174,35 @@ def render_markdown(summary: dict[str, Any]) -> str:
         )
         if source.get("reason"):
             lines.append(f"  - reason: `{source.get('reason')}`")
+    simplicial_complex = artifacts.get("simplicial_complex_evidence", {}) if isinstance(artifacts.get("simplicial_complex_evidence"), dict) else {}
+    lines.extend(
+        [
+            "## Simplicial Complex And Simplex-Tree Evidence",
+            "",
+            f"- Available: `{simplicial_complex.get('available', False)}`",
+            f"- Sources: `{simplicial_complex.get('source_count', 0)}`",
+            f"- Radius-slider contracts: `{simplicial_complex.get('total_radius_slider_contracts', 0)}`",
+            f"- Simplex-tree poset contracts: `{simplicial_complex.get('total_simplex_tree_poset_contracts', 0)}`",
+            f"- Reasoning steps: `{simplicial_complex.get('total_step_count', 0)}`",
+            f"- Vertices/edges/faces counted: `{simplicial_complex.get('total_vertices', 0)}` / `{simplicial_complex.get('total_edges', 0)}` / `{simplicial_complex.get('total_faces', 0)}`",
+            f"- Source/displayed simplices: `{simplicial_complex.get('total_source_simplices', 0)}` / `{simplicial_complex.get('total_displayed_simplices', 0)}`",
+            "",
+            "```json",
+            json.dumps(simplicial_complex.get("status_counts", {}), indent=2),
+            "```",
+            "",
+        ]
+    )
+    for source in simplicial_complex.get("sources", []) if isinstance(simplicial_complex.get("sources"), list) else []:
+        if not isinstance(source, dict):
+            continue
+        lines.append(
+            f"- `{source.get('path', '')}` kind=`{source.get('kind', 'unavailable')}` available=`{source.get('available')}` "
+            f"status=`{source.get('status', 'unavailable')}` steps=`{source.get('step_count', 0)}` "
+            f"thresholds=`{source.get('threshold_count', 0)}` simplices=`{source.get('source_simplex_count', source.get('displayed_simplex_count', 0))}`"
+        )
+        if source.get("reason"):
+            lines.append(f"  - reason: `{source.get('reason')}`")
     ranked_validator_categories = validator_gaps.get("ranked_categories", []) if isinstance(validator_gaps.get("ranked_categories"), list) else []
     if ranked_validator_categories:
         lines.extend(["### Required Actions", ""])
@@ -2105,6 +2329,7 @@ def render_html(summary: dict[str, Any]) -> str:
     toric_tropical_cas = artifacts.get("toric_tropical_cas_evidence", {}) if isinstance(artifacts.get("toric_tropical_cas_evidence"), dict) else {}
     analogical_query_context = artifacts.get("analogical_query_context_evidence", {}) if isinstance(artifacts.get("analogical_query_context_evidence"), dict) else {}
     analogical_memory = artifacts.get("analogical_memory_evidence", {}) if isinstance(artifacts.get("analogical_memory_evidence"), dict) else {}
+    simplicial_complex = artifacts.get("simplicial_complex_evidence", {}) if isinstance(artifacts.get("simplicial_complex_evidence"), dict) else {}
     validator_sources = validator_gaps.get("sources", []) if isinstance(validator_gaps.get("sources"), list) else []
     sidecars = [str(path) for path in artifacts.get("advanced_sidecars_tail", [])]
     source_rows = []
@@ -2324,6 +2549,25 @@ def render_html(summary: dict[str, Any]) -> str:
         )
     if not analogical_memory_rows:
         analogical_memory_rows.append("<tr><td colspan='10' class='muted'>No analogical memory retrieval or simplex-tree analogy sidecar paths recorded.</td></tr>")
+    simplicial_complex_rows = []
+    for source in simplicial_complex.get("sources", []) if isinstance(simplicial_complex.get("sources"), list) else []:
+        if not isinstance(source, dict):
+            continue
+        simplicial_complex_rows.append(
+            "<tr>"
+            f"<td>{html.escape(str(source.get('path', '')))}</td>"
+            f"<td>{html.escape(str(source.get('kind', 'unavailable')))}</td>"
+            f"<td>{html.escape(str(source.get('available')))}</td>"
+            f"<td>{html.escape(str(source.get('status', 'unavailable')))}</td>"
+            f"<td>{html.escape(str(source.get('available_view_count', source.get('step_count', 0))))}</td>"
+            f"<td>{html.escape(str(source.get('threshold_count', source.get('rendered_slider_contracts', 0))))}</td>"
+            f"<td>{html.escape(str(source.get('source_simplex_count', source.get('displayed_simplex_count', 0))))}</td>"
+            f"<td>{html.escape(str(source.get('no_proxy_or_fallback')))}</td>"
+            f"<td>{html.escape(str(source.get('reason', '')))}</td>"
+            "</tr>"
+        )
+    if not simplicial_complex_rows:
+        simplicial_complex_rows.append("<tr><td colspan='9' class='muted'>No simplicial complex, radius-slider, or simplex-tree sidecar paths recorded.</td></tr>")
     sidecar_items = "".join(f"<li data-path='{html.escape(path.lower())}'>{html.escape(path)}</li>" for path in sidecars[:160]) or "<li class='muted'>No sidecar paths recorded.</li>"
     restart_safe = checkpoint.get("restart_safe") and execution.get("ready") and advanced.get("safe_for_restart") and restart.get("step0_restart_allowed")
     return f"""<!doctype html>
@@ -2369,6 +2613,7 @@ code {{ white-space:break-spaces; }}
 <span class="badge {'ok' if chart_bundle_transport.get('available') else 'warn'}">chart_bundle_evidence={html.escape(str(bool(chart_bundle_transport.get('available'))))}</span>
 <span class="badge {'ok' if toric_tropical_cas.get('available') else 'warn'}">toric_tropical_cas_evidence={html.escape(str(bool(toric_tropical_cas.get('available'))))}</span>
 <span class="badge {'ok' if analogical_memory.get('available') else 'warn'}">analogical_memory_evidence={html.escape(str(bool(analogical_memory.get('available'))))}</span>
+<span class="badge {'ok' if simplicial_complex.get('available') else 'warn'}">simplicial_complex_evidence={html.escape(str(bool(simplicial_complex.get('available'))))}</span>
 </header>
 <main>
 <section class="grid">
@@ -2389,6 +2634,7 @@ code {{ white-space:break-spaces; }}
 {_bar_chart_svg(chart_bundle_transport.get('completeness_tier_counts', {}) if isinstance(chart_bundle_transport, dict) else {}, title='Chart/Vector-Bundle Completeness Tiers', chart_id='chart-vector-bundle-completeness-tiers')}
 {_bar_chart_svg(toric_tropical_cas.get('status_counts', {}) if isinstance(toric_tropical_cas, dict) else {}, title='Toric/Tropical CAS Statuses', chart_id='toric-tropical-cas-statuses')}
 {_bar_chart_svg(analogical_memory.get('status_counts', {}) or analogical_memory.get('quality_gate_reason_counts', {}) if isinstance(analogical_memory, dict) else {}, title='Analogical Memory Statuses', chart_id='analogical-memory-statuses')}
+{_bar_chart_svg(simplicial_complex.get('status_counts', {}) if isinstance(simplicial_complex, dict) else {}, title='Simplicial Complex And Simplex-Tree Statuses', chart_id='simplicial-complex-statuses')}
 <section class="panel"><h2>Validator Sources</h2><table><thead><tr><th>Name</th><th>JSON path</th><th>Available</th><th>Gaps</th><th>Reason</th></tr></thead><tbody>{''.join(source_rows)}</tbody></table></section>
 <section class="panel"><h2>Validator Gap Actions</h2><table><thead><tr><th>Category</th><th>Count</th><th>Required action</th><th>Examples</th></tr></thead><tbody>{''.join(action_rows)}</tbody></table></section>
 <section class="panel"><h2>GFlowNet Branch Selection Evidence</h2><table><thead><tr><th>Sidecar</th><th>Available</th><th>Valid rows</th><th>Selected actions</th><th>Policies</th><th>Reason</th></tr></thead><tbody>{''.join(gflownet_branch_rows)}</tbody></table></section>
@@ -2401,6 +2647,7 @@ code {{ white-space:break-spaces; }}
 <section class="panel"><h2>Toric/Tropical CAS Evidence</h2><table><thead><tr><th>Sidecar</th><th>Kind</th><th>Available</th><th>Status</th><th>Backend</th><th>Finite toric ideal</th><th>Tropical fan</th><th>Rays</th><th>Reason</th></tr></thead><tbody>{''.join(toric_tropical_rows)}</tbody></table></section>
 <section class="panel"><h2>Analogical Query Context Evidence</h2><table><thead><tr><th>Sidecar</th><th>Available</th><th>Selected source</th><th>Status</th><th>Probability vertices</th><th>Rejected keys</th><th>Reason</th></tr></thead><tbody>{''.join(analogical_query_rows)}</tbody></table></section>
 <section class="panel"><h2>Analogical Memory Evidence</h2><table><thead><tr><th>Sidecar</th><th>Kind</th><th>Available</th><th>Status</th><th>Retrieved</th><th>Qualified</th><th>Top-k rendered</th><th>Pairs</th><th>Insufficient memory</th><th>Reason</th></tr></thead><tbody>{''.join(analogical_memory_rows)}</tbody></table></section>
+<section class="panel"><h2>Simplicial Complex And Simplex-Tree Evidence</h2><table><thead><tr><th>Sidecar</th><th>Kind</th><th>Available</th><th>Status</th><th>Views/steps</th><th>Thresholds/sliders</th><th>Simplices</th><th>No proxy</th><th>Reason</th></tr></thead><tbody>{''.join(simplicial_complex_rows)}</tbody></table></section>
 <section class="panel"><h2>Blockers And Warnings</h2><div class="grid"><div><h3>Checkpoint</h3><ul>{_html_list(checkpoint.get('warnings', []))}</ul></div><div><h3>Execution</h3><ul>{_html_list(execution.get('issues', []))}</ul></div><div><h3>Advanced BPB</h3><ul>{_html_list(advanced.get('failed_gates', []))}</ul></div><div><h3>Restart</h3><ul>{_html_list(restart.get('blockers', []))}</ul></div></div></section>
 <section class="panel"><h2>Advanced Sidecars Tail</h2><input id="sidecar-filter" type="search" placeholder="Filter sidecar paths"><ul id="sidecar-list">{sidecar_items}</ul></section>
 </main>

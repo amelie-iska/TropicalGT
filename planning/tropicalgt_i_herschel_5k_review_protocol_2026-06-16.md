@@ -217,3 +217,11 @@ CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src:TropicalGT-I/scripts /home/i
 CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src:TropicalGT-I/scripts /home/iska/miniconda3/envs/tokengt/bin/python TropicalGT-I/scripts/audit_metric_provenance.py --fail-on-uncovered
 # findings=412 covered=412 uncovered=0
 ```
+
+## 2026-06-18 Simplicial Complex And Simplex-Tree Evidence Follow-Up
+
+Herschel now treats the recorded full-trajectory complex payload, full-trajectory radius-slider contracts, full-trajectory SimplexTree poset contracts, and `reasoning_step_complex_maps/manifest.json` as Herschel-required audit sidecars when they exist in the latest `got_audit` directory. `write_herschel_5k_report.py` exposes `tropicalgt.herschel_simplicial_complex_evidence.v1`, sourced only from those recorded contracts.
+
+Availability requires `tropicalgt.trajectory_complex_overlay_contract.v1`, `tropicalgt.radius_filtration_slider_contract.v1`, `tropicalgt.simplex_tree_poset.v1`, and `tropicalgt.reasoning_step_complex_maps.v1` evidence with actual-data/no-proxy flags. Radius sliders must start as disjoint vertices, grow min-to-max, keep solid edges/faces radius-gated, and remain monotone. SimplexTree posets must be GUDHI-backed, face-to-coface primary, not disconnected columns, and safe to render. Per-step manifests must confirm source contracts, sliders, and simplex-tree posets for every model-evaluated reasoning step. Missing or unsafe contracts remain unavailable and are not replaced by global trajectory plots or static proxy complexes.
+
+Validation: focused Herschel/bundle tests passed (`11 passed`), broader Herschel/bundle/review-loop/provenance tests passed (`36 passed`), and metric provenance audit passed (`findings=423 covered=423 uncovered=0`).
