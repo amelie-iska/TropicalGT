@@ -257,7 +257,21 @@ def _row(root: Path, name: str) -> Path:
             "surface_contact_contract": "disabled for the main trajectory page: rendered GoT state marker z uses PC3 geometry, while raw NLL is preserved as color, hover, centered/scaled metadata, and projected surface diagnostics",
             "trajectory_point_surface_residual_max": 0.0,
             "surface_projected_z_by_record_id": {row["record_id"]: row["nll"] for row in candidates},
-            "local_interpolating_sheet": {"available": False, "reason": "disabled_to_preserve_exact_reasoning_point_surface_contact"},
+            "local_embedding_neighborhood_surface": {
+                "schema_version": "tropicalgt.local_embedding_neighborhood_surface.v1",
+                "available": True,
+                "surface_kind": "local_interpolating_nll_sheet",
+                "anchor_source": "scaling_report.candidates embeddings plus measured raw NLL values",
+                "model_evaluated_anchor_count": len(candidates),
+                "anchor_record_ids": [row["record_id"] for row in candidates],
+                "surface_projected_z_by_record_id": {row["record_id"]: row["nll"] for row in candidates},
+                "trajectory_point_surface_residual_max": 0.0,
+                "invented_nll_values": False,
+                "support_samples_are_model_states": False,
+                "trace_visibility": "legendonly",
+                "no_proxy_or_fallback": True,
+            },
+            "local_interpolating_sheet": {"available": False, "reason": "legacy_key_disabled; use local_embedding_neighborhood_surface for observed-anchor-only interpolation metadata"},
             "surrogate_landscape_layer": {"available": False, "reason": "disabled_by_default_not_model_evaluated"},
         },
         "nll_progress": {
@@ -1935,6 +1949,10 @@ def test_validate_audit_root_rejects_broken_nll_surface_contact_fields(tmp_path:
     validator = _load_validator()
     cases = [
         ("missing_projected_map", lambda payload: payload["nll_surface"].pop("surface_projected_z_by_record_id"), "missing per-record projected z values"),
+        ("missing_local_surface", lambda payload: payload["nll_surface"].pop("local_embedding_neighborhood_surface"), "missing local embedding-neighborhood surface contract"),
+        ("local_surface_proxy", lambda payload: payload["nll_surface"]["local_embedding_neighborhood_surface"].__setitem__("invented_nll_values", True), "invented NLL values"),
+        ("local_surface_residual", lambda payload: payload["nll_surface"]["local_embedding_neighborhood_surface"].__setitem__("trajectory_point_surface_residual_max", 42.0), "local embedding-neighborhood surface residual exceeds tolerance"),
+        ("local_surface_projection_mismatch", lambda payload: payload["nll_surface"]["local_embedding_neighborhood_surface"]["surface_projected_z_by_record_id"].__setitem__("root", 42.0), "local embedding-neighborhood surface projection for root does not match"),
         ("touch_flag_true", lambda payload: payload["nodes"][0]["plot"].__setitem__("touches_nll_surface", True), "should keep PC3 geometry rather than touch"),
         ("missing_z", lambda payload: payload["nodes"][0]["plot"].pop("z"), "missing finite plotted z"),
         ("non_null_z_surface", lambda payload: payload["nodes"][0]["plot"].__setitem__("z_surface", 999.0), "should leave z_surface null"),

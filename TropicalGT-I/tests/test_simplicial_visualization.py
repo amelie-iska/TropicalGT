@@ -752,9 +752,23 @@ def test_got_trajectory_visualization_renders_simplicial_panel_and_nll_surface(t
     if surrogate_layer.get("available") is True:
         assert surrogate_layer["surface_kind"] == "smooth_projected_nll_fitness_landscape"
         assert surrogate_layer["point_count"] >= len(scaling["candidates"])
+    local_surface = payload["nll_surface"].get("local_embedding_neighborhood_surface", {})
+    assert local_surface["schema_version"] == "tropicalgt.local_embedding_neighborhood_surface.v1"
+    assert local_surface["available"] is True
+    assert local_surface["surface_kind"] == "local_interpolating_nll_sheet"
+    assert local_surface["anchor_source"] == "scaling_report.candidates embeddings plus measured raw NLL values"
+    assert local_surface["model_evaluated_anchor_count"] == len(scaling["candidates"])
+    assert local_surface["anchor_record_ids"] == [node["record_id"] for node in payload["nodes"]]
+    assert local_surface["surface_projected_z_by_record_id"] == projected_by_id
+    assert local_surface["trajectory_point_surface_residual_max"] == 0.0
+    assert local_surface["invented_nll_values"] is False
+    assert local_surface["support_samples_are_model_states"] is False
+    assert local_surface["trace_visibility"] == "legendonly"
+    assert local_surface["no_proxy_or_fallback"] is True
+    assert "Local embedding-neighborhood NLL surface" in html
     local_sheet = payload["nll_surface"].get("local_interpolating_sheet", {})
     assert local_sheet.get("available") is False
-    assert local_sheet.get("reason") == "disabled_to_preserve_exact_reasoning_point_surface_contact"
+    assert local_sheet.get("reason") == "legacy_key_disabled; use local_embedding_neighborhood_surface for observed-anchor-only interpolation metadata"
     assert payload["nll_surface"]["max_point_residual"] < 1e-5
     assert "3D PCA NLL density cloud around actual GoT embeddings" in density_cloud_html
     assert "not a model state" in density_cloud_html

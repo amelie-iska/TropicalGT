@@ -656,9 +656,45 @@ def write_got_trajectory_visualization(scaling_report: dict[str, object], output
             "surface_projected_z_by_record_id": {ids[i]: float(nll_plot_z[i]) for i in range(len(ids))},
         }
     )
+    local_surface, local_surface_meta = _nll_local_interpolating_sheet_trace(
+        pca[:, 0],
+        pca[:, 1],
+        nll_plot_z,
+        nll_values,
+        name="Local embedding-neighborhood NLL surface (observed anchors only)",
+    )
+    local_surface_payload = dict(local_surface_meta)
+    local_surface_payload.update(
+        {
+            "schema_version": "tropicalgt.local_embedding_neighborhood_surface.v1",
+            "anchor_source": "scaling_report.candidates embeddings plus measured raw NLL values",
+            "coordinate_space": "PC1/PC2 from actual model graph-state embeddings with projected centered-scaled raw NLL z",
+            "model_evaluated_anchor_count": int(len(candidates)),
+            "anchor_record_ids": list(ids),
+            "surface_projected_z_by_record_id": {ids[i]: float(nll_plot_z[i]) for i in range(len(ids))},
+            "trajectory_point_surface_residual_max": float(0.0 if abs(float(local_surface_meta.get("max_point_residual", 0.0) or 0.0)) <= 1e-8 else float(local_surface_meta.get("max_point_residual", 0.0) or 0.0)),
+            "invented_nll_values": False,
+            "support_samples_are_model_states": False,
+            "main_marker_z_coordinate": "PC3 graph-state coordinate; this local surface uses the separate projected NLL z coordinate frame",
+            "trace_visibility": "legendonly" if local_surface_meta.get("available") is True else "unavailable",
+            "no_proxy_or_fallback": True,
+        }
+    )
+    if local_surface_meta.get("available") is True and local_surface is not None:
+        local_surface.visible = "legendonly"
+        local_surface.opacity = 0.34
+        fig.add_trace(local_surface)
+    else:
+        local_surface_payload.update(
+            {
+                "safe_unavailable_render": True,
+                "reason": str(local_surface_payload.get("reason", "local_embedding_neighborhood_surface_unavailable")),
+            }
+        )
+    nll_surface_meta["local_embedding_neighborhood_surface"] = local_surface_payload
     nll_surface_meta["local_interpolating_sheet"] = {
         "available": False,
-        "reason": "disabled_to_preserve_exact_reasoning_point_surface_contact",
+        "reason": "legacy_key_disabled; use local_embedding_neighborhood_surface for observed-anchor-only interpolation metadata",
     }
     nll_surface_meta["surrogate_landscape_layer"] = {
         "available": False,

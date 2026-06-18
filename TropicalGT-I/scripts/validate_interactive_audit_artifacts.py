@@ -926,6 +926,39 @@ def validate_row(row_dir: Path, *, min_candidates: int = 8, min_depth: int = 2, 
     )
     projected_by_record = surface.get("surface_projected_z_by_record_id", {})
     _assert(isinstance(projected_by_record, dict) and len(projected_by_record) >= len(nodes), errors, "NLL surface is missing per-record projected z values")
+    local_surface = surface.get("local_embedding_neighborhood_surface")
+    _assert(isinstance(local_surface, dict), errors, "NLL surface is missing local embedding-neighborhood surface contract")
+    if isinstance(local_surface, dict):
+        _assert(
+            local_surface.get("schema_version") == "tropicalgt.local_embedding_neighborhood_surface.v1",
+            errors,
+            "local embedding-neighborhood surface has the wrong schema version",
+        )
+        _assert(local_surface.get("no_proxy_or_fallback") is True, errors, "local embedding-neighborhood surface does not declare no-proxy/no-fallback")
+        if local_surface.get("available") is True:
+            _assert(local_surface.get("invented_nll_values") is False, errors, "local embedding-neighborhood surface invented NLL values")
+            _assert(local_surface.get("support_samples_are_model_states") is False, errors, "local embedding-neighborhood surface treats support samples as model states")
+            _assert(_finite_float(local_surface.get("model_evaluated_anchor_count"), 0.0) >= len(nodes), errors, "local embedding-neighborhood surface has too few model-evaluated anchors")
+            _assert(
+                _finite_float(local_surface.get("trajectory_point_surface_residual_max"), 999.0) <= nll_residual_tol,
+                errors,
+                "local embedding-neighborhood surface residual exceeds tolerance",
+            )
+            local_projected = local_surface.get("surface_projected_z_by_record_id", {})
+            _assert(isinstance(local_projected, dict) and len(local_projected) >= len(nodes), errors, "local embedding-neighborhood surface lacks per-record projected z values")
+            for node in nodes:
+                rid = str(node.get("record_id", ""))
+                _assert(isinstance(local_projected, dict) and rid in local_projected, errors, f"local embedding-neighborhood surface lacks projected z for {rid}")
+                _assert(isinstance(projected_by_record, dict) and rid in projected_by_record, errors, f"NLL surface missing projected z for {rid}")
+                if isinstance(local_projected, dict) and isinstance(projected_by_record, dict) and rid in local_projected and rid in projected_by_record:
+                    _assert(
+                        abs(_finite_float(local_projected.get(rid)) - _finite_float(projected_by_record.get(rid))) <= nll_residual_tol,
+                        errors,
+                        f"local embedding-neighborhood surface projection for {rid} does not match main NLL surface projection",
+                    )
+        else:
+            _assert(local_surface.get("safe_unavailable_render") is True, errors, "unavailable local embedding-neighborhood surface lacks a safe unavailable render flag")
+            _assert(bool(local_surface.get("reason")), errors, "unavailable local embedding-neighborhood surface lacks an exact reason")
     for node in nodes:
         rid = str(node.get("record_id", ""))
         plot = node.get("plot", {}) if isinstance(node.get("plot"), dict) else {}

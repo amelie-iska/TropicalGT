@@ -339,17 +339,30 @@ Result: `1 passed`. Browser QA screenshots:
 - Modify: `TropicalGT-I/src/tropicalgt/visualization.py`
 - Test: `TropicalGT-I/tests/test_simplicial_visualization.py`
 
-- [ ] **Step 5.1: Write failing test for neighborhood-surface metadata**
+- [x] **Step 5.1: Write failing test for neighborhood-surface metadata**
 
 Assert `payload["nll_surface"]["local_embedding_neighborhood_surface"]["available"] is True` when enough candidates exist, and that `trajectory_point_surface_residual_max == 0.0`.
 
-- [ ] **Step 5.2: Use real candidate anchors only**
+- [x] **Step 5.2: Use real candidate anchors only**
 
 Build local surface anchors from all generated candidate embeddings/NLL values in the scaling report. Do not invent NLL values. If insufficient anchors exist, emit an explicit diagnostic rather than a fake smooth surface.
 
-- [ ] **Step 5.3: Keep exact contact**
+- [x] **Step 5.3: Keep exact contact**
 
-For every GoT node, keep `plot.z == plot.z_surface == surface_projected_z_by_record_id[record_id]`. Validator must reject any mismatch.
+For every GoT node in the main PCA view, keep `plot.z == pca.pc3` and `plot.z_surface is None`; in the separate projected-NLL surface frame, keep `plot.z_centered_scaled_nll == surface_projected_z_by_record_id[record_id]`. Validator must reject any mismatch.
+
+
+Implemented 2026-06-18: `got_trajectory_payloads.json` now includes
+`tropicalgt.local_embedding_neighborhood_surface.v1`, sourced only from
+`scaling_report.candidates` graph-state embeddings and measured raw NLL values.
+The surface is hidden by default, uses projected centered/scaled NLL z rather
+than the main PC3 marker geometry, records exact per-record projected z values,
+sets `invented_nll_values=false`, and the validator rejects missing, proxy, or
+mismatched local-surface evidence. CPU-only checks passed:
+`test_got_trajectory_visualization_renders_simplicial_panel_and_nll_surface`,
+full `test_simplicial_visualization.py`, full
+`test_interactive_artifact_validator.py`, and `py_compile` for the touched
+source/test files.
 
 ---
 
