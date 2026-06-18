@@ -1048,3 +1048,10 @@ CUDA_VISIBLE_DEVICES="" /home/iska/miniconda3/bin/conda run -n tokengt python -m
 - The bundle records `herschel_required_sidecars_present` for exact sidecar provenance. Missing sidecars stay unavailable and cannot be inferred from validator text, embedding rows, or generic artifact filenames.
 - Regression coverage verifies a real periodic analogical sidecar is present in the persisted active contract and that Herschel's `analogical_query_context_evidence` reads the expected trajectory-probability query source and probability-vertex count.
 - Verification passed: py-compile; focused bundle/Herschel tests (`11 passed`); broader bundle/Herschel/review-loop/provenance tests (`36 passed`); metric provenance audit (`331 covered, 0 uncovered`).
+
+## 2026-06-18 Two-Parameter Betti Diagnostic No-Proxy QA
+
+- `persistence_module_betti.html` is now validator-gated as a secondary Betti/rank diagnostic, not a primary two-parameter module view.
+- The strict validator rejects retired `decorative 3D` wording and requires `secondary diagnostic` plus `no 3D rank-slab primary view` markers.
+- The generated growth-persistence module page emits the same secondary-diagnostic wording.
+- Verification passed: py-compile; focused Betti/bifiltration validator tests (`4 passed`); focused visualization/validator slice (`4 passed`); full interactive validator tests (`46 passed`).

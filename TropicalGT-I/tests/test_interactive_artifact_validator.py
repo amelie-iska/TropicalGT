@@ -1457,7 +1457,7 @@ def _row(root: Path, name: str) -> Path:
         "analogical_simplex_tree_analogy.html": _html("Analogical simplex-tree analogy", "Plotly.newPlot finite simplex-tree rows preserved face-to-coface chains no proxy"),
         "trajectory_persistence/persistence_barcode.html": _html("Trajectory persistence barcode", "Plotly.newPlot simplicial-object-plot selected-complex-graph plotly_click"),
         "trajectory_persistence/two_parameter_bifiltration.html": _html("Trajectory 2-parameter persistence over F2[x_level,x_radius]", "Plotly.newPlot 2-parameter module fibers Miller-Sturmfels staircase H0 fiber rank"),
-        "trajectory_persistence/persistence_module_betti.html": _html("Trajectory persistence Betti", "Plotly.newPlot 2D matrix decorative 3D simplicial-object-plot selected-complex-graph plotly_click"),
+        "trajectory_persistence/persistence_module_betti.html": _html("Trajectory persistence Betti", "Plotly.newPlot 2D matrix secondary diagnostic no 3D rank-slab primary view simplicial-object-plot selected-complex-graph plotly_click"),
         "trajectory_persistence/persistence_representations.html": _html("Trajectory GUDHI persistence vectorization", "Plotly.newPlot Fast train/eval features"),
         "trajectory_persistence/persistence_landscapes.html": _html("Trajectory Actual GUDHI persistence landscape functions", "Plotly.newPlot lambda_1(t) not norm-only summaries"),
     }
@@ -1917,6 +1917,20 @@ def test_validate_audit_root_rejects_norm_only_persistence_landscape_payload(tmp
     report = validator.validate_audit_root(audit, min_rows=1, min_candidates=4, min_depth=2)
     assert not report["ok"]
     assert any("norm-only" in err or "no curve traces" in err for err in report["errors"])
+
+
+def test_validate_audit_root_rejects_decorative_3d_betti_marker(tmp_path: Path):
+    validator = _load_validator()
+    audit = tmp_path / "step_00000001" / "got_audit"
+    row = _row(audit, ".")
+    _write(
+        row / "trajectory_persistence" / "persistence_module_betti.html",
+        _html("Trajectory persistence Betti", "Plotly.newPlot 2D matrix decorative 3D simplicial-object-plot selected-complex-graph plotly_click"),
+    )
+    _write(audit / "codex_browser_index.html", _codex_browser_html(_browser_samples(audit, ["."])))
+    report = validator.validate_audit_root(audit, min_rows=1, min_candidates=4, min_depth=2)
+    assert not report["ok"]
+    assert any("decorative 3D rank-slab" in err for err in report["errors"])
 
 
 def test_validate_audit_root_rejects_missing_bifiltration_structure_map_summary(tmp_path: Path):

@@ -31,7 +31,7 @@ REQUIRED_HTML = {
     "analogical_simplex_tree": ("analogical_simplex_tree_analogy.html", ("Analogical simplex-tree analogy", "finite simplex-tree rows", "preserved face-to-coface chains")),
     "trajectory_barcode": ("trajectory_persistence/persistence_barcode.html", ("Trajectory", "barcode")),
     "trajectory_bifiltration": ("trajectory_persistence/two_parameter_bifiltration.html", ("Trajectory 2-parameter persistence over F2[x_level,x_radius]", "2-parameter module fibers", "Miller-Sturmfels staircase", "H0 fiber rank")),
-    "trajectory_betti": ("trajectory_persistence/persistence_module_betti.html", ("Trajectory", "Betti", "2D matrix", "decorative 3D")),
+    "trajectory_betti": ("trajectory_persistence/persistence_module_betti.html", ("Trajectory", "Betti", "secondary diagnostic", "no 3D rank-slab primary view")),
     "trajectory_representations": ("trajectory_persistence/persistence_representations.html", ("Trajectory", "GUDHI persistence vectorization", "Fast train", "eval features")),
     "trajectory_landscapes": ("trajectory_persistence/persistence_landscapes.html", ("Trajectory", "Actual GUDHI persistence landscape functions", "lambda_1(t)", "not norm-only summaries")),
 }
@@ -623,6 +623,10 @@ def _validate_file_set(row_dir: Path, errors: list[str]) -> dict[str, str]:
                 _assert(support_audit or collapse_audit, errors, f"{rel} is not the interpretable support audit view")
             if key == "graphcg":
                 _assert(("Readable top-direction heatmap" in html) or ("GraphCG full-rank direction audit" in html and "heatmap shows all" in html), errors, f"{rel} does not use the readable GraphCG full-rank audit layout")
+            if key == "trajectory_betti":
+                _assert("decorative 3D" not in html, errors, f"{rel} contains retired decorative 3D rank-slab wording")
+                _assert("secondary diagnostic" in html, errors, f"{rel} does not label Betti/rank views as secondary diagnostics")
+                _assert("no 3D rank-slab primary view" in html, errors, f"{rel} does not disclaim 3D rank slabs as primary views")
             if key == "trajectory_nll":
                 _assert("selected-complex-graph" in html and "plotly_click" in html, errors, f"{rel} does not click-select an interactive reasoning-step complex")
                 _assert("open interactive reasoning-step complex page" in html, errors, f"{rel} does not expose per-step complex page links")

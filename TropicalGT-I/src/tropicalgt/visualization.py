@@ -8239,7 +8239,7 @@ def _write_growth_persistence_module(path: Path, topology: dict[str, object], gr
         template="plotly_dark",
         title=(
             f"{title_prefix}multiparameter persistence and chain-presentation diagnostics"
-            "<br><sup>2D matrix/bar view replaces decorative 3D spikes; hover opens the corresponding filtered complex panel</sup>"
+            "<br><sup>Secondary diagnostic 2D matrix/bar view; no 3D rank-slab primary view; hover opens the corresponding filtered complex panel</sup>"
         ),
         height=940,
         margin=dict(t=132, l=88, r=116, b=168),

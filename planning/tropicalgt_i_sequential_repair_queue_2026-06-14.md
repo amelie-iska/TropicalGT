@@ -816,3 +816,11 @@ The live item-by-item repair inventory is maintained in `planning/tropicalgt_i_c
 - [x] The augmentation is path-only and evidence-only: it records existing sidecars under `advanced_sidecars_tail` and `herschel_required_sidecars_present`; it does not copy generated artifacts, infer missing evidence, or substitute validator prose for a sidecar.
 - [x] Regression coverage creates a real periodic `got_audit/analogical_simplicial_maps.json`, verifies the persisted active contract contains it, and verifies Herschel's `analogical_query_context_evidence` reads the contract from the review bundle.
 - [x] Verification passed: py-compile for touched bundle/report files, focused bundle/Herschel tests (`11 passed`), broader bundle/Herschel/review-loop/provenance slice (`36 passed`), and provenance audit (`331 covered, 0 uncovered`).
+
+### Current Objective Update - Two-Parameter Betti Diagnostic No-Proxy QA Pass
+
+- [x] Tightened the strict interactive-artifact validator so `trajectory_persistence/persistence_module_betti.html` must label the Betti/rank page as a secondary diagnostic and explicitly state that there is no 3D rank-slab primary view.
+- [x] Removed the old validator requirement that accepted `decorative 3D` wording as a marker; that retired wording is now rejected.
+- [x] Updated the generated growth-persistence Betti page subtitle to say `Secondary diagnostic 2D matrix/bar view; no 3D rank-slab primary view`, preserving the Miller-Sturmfels staircase as the primary two-parameter page.
+- [x] Added regression coverage proving old `decorative 3D` Betti diagnostic HTML fails validation.
+- [x] Verification passed: py-compile for touched validator/visualization/tests; focused Betti/bifiltration validator tests (`4 passed`); focused visualization/validator slice (`4 passed`); full interactive artifact validator tests (`46 passed`).

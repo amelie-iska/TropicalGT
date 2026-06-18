@@ -1557,3 +1557,25 @@ CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src:TropicalGT-I/scripts /home/i
 CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src:TropicalGT-I/scripts /home/iska/miniconda3/envs/tokengt/bin/python TropicalGT-I/scripts/audit_metric_provenance.py --fail-on-uncovered
 # findings=331 covered=331 uncovered=0
 ```
+
+## 2026-06-18 Two-Parameter Betti Diagnostic No-Proxy QA
+
+Sequential two-parameter persistence QA item completed after the 5K bundle analogical sidecar inventory pass:
+
+- The strict interactive validator no longer accepts `decorative 3D` as required Betti-page wording.
+- `persistence_module_betti.html` must now expose the rank/Betti page as a secondary diagnostic and must include `no 3D rank-slab primary view`.
+- `_write_growth_persistence_module()` emits that wording in the actual generated page subtitle, while the bivariate `two_parameter_bifiltration.html` remains the primary Miller-Sturmfels staircase/module-lattice page.
+- Regression coverage overwrites the Betti page with the retired decorative-3D text and verifies strict validation fails.
+
+Validation:
+
+```text
+CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src:TropicalGT-I/scripts /home/iska/miniconda3/envs/tokengt/bin/python -m py_compile TropicalGT-I/scripts/validate_interactive_audit_artifacts.py TropicalGT-I/src/tropicalgt/visualization.py TropicalGT-I/tests/test_interactive_artifact_validator.py
+# passed
+CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src:TropicalGT-I/scripts /home/iska/miniconda3/envs/tokengt/bin/python -m pytest -q TropicalGT-I/tests/test_interactive_artifact_validator.py -k "decorative_3d_betti_marker or bifiltration"
+# 4 passed, 42 deselected
+CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src:TropicalGT-I/scripts /home/iska/miniconda3/envs/tokengt/bin/python -m pytest -q TropicalGT-I/tests/test_interactive_artifact_validator.py TropicalGT-I/tests/test_simplicial_visualization.py -k "bifiltration or persistence_module"
+# 4 passed, 92 deselected
+CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src:TropicalGT-I/scripts /home/iska/miniconda3/envs/tokengt/bin/python -m pytest -q TropicalGT-I/tests/test_interactive_artifact_validator.py
+# 46 passed
+```
