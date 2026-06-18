@@ -257,3 +257,10 @@ CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/t
 CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_interactive_artifact_validator.py TropicalGT-I/tests/test_metrics_and_memory.py -q
 CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m py_compile TropicalGT-I/src/tropicalgt/visualization.py TropicalGT-I/tests/test_simplicial_visualization.py
 ```
+
+
+## 2026-06-18 Analogical Visualization Checklist Closure
+
+- Verified the signature-cosine separation already present in analogical pair pages and the top-k table: coarse signature cosine is displayed separately and is explicitly excluded from derived-equivalence or derived/algebraic claims.
+- Verified the analogical simplex-tree analogy artifact already present at `analogical_simplex_tree_analogy.html/json`: it renders finite simplex-tree Hasse rows from the stored probability-map certificate, marks preserved versus failed simplex rows, and includes preserved face-to-coface chain summaries.
+- Marked the corresponding Task 6 plan items complete; remaining analogical work moves from core no-proxy correctness to browser QA/regeneration when GPU/process constraints allow.

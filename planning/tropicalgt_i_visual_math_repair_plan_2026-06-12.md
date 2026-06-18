@@ -120,8 +120,8 @@
 - [x] For each retrieved memory, compute probability-JS vertex assignment from model probabilities. (2026-06-18: positive probability-map retrieval rejects rows lacking full query/codomain probability vectors.)
 - [x] Check edge, face, and filtration preservation before calling it a simplicial map. (2026-06-18: failed preservation remains a correspondence with zero probability-map score.)
 - [x] Compute conservative `derived_algebraic_similarity = min(ph_similarity, free_resolution_similarity, rank_invariant_similarity, chain_map_score)`. (2026-06-18: coarse signature cosine remains displayed separately and no longer participates in the derived/algebraic minimum.)
-- [ ] Move any embedding/probability cosine into a separate `signature_cosine` column.
-- [ ] Add a simplex-tree analogy view with preserved face/coface paths.
+- [x] Move any embedding/probability cosine into a separate `signature_cosine` column. (2026-06-18 verified: top-k table and pair hovers label this as coarse signature cosine, separate from derived/algebraic similarity.)
+- [x] Add a simplex-tree analogy view with preserved face/coface paths. (2026-06-18 verified: `analogical_simplex_tree_analogy.html/json` renders finite simplex-tree rows and preserved face/coface chains.)
 
 ### Task 7: Browser QA and Push
 
