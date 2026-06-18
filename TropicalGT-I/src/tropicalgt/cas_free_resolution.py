@@ -16,7 +16,7 @@ from typing import Any
 SCHEMA_VERSION = "tropicalgt.real_free_resolution.v1"
 MODULE_SCHEMA_VERSION = "tropicalgt.level_radius_module.v1"
 CACHE_SCHEMA_VERSION = "tropicalgt.real_free_resolution.cache.v1"
-ADAPTER_CACHE_VERSION = "2026-06-15.cas-free-resolution-cache-v2"
+ADAPTER_CACHE_VERSION = "2026-06-18.cas-free-resolution-cache-v3"
 SUPPORTED_RINGS = {
     "F2[x_level,x_radius]": ["x_level", "x_radius"],
     "F2[x_filtration,x_dimension]": ["x_filtration", "x_dimension"],
@@ -112,6 +112,8 @@ def free_resolution_certificate_contract() -> dict[str, Any]:
                 "fitting_ideals": True,
                 "minors": True,
                 "grade_depth_diagnostics": True,
+                "differential_matrices": True,
+                "syzygy_generators_from_resolution_maps": True,
                 "bemultipliers_optional_post_certificate": True,
                 "safe_for_multigraded_claims_when_homogeneous": True,
             },
@@ -119,12 +121,14 @@ def free_resolution_certificate_contract() -> dict[str, Any]:
                 "ungraded_resolution": True,
                 "determinantal_and_fitting_ideals": True,
                 "minimality_may_be_false_with_unit_entries": True,
+                "syzygy_generators_from_resolution_maps": False,
                 "safe_for_multigraded_claims": False,
                 "bemultipliers_optional_post_certificate": False,
             },
             "sage": {
                 "total_graded_resolution_for_supported_one_row_ideals": True,
                 "safe_for_multigraded_claims": False,
+                "syzygy_generators_from_resolution_maps": False,
                 "bemultipliers_optional_post_certificate": False,
             },
             "BEMultipliers": {
@@ -531,6 +535,58 @@ def cas_command_templates(module_schema: dict[str, Any]) -> dict[str, str]:
     }
 
 
+def cas_backend_capability_matrix() -> dict[str, dict[str, Any]]:
+    return {
+        "M2": {
+            "display_name": "Macaulay2",
+            "certifies": [
+                "minimal_multigraded_free_resolution_when_homogeneous",
+                "multidegree_shifts",
+                "differential_matrices",
+                "syzygy_generators_from_resolution_maps",
+                "fitting_ideals",
+                "determinantal_minors",
+                "grade_depth_rank_ideal_diagnostics",
+            ],
+            "optional_sidecars": ["BEMultipliers_aMultiplier_after_certified_chain_complex"],
+            "unsafe_to_infer": [],
+            "safe_for_multigraded_claims": True,
+            "certificate_required_before_rendering": True,
+        },
+        "sage": {
+            "display_name": "Sage",
+            "certifies": [
+                "total_graded_resolution_for_supported_one_row_ideal_quotients",
+                "total_graded_betti_ranks",
+            ],
+            "optional_sidecars": [],
+            "unsafe_to_infer": [
+                "multigraded_shifts",
+                "multigraded_syzygies",
+                "Buchsbaum_Eisenbud_multipliers",
+            ],
+            "safe_for_multigraded_claims": False,
+            "certificate_required_before_rendering": True,
+        },
+        "Singular": {
+            "display_name": "Singular",
+            "certifies": [
+                "ungraded_resolution_summary",
+                "determinantal_minors",
+                "fitting_ideals",
+            ],
+            "optional_sidecars": [],
+            "unsafe_to_infer": [
+                "multigraded_shifts",
+                "multigraded_syzygies",
+                "Buchsbaum_Eisenbud_multipliers",
+            ],
+            "safe_for_multigraded_claims": False,
+            "certificate_required_before_rendering": True,
+        },
+    }
+
+
 def cas_execution_manifest(module_schema: dict[str, Any], *, templates: dict[str, str] | None = None) -> dict[str, Any]:
     templates = templates if templates is not None else cas_command_templates(module_schema)
     backend_probe = probe_cas_backends()
@@ -542,6 +598,7 @@ def cas_execution_manifest(module_schema: dict[str, Any], *, templates: dict[str
     template_key_by_backend = {"M2": "macaulay2", "sage": "sage", "Singular": "singular"}
     presentation = module_schema.get("presentation_matrix", {}) if isinstance(module_schema.get("presentation_matrix"), dict) else {}
     backend_entries: list[dict[str, Any]] = []
+    capabilities = cas_backend_capability_matrix()
     for backend_name in backend_probe.get("preferred_order", ["M2", "sage", "Singular"]):
         probe_row = backend_by_name.get(str(backend_name), {})
         template_key = template_key_by_backend.get(str(backend_name), str(backend_name).lower())
@@ -560,10 +617,12 @@ def cas_execution_manifest(module_schema: dict[str, Any], *, templates: dict[str
                 "complexity_guard_reason": guard.get("reason") if guard else "",
                 "safe_to_execute_under_current_limits": bool(probe_row.get("available") and template and guard is None),
                 "certificate_required_before_rendering": True,
+                "capabilities": capabilities.get(str(backend_name), {}),
             }
         )
     return {
         "schema_version": "tropicalgt.cas_execution_manifest.v1",
+        "capability_matrix_schema": "tropicalgt.cas_backend_capabilities.v1",
         "module_schema_version": module_schema.get("schema_version"),
         "coefficient_ring": module_schema.get("coefficient_ring"),
         "variables": list(module_schema.get("variables", [])),
@@ -1168,6 +1227,7 @@ def _certified_result(module_schema: dict[str, Any], backend_result: dict[str, A
     sage_resolution_text = str(parsed.get("sage_resolution_text", "") or "")
     macaulay2_multigraded = _parse_macaulay2_multigraded_artifacts(parsed, backend=backend) if backend == "Macaulay2" else {}
     singular_determinantal = _parse_singular_determinantal_artifacts(parsed, backend=backend) if backend == "Singular" else {}
+    syzygy_diagnostics = macaulay2_multigraded.get("syzygy_diagnostics", _unavailable_syzygy_diagnostics(backend)) if isinstance(macaulay2_multigraded, dict) else _unavailable_syzygy_diagnostics(backend)
     be_diagnostics = _parse_buchsbaum_eisenbud_diagnostics(parsed, backend=backend)
     structured_betti = _parse_ungraded_betti_table(betti_text, backend=backend)
     if sage_total_graded.get("available"):
@@ -1234,6 +1294,8 @@ def _certified_result(module_schema: dict[str, Any], backend_result: dict[str, A
             free_resolution_summary["ideal_diagnostics"] = ideal_diagnostics
         if be_rank_conditions.get("available"):
             free_resolution_summary["buchsbaum_eisenbud_rank_conditions"] = be_rank_conditions
+        if syzygy_diagnostics.get("available"):
+            free_resolution_summary["syzygy_diagnostics"] = syzygy_diagnostics
         if grade_depth_regular.get("available"):
             free_resolution_summary["grade_depth_regular_diagnostics"] = grade_depth_regular
     templates = cas_command_templates(module_schema)
@@ -1265,6 +1327,7 @@ def _certified_result(module_schema: dict[str, Any], backend_result: dict[str, A
         "bemultipliers_safe_to_render_multiplier_output": bool(be_diagnostics.get("safe_to_render_multiplier_output")),
         "bemultipliers_is_resolution_backend": False,
         "grade_depth_regular_diagnostics_available": bool(grade_depth_regular.get("available")),
+        "syzygy_diagnostics_available": bool(syzygy_diagnostics.get("available")),
         "regular_element_certificate_available": bool(grade_depth_regular.get("regular_element_certificate_available")),
         "no_proxy_policy": "Only exact CAS certificates with parsed free-resolution summaries are rendered as resolutions; diagnostics alone are not substituted.",
         "certificate_contract": free_resolution_certificate_contract(),
@@ -1298,6 +1361,7 @@ def _certified_result(module_schema: dict[str, Any], backend_result: dict[str, A
             "singular_determinantal": singular_determinantal,
             "fitting_ideals": fitting_ideals,
             "minors": minors,
+            "syzygies": syzygy_diagnostics,
             "ideal_diagnostics": ideal_diagnostics,
             "buchsbaum_eisenbud_diagnostics": be_diagnostics,
             "buchsbaum_eisenbud_rank_conditions": be_rank_conditions,
@@ -1380,6 +1444,7 @@ def _parse_macaulay2_multigraded_artifacts(parsed: dict[str, Any], *, backend: s
     fitting_ideals = _parse_key_value_lines(fitting_text)
     minors = _parse_key_value_lines(minors_text)
     available = bool(free_modules)
+    syzygy_diagnostics = _macaulay2_syzygy_diagnostics(differentials)
     return {
         "available": available,
         "backend": backend,
@@ -1388,6 +1453,8 @@ def _parse_macaulay2_multigraded_artifacts(parsed: dict[str, Any], *, backend: s
         "betti_table_rows": betti_table_rows,
         "betti_by_homological_and_multidegree": betti_by_multidegree,
         "differentials": differentials,
+        "syzygy_generators": syzygy_diagnostics.get("syzygy_generators", []),
+        "syzygy_diagnostics": syzygy_diagnostics,
         "fitting_ideals": fitting_ideals,
         "minors": minors,
         "not_multigraded": False,
@@ -1704,6 +1771,71 @@ def _parse_macaulay2_differentials(text: str) -> list[dict[str, Any]]:
         elif field == "matrix":
             row["matrix_text"] = value.strip()
     return [grouped[key] for key in sorted(grouped)]
+
+
+def _macaulay2_syzygy_diagnostics(differentials: list[dict[str, Any]]) -> dict[str, Any]:
+    rows: list[dict[str, Any]] = []
+    by_order: dict[str, int] = {}
+    for differential in differentials or []:
+        if not isinstance(differential, dict):
+            continue
+        homological_degree = _parse_int_or_none(differential.get("homological_degree"))
+        source_degrees = differential.get("source_degrees")
+        if homological_degree is None or homological_degree < 2 or not isinstance(source_degrees, list):
+            continue
+        syzygy_order = homological_degree - 1
+        for index, multidegree in enumerate(source_degrees):
+            if not isinstance(multidegree, list):
+                continue
+            degree = [int(value) for value in multidegree]
+            key = str(syzygy_order)
+            by_order[key] = by_order.get(key, 0) + 1
+            rows.append(
+                {
+                    "syzygy_order": syzygy_order,
+                    "homological_degree": homological_degree,
+                    "source_free_module": f"F_{homological_degree}",
+                    "target_free_module": f"F_{homological_degree - 1}",
+                    "differential": f"d{homological_degree}",
+                    "generator_index": index,
+                    "multidegree": degree,
+                    "shift_display": "(" + ",".join(str(value) for value in degree) + ")",
+                    "source": "macaulay2_resolution_differential_source_degrees",
+                    "interpretation": "columns of the certified Macaulay2 differential encode syzygy-module generators",
+                    "safe_for_multigraded_claims": True,
+                }
+            )
+    if not rows:
+        return {
+            "available": False,
+            "backend": "Macaulay2",
+            "reason": "Macaulay2 output did not contain higher differential source-degree blocks, so no certified syzygy generators were surfaced.",
+            "requires_certified_macaulay2_resolution_maps": True,
+            "not_inferred_from_chain_diagnostics": True,
+            "no_proxy_policy": "Do not infer syzygies from finite chain nullspaces, ungraded Betti rows, Fitting ideals, minors, or total-graded summaries.",
+        }
+    return {
+        "available": True,
+        "backend": "Macaulay2",
+        "schema_version": "tropicalgt.cas_syzygy_diagnostics.v1",
+        "syzygy_generators": rows,
+        "syzygy_counts_by_order": by_order,
+        "requires_certified_macaulay2_resolution_maps": True,
+        "not_inferred_from_chain_diagnostics": True,
+        "no_proxy_policy": "Syzygy generators are rendered only from Macaulay2 resolution differentials attached to an exact CAS certificate.",
+    }
+
+
+def _unavailable_syzygy_diagnostics(backend: str) -> dict[str, Any]:
+    return {
+        "available": False,
+        "backend": backend,
+        "reason": "No certified Macaulay2 multigraded resolution-map output is present; syzygies are not inferred from ungraded or total-graded diagnostics.",
+        "requires_certified_macaulay2_resolution_maps": True,
+        "not_inferred_from_chain_diagnostics": True,
+        "no_proxy_policy": "Do not infer syzygies from finite chain nullspaces, ungraded Betti rows, Fitting ideals, minors, or total-graded summaries.",
+    }
+
 
 def _parse_json_dict(value: Any) -> dict[str, Any]:
     if not value:

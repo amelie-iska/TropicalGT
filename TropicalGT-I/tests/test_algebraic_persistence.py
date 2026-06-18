@@ -68,6 +68,7 @@ def _assert_real_resolution_guard(real, expected_ring):
     assert manifest["schema_version"] == "tropicalgt.cas_execution_manifest.v1"
     assert manifest["coefficient_ring"] == expected_ring
     assert manifest["backend_order"] == ["M2", "sage", "Singular"]
+    assert manifest["capability_matrix_schema"] == "tropicalgt.cas_backend_capabilities.v1"
     assert manifest["no_proxy_or_fallback"] is True
     assert "safe_to_render" in manifest["render_rule"]
     entries = {row["name"]: row for row in manifest["backend_entries"]}
@@ -75,6 +76,9 @@ def _assert_real_resolution_guard(real, expected_ring):
     assert entries["M2"]["template_key"] == "macaulay2"
     assert entries["sage"]["template_key"] == "sage"
     assert entries["Singular"]["template_key"] == "singular"
+    assert "syzygy_generators_from_resolution_maps" in entries["M2"]["capabilities"]["certifies"]
+    assert "multigraded_syzygies" in entries["sage"]["capabilities"]["unsafe_to_infer"]
+    assert "multigraded_syzygies" in entries["Singular"]["capabilities"]["unsafe_to_infer"]
     assert all(row["certificate_required_before_rendering"] is True for row in entries.values())
     assert manifest["bemultipliers_policy"]["is_resolution_backend"] is False
     assert "unavailable" in contract["unavailable_render_rule"]
@@ -439,6 +443,12 @@ def test_singular_certified_result_structures_ungraded_betti_rows_without_multig
     assert be_rank["nonnegative_rank_conditions"] is True
     assert be_rank["exactness_certified_by_backend"] is True
     assert be_rank["is_independent_certificate"] is False
+    syzygies = real["cas_artifacts"]["syzygies"]
+    assert syzygies["available"] is False
+    assert syzygies["requires_certified_macaulay2_resolution_maps"] is True
+    assert syzygies["not_inferred_from_chain_diagnostics"] is True
+    assert "not inferred" in syzygies["reason"]
+    assert "ungraded" in syzygies["no_proxy_policy"]
     assert be_rank["paper_method_contract"]["buchsbaum_eisenbud_multipliers"]["requires_certified_chain_complex"] is True
 
 
@@ -698,6 +708,29 @@ def test_certified_cas_result_surfaces_buchsbaum_eisenbud_diagnostics():
     assert be_rank["shape_bounds_hold"] is True
     assert be_rank["paper_method_note"].startswith("For an exact finite free complex")
     assert real["free_resolution_summary"]["ideal_diagnostics"] == ideal_diag
+    syzygies = real["cas_artifacts"]["syzygies"]
+    assert syzygies["available"] is True
+    assert syzygies["schema_version"] == "tropicalgt.cas_syzygy_diagnostics.v1"
+    assert syzygies["syzygy_counts_by_order"] == {"1": 1}
+    assert syzygies["syzygy_generators"] == [
+        {
+            "syzygy_order": 1,
+            "homological_degree": 2,
+            "source_free_module": "F_2",
+            "target_free_module": "F_1",
+            "differential": "d2",
+            "generator_index": 0,
+            "multidegree": [1, 1],
+            "shift_display": "(1,1)",
+            "source": "macaulay2_resolution_differential_source_degrees",
+            "interpretation": "columns of the certified Macaulay2 differential encode syzygy-module generators",
+            "safe_for_multigraded_claims": True,
+        }
+    ]
+    assert syzygies["not_inferred_from_chain_diagnostics"] is True
+    assert real["cas_artifacts"]["macaulay2_multigraded"]["syzygy_generators"] == syzygies["syzygy_generators"]
+    assert real["free_resolution_summary"]["syzygy_diagnostics"] == syzygies
+    assert cert["syzygy_diagnostics_available"] is True
     assert real["free_resolution_summary"]["buchsbaum_eisenbud_rank_conditions"] == be_rank
     assert real["free_resolution_summary"]["grade_depth_regular_diagnostics"] == grade_depth
     assert cert["grade_depth_regular_diagnostics_available"] is True

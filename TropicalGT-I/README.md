@@ -51,6 +51,11 @@ Use `configs/gpu_ablation.json` for bounded data-backed RTX 4090 ablation ladder
 
 `meet_in_middle.enabled` optionally activates the graph-aware meet-in-the-middle adaptation. It scores the same graph-autoregressive byte stream left-to-right and right-to-left, using topological order for causal DAGs and deterministic random order for non-causal graphs. It is off by default because the reverse pass adds memory and compute; use `eval_tropicalgt_i.py --meet-in-middle` or `infer_tropicalgt_i.py --meet-in-middle` for inspection before adding nonzero training weights.
 
+
+## Certified CAS Algebra
+
+The CAS free-resolution adapter at src/tropicalgt/cas_free_resolution.py exposes a backend capability matrix for Macaulay2, Sage, Singular, and optional BEMultipliers sidecars. Macaulay2 is the only backend currently marked safe for multigraded free-resolution claims over F2[x_level,x_radius]; it surfaces multidegree shifts, differential matrices, Fitting ideals, minors, grade/depth rank-ideal diagnostics, and certified syzygy generators parsed from returned resolution maps. Sage total-graded summaries and Singular ungraded/determinantal diagnostics remain real CAS evidence, but they explicitly mark multigraded shifts and syzygies as unsafe to infer. BEMultipliers output is a post-certificate diagnostic only and never substitutes for a free-resolution certificate.
+
 ## Papers and Assets
 
 - [Main TropicalGT paper](../references/main.pdf)
