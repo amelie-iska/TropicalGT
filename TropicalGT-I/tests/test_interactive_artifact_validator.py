@@ -1139,6 +1139,14 @@ def _row(root: Path, name: str) -> Path:
                     "module_lattice_overlay_trace_names": ["actual x_level structure maps over F2", "actual x_radius structure maps over F2"],
                     "no_proxy_or_fallback": True,
                 },
+                "certificate_indexed_cas_evidence": {
+                    "schema_version": "tropicalgt.cas_certificate_indexed_evidence.v1",
+                    "available": False,
+                    "reason": "fixture_cas_backend_unavailable",
+                    "safe_unavailable_render": True,
+                    "no_proxy_or_fallback": True,
+                    "render_rule": "No certificate-indexed CAS evidence is displayed unless a certified CAS result emitted the evidence block.",
+                },
                 "miller_sturmfels_staircase_evidence": {
                     "schema_version": "tropicalgt.miller_sturmfels_staircase_evidence.v1",
                     "coefficient_ring": "F2[x_level,x_radius]",
@@ -1544,6 +1552,35 @@ def test_validate_audit_root_rejects_missing_miller_sturmfels_staircase_evidence
     report = validator.validate_audit_root(audit, min_rows=1, min_candidates=4, min_depth=2)
     assert not report["ok"]
     assert any("Miller-Sturmfels staircase evidence" in err for err in report["errors"])
+
+
+def test_validate_audit_root_rejects_missing_certificate_indexed_cas_evidence(tmp_path: Path):
+    validator = _load_validator()
+    audit = tmp_path / "step_00000001" / "got_audit"
+    row = _row(audit, ".")
+    visual_path = row / "trajectory_persistence" / "two_parameter_bifiltration.json"
+    payload = json.loads(visual_path.read_text(encoding="utf-8"))
+    payload.pop("certificate_indexed_cas_evidence")
+    visual_path.write_text(json.dumps(payload), encoding="utf-8")
+    _write(audit / "codex_browser_index.html", _codex_browser_html(_browser_samples(audit, ["."])))
+    report = validator.validate_audit_root(audit, min_rows=1, min_candidates=4, min_depth=2)
+    assert not report["ok"]
+    assert any("certificate-indexed CAS evidence" in err for err in report["errors"])
+
+
+def test_validate_audit_root_rejects_unsafe_certificate_indexed_cas_evidence(tmp_path: Path):
+    validator = _load_validator()
+    audit = tmp_path / "step_00000001" / "got_audit"
+    row = _row(audit, ".")
+    visual_path = row / "trajectory_persistence" / "two_parameter_bifiltration.json"
+    payload = json.loads(visual_path.read_text(encoding="utf-8"))
+    payload["certificate_indexed_cas_evidence"]["no_proxy_or_fallback"] = False
+    payload["certificate_indexed_cas_evidence"]["safe_unavailable_render"] = False
+    visual_path.write_text(json.dumps(payload), encoding="utf-8")
+    _write(audit / "codex_browser_index.html", _codex_browser_html(_browser_samples(audit, ["."])))
+    report = validator.validate_audit_root(audit, min_rows=1, min_candidates=4, min_depth=2)
+    assert not report["ok"]
+    assert any("certificate-indexed CAS evidence" in err and ("proxy/fallback" in err or "safe-unavailable" in err) for err in report["errors"])
 
 
 def test_validate_audit_root_rejects_miller_sturmfels_staircase_aggregate_mismatch(tmp_path: Path):

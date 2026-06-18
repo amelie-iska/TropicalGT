@@ -752,6 +752,16 @@ def validate_row(row_dir: Path, *, min_candidates: int = 8, min_depth: int = 2, 
         _assert("x_level" in directions_rendered and "x_radius" in directions_rendered, errors, "trajectory bifiltration primary structure-map evidence lacks both directions")
         _assert(int(_finite_float(primary_structure_evidence.get("primary_table_rows"), -1.0)) == (len(structure_maps) if isinstance(structure_maps, list) else 0), errors, "trajectory bifiltration primary structure-map evidence table count does not match raw maps")
         _assert(primary_structure_evidence.get("no_proxy_or_fallback") is True, errors, "trajectory bifiltration primary structure-map evidence allows proxy/fallback evidence")
+        cas_indexed = bifiltration_visual_payload.get("certificate_indexed_cas_evidence") if isinstance(bifiltration_visual_payload.get("certificate_indexed_cas_evidence"), dict) else {}
+        _assert(cas_indexed.get("schema_version") == "tropicalgt.cas_certificate_indexed_evidence.v1", errors, "trajectory bifiltration visual payload lacks certificate-indexed CAS evidence schema")
+        _assert(cas_indexed.get("no_proxy_or_fallback") is True, errors, "trajectory bifiltration certificate-indexed CAS evidence allows proxy/fallback evidence")
+        if cas_indexed.get("available") is True:
+            _assert(cas_indexed.get("exactness_certified") is True, errors, "available certificate-indexed CAS evidence is not exactness-certified")
+            _assert(isinstance(cas_indexed.get("evidence_blocks"), dict), errors, "available certificate-indexed CAS evidence lacks evidence blocks")
+            _assert(cas_indexed.get("derived_category_claim_requires_chain_map_or_resolution_comparison") is True, errors, "available certificate-indexed CAS evidence lacks derived-category guard")
+        else:
+            _assert(cas_indexed.get("safe_unavailable_render") is True, errors, "unavailable certificate-indexed CAS evidence is not marked safe-unavailable")
+            _assert(bool(cas_indexed.get("reason")), errors, "unavailable certificate-indexed CAS evidence lacks reason")
         staircase_cards = bifiltration_visual_payload.get("staircase_cards", [])
         _assert(isinstance(staircase_cards, list) and bool(staircase_cards), errors, "trajectory bifiltration visual payload lacks staircase card contracts")
         if isinstance(staircase_cards, list):
