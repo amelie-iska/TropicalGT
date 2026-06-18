@@ -33,3 +33,9 @@ If checkpoint integrity, metrics, sidecars, visual audits, and validators satisf
 ## Advanced Methodology Requirement
 
 Each restart decision must consider all implemented paradigms: TokenGT-style graph tokenization, OAI Parameter-Golf graph data, available HF/reasoning data, tropical ring attention, long-context/multi-row training, GraphCG full-rank directions, GFlowNet graph-of-thought training, memory retrieval and analogical reports, BPB/graph-BPB logging, periodic visual audits, meet-in-the-middle, causal DAG forward/reverse decoding, ROAR/random-order decoding, CAS/free-resolution/Fitting/minor/BE evidence, PH/persistence/landscape features, chart-bundle/vector-bundle/toric/sheaf metrics, tropical fan/toric sidecars, and every no-proxy artifact contract implemented since the prior gate.
+
+## GPU Launch Safety Update - 2026-06-18
+
+Herschel and any campaign/review-loop automation must not launch, resume, or restart GPU training unless an explicit GPU launch clearance is present. The accepted clearance forms are `--allow-gpu-launch`, `TROPICALGT_ALLOW_GPU_LAUNCH=true`, or a declared `--gpu-memory-budget-mb` / `TROPICALGT_GPU_MEMORY_BUDGET_MB` paired with a human-readable clearance note. CPU-only report generation, checkpoint evidence inspection, prompt writing, and unavailable-evidence recording may proceed without clearance. Any blocked launch must write a `tropicalgt.gpu_launch_safety_contract.v1` JSON record with exact blockers, and no blocked GPU launch may be treated as a failed training result.
+
+The current implementation writes this contract from both `parameter_golf_codex_review_loop.py` and `run_advanced_bpb_campaign.py`; this preserves the user's separate GPU work while keeping Herschel's 5K review/report path available.

@@ -1308,3 +1308,24 @@ CUDA_VISIBLE_DEVICES="" /home/iska/miniconda3/bin/conda run -n tokengt python -m
 CUDA_VISIBLE_DEVICES="" /home/iska/miniconda3/bin/conda run -n tokengt python -m pytest -q tests/test_simplicial_visualization.py tests/test_interactive_artifact_validator.py tests/test_sample_browser_index.py
 # 81 passed
 ```
+
+## 2026-06-18 GPU-Safe Herschel Launch Gate
+
+Highest-priority training automation repair completed for the current GPU-sharing constraint:
+
+- Added `tropicalgt.gpu_launch_safety_contract.v1` in `TropicalGT-I/src/tropicalgt/launch_safety.py`.
+- `parameter_golf_codex_review_loop.py` now records `gpu_launch_safety_contract.json` and refuses non-dry-run training launch unless explicit GPU clearance or a declared memory budget plus clearance note is present.
+- `run_advanced_bpb_campaign.py` now records `advanced_bpb_campaign_gpu_launch_safety.json` and refuses campaign training launch under the same policy.
+- Dry-run, prepare-only, once/review, and CPU-only report paths remain available without GPU clearance.
+- This does not inspect GPU state or reserve memory; it is a launch/restart policy gate so TropicalGT-I automation cannot surprise-interfere with the user's other GPU training.
+
+Validation:
+
+```text
+CUDA_VISIBLE_DEVICES="" python3 -m py_compile TropicalGT-I/src/tropicalgt/launch_safety.py TropicalGT-I/scripts/parameter_golf_codex_review_loop.py TropicalGT-I/scripts/run_advanced_bpb_campaign.py TropicalGT-I/tests/test_launch_safety.py
+# passed
+CUDA_VISIBLE_DEVICES="" /home/iska/miniconda3/bin/conda run -n tokengt python -m pytest -q tests/test_launch_safety.py tests/test_parameter_golf_review_loop.py
+# 22 passed
+CUDA_VISIBLE_DEVICES="" /home/iska/miniconda3/bin/conda run -n tokengt python -m pytest -q tests/test_prepare_5k_review_bundle.py
+# 9 passed
+```

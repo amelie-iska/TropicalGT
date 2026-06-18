@@ -20,6 +20,7 @@ if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
 from tropicalgt.run import load_config  # noqa: E402
+from tropicalgt.launch_safety import enforce_gpu_launch_safety, gpu_launch_safety_contract  # noqa: E402
 from tropicalgt.readiness_contracts import enforce_advanced_bpb_contract  # noqa: E402
 
 
@@ -38,6 +39,9 @@ def main() -> None:
     parser.add_argument("--output-dir", type=Path, default=ROOT / "TropicalGT-I" / "outputs" / "parameter_golf_codex_reviews")
     parser.add_argument("--codex-command", default=os.environ.get("CODEX_REVIEW_COMMAND", "codex exec"))
     parser.add_argument("--cuda-alloc-conf", default=os.environ.get("PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True"))
+    parser.add_argument("--allow-gpu-launch", action="store_true", help="Explicitly authorize this review loop to launch GPU training work.")
+    parser.add_argument("--gpu-memory-budget-mb", type=int, default=None, help="Declared safe GPU memory budget for this launch; requires --gpu-clearance-note or TROPICALGT_GPU_CLEARANCE_NOTE.")
+    parser.add_argument("--gpu-clearance-note", default=os.environ.get("TROPICALGT_GPU_CLEARANCE_NOTE", ""), help="Human-readable note documenting who/what cleared GPU launch or budget use.")
     parser.add_argument("--invoke-codex", action="store_true", help="Actually run the configured Codex command. Without this, prompts are written only.")
     parser.add_argument("--once", action="store_true", help="Review the current report/checkpoint once without launching training.")
     parser.add_argument("--dry-run", action="store_true", help="Print intended train/review actions without executing them.")
@@ -53,10 +57,24 @@ def main() -> None:
     args = parser.parse_args()
 
     cfg = load_config(args.config)
-    if not args.once:
-        _enforce_train_launch_contract(cfg)
     output_dir = args.output_dir
     output_dir.mkdir(parents=True, exist_ok=True)
+    launch_safety = gpu_launch_safety_contract(
+        allow_gpu_launch=bool(args.allow_gpu_launch),
+        gpu_memory_budget_mb=args.gpu_memory_budget_mb,
+        gpu_clearance_note=args.gpu_clearance_note,
+        action="parameter_golf_codex_review_loop_train_launch",
+    )
+    (output_dir / "gpu_launch_safety_contract.json").write_text(json.dumps(launch_safety, indent=2), encoding="utf-8")
+    if not args.once:
+        _enforce_train_launch_contract(cfg)
+    if not args.once and not args.dry_run:
+        enforce_gpu_launch_safety(
+            allow_gpu_launch=bool(args.allow_gpu_launch),
+            gpu_memory_budget_mb=args.gpu_memory_budget_mb,
+            gpu_clearance_note=args.gpu_clearance_note,
+            action="parameter_golf_codex_review_loop_train_launch",
+        )
     report_path = Path(cfg.get("output_dir", "TropicalGT-I/outputs/train")) / "train_report.json"
     checkpoint_dir = Path(cfg.get("checkpoint_dir", "TropicalGT-I/checkpoints"))
     run_name = cfg.get("run_name", "tropicalgt_i_train")
@@ -71,6 +89,7 @@ def main() -> None:
         "review_every_steps": args.review_every_steps,
         "max_total_steps": max_total_steps,
         "restart_policy": args.restart_policy,
+        "gpu_launch_safety_contract": launch_safety,
         "started_at": time.time(),
         "events": [],
     }
