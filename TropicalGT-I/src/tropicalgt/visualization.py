@@ -5703,6 +5703,16 @@ def _build_vector_bundle_paper_sidecar(metadata: Mapping[str, Any] | None, resul
         "safe_to_use_as_vector_bundle_paper_telemetry": True,
         "safe_to_use_as_vector_bundle_theorem_certificate": False,
         "safe_to_use_as_toric_or_tropical_embedding_certificate": False,
+        "paper_claim_scope": {
+            "monomial_transports": "mathematically motivated regularizer/telemetry over exported chart ids and transport logits",
+            "matroid_one_dimensional_cone_filtrations": "chart-by-toric-row flat-incidence regularizer/diagnostic only",
+            "graphcg_toric_agreement": "alignment metric between GraphCG directions and configured toric rows, not a toric fan certificate",
+            "transported_persistence_landscapes": "real GUDHI landscape comparison metrics only when analogical memory exports them",
+            "actual_tropical_toric_variety_constructed": False,
+            "actual_tropical_scheme_constructed": False,
+            "promotion_rule": "promote from telemetry only after separate certified toric/tropical/CAS evidence and BPB/graph-BPB guardrails pass",
+            "no_proxy_or_fallback": True,
+        },
         "render_contract": "Vector-bundle paper sidecar fields are model/run telemetry only: chart ids, monomial transport ids, configured toric active rows, one dimensional cone(s) flat-incidence diagnostics, GraphCG-toric agreement, and transported persistence-landscape metrics. Missing fields stay unavailable; no proxies, fallbacks, toric embeddings, tropical varieties, normal fans, or theorem certificates are fabricated.",
     }
 
@@ -5791,6 +5801,7 @@ def _write_chart_bundle_transport_html(path: Path, payload: Mapping[str, Any]) -
         ("paper sidecar GraphCG-toric agreement", _json_clip(paper_sidecar.get("graphcg_toric_agreement", {}), 520)),
         ("paper sidecar transported landscapes", _json_clip(paper_sidecar.get("transported_persistence_landscape_metrics", {}), 520)),
         ("paper sidecar unavailable fields", _json_clip(paper_sidecar.get("unavailable_fields", []), 360)),
+        ("paper claim scope", _json_clip(paper_sidecar.get("paper_claim_scope", {}), 700)),
         ("paper sidecar render contract", paper_sidecar.get("render_contract", "unavailable")),
         ("actual data only", payload.get("actual_data_only", False)),
         ("no proxy or fallback", payload.get("no_proxy_or_fallback", False)),

@@ -1218,6 +1218,9 @@ def test_chart_bundle_transport_sidecar_unavailable_without_metadata(tmp_path: P
     assert paper["actual_data_only"] is True
     assert paper["no_proxy_or_fallback"] is True
     assert paper["safe_to_use_as_vector_bundle_theorem_certificate"] is False
+    assert paper["paper_claim_scope"]["actual_tropical_toric_variety_constructed"] is False
+    assert paper["paper_claim_scope"]["actual_tropical_scheme_constructed"] is False
+    assert "regularizer" in paper["paper_claim_scope"]["monomial_transports"]
     assert "toric_active_rows" in paper["unavailable_fields"]
     assert "No chart-bundle transport metadata" in html
     assert "Chart-bundle transport sidecar unavailable" in html
@@ -1267,6 +1270,9 @@ def test_chart_bundle_transport_sidecar_renders_metadata_contracts(tmp_path: Pat
     assert paper["transported_persistence_landscape_metrics"]["available"] is True
     assert paper["transported_persistence_landscape_metrics"]["metrics"]["cosine_mean"]["value"] == 0.875
     assert paper["safe_to_use_as_vector_bundle_theorem_certificate"] is False
+    assert paper["paper_claim_scope"]["actual_tropical_toric_variety_constructed"] is False
+    assert paper["paper_claim_scope"]["actual_tropical_scheme_constructed"] is False
+    assert "regularizer" in paper["paper_claim_scope"]["matroid_one_dimensional_cone_filtrations"]
     assert payload["safe_to_render_as_tropical_variety_embedding"] is False
     assert "chart_00__to__chart_01" in html
     assert "paper sidecar GraphCG-toric agreement" in html

@@ -621,6 +621,11 @@ def validate_row(row_dir: Path, *, min_candidates: int = 8, min_depth: int = 2, 
         _assert(paper_sidecar.get("no_proxy_or_fallback") is True, errors, "vector-bundle paper sidecar missing no-proxy flag")
         _assert(paper_sidecar.get("safe_to_use_as_vector_bundle_theorem_certificate") is False, errors, "vector-bundle paper sidecar incorrectly claims theorem-certificate safety")
         _assert(paper_sidecar.get("safe_to_use_as_toric_or_tropical_embedding_certificate") is False, errors, "vector-bundle paper sidecar incorrectly claims toric/tropical certificate safety")
+        paper_claim_scope = paper_sidecar.get("paper_claim_scope", {}) if isinstance(paper_sidecar.get("paper_claim_scope"), dict) else {}
+        _assert(paper_claim_scope.get("actual_tropical_toric_variety_constructed") is False, errors, "vector-bundle paper sidecar incorrectly claims a constructed tropical toric variety")
+        _assert(paper_claim_scope.get("actual_tropical_scheme_constructed") is False, errors, "vector-bundle paper sidecar incorrectly claims a constructed tropical scheme")
+        _assert(paper_claim_scope.get("no_proxy_or_fallback") is True, errors, "vector-bundle paper claim scope missing no-proxy flag")
+        _assert("regularizer" in str(paper_claim_scope.get("monomial_transports", "")), errors, "vector-bundle paper claim scope does not keep monomial transports as regularizers/telemetry")
         paper_contract = str(paper_sidecar.get("render_contract", ""))
         _assert("no proxies" in paper_contract or "no proxy" in paper_contract, errors, "vector-bundle paper sidecar missing no-proxy render contract")
         required_paper_keys = (
