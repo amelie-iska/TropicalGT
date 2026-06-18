@@ -837,6 +837,119 @@ def _chart_bundle_transport_evidence(sidecar_paths: list[str]) -> dict[str, Any]
     }
 
 
+def _persistence_landscape_evidence(sidecar_paths: list[str]) -> dict[str, Any]:
+    sources: list[dict[str, Any]] = []
+    backend_counts: dict[str, int] = {}
+    unavailable_reason_counts: dict[str, int] = {}
+    total_rows = 0
+    total_curve_traces = 0
+    total_finite_intervals = 0
+    total_growth_rows = 0
+    verified_unavailable_count = 0
+    for raw_path in sidecar_paths:
+        lower = raw_path.lower()
+        if "persistence_landscapes" not in lower or not lower.endswith(".json"):
+            continue
+        resolved = _resolve_output_path(Path(raw_path))
+        source: dict[str, Any] = {"path": _project_path(resolved), "available": False}
+        if not resolved.exists():
+            source["reason"] = "persistence_landscape_sidecar_missing"
+            unavailable_reason_counts[source["reason"]] = unavailable_reason_counts.get(source["reason"], 0) + 1
+            sources.append(source)
+            continue
+        try:
+            payload = json.loads(resolved.read_text(encoding="utf-8"))
+        except Exception as exc:  # pragma: no cover - parser message is platform-dependent
+            source["reason"] = f"persistence_landscape_sidecar_parse_error:{exc}"
+            unavailable_reason_counts["persistence_landscape_sidecar_parse_error"] = unavailable_reason_counts.get("persistence_landscape_sidecar_parse_error", 0) + 1
+            sources.append(source)
+            continue
+        if not isinstance(payload, dict):
+            source["reason"] = "persistence_landscape_sidecar_not_object"
+            unavailable_reason_counts[source["reason"]] = unavailable_reason_counts.get(source["reason"], 0) + 1
+            sources.append(source)
+            continue
+        rows = payload.get("landscape_rows") if isinstance(payload.get("landscape_rows"), list) else []
+        unavailable_reasons = [str(reason) for reason in payload.get("unavailable_reasons", [])] if isinstance(payload.get("unavailable_reasons"), list) else []
+        backend = str(payload.get("landscape_backend") or "unavailable")
+        row_count = len([row for row in rows if isinstance(row, dict)])
+        curve_trace_count = _optional_int(payload.get("curve_trace_count")) or 0
+        finite_interval_count = _optional_int(payload.get("finite_persistence_interval_count")) or 0
+        growth_row_count = _optional_int(payload.get("growth_row_count")) or 0
+        schema_ok = payload.get("schema_version") == "tropicalgt.persistence_landscape_visual_contract.v1"
+        no_proxy_ok = bool(payload.get("actual_data_only") is True and payload.get("no_proxy_or_fallback") is True and payload.get("not_nll_fitness_landscape") is True)
+        rows_ok = bool(row_count > 0 and curve_trace_count > 0 and payload.get("safe_to_render_actual_landscape_functions") is True)
+        backend_ok = bool(backend and backend != "unavailable")
+        norm_only_ok = payload.get("not_norm_only_summary") is True
+        available = bool(payload.get("available") is True and schema_ok and no_proxy_ok and rows_ok and backend_ok and norm_only_ok)
+        verified_unavailable = bool(not available and payload.get("available") is False and payload.get("unavailable_state_verified_by_intervals") is True and finite_interval_count == 0)
+        if available:
+            total_rows += row_count
+            total_curve_traces += curve_trace_count
+            total_finite_intervals += finite_interval_count
+            total_growth_rows += growth_row_count
+            backend_counts[backend] = backend_counts.get(backend, 0) + 1
+        if verified_unavailable:
+            verified_unavailable_count += 1
+        for reason in unavailable_reasons:
+            unavailable_reason_counts[reason] = unavailable_reason_counts.get(reason, 0) + 1
+        source.update(
+            {
+                "available": available,
+                "verified_unavailable": verified_unavailable,
+                "schema_version": payload.get("schema_version", "unavailable"),
+                "landscape_backend": backend,
+                "landscape_row_count": row_count,
+                "curve_trace_count": curve_trace_count,
+                "finite_persistence_interval_count": finite_interval_count,
+                "growth_row_count": growth_row_count,
+                "homology_dimensions": payload.get("homology_dimensions", []),
+                "small_multiples_available": bool(payload.get("small_multiples_available", False)),
+                "heatmap_available": bool(payload.get("heatmap_available", False)),
+                "safe_to_render_actual_landscape_functions": bool(payload.get("safe_to_render_actual_landscape_functions", False)),
+                "not_nll_fitness_landscape": bool(payload.get("not_nll_fitness_landscape", False)),
+                "not_norm_only_summary": bool(payload.get("not_norm_only_summary", False)),
+                "unavailable_reasons": unavailable_reasons,
+                "no_proxy_or_fallback": no_proxy_ok,
+            }
+        )
+        if not available:
+            reasons = []
+            if payload.get("available") is not True:
+                reasons.append("persistence_landscape_unavailable")
+            if not schema_ok:
+                reasons.append("missing_persistence_landscape_visual_contract_schema")
+            if not no_proxy_ok:
+                reasons.append("missing_persistence_landscape_no_proxy_contract")
+            if not rows_ok:
+                reasons.append("missing_actual_gudhi_landscape_rows")
+            if not backend_ok:
+                reasons.append("missing_gudhi_landscape_backend")
+            if not norm_only_ok:
+                reasons.append("landscape_not_verified_beyond_norm_summary")
+            source["reason"] = ";".join(reasons) or "persistence_landscape_evidence_unavailable"
+            for reason in reasons or [source["reason"]]:
+                unavailable_reason_counts[reason] = unavailable_reason_counts.get(reason, 0) + 1
+        sources.append(source)
+    available_sources = [row for row in sources if row.get("available")]
+    return {
+        "schema_version": "tropicalgt.herschel_persistence_landscape_evidence.v1",
+        "available": bool(available_sources),
+        "source_count": len(sources),
+        "available_source_count": len(available_sources),
+        "verified_unavailable_source_count": verified_unavailable_count,
+        "required_visual_contract_schema": "tropicalgt.persistence_landscape_visual_contract.v1",
+        "total_landscape_row_count": total_rows,
+        "total_curve_trace_count": total_curve_traces,
+        "total_finite_persistence_interval_count": total_finite_intervals,
+        "total_growth_row_count": total_growth_rows,
+        "backend_counts": {key: backend_counts[key] for key in sorted(backend_counts)},
+        "unavailable_reason_counts": {key: unavailable_reason_counts[key] for key in sorted(unavailable_reason_counts)},
+        "sources": sources,
+        "policy": "Herschel reports persistence landscapes only from recorded trajectory_persistence/persistence_landscapes.json sidecars with actual GUDHI lambda_k(t) rows, backend provenance, no-proxy flags, and an explicit not-NLL/fitness-landscape contract. No finite-interval cases remain verified unavailable and are not rendered as zero landscapes or norm-only summaries.",
+    }
+
+
 def _toric_tropical_cas_evidence(sidecar_paths: list[str]) -> dict[str, Any]:
     sources: list[dict[str, Any]] = []
     status_counts: dict[str, int] = {}
@@ -1137,6 +1250,7 @@ def summarize_bundle(bundle: dict[str, Any], *, bundle_path: Path | None = None)
             "graphcg_direction_evidence": _graphcg_direction_evidence(sidecars),
             "nll_density_evidence": _nll_density_evidence(sidecars),
             "chart_bundle_transport_evidence": _chart_bundle_transport_evidence(sidecars),
+            "persistence_landscape_evidence": _persistence_landscape_evidence(sidecars),
             "toric_tropical_cas_evidence": _toric_tropical_cas_evidence(sidecars),
             "analogical_query_context_evidence": _analogical_query_context_evidence(sidecars),
         },
@@ -1311,6 +1425,33 @@ def render_markdown(summary: dict[str, Any]) -> str:
         lines.append(
             f"- `{source.get('path', '')}` available=`{source.get('available')}` anchors=`{source.get('actual_model_anchor_count')}` "
             f"samples=`{source.get('support_sample_count')}` bandwidth=`{_fmt(source.get('kernel_bandwidth'))}` nll_span=`{_fmt(source.get('nll_span'))}`"
+        )
+        if source.get("reason"):
+            lines.append(f"  - reason: `{source.get('reason')}`")
+    persistence_landscape = artifacts.get("persistence_landscape_evidence", {}) if isinstance(artifacts.get("persistence_landscape_evidence"), dict) else {}
+    lines.extend(
+        [
+            "## Persistence Landscape Evidence",
+            "",
+            f"- Available: `{persistence_landscape.get('available', False)}`",
+            f"- Sources: `{persistence_landscape.get('source_count', 0)}`",
+            f"- Verified unavailable sources: `{persistence_landscape.get('verified_unavailable_source_count', 0)}`",
+            f"- Total landscape rows: `{persistence_landscape.get('total_landscape_row_count', 0)}`",
+            f"- Total curve traces: `{persistence_landscape.get('total_curve_trace_count', 0)}`",
+            "",
+            "```json",
+            json.dumps(persistence_landscape.get("backend_counts", {}) or persistence_landscape.get("unavailable_reason_counts", {}), indent=2),
+            "```",
+            "",
+        ]
+    )
+    for source in persistence_landscape.get("sources", []) if isinstance(persistence_landscape.get("sources"), list) else []:
+        if not isinstance(source, dict):
+            continue
+        lines.append(
+            f"- `{source.get('path', '')}` available=`{source.get('available')}` verified_unavailable=`{source.get('verified_unavailable')}` "
+            f"backend=`{source.get('landscape_backend', 'unavailable')}` rows=`{source.get('landscape_row_count', 0)}` "
+            f"curves=`{source.get('curve_trace_count', 0)}` finite_intervals=`{source.get('finite_persistence_interval_count', 0)}`"
         )
         if source.get("reason"):
             lines.append(f"  - reason: `{source.get('reason')}`")
@@ -1510,6 +1651,7 @@ def render_html(summary: dict[str, Any]) -> str:
     graphcg_direction = artifacts.get("graphcg_direction_evidence", {}) if isinstance(artifacts.get("graphcg_direction_evidence"), dict) else {}
     nll_density = artifacts.get("nll_density_evidence", {}) if isinstance(artifacts.get("nll_density_evidence"), dict) else {}
     chart_bundle_transport = artifacts.get("chart_bundle_transport_evidence", {}) if isinstance(artifacts.get("chart_bundle_transport_evidence"), dict) else {}
+    persistence_landscape = artifacts.get("persistence_landscape_evidence", {}) if isinstance(artifacts.get("persistence_landscape_evidence"), dict) else {}
     toric_tropical_cas = artifacts.get("toric_tropical_cas_evidence", {}) if isinstance(artifacts.get("toric_tropical_cas_evidence"), dict) else {}
     analogical_query_context = artifacts.get("analogical_query_context_evidence", {}) if isinstance(artifacts.get("analogical_query_context_evidence"), dict) else {}
     validator_sources = validator_gaps.get("sources", []) if isinstance(validator_gaps.get("sources"), list) else []
@@ -1618,6 +1760,25 @@ def render_html(summary: dict[str, Any]) -> str:
         )
     if not nll_density_rows:
         nll_density_rows.append("<tr><td colspan='8' class='muted'>No NLL density payload sidecar paths recorded.</td></tr>")
+    persistence_landscape_rows = []
+    for source in persistence_landscape.get("sources", []) if isinstance(persistence_landscape.get("sources"), list) else []:
+        if not isinstance(source, dict):
+            continue
+        persistence_landscape_rows.append(
+            "<tr>"
+            f"<td>{html.escape(str(source.get('path', '')))}</td>"
+            f"<td>{html.escape(str(source.get('available')))}</td>"
+            f"<td>{html.escape(str(source.get('verified_unavailable')))}</td>"
+            f"<td>{html.escape(str(source.get('landscape_backend', 'unavailable')))}</td>"
+            f"<td>{html.escape(str(source.get('landscape_row_count', 0)))}</td>"
+            f"<td>{html.escape(str(source.get('curve_trace_count', 0)))}</td>"
+            f"<td>{html.escape(str(source.get('finite_persistence_interval_count', 0)))}</td>"
+            f"<td>{html.escape(str(source.get('unavailable_reasons', [])))}</td>"
+            f"<td>{html.escape(str(source.get('reason', '')))}</td>"
+            "</tr>"
+        )
+    if not persistence_landscape_rows:
+        persistence_landscape_rows.append("<tr><td colspan='9' class='muted'>No persistence landscape sidecar paths recorded.</td></tr>")
     chart_bundle_rows = []
     for source in chart_bundle_transport.get("sources", []) if isinstance(chart_bundle_transport.get("sources"), list) else []:
         if not isinstance(source, dict):
@@ -1712,6 +1873,7 @@ code {{ white-space:break-spaces; }}
 <span class="badge {'ok' if tropical_support.get('available') else 'warn'}">tropical_support_evidence={html.escape(str(bool(tropical_support.get('available'))))}</span>
 <span class="badge {'ok' if graphcg_direction.get('available') else 'warn'}">graphcg_direction_evidence={html.escape(str(bool(graphcg_direction.get('available'))))}</span>
 <span class="badge {'ok' if nll_density.get('available') else 'warn'}">nll_density_evidence={html.escape(str(bool(nll_density.get('available'))))}</span>
+<span class="badge {'ok' if persistence_landscape.get('available') else 'warn'}">persistence_landscape_evidence={html.escape(str(bool(persistence_landscape.get('available'))))}</span>
 <span class="badge {'ok' if chart_bundle_transport.get('available') else 'warn'}">chart_bundle_evidence={html.escape(str(bool(chart_bundle_transport.get('available'))))}</span>
 <span class="badge {'ok' if toric_tropical_cas.get('available') else 'warn'}">toric_tropical_cas_evidence={html.escape(str(bool(toric_tropical_cas.get('available'))))}</span>
 </header>
@@ -1729,6 +1891,7 @@ code {{ white-space:break-spaces; }}
 {_bar_chart_svg(tropical_support.get('support_probability_source_counts', {}) if isinstance(tropical_support, dict) else {}, title='Tropical Support Probability Sources', chart_id='tropical-support-probability-sources')}
 {_bar_chart_svg(graphcg_direction.get('basis_source_counts', {}) if isinstance(graphcg_direction, dict) else {}, title='GraphCG Projection Basis Sources', chart_id='graphcg-projection-basis-sources')}
 {_bar_chart_svg(nll_density.get('visible_density_layer_counts', {}) if isinstance(nll_density, dict) else {}, title='NLL Density Visible Layers', chart_id='nll-density-visible-layers')}
+{_bar_chart_svg(persistence_landscape.get('backend_counts', {}) or persistence_landscape.get('unavailable_reason_counts', {}) if isinstance(persistence_landscape, dict) else {}, title='Persistence Landscape Backends Or Unavailable Reasons', chart_id='persistence-landscape-backends')}
 {_bar_chart_svg(chart_bundle_transport.get('completeness_tier_counts', {}) if isinstance(chart_bundle_transport, dict) else {}, title='Chart/Vector-Bundle Completeness Tiers', chart_id='chart-vector-bundle-completeness-tiers')}
 {_bar_chart_svg(toric_tropical_cas.get('status_counts', {}) if isinstance(toric_tropical_cas, dict) else {}, title='Toric/Tropical CAS Statuses', chart_id='toric-tropical-cas-statuses')}
 <section class="panel"><h2>Validator Sources</h2><table><thead><tr><th>Name</th><th>JSON path</th><th>Available</th><th>Gaps</th><th>Reason</th></tr></thead><tbody>{''.join(source_rows)}</tbody></table></section>
@@ -1737,6 +1900,7 @@ code {{ white-space:break-spaces; }}
 <section class="panel"><h2>Tropical Support Evidence</h2><table><thead><tr><th>Sidecar</th><th>Available</th><th>Probability source</th><th>Tokens</th><th>Strict wall rate</th><th>Near wall rate</th><th>Status</th><th>Reason</th></tr></thead><tbody>{''.join(tropical_support_rows)}</tbody></table></section>
 <section class="panel"><h2>GraphCG Direction Evidence</h2><table><thead><tr><th>Sidecar</th><th>Available</th><th>Basis</th><th>Directions</th><th>Candidates</th><th>Active nonzero</th><th>Mean |cos| p90</th><th>Reason</th></tr></thead><tbody>{''.join(graphcg_direction_rows)}</tbody></table></section>
 <section class="panel"><h2>NLL Density Evidence</h2><table><thead><tr><th>Sidecar</th><th>Available</th><th>Anchors</th><th>Support samples</th><th>Kernel bandwidth</th><th>NLL span</th><th>Support visibility</th><th>Reason</th></tr></thead><tbody>{''.join(nll_density_rows)}</tbody></table></section>
+<section class="panel"><h2>Persistence Landscape Evidence</h2><table><thead><tr><th>Sidecar</th><th>Available</th><th>Verified unavailable</th><th>Backend</th><th>Rows</th><th>Curves</th><th>Finite intervals</th><th>Unavailable reasons</th><th>Reason</th></tr></thead><tbody>{''.join(persistence_landscape_rows)}</tbody></table></section>
 <section class="panel"><h2>Chart/Vector-Bundle Evidence</h2><table><thead><tr><th>Sidecar</th><th>Available</th><th>Completeness tier</th><th>Paper-ready telemetry</th><th>Charts</th><th>Transports</th><th>Missing groups</th><th>Reason</th></tr></thead><tbody>{''.join(chart_bundle_rows)}</tbody></table></section>
 <section class="panel"><h2>Toric/Tropical CAS Evidence</h2><table><thead><tr><th>Sidecar</th><th>Kind</th><th>Available</th><th>Status</th><th>Backend</th><th>Finite toric ideal</th><th>Tropical fan</th><th>Rays</th><th>Reason</th></tr></thead><tbody>{''.join(toric_tropical_rows)}</tbody></table></section>
 <section class="panel"><h2>Analogical Query Context Evidence</h2><table><thead><tr><th>Sidecar</th><th>Available</th><th>Selected source</th><th>Status</th><th>Probability vertices</th><th>Rejected keys</th><th>Reason</th></tr></thead><tbody>{''.join(analogical_query_rows)}</tbody></table></section>

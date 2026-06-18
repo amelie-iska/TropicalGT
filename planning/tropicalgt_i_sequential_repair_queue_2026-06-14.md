@@ -911,3 +911,12 @@ The live item-by-item repair inventory is maintained in `planning/tropicalgt_i_c
 - [x] Markdown and HTML reports now expose `Toric/Tropical CAS Evidence` plus a CAS status chart for post-5K review.
 - [x] Missing, unavailable, schema-mismatched, input-lacking, certificate-lacking, no-proxy-lacking, or globally unsafe toric/tropical sidecars remain unavailable and cannot justify restart, BPB claims, theorem claims, toric embedding claims, tropical-variety claims, or normal-fan claims.
 - [x] Verification passed: py-compile; focused Herschel/bundle tests (`11 passed`); broader Herschel/bundle/review-loop/provenance tests (`36 passed`); metric provenance audit (`382 covered, 0 uncovered`).
+
+### Current Objective Update - Herschel Persistence-Landscape PH Evidence Pass
+
+- [x] Added `trajectory_persistence/persistence_landscapes.json` to the Herschel-required audit sidecar inventory when it exists in the latest recorded `got_audit` directory.
+- [x] Added `tropicalgt.herschel_persistence_landscape_evidence.v1` to the Herschel 5K summary, sourced only from recorded persistence-landscape visual-contract sidecars.
+- [x] Available landscape evidence now requires `tropicalgt.persistence_landscape_visual_contract.v1`, actual GUDHI `lambda_k(t)` landscape rows, backend provenance, curve traces, finite interval evidence, no-proxy flags, `not_nll_fitness_landscape`, and `not_norm_only_summary`.
+- [x] Verified-unavailable no-finite-interval states are reported explicitly and cannot become zero landscape evidence, NLL/fitness landscapes, norm-only summaries, BPB evidence, or restart justification.
+- [x] Markdown and HTML reports now expose `Persistence Landscape Evidence` plus a backend/unavailable-reason chart for post-5K review.
+- [x] Verification passed: py-compile; focused Herschel/bundle tests (`11 passed`); broader Herschel/bundle/review-loop/provenance tests (`36 passed`); metric provenance audit (`388 covered, 0 uncovered`).

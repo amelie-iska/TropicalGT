@@ -250,6 +250,36 @@ def test_write_herschel_report_preserves_blockers_and_sidecar_groups(tmp_path: P
         ),
         encoding="utf-8",
     )
+    persistence_landscape_path = tmp_path / "persistence_landscapes.json"
+    persistence_landscape_path.write_text(
+        json.dumps(
+            {
+                "schema_version": "tropicalgt.persistence_landscape_visual_contract.v1",
+                "available": True,
+                "source": "topology.persistence_representations.methods[*].landscape",
+                "landscape_backend": "gudhi.representations.Landscape",
+                "backend_provenance": {"available": True, "backends": ["gudhi.representations.Landscape"]},
+                "actual_data_only": True,
+                "no_proxy_or_fallback": True,
+                "not_nll_fitness_landscape": True,
+                "not_norm_only_summary": True,
+                "safe_to_render_actual_landscape_functions": True,
+                "curve_trace_count": 2,
+                "finite_persistence_interval_count": 3,
+                "growth_row_count": 2,
+                "homology_dimensions": [0, 1],
+                "small_multiples_available": True,
+                "heatmap_available": True,
+                "landscape_rows": [
+                    {"level": 0, "homology_dimension": 0, "backend": "gudhi.representations.Landscape", "values_source": "reported_landscape_grid_values"},
+                    {"level": 1, "homology_dimension": 1, "backend": "gudhi.representations.Landscape", "values_source": "reported_landscape_grid_values"},
+                ],
+                "unavailable_reasons": [],
+                "unavailable_state_verified_by_intervals": False,
+            }
+        ),
+        encoding="utf-8",
+    )
     chart_bundle_path = tmp_path / "chart_bundle_transport_sidecar.json"
     chart_bundle_payload = {
         "schema_version": "tropicalgt.chart_bundle_transport_sidecar.v1",
@@ -462,7 +492,7 @@ def test_write_herschel_report_preserves_blockers_and_sidecar_groups(tmp_path: P
                 str(toric_sidecar_path),
                 "got_audit/betti_table.json",
                 "got_audit/certificate_indexed_cas_evidence.json",
-                "got_audit/persistence_landscape.json",
+                str(persistence_landscape_path),
                 "got_audit/analogical_memory_report.json",
                 str(analogical_maps_path),
                 str(inference_scaling_tree_path),
@@ -576,6 +606,19 @@ def test_write_herschel_report_preserves_blockers_and_sidecar_groups(tmp_path: P
     assert nll_density["sources"][0]["support_sample_trace_visibility"] == "legendonly"
     assert nll_density["sources"][0]["support_samples_are_model_states"] is False
     assert nll_density["sources"][0]["no_proxy_or_fallback"] is True
+    persistence_landscape = summary["artifact_evidence"]["persistence_landscape_evidence"]
+    assert persistence_landscape["schema_version"] == "tropicalgt.herschel_persistence_landscape_evidence.v1"
+    assert persistence_landscape["available"] is True
+    assert persistence_landscape["source_count"] == 1
+    assert persistence_landscape["available_source_count"] == 1
+    assert persistence_landscape["verified_unavailable_source_count"] == 0
+    assert persistence_landscape["total_landscape_row_count"] == 2
+    assert persistence_landscape["total_curve_trace_count"] == 2
+    assert persistence_landscape["total_finite_persistence_interval_count"] == 3
+    assert persistence_landscape["backend_counts"] == {"gudhi.representations.Landscape": 1}
+    assert persistence_landscape["sources"][0]["not_nll_fitness_landscape"] is True
+    assert persistence_landscape["sources"][0]["not_norm_only_summary"] is True
+    assert persistence_landscape["sources"][0]["no_proxy_or_fallback"] is True
     chart_bundle = summary["artifact_evidence"]["chart_bundle_transport_evidence"]
     assert chart_bundle["schema_version"] == "tropicalgt.herschel_chart_bundle_transport_evidence.v1"
     assert chart_bundle["available"] is True
@@ -634,6 +677,8 @@ def test_write_herschel_report_preserves_blockers_and_sidecar_groups(tmp_path: P
     assert "effective_full_rank_qr" in markdown
     assert "## NLL Density Evidence" in markdown
     assert "density_volume" in markdown
+    assert "## Persistence Landscape Evidence" in markdown
+    assert "gudhi.representations.Landscape" in markdown
     assert "## Chart/Vector-Bundle Evidence" in markdown
     assert "paper_ready" in markdown
     assert "## Toric/Tropical CAS Evidence" in markdown
@@ -661,6 +706,9 @@ def test_write_herschel_report_preserves_blockers_and_sidecar_groups(tmp_path: P
     assert "NLL Density Evidence" in html
     assert "data-chart='nll-density-visible-layers'" in html
     assert "density_volume" in html
+    assert "Persistence Landscape Evidence" in html
+    assert "data-chart='persistence-landscape-backends'" in html
+    assert "gudhi.representations.Landscape" in html
     assert "Chart/Vector-Bundle Evidence" in html
     assert "data-chart='chart-vector-bundle-completeness-tiers'" in html
     assert "paper_ready" in html

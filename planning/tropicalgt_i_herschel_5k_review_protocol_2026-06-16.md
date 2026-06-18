@@ -172,3 +172,16 @@ CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src:TropicalGT-I/scripts /home/i
 CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src:TropicalGT-I/scripts /home/iska/miniconda3/envs/tokengt/bin/python TropicalGT-I/scripts/audit_metric_provenance.py --fail-on-uncovered
 # findings=382 covered=382 uncovered=0
 ```
+
+2026-06-18 persistence-landscape PH evidence follow-up: Herschel now treats `trajectory_persistence/persistence_landscapes.json` as a required recorded GoT audit sidecar when it exists. `write_herschel_5k_report.py` exposes `tropicalgt.herschel_persistence_landscape_evidence.v1`, sourced only from recorded persistence-landscape visual contracts. Available evidence requires actual GUDHI `lambda_k(t)` rows, backend provenance, curve traces, finite interval evidence, no-proxy flags, and an explicit `not_nll_fitness_landscape`/not-norm-only contract. No-finite-interval cases can be reported as verified unavailable, but they are not converted into zero landscapes, norm-only summaries, NLL/fitness landscapes, or restart evidence.
+
+2026-06-18 persistence-landscape PH evidence validation:
+
+```text
+CUDA_VISIBLE_DEVICES="" /home/iska/miniconda3/envs/tokengt/bin/python -m py_compile TropicalGT-I/scripts/write_herschel_5k_report.py TropicalGT-I/scripts/prepare_5k_review_bundle.py TropicalGT-I/tests/test_herschel_5k_report.py TropicalGT-I/tests/test_prepare_5k_review_bundle.py
+# passed
+CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src:TropicalGT-I/scripts /home/iska/miniconda3/envs/tokengt/bin/python -m pytest -q TropicalGT-I/tests/test_herschel_5k_report.py TropicalGT-I/tests/test_prepare_5k_review_bundle.py TropicalGT-I/tests/test_parameter_golf_review_loop.py TropicalGT-I/tests/test_metric_provenance.py
+# 36 passed
+CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src:TropicalGT-I/scripts /home/iska/miniconda3/envs/tokengt/bin/python TropicalGT-I/scripts/audit_metric_provenance.py --fail-on-uncovered
+# findings=388 covered=388 uncovered=0
+```

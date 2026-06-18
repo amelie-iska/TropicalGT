@@ -353,6 +353,33 @@ def test_prepare_review_bundle_defaults_to_periodic_validation_artifacts(tmp_pat
         ),
         encoding="utf-8",
     )
+    (periodic_dir / "got_audit" / "trajectory_persistence").mkdir(parents=True, exist_ok=True)
+    (periodic_dir / "got_audit" / "trajectory_persistence" / "persistence_landscapes.json").write_text(
+        json.dumps(
+            {
+                "schema_version": "tropicalgt.persistence_landscape_visual_contract.v1",
+                "available": False,
+                "source": "topology.persistence_representations.methods[*].landscape",
+                "landscape_backend": "unavailable",
+                "backend_provenance": {"available": False, "backends": []},
+                "actual_data_only": True,
+                "no_proxy_or_fallback": True,
+                "not_nll_fitness_landscape": True,
+                "not_norm_only_summary": False,
+                "safe_to_render_actual_landscape_functions": False,
+                "curve_trace_count": 0,
+                "finite_persistence_interval_count": 0,
+                "growth_row_count": 1,
+                "homology_dimensions": [],
+                "small_multiples_available": False,
+                "heatmap_available": False,
+                "landscape_rows": [],
+                "unavailable_reasons": ["no_finite_persistence_intervals_for_gudhi_landscape"],
+                "unavailable_state_verified_by_intervals": True,
+            }
+        ),
+        encoding="utf-8",
+    )
     (periodic_dir / "got_audit" / "chart_bundle_transport_sidecar.json").write_text(
         json.dumps(
             {
@@ -538,6 +565,7 @@ def test_prepare_review_bundle_defaults_to_periodic_validation_artifacts(tmp_pat
     assert any(path.endswith("periodic/step_00005000/got_audit/graphcg_direction_cosines_payload.json") for path in sidecars)
     assert any(path.endswith("periodic/step_00005000/got_audit/got_nll_density_cloud_payload.json") for path in sidecars)
     assert any(path.endswith("periodic/step_00005000/got_audit/chart_bundle_transport_sidecar.json") for path in sidecars)
+    assert any(path.endswith("periodic/step_00005000/got_audit/trajectory_persistence/persistence_landscapes.json") for path in sidecars)
     assert any(path.endswith("periodic/step_00005000/got_audit/toric_embedding_sidecar.json") for path in sidecars)
     assert any(path.endswith("periodic/step_00005000/got_audit/tropical_fan_diagnostics.json") for path in sidecars)
     assert bundle["artifact_inventory"]["herschel_required_sidecars_present"]
@@ -560,6 +588,10 @@ def test_prepare_review_bundle_defaults_to_periodic_validation_artifacts(tmp_pat
     )
     assert any(
         path.endswith("periodic/step_00005000/got_audit/chart_bundle_transport_sidecar.json")
+        for path in persisted_contract["artifact_inventory"]["advanced_sidecars_tail"]
+    )
+    assert any(
+        path.endswith("periodic/step_00005000/got_audit/trajectory_persistence/persistence_landscapes.json")
         for path in persisted_contract["artifact_inventory"]["advanced_sidecars_tail"]
     )
     assert any(
@@ -592,6 +624,13 @@ def test_prepare_review_bundle_defaults_to_periodic_validation_artifacts(tmp_pat
     assert nll_density["total_support_sample_count"] == 12
     assert nll_density["visible_density_layer_counts"] == {"actual_model_anchor_markers": 1, "density_volume": 1}
     assert nll_density["sources"][0]["support_sample_trace_visibility"] == "legendonly"
+    persistence_landscape = bundle["herschel_report_summary"]["artifact_evidence"]["persistence_landscape_evidence"]
+    assert persistence_landscape["available"] is False
+    assert persistence_landscape["source_count"] == 1
+    assert persistence_landscape["verified_unavailable_source_count"] == 1
+    assert persistence_landscape["unavailable_reason_counts"]["no_finite_persistence_intervals_for_gudhi_landscape"] == 1
+    assert persistence_landscape["sources"][0]["not_nll_fitness_landscape"] is True
+    assert persistence_landscape["sources"][0]["verified_unavailable"] is True
     chart_bundle = bundle["herschel_report_summary"]["artifact_evidence"]["chart_bundle_transport_evidence"]
     assert chart_bundle["available"] is True
     assert chart_bundle["paper_ready_source_count"] == 0
