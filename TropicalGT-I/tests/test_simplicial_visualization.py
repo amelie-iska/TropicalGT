@@ -1358,6 +1358,8 @@ def test_trajectory_persistence_uses_growth_and_chain_presentation_diagnostics(t
     assert "Actual GUDHI persistence landscape functions" in landscapes_html
     assert "lambda_1(t)" in landscapes_html
     assert "not norm-only summaries" in landscapes_html
+    assert "Legible small multiples of actual lambda_k(t) vectors" in landscapes_html
+    assert "stacked small multiples; hover shows actual lambda value" in landscapes_html
     assert landscapes_payload["schema_version"] == "tropicalgt.persistence_landscape_visual_contract.v1"
     assert landscapes_payload["available"] is True
     assert landscapes_payload["actual_data_only"] is True
@@ -1366,6 +1368,12 @@ def test_trajectory_persistence_uses_growth_and_chain_presentation_diagnostics(t
     assert landscapes_payload["not_norm_only_summary"] is True
     assert landscapes_payload["safe_to_render_actual_landscape_functions"] is True
     assert landscapes_payload["curve_trace_count"] > 0
+    assert landscapes_payload["small_multiples_available"] is True
+    assert landscapes_payload["small_multiple_trace_count"] == landscapes_payload["curve_trace_count"]
+    assert landscapes_payload["small_multiple_layout"] == "stacked_2d_lambda_curves_with_visual_offsets_hover_shows_actual_values"
+    assert landscapes_payload["small_multiple_series"]
+    assert all(row["actual_values_source"] == "gudhi.representations.Landscape.vector" for row in landscapes_payload["small_multiple_series"])
+    assert all(row["normalization"].startswith("visual_y = lambda_value") for row in landscapes_payload["small_multiple_series"])
     assert landscapes_payload["rendered_growth_level_count"] == 2
     assert landscapes_payload["homology_dimensions"] == [0, 1]
     assert landscapes_payload["landscape_rows"]

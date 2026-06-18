@@ -280,3 +280,19 @@ CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/t
 - Verified the current two-parameter persistence implementation against the remaining checklist: `write_two_parameter_bifiltration_visualization` renders a Miller-Sturmfels-style primary staircase over `F2[x_level,x_radius]`, with x_radius horizontal, x_level vertical, upward-closed generated regions, quotient-basis lattice points, minimal antichain generators, adjacent structure maps, rank-invariant samples, and scoped adjacent-LCM syzygies.
 - Verified certified algebra tables are separated from chain diagnostics: Macaulay2/CAS Betti, differential, syzygy, Fitting/minor, and Buchsbaum-Eisenbud sections render only certified/unavailable CAS evidence; chain-presentation diagnostics are not substituted for a free resolution.
 - Marked the corresponding bidegree grid, fiber-rank, generator, adjacent-LCM, staircase rendering, and conservative-label checklist items complete. Live browser regeneration remains separate from source-level correctness.
+
+## 2026-06-18 Persistence Landscape Small-Multiple Repair
+
+- Reworked the growth persistence-landscape artifact so actual GUDHI `lambda_k(t)` vectors render in a legible stacked 2D small-multiple panel alongside the existing 3D curve view and first-available `lambda_1(t)` heatmap.
+- The small multiples use visual normalization only (`lambda_value / max_abs(lambda_row) + stacked_offset`) and keep exact lambda values in hover/customdata plus `persistence_landscapes.json`; no NLL/fitness landscape, norm-only summary, zero vector, or synthetic topology row is substituted.
+- Extended the persistence-landscape visual contract with `small_multiples_available`, `small_multiple_trace_count`, `small_multiple_layout`, and per-series source rows so validators and browser QA can audit the plot provenance.
+- Regression coverage now requires the user-facing HTML and JSON contract to expose the small-multiple panel and GUDHI vector source.
+
+Verification:
+
+```bash
+CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_simplicial_visualization.py -k "persistence_landscape or persistence_visualizations" -q
+CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_simplicial_visualization.py -q
+CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m pytest TropicalGT-I/tests/test_interactive_artifact_validator.py -q
+CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/tokengt/bin/python -m py_compile TropicalGT-I/src/tropicalgt/visualization.py TropicalGT-I/tests/test_simplicial_visualization.py
+```

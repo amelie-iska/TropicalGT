@@ -7775,15 +7775,16 @@ def _persistence_landscape_unavailable_contract(reason: str) -> dict[str, object
 def _write_growth_persistence_landscapes(path: Path, topology: dict[str, object], growth: list[object], title_prefix: str = "") -> None:
     rows = _trajectory_growth_rows(topology, growth)
     fig = make_subplots(
-        rows=2,
+        rows=3,
         cols=1,
-        specs=[[{"type": "scene"}], [{"type": "heatmap"}]],
+        specs=[[{"type": "scene"}], [{"type": "heatmap"}], [{"type": "xy"}]],
         subplot_titles=(
             "GUDHI persistence landscape lambda_k(t) curves by growth level",
             "First available lambda_1(t) image by growth level",
+            "Legible small multiples of actual lambda_k(t) vectors",
         ),
-        row_heights=[0.64, 0.36],
-        vertical_spacing=0.13,
+        row_heights=[0.46, 0.24, 0.30],
+        vertical_spacing=0.12,
     )
     panel_objects: list[dict[str, object]] = []
     panel_hover: list[str] = []
@@ -7797,6 +7798,8 @@ def _write_growth_persistence_landscapes(path: Path, topology: dict[str, object]
     heatmap_x: list[float] = []
     heatmap_dim: int | None = None
     trace_count = 0
+    small_multiple_trace_count = 0
+    small_multiple_series: list[dict[str, object]] = []
     landscape_contract_rows: list[dict[str, object]] = []
     unavailable_reasons: list[str] = []
     for row_idx, row in enumerate(rows):
@@ -7874,6 +7877,41 @@ def _write_growth_persistence_landscapes(path: Path, topology: dict[str, object]
                     col=1,
                 )
                 trace_count += 1
+                max_abs = max([abs(float(value)) for value in ys if math.isfinite(float(value))] or [1.0])
+                scale = max(max_abs, 1e-12)
+                offset = float(small_multiple_trace_count) * 1.35
+                small_y = [float(value) / scale + offset for value in ys]
+                small_name = f"L{level} H{dim} lambda_{layer_idx + 1}"
+                fig.add_trace(
+                    go.Scatter(
+                        x=grid,
+                        y=small_y,
+                        mode="lines",
+                        line=dict(width=2.4, color=color),
+                        name=small_name,
+                        customdata=ys,
+                        hovertemplate=(
+                            f"small multiple: growth level={level}<br>"
+                            f"H{dim} lambda_{layer_idx + 1}(t)<br>"
+                            "filtration t=%{x:.4g}<br>"
+                            "actual lambda value=%{customdata:.5g}<extra></extra>"
+                        ),
+                        showlegend=True,
+                    ),
+                    row=3,
+                    col=1,
+                )
+                small_multiple_series.append(
+                    {
+                        "level": int(level),
+                        "homology_dimension": int(dim),
+                        "lambda_index": int(layer_idx + 1),
+                        "grid_count": int(len(grid)),
+                        "normalization": "visual_y = lambda_value / max_abs(lambda_row) + stacked_offset; hover shows actual lambda value",
+                        "actual_values_source": "gudhi.representations.Landscape.vector",
+                    }
+                )
+                small_multiple_trace_count += 1
     if heatmap_rows:
         fig.add_trace(
             go.Heatmap(
@@ -7918,12 +7956,15 @@ def _write_growth_persistence_landscapes(path: Path, topology: dict[str, object]
             aspectratio=dict(x=1.15, y=0.78, z=0.86),
             camera=dict(eye=dict(x=1.55, y=-1.75, z=1.18)),
         ),
-        showlegend=False,
-        height=1260,
-        margin=dict(t=150, l=82, r=118, b=96),
+        showlegend=True,
+        legend=dict(orientation="h", yanchor="bottom", y=-0.16, xanchor="left", x=0.0, font=dict(size=10)),
+        height=1560,
+        margin=dict(t=160, l=86, r=124, b=170),
     )
     fig.update_xaxes(title_text="filtration or normalized landscape sample t", row=2, col=1)
     fig.update_yaxes(title_text="growth level / homology dimension", row=2, col=1)
+    fig.update_xaxes(title_text="filtration or normalized landscape sample t", row=3, col=1)
+    fig.update_yaxes(title_text="stacked small multiples; hover shows actual lambda value", row=3, col=1)
     homology_dimensions = sorted({int(row["homology_dimension"]) for row in landscape_contract_rows})
     rendered_levels = sorted({int(row["level"]) for row in landscape_contract_rows})
     contract = {
@@ -7942,6 +7983,10 @@ def _write_growth_persistence_landscapes(path: Path, topology: dict[str, object]
         "homology_dimensions": homology_dimensions,
         "heatmap_available": bool(heatmap_rows),
         "heatmap_source": "first available lambda_1(t) rows from actual landscape values" if heatmap_rows else "unavailable_no_lambda1_rows",
+        "small_multiples_available": bool(small_multiple_trace_count > 0),
+        "small_multiple_trace_count": int(small_multiple_trace_count),
+        "small_multiple_layout": "stacked_2d_lambda_curves_with_visual_offsets_hover_shows_actual_values",
+        "small_multiple_series": small_multiple_series,
         "landscape_rows": landscape_contract_rows,
         "unavailable_reasons": unavailable_reasons,
         "render_contract": "Persistence landscape pages render only actual GUDHI Landscape vectors/lambda_k rows from persistence_representations; unavailable states are explicit and are not replaced by NLL/fitness landscapes, zero vectors, norms, or proxy summaries.",
