@@ -159,3 +159,16 @@ CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src:TropicalGT-I/scripts /home/i
 CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src:TropicalGT-I/scripts /home/iska/miniconda3/envs/tokengt/bin/python TropicalGT-I/scripts/audit_metric_provenance.py --fail-on-uncovered
 # findings=372 covered=372 uncovered=0
 ```
+
+2026-06-18 toric/tropical CAS evidence follow-up: Herschel now treats `toric_embedding_sidecar.json` and `tropical_fan_diagnostics.json` as required recorded GoT audit sidecars when they exist. `write_herschel_5k_report.py` exposes `tropicalgt.herschel_toric_tropical_cas_evidence.v1`, sourced only from recorded finite toric-ideal and Macaulay2 Tropical fan diagnostic sidecars. Certified finite toric-ideal sidecars, certified tropical fan diagnostics, unavailable CAS states, backend statuses, missing no-proxy contracts, ray counts, and forbidden global/tropical/normal-fan claim flags are reported explicitly. This evidence is never promoted to a global toric-variety embedding, tropical-variety embedding, normal-fan certificate, vector-bundle theorem certificate, or BPB restart justification by itself.
+
+2026-06-18 toric/tropical CAS evidence validation:
+
+```text
+CUDA_VISIBLE_DEVICES="" /home/iska/miniconda3/envs/tokengt/bin/python -m py_compile TropicalGT-I/scripts/write_herschel_5k_report.py TropicalGT-I/scripts/prepare_5k_review_bundle.py TropicalGT-I/src/tropicalgt/provenance.py TropicalGT-I/tests/test_herschel_5k_report.py TropicalGT-I/tests/test_prepare_5k_review_bundle.py
+# passed
+CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src:TropicalGT-I/scripts /home/iska/miniconda3/envs/tokengt/bin/python -m pytest -q TropicalGT-I/tests/test_herschel_5k_report.py TropicalGT-I/tests/test_prepare_5k_review_bundle.py TropicalGT-I/tests/test_parameter_golf_review_loop.py TropicalGT-I/tests/test_metric_provenance.py
+# 36 passed
+CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src:TropicalGT-I/scripts /home/iska/miniconda3/envs/tokengt/bin/python TropicalGT-I/scripts/audit_metric_provenance.py --fail-on-uncovered
+# findings=382 covered=382 uncovered=0
+```

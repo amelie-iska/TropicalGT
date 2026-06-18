@@ -315,6 +315,76 @@ def test_write_herschel_report_preserves_blockers_and_sidecar_groups(tmp_path: P
         "safe_to_use_as_normal_fan_certificate": False,
     }
     chart_bundle_path.write_text(json.dumps(chart_bundle_payload), encoding="utf-8")
+    toric_sidecar_path = tmp_path / "toric_embedding_sidecar.json"
+    toric_sidecar_path.write_text(
+        json.dumps(
+            {
+                "schema_version": "tropicalgt.toric_embedding_sidecar_visual_audit.v1",
+                "available": True,
+                "source_path": "unit.model_derived_toric_exponent_matrix",
+                "exponent_matrix_spec": {"variables": ["x", "y"], "exponent_matrix": [[1, 0], [0, 1]]},
+                "cas_input_contract": {
+                    "schema_version": "tropicalgt.toric_embedding_input_contract.v1",
+                    "actual_data_only": True,
+                    "no_proxy_or_fallback": True,
+                    "proxy_substitution_allowed": False,
+                    "explicit_cas_input_present": True,
+                    "safe_to_render_certificate": True,
+                    "input_sha256": "toric-input-sha",
+                },
+                "diagnostics": {
+                    "schema_version": "tropicalgt.cas_toric_embedding.v1",
+                    "available": True,
+                    "status": "certified",
+                    "backend": "Macaulay2",
+                    "certificate_attached": True,
+                    "toric_ideal_certified": True,
+                    "safe_to_render_as_toric_embedding": True,
+                    "safe_to_render_as_tropical_variety_embedding": False,
+                    "safe_to_render_as_global_toric_variety_embedding": False,
+                    "safe_to_use_as_normal_fan_certificate": False,
+                },
+                "safe_to_render_as_finite_toric_ideal_sidecar": True,
+                "safe_to_render_as_tropical_variety_embedding": False,
+                "safe_to_render_as_global_toric_variety_embedding": False,
+                "safe_to_use_as_normal_fan_certificate": False,
+            }
+        ),
+        encoding="utf-8",
+    )
+    tropical_fan_path = tmp_path / "tropical_fan_diagnostics.json"
+    tropical_fan_path.write_text(
+        json.dumps(
+            {
+                "schema_version": "tropicalgt.tropical_fan_visual_audit.v1",
+                "available": True,
+                "source_path": "unit.model_derived_tropical_ideal",
+                "ideal_spec": {"variables": ["x", "y"], "generators": ["x+y+1"]},
+                "cas_input_contract": {
+                    "schema_version": "tropicalgt.tropical_fan_input_contract.v1",
+                    "actual_data_only": True,
+                    "no_proxy_or_fallback": True,
+                    "proxy_substitution_allowed": False,
+                    "explicit_cas_input_present": True,
+                    "safe_to_render_certificate": True,
+                    "input_sha256": "fan-input-sha",
+                },
+                "diagnostics": {
+                    "schema_version": "tropicalgt.cas_tropical_fan.v1",
+                    "available": True,
+                    "status": "certified",
+                    "backend": "Macaulay2",
+                    "certificate_attached": True,
+                    "fan_diagnostics_certified": True,
+                    "tropical_cycle_certified": True,
+                    "safe_to_render_as_tropical_fan": True,
+                    "fan_summary": {"ray_count": 2, "ambient_dimension": 2},
+                },
+                "safe_to_render_as_tropical_fan": True,
+            }
+        ),
+        encoding="utf-8",
+    )
     validator_json = tmp_path / "interactive_validator.json"
     validator_json.write_text(
         json.dumps(
@@ -388,7 +458,8 @@ def test_write_herschel_report_preserves_blockers_and_sidecar_groups(tmp_path: P
             "latest_got_audit_dir": "outputs/unit/periodic/step_00005000/got_audit",
             "latest_periodic_dir": "outputs/unit/periodic/step_00005000",
             "advanced_sidecars_tail": [
-                "got_audit/tropical_fan_diagnostics.json",
+                str(tropical_fan_path),
+                str(toric_sidecar_path),
                 "got_audit/betti_table.json",
                 "got_audit/certificate_indexed_cas_evidence.json",
                 "got_audit/persistence_landscape.json",
@@ -440,7 +511,7 @@ def test_write_herschel_report_preserves_blockers_and_sidecar_groups(tmp_path: P
     assert groups["cas_algebra"] == 2
     assert groups["topology_persistence"] == 1
     assert groups["analogical_memory"] == 2
-    assert groups["tropical_toric"] == 2
+    assert groups["tropical_toric"] == 3
     assert groups["graphcg"] == 1
     assert groups["gflownet"] == 1
     assert groups["nll_density"] == 1
@@ -518,6 +589,20 @@ def test_write_herschel_report_preserves_blockers_and_sidecar_groups(tmp_path: P
     assert chart_bundle["sources"][0]["safe_to_render_as_toric_embedding_certificate"] is False
     assert chart_bundle["sources"][0]["safe_to_use_as_vector_bundle_theorem_certificate"] is False
     assert chart_bundle["sources"][0]["no_proxy_or_fallback"] is True
+    toric_tropical = summary["artifact_evidence"]["toric_tropical_cas_evidence"]
+    assert toric_tropical["schema_version"] == "tropicalgt.herschel_toric_tropical_cas_evidence.v1"
+    assert toric_tropical["available"] is True
+    assert toric_tropical["source_count"] == 2
+    assert toric_tropical["available_source_count"] == 2
+    assert toric_tropical["toric_source_count"] == 1
+    assert toric_tropical["tropical_fan_source_count"] == 1
+    assert toric_tropical["certified_finite_toric_ideal_count"] == 1
+    assert toric_tropical["certified_tropical_fan_count"] == 1
+    assert toric_tropical["forbidden_global_claim_count"] == 0
+    assert toric_tropical["total_tropical_ray_count"] == 2
+    assert toric_tropical["status_counts"] == {"toric_embedding_sidecar:certified": 1, "tropical_fan_diagnostics:certified": 1}
+    assert toric_tropical["sources"][0]["no_proxy_or_fallback"] is True
+    assert toric_tropical["sources"][1]["no_proxy_or_fallback"] is True
     analogical_query = summary["artifact_evidence"]["analogical_query_context_evidence"]
     assert analogical_query["schema_version"] == "tropicalgt.herschel_analogical_query_context_evidence.v1"
     assert analogical_query["available"] is True
@@ -551,6 +636,8 @@ def test_write_herschel_report_preserves_blockers_and_sidecar_groups(tmp_path: P
     assert "density_volume" in markdown
     assert "## Chart/Vector-Bundle Evidence" in markdown
     assert "paper_ready" in markdown
+    assert "## Toric/Tropical CAS Evidence" in markdown
+    assert "toric_embedding_sidecar:certified" in markdown
     assert "## Analogical Query Context Evidence" in markdown
     assert "trajectory_probability_filtered_simplicial_object" in markdown
     assert "probability_filtered_simplicial_object" in markdown
@@ -577,6 +664,9 @@ def test_write_herschel_report_preserves_blockers_and_sidecar_groups(tmp_path: P
     assert "Chart/Vector-Bundle Evidence" in html
     assert "data-chart='chart-vector-bundle-completeness-tiers'" in html
     assert "paper_ready" in html
+    assert "Toric/Tropical CAS Evidence" in html
+    assert "data-chart='toric-tropical-cas-statuses'" in html
+    assert "toric_embedding_sidecar" in html
     assert "Analogical Query Context Evidence" in html
     assert "valid_query_probability_trajectory_complex" in html
     assert "row 0 missing json analogical_simplex_tree_analogy.json" in html

@@ -575,6 +575,8 @@ PROVENANCE_REGISTRY: tuple[ProvenanceEntry, ...] = (
             "no-proxy evidence rows were preserved",
             "no probability radius complex, simplex tree, edges, faces, or proxy geometry is fabricated",
             "proxy_substitution_allowed",
+            "missing_toric_embedding_no_proxy_contract",
+            "missing_tropical_fan_no_proxy_contract",
             "rejected_proxy_sources",
         ),
     ),

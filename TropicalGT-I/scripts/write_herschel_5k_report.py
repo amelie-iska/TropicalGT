@@ -837,6 +837,179 @@ def _chart_bundle_transport_evidence(sidecar_paths: list[str]) -> dict[str, Any]
     }
 
 
+def _toric_tropical_cas_evidence(sidecar_paths: list[str]) -> dict[str, Any]:
+    sources: list[dict[str, Any]] = []
+    status_counts: dict[str, int] = {}
+    unavailable_reason_counts: dict[str, int] = {}
+    toric_source_count = 0
+    tropical_source_count = 0
+    certified_finite_toric_ideal_count = 0
+    certified_tropical_fan_count = 0
+    forbidden_global_claim_count = 0
+    total_tropical_ray_count = 0
+
+    def _count(mapping: dict[str, int], key: str) -> None:
+        mapping[key] = mapping.get(key, 0) + 1
+
+    for raw_path in sidecar_paths:
+        lower = raw_path.lower()
+        if "toric_embedding_sidecar" in lower and lower.endswith(".json"):
+            kind = "toric_embedding_sidecar"
+            toric_source_count += 1
+        elif "tropical_fan_diagnostics" in lower and lower.endswith(".json"):
+            kind = "tropical_fan_diagnostics"
+            tropical_source_count += 1
+        else:
+            continue
+        resolved = _resolve_output_path(Path(raw_path))
+        source: dict[str, Any] = {"path": _project_path(resolved), "kind": kind, "available": False}
+        if not resolved.exists():
+            source["reason"] = f"{kind}_missing"
+            _count(unavailable_reason_counts, source["reason"])
+            sources.append(source)
+            continue
+        try:
+            payload = json.loads(resolved.read_text(encoding="utf-8"))
+        except Exception as exc:  # pragma: no cover - parser message is platform-dependent
+            source["reason"] = f"{kind}_parse_error:{exc}"
+            _count(unavailable_reason_counts, f"{kind}_parse_error")
+            sources.append(source)
+            continue
+        if not isinstance(payload, dict):
+            source["reason"] = f"{kind}_not_object"
+            _count(unavailable_reason_counts, source["reason"])
+            sources.append(source)
+            continue
+        diagnostics = payload.get("diagnostics") if isinstance(payload.get("diagnostics"), dict) else {}
+        input_contract = payload.get("cas_input_contract") if isinstance(payload.get("cas_input_contract"), dict) else {}
+        status = str(diagnostics.get("status") or ("available" if payload.get("available") is True else "unavailable"))
+        _count(status_counts, f"{kind}:{status}")
+        if kind == "toric_embedding_sidecar":
+            schema_ok = payload.get("schema_version") == "tropicalgt.toric_embedding_sidecar_visual_audit.v1"
+            diag_schema_ok = diagnostics.get("schema_version") == "tropicalgt.cas_toric_embedding.v1"
+            input_schema_ok = input_contract.get("schema_version") == "tropicalgt.toric_embedding_input_contract.v1"
+            no_proxy_ok = bool(input_contract.get("actual_data_only") is True and input_contract.get("no_proxy_or_fallback") is True and input_contract.get("proxy_substitution_allowed") is False)
+            explicit_input_ok = bool(input_contract.get("explicit_cas_input_present") is True and input_contract.get("safe_to_render_certificate") is True and bool(input_contract.get("input_sha256")))
+            finite_certificate_ok = bool(payload.get("available") is True and payload.get("safe_to_render_as_finite_toric_ideal_sidecar") is True and diagnostics.get("certificate_attached") is True and diagnostics.get("toric_ideal_certified") is True and diagnostics.get("safe_to_render_as_toric_embedding") is True)
+            forbidden_claim_safe = bool(payload.get("safe_to_render_as_tropical_variety_embedding") is False and payload.get("safe_to_render_as_global_toric_variety_embedding") is False and payload.get("safe_to_use_as_normal_fan_certificate") is False and diagnostics.get("safe_to_render_as_tropical_variety_embedding") is False and diagnostics.get("safe_to_render_as_global_toric_variety_embedding") is False and diagnostics.get("safe_to_use_as_normal_fan_certificate") is False)
+            available = bool(schema_ok and diag_schema_ok and input_schema_ok and no_proxy_ok and explicit_input_ok and finite_certificate_ok and forbidden_claim_safe)
+            if available:
+                certified_finite_toric_ideal_count += 1
+            if not forbidden_claim_safe:
+                forbidden_global_claim_count += 1
+            source.update({
+                "available": available,
+                "sidecar_schema_version": payload.get("schema_version", "unavailable"),
+                "cas_schema_version": diagnostics.get("schema_version", "unavailable"),
+                "cas_input_contract_schema_version": input_contract.get("schema_version", "unavailable"),
+                "status": status,
+                "backend": diagnostics.get("backend", "unavailable"),
+                "certificate_attached": bool(diagnostics.get("certificate_attached", False)),
+                "toric_ideal_certified": bool(diagnostics.get("toric_ideal_certified", False)),
+                "finite_toric_ideal_sidecar_safe": bool(payload.get("safe_to_render_as_finite_toric_ideal_sidecar", False)),
+                "safe_to_render_as_global_toric_variety_embedding": payload.get("safe_to_render_as_global_toric_variety_embedding"),
+                "safe_to_render_as_tropical_variety_embedding": payload.get("safe_to_render_as_tropical_variety_embedding"),
+                "safe_to_use_as_normal_fan_certificate": payload.get("safe_to_use_as_normal_fan_certificate"),
+                "explicit_cas_input_present": bool(input_contract.get("explicit_cas_input_present", False)),
+                "input_sha256": input_contract.get("input_sha256"),
+                "no_proxy_or_fallback": no_proxy_ok,
+            })
+            if not available:
+                reasons = []
+                if payload.get("available") is not True:
+                    reasons.append("toric_embedding_sidecar_unavailable")
+                if not schema_ok:
+                    reasons.append("missing_toric_embedding_sidecar_schema")
+                if not diag_schema_ok:
+                    reasons.append("missing_cas_toric_embedding_schema")
+                if not input_schema_ok:
+                    reasons.append("missing_toric_embedding_input_contract_schema")
+                if not no_proxy_ok:
+                    reasons.append("missing_toric_embedding_no_proxy_contract")
+                if not explicit_input_ok:
+                    reasons.append("missing_explicit_toric_exponent_matrix_input")
+                if not finite_certificate_ok:
+                    reasons.append("finite_toric_ideal_certificate_unavailable")
+                if not forbidden_claim_safe:
+                    reasons.append("unsafe_global_toric_or_tropical_claim")
+                source["reason"] = ";".join(reasons) or "toric_embedding_evidence_unavailable"
+                for reason in reasons or [source["reason"]]:
+                    _count(unavailable_reason_counts, reason)
+        else:
+            schema_ok = payload.get("schema_version") == "tropicalgt.tropical_fan_visual_audit.v1"
+            diag_schema_ok = diagnostics.get("schema_version") == "tropicalgt.cas_tropical_fan.v1"
+            input_schema_ok = input_contract.get("schema_version") == "tropicalgt.tropical_fan_input_contract.v1"
+            no_proxy_ok = bool(input_contract.get("actual_data_only") is True and input_contract.get("no_proxy_or_fallback") is True and input_contract.get("proxy_substitution_allowed") is False)
+            explicit_input_ok = bool(input_contract.get("explicit_cas_input_present") is True and input_contract.get("safe_to_render_certificate") is True and bool(input_contract.get("input_sha256")))
+            summary = diagnostics.get("fan_summary") if isinstance(diagnostics.get("fan_summary"), dict) else {}
+            ray_count = _optional_int(summary.get("ray_count")) or 0
+            fan_certificate_ok = bool(payload.get("available") is True and payload.get("safe_to_render_as_tropical_fan") is True and diagnostics.get("certificate_attached") is True and diagnostics.get("fan_diagnostics_certified") is True and diagnostics.get("safe_to_render_as_tropical_fan") is True and ray_count > 0)
+            available = bool(schema_ok and diag_schema_ok and input_schema_ok and no_proxy_ok and explicit_input_ok and fan_certificate_ok)
+            if available:
+                certified_tropical_fan_count += 1
+                total_tropical_ray_count += int(ray_count)
+            source.update({
+                "available": available,
+                "sidecar_schema_version": payload.get("schema_version", "unavailable"),
+                "cas_schema_version": diagnostics.get("schema_version", "unavailable"),
+                "cas_input_contract_schema_version": input_contract.get("schema_version", "unavailable"),
+                "status": status,
+                "backend": diagnostics.get("backend", "unavailable"),
+                "certificate_attached": bool(diagnostics.get("certificate_attached", False)),
+                "fan_diagnostics_certified": bool(diagnostics.get("fan_diagnostics_certified", False)),
+                "tropical_cycle_certified": bool(diagnostics.get("tropical_cycle_certified", False)),
+                "safe_to_render_as_tropical_fan": bool(payload.get("safe_to_render_as_tropical_fan", False)),
+                "ray_count": ray_count,
+                "ambient_dimension": _optional_int(summary.get("ambient_dimension")),
+                "explicit_cas_input_present": bool(input_contract.get("explicit_cas_input_present", False)),
+                "input_sha256": input_contract.get("input_sha256"),
+                "no_proxy_or_fallback": no_proxy_ok,
+            })
+            if not available:
+                reasons = []
+                if payload.get("available") is not True:
+                    reasons.append("tropical_fan_diagnostics_unavailable")
+                if not schema_ok:
+                    reasons.append("missing_tropical_fan_visual_schema")
+                if not diag_schema_ok:
+                    reasons.append("missing_cas_tropical_fan_schema")
+                if not input_schema_ok:
+                    reasons.append("missing_tropical_fan_input_contract_schema")
+                if not no_proxy_ok:
+                    reasons.append("missing_tropical_fan_no_proxy_contract")
+                if not explicit_input_ok:
+                    reasons.append("missing_explicit_model_derived_tropical_ideal")
+                if not fan_certificate_ok:
+                    reasons.append("tropical_fan_certificate_unavailable")
+                if ray_count <= 0:
+                    reasons.append("missing_one_dimensional_cones")
+                source["reason"] = ";".join(reasons) or "tropical_fan_evidence_unavailable"
+                for reason in reasons or [source["reason"]]:
+                    _count(unavailable_reason_counts, reason)
+        sources.append(source)
+    available_sources = [row for row in sources if row.get("available")]
+    return {
+        "schema_version": "tropicalgt.herschel_toric_tropical_cas_evidence.v1",
+        "available": bool(available_sources),
+        "source_count": len(sources),
+        "available_source_count": len(available_sources),
+        "toric_source_count": toric_source_count,
+        "tropical_fan_source_count": tropical_source_count,
+        "certified_finite_toric_ideal_count": certified_finite_toric_ideal_count,
+        "certified_tropical_fan_count": certified_tropical_fan_count,
+        "forbidden_global_claim_count": forbidden_global_claim_count,
+        "total_tropical_ray_count": total_tropical_ray_count,
+        "required_toric_sidecar_schema": "tropicalgt.toric_embedding_sidecar_visual_audit.v1",
+        "required_toric_cas_schema": "tropicalgt.cas_toric_embedding.v1",
+        "required_tropical_fan_sidecar_schema": "tropicalgt.tropical_fan_visual_audit.v1",
+        "required_tropical_fan_cas_schema": "tropicalgt.cas_tropical_fan.v1",
+        "status_counts": {key: status_counts[key] for key in sorted(status_counts)},
+        "unavailable_reason_counts": {key: unavailable_reason_counts[key] for key in sorted(unavailable_reason_counts)},
+        "sources": sources,
+        "policy": "Herschel reports toric/tropical CAS evidence only from recorded toric_embedding_sidecar and tropical_fan_diagnostics JSON sidecars. Finite toric-ideal sidecar certificates and Macaulay2 Tropical fan certificates remain separate from global toric-variety embeddings, tropical-variety embeddings, normal-fan certificates, vector-bundle theorem evidence, and BPB restart justification.",
+    }
+
+
 def _analogical_query_context_evidence(sidecar_paths: list[str]) -> dict[str, Any]:
     sources: list[dict[str, Any]] = []
     for raw_path in sidecar_paths:
@@ -964,6 +1137,7 @@ def summarize_bundle(bundle: dict[str, Any], *, bundle_path: Path | None = None)
             "graphcg_direction_evidence": _graphcg_direction_evidence(sidecars),
             "nll_density_evidence": _nll_density_evidence(sidecars),
             "chart_bundle_transport_evidence": _chart_bundle_transport_evidence(sidecars),
+            "toric_tropical_cas_evidence": _toric_tropical_cas_evidence(sidecars),
             "analogical_query_context_evidence": _analogical_query_context_evidence(sidecars),
         },
         "restart_decision": {
@@ -1167,6 +1341,34 @@ def render_markdown(summary: dict[str, Any]) -> str:
         )
         if source.get("reason"):
             lines.append(f"  - reason: `{source.get('reason')}`")
+    toric_tropical_cas = artifacts.get("toric_tropical_cas_evidence", {}) if isinstance(artifacts.get("toric_tropical_cas_evidence"), dict) else {}
+    lines.extend(
+        [
+            "## Toric/Tropical CAS Evidence",
+            "",
+            f"- Available: `{toric_tropical_cas.get('available', False)}`",
+            f"- Sources: `{toric_tropical_cas.get('source_count', 0)}`",
+            f"- Certified finite toric ideals: `{toric_tropical_cas.get('certified_finite_toric_ideal_count', 0)}`",
+            f"- Certified tropical fans: `{toric_tropical_cas.get('certified_tropical_fan_count', 0)}`",
+            f"- Forbidden global/tropical/normal-fan claim count: `{toric_tropical_cas.get('forbidden_global_claim_count', 0)}`",
+            "",
+            "```json",
+            json.dumps(toric_tropical_cas.get("status_counts", {}), indent=2),
+            "```",
+            "",
+        ]
+    )
+    for source in toric_tropical_cas.get("sources", []) if isinstance(toric_tropical_cas.get("sources"), list) else []:
+        if not isinstance(source, dict):
+            continue
+        lines.append(
+            f"- `{source.get('path', '')}` kind=`{source.get('kind', 'unavailable')}` available=`{source.get('available')}` "
+            f"status=`{source.get('status', 'unavailable')}` backend=`{source.get('backend', 'unavailable')}` "
+            f"toric_ideal=`{source.get('toric_ideal_certified', False)}` fan=`{source.get('fan_diagnostics_certified', False)}` "
+            f"rays=`{source.get('ray_count', 0)}`"
+        )
+        if source.get("reason"):
+            lines.append(f"  - reason: `{source.get('reason')}`")
     analogical_query_context = artifacts.get("analogical_query_context_evidence", {}) if isinstance(artifacts.get("analogical_query_context_evidence"), dict) else {}
     lines.extend(
         [
@@ -1308,6 +1510,7 @@ def render_html(summary: dict[str, Any]) -> str:
     graphcg_direction = artifacts.get("graphcg_direction_evidence", {}) if isinstance(artifacts.get("graphcg_direction_evidence"), dict) else {}
     nll_density = artifacts.get("nll_density_evidence", {}) if isinstance(artifacts.get("nll_density_evidence"), dict) else {}
     chart_bundle_transport = artifacts.get("chart_bundle_transport_evidence", {}) if isinstance(artifacts.get("chart_bundle_transport_evidence"), dict) else {}
+    toric_tropical_cas = artifacts.get("toric_tropical_cas_evidence", {}) if isinstance(artifacts.get("toric_tropical_cas_evidence"), dict) else {}
     analogical_query_context = artifacts.get("analogical_query_context_evidence", {}) if isinstance(artifacts.get("analogical_query_context_evidence"), dict) else {}
     validator_sources = validator_gaps.get("sources", []) if isinstance(validator_gaps.get("sources"), list) else []
     sidecars = [str(path) for path in artifacts.get("advanced_sidecars_tail", [])]
@@ -1433,6 +1636,25 @@ def render_html(summary: dict[str, Any]) -> str:
         )
     if not chart_bundle_rows:
         chart_bundle_rows.append("<tr><td colspan='8' class='muted'>No chart-bundle transport sidecar paths recorded.</td></tr>")
+    toric_tropical_rows = []
+    for source in toric_tropical_cas.get("sources", []) if isinstance(toric_tropical_cas.get("sources"), list) else []:
+        if not isinstance(source, dict):
+            continue
+        toric_tropical_rows.append(
+            "<tr>"
+            f"<td>{html.escape(str(source.get('path', '')))}</td>"
+            f"<td>{html.escape(str(source.get('kind', 'unavailable')))}</td>"
+            f"<td>{html.escape(str(source.get('available')))}</td>"
+            f"<td>{html.escape(str(source.get('status', 'unavailable')))}</td>"
+            f"<td>{html.escape(str(source.get('backend', 'unavailable')))}</td>"
+            f"<td>{html.escape(str(source.get('toric_ideal_certified', False)))}</td>"
+            f"<td>{html.escape(str(source.get('fan_diagnostics_certified', False)))}</td>"
+            f"<td>{html.escape(str(source.get('ray_count', 0)))}</td>"
+            f"<td>{html.escape(str(source.get('reason', '')))}</td>"
+            "</tr>"
+        )
+    if not toric_tropical_rows:
+        toric_tropical_rows.append("<tr><td colspan='9' class='muted'>No toric/tropical CAS sidecar paths recorded.</td></tr>")
     analogical_query_rows = []
     for source in analogical_query_context.get("sources", []) if isinstance(analogical_query_context.get("sources"), list) else []:
         if not isinstance(source, dict):
@@ -1491,6 +1713,7 @@ code {{ white-space:break-spaces; }}
 <span class="badge {'ok' if graphcg_direction.get('available') else 'warn'}">graphcg_direction_evidence={html.escape(str(bool(graphcg_direction.get('available'))))}</span>
 <span class="badge {'ok' if nll_density.get('available') else 'warn'}">nll_density_evidence={html.escape(str(bool(nll_density.get('available'))))}</span>
 <span class="badge {'ok' if chart_bundle_transport.get('available') else 'warn'}">chart_bundle_evidence={html.escape(str(bool(chart_bundle_transport.get('available'))))}</span>
+<span class="badge {'ok' if toric_tropical_cas.get('available') else 'warn'}">toric_tropical_cas_evidence={html.escape(str(bool(toric_tropical_cas.get('available'))))}</span>
 </header>
 <main>
 <section class="grid">
@@ -1507,6 +1730,7 @@ code {{ white-space:break-spaces; }}
 {_bar_chart_svg(graphcg_direction.get('basis_source_counts', {}) if isinstance(graphcg_direction, dict) else {}, title='GraphCG Projection Basis Sources', chart_id='graphcg-projection-basis-sources')}
 {_bar_chart_svg(nll_density.get('visible_density_layer_counts', {}) if isinstance(nll_density, dict) else {}, title='NLL Density Visible Layers', chart_id='nll-density-visible-layers')}
 {_bar_chart_svg(chart_bundle_transport.get('completeness_tier_counts', {}) if isinstance(chart_bundle_transport, dict) else {}, title='Chart/Vector-Bundle Completeness Tiers', chart_id='chart-vector-bundle-completeness-tiers')}
+{_bar_chart_svg(toric_tropical_cas.get('status_counts', {}) if isinstance(toric_tropical_cas, dict) else {}, title='Toric/Tropical CAS Statuses', chart_id='toric-tropical-cas-statuses')}
 <section class="panel"><h2>Validator Sources</h2><table><thead><tr><th>Name</th><th>JSON path</th><th>Available</th><th>Gaps</th><th>Reason</th></tr></thead><tbody>{''.join(source_rows)}</tbody></table></section>
 <section class="panel"><h2>Validator Gap Actions</h2><table><thead><tr><th>Category</th><th>Count</th><th>Required action</th><th>Examples</th></tr></thead><tbody>{''.join(action_rows)}</tbody></table></section>
 <section class="panel"><h2>GFlowNet Branch Selection Evidence</h2><table><thead><tr><th>Sidecar</th><th>Available</th><th>Valid rows</th><th>Selected actions</th><th>Policies</th><th>Reason</th></tr></thead><tbody>{''.join(gflownet_branch_rows)}</tbody></table></section>
@@ -1514,6 +1738,7 @@ code {{ white-space:break-spaces; }}
 <section class="panel"><h2>GraphCG Direction Evidence</h2><table><thead><tr><th>Sidecar</th><th>Available</th><th>Basis</th><th>Directions</th><th>Candidates</th><th>Active nonzero</th><th>Mean |cos| p90</th><th>Reason</th></tr></thead><tbody>{''.join(graphcg_direction_rows)}</tbody></table></section>
 <section class="panel"><h2>NLL Density Evidence</h2><table><thead><tr><th>Sidecar</th><th>Available</th><th>Anchors</th><th>Support samples</th><th>Kernel bandwidth</th><th>NLL span</th><th>Support visibility</th><th>Reason</th></tr></thead><tbody>{''.join(nll_density_rows)}</tbody></table></section>
 <section class="panel"><h2>Chart/Vector-Bundle Evidence</h2><table><thead><tr><th>Sidecar</th><th>Available</th><th>Completeness tier</th><th>Paper-ready telemetry</th><th>Charts</th><th>Transports</th><th>Missing groups</th><th>Reason</th></tr></thead><tbody>{''.join(chart_bundle_rows)}</tbody></table></section>
+<section class="panel"><h2>Toric/Tropical CAS Evidence</h2><table><thead><tr><th>Sidecar</th><th>Kind</th><th>Available</th><th>Status</th><th>Backend</th><th>Finite toric ideal</th><th>Tropical fan</th><th>Rays</th><th>Reason</th></tr></thead><tbody>{''.join(toric_tropical_rows)}</tbody></table></section>
 <section class="panel"><h2>Analogical Query Context Evidence</h2><table><thead><tr><th>Sidecar</th><th>Available</th><th>Selected source</th><th>Status</th><th>Probability vertices</th><th>Rejected keys</th><th>Reason</th></tr></thead><tbody>{''.join(analogical_query_rows)}</tbody></table></section>
 <section class="panel"><h2>Blockers And Warnings</h2><div class="grid"><div><h3>Checkpoint</h3><ul>{_html_list(checkpoint.get('warnings', []))}</ul></div><div><h3>Execution</h3><ul>{_html_list(execution.get('issues', []))}</ul></div><div><h3>Advanced BPB</h3><ul>{_html_list(advanced.get('failed_gates', []))}</ul></div><div><h3>Restart</h3><ul>{_html_list(restart.get('blockers', []))}</ul></div></div></section>
 <section class="panel"><h2>Advanced Sidecars Tail</h2><input id="sidecar-filter" type="search" placeholder="Filter sidecar paths"><ul id="sidecar-list">{sidecar_items}</ul></section>

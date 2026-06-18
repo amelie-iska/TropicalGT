@@ -1129,3 +1129,13 @@ CUDA_VISIBLE_DEVICES="" /home/iska/miniconda3/bin/conda run -n tokengt python -m
 - [x] Markdown and HTML reports now expose `Chart/Vector-Bundle Evidence` plus a completeness-tier chart for post-5K review.
 - [x] Missing, unparsable, unsafe, schema-mismatched, metadata-lacking, or contract-lacking chart/vector-bundle sidecars remain unavailable and cannot justify restart, BPB claims, paper-ready claims, toric embedding claims, or hyperparameter promotion.
 - [x] Verification passed: py-compile; broader Herschel/bundle/review-loop/provenance tests (`36 passed`); metric provenance audit (`372 covered, 0 uncovered`).
+
+### Current Objective Update - Herschel Toric/Tropical CAS Evidence Pass
+
+- [x] Added `toric_embedding_sidecar.json` and `tropical_fan_diagnostics.json` to the Herschel-required audit sidecar inventory when they exist in the latest recorded `got_audit` directory.
+- [x] Added `tropicalgt.herschel_toric_tropical_cas_evidence.v1` to the Herschel 5K summary, sourced only from recorded toric embedding and tropical fan CAS sidecars.
+- [x] Finite toric-ideal sidecar evidence now requires the toric visual-audit schema, `tropicalgt.cas_toric_embedding.v1`, explicit toric exponent-matrix input contract, certificate attachment, certified toric ideal, no-proxy flags, and false global toric-variety/tropical-variety/normal-fan safety flags.
+- [x] Tropical fan evidence now requires the tropical fan visual-audit schema, `tropicalgt.cas_tropical_fan.v1`, explicit model-derived tropical ideal input contract, certificate attachment, certified fan diagnostics, one dimensional cone/ray count, and no-proxy flags.
+- [x] Markdown and HTML reports now expose `Toric/Tropical CAS Evidence` plus a CAS status chart for post-5K review.
+- [x] Missing, unavailable, schema-mismatched, input-lacking, certificate-lacking, no-proxy-lacking, or globally unsafe toric/tropical sidecars remain unavailable and cannot justify restart, BPB claims, theorem claims, toric embedding claims, tropical-variety claims, or normal-fan claims.
+- [x] Verification passed: py-compile; focused Herschel/bundle tests (`11 passed`); broader Herschel/bundle/review-loop/provenance tests (`36 passed`); metric provenance audit (`382 covered, 0 uncovered`).

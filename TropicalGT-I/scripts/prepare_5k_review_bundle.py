@@ -27,6 +27,8 @@ HERSCHEL_REQUIRED_AUDIT_SIDECARS = (
     "graphcg_direction_cosines_payload.json",
     "got_nll_density_cloud_payload.json",
     "chart_bundle_transport_sidecar.json",
+    "toric_embedding_sidecar.json",
+    "tropical_fan_diagnostics.json",
 )
 
 
