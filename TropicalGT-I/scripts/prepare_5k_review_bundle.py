@@ -24,6 +24,7 @@ HERSCHEL_REQUIRED_AUDIT_SIDECARS = (
     "analogical_simplicial_maps.json",
     "inference_scaling_tree.json",
     "tropical_support_payload.json",
+    "graphcg_direction_cosines_payload.json",
 )
 
 

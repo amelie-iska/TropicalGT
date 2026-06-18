@@ -452,6 +452,126 @@ def _tropical_support_evidence(sidecar_paths: list[str]) -> dict[str, Any]:
     }
 
 
+def _graphcg_direction_evidence(sidecar_paths: list[str]) -> dict[str, Any]:
+    sources: list[dict[str, Any]] = []
+    basis_source_counts: dict[str, int] = {}
+    total_direction_count = 0
+    total_candidate_count = 0
+    for raw_path in sidecar_paths:
+        lower = raw_path.lower()
+        if "graphcg_direction_cosines_payload" not in lower:
+            continue
+        resolved = _resolve_output_path(Path(raw_path))
+        source: dict[str, Any] = {"path": _project_path(resolved), "available": False}
+        if not resolved.exists():
+            source["reason"] = "graphcg_direction_sidecar_missing"
+            sources.append(source)
+            continue
+        try:
+            payload = json.loads(resolved.read_text(encoding="utf-8"))
+        except Exception as exc:  # pragma: no cover - parse message is platform-dependent
+            source["reason"] = f"graphcg_direction_sidecar_parse_error:{exc}"
+            sources.append(source)
+            continue
+        if not isinstance(payload, dict):
+            source["reason"] = "graphcg_direction_sidecar_not_object"
+            sources.append(source)
+            continue
+        evidence_contract = payload.get("graphcg_direction_evidence_contract") if isinstance(payload.get("graphcg_direction_evidence_contract"), dict) else {}
+        readability_contract = payload.get("graphcg_readability_contract") if isinstance(payload.get("graphcg_readability_contract"), dict) else {}
+        basis_certificate = payload.get("projection_basis_certificate") if isinstance(payload.get("projection_basis_certificate"), dict) else {}
+        matrix_shape = payload.get("matrix_shape") if isinstance(payload.get("matrix_shape"), list) else []
+        direction_count = _optional_int(evidence_contract.get("direction_count", payload.get("full_rank_direction_count")))
+        direction_row_count = _optional_int(evidence_contract.get("direction_row_count", len(payload.get("direction_rows", [])) if isinstance(payload.get("direction_rows"), list) else None))
+        candidate_count = _optional_int(basis_certificate.get("candidate_count", matrix_shape[0] if matrix_shape else None))
+        panel_count = _optional_int(payload.get("panel_count"))
+        contract_schema_ok = evidence_contract.get("schema_version") == "tropicalgt.graphcg_direction_evidence.v1"
+        readability_schema_ok = readability_contract.get("schema_version") == "tropicalgt.graphcg_direction_readability.v1"
+        no_proxy_ok = bool(evidence_contract.get("no_proxy_or_fallback") is True and readability_contract.get("no_proxy_or_fallback") is True)
+        all_rows_ok = bool(evidence_contract.get("all_model_directions_have_rows") is True and direction_count and direction_row_count == direction_count)
+        all_panels_ok = bool(
+            evidence_contract.get("all_directions_rendered_in_heatmap") is True
+            and evidence_contract.get("all_directions_rendered_in_activity_spectrum") is True
+            and evidence_contract.get("all_directions_rendered_in_signed_bias_panel") is True
+            and readability_contract.get("all_model_directions_rendered") is True
+            and readability_contract.get("directions_sampled_for_heatmap") is False
+        )
+        basis_ok = bool(basis_certificate.get("available") is True and basis_certificate.get("all_candidates_have_all_direction_cosines") is True)
+        safe_full_rank_ok = bool(evidence_contract.get("safe_to_render_full_rank_direction_evidence") is True)
+        available = bool(payload.get("available") is True and contract_schema_ok and readability_schema_ok and no_proxy_ok and all_rows_ok and all_panels_ok and basis_ok and safe_full_rank_ok)
+        basis_counts = basis_certificate.get("basis_source_counts") if isinstance(basis_certificate.get("basis_source_counts"), dict) else {}
+        if available:
+            total_direction_count += int(direction_count or 0)
+            total_candidate_count += int(candidate_count or 0)
+            for key, value in basis_counts.items():
+                try:
+                    basis_source_counts[str(key)] = basis_source_counts.get(str(key), 0) + int(value)
+                except (TypeError, ValueError):
+                    continue
+        source.update(
+            {
+                "available": available,
+                "direction_contract_schema_version": evidence_contract.get("schema_version", "unavailable"),
+                "readability_contract_schema_version": readability_contract.get("schema_version", "unavailable"),
+                "direction_count": direction_count,
+                "direction_row_count": direction_row_count,
+                "candidate_count": candidate_count,
+                "matrix_shape": matrix_shape,
+                "full_rank_direction_count": _optional_int(payload.get("full_rank_direction_count")),
+                "active_rank_nonzero_mean_abs": _optional_int(payload.get("active_rank_nonzero_mean_abs")),
+                "top_active_direction_panel_count": _optional_int(evidence_contract.get("top_active_direction_panel_count", payload.get("top_active_direction_limit"))),
+                "panel_count": panel_count,
+                "projection_basis": basis_certificate.get("projection_basis", "unavailable"),
+                "basis_source_counts": basis_counts,
+                "mean_abs_min": _optional_float(payload.get("mean_abs_min")),
+                "mean_abs_max": _optional_float(payload.get("mean_abs_max")),
+                "mean_abs_p90": _optional_float(payload.get("mean_abs_p90")),
+                "safe_to_render_full_rank_direction_evidence": safe_full_rank_ok,
+                "all_model_directions_have_rows": all_rows_ok,
+                "all_direction_panels_available": all_panels_ok,
+                "exact_direction_ids_preserved": bool(
+                    evidence_contract.get("exact_direction_ids_preserved") is True
+                    and readability_contract.get("exact_direction_ids_preserved_in_hover_and_payload") is True
+                ),
+                "no_proxy_or_fallback": no_proxy_ok,
+            }
+        )
+        if not available:
+            reasons = []
+            if payload.get("available") is not True:
+                reasons.append("graphcg_payload_unavailable")
+            if not contract_schema_ok:
+                reasons.append("missing_graphcg_direction_evidence_contract_schema")
+            if not readability_schema_ok:
+                reasons.append("missing_graphcg_direction_readability_contract_schema")
+            if not no_proxy_ok:
+                reasons.append("missing_graphcg_no_proxy_contract")
+            if not all_rows_ok:
+                reasons.append("missing_all_model_direction_rows")
+            if not all_panels_ok:
+                reasons.append("missing_full_rank_direction_panels")
+            if not basis_ok:
+                reasons.append("missing_projection_basis_certificate")
+            if not safe_full_rank_ok:
+                reasons.append("unsafe_full_rank_direction_evidence")
+            source["reason"] = ";".join(reasons) or "graphcg_direction_evidence_unavailable"
+        sources.append(source)
+    available_sources = [row for row in sources if row.get("available")]
+    return {
+        "schema_version": "tropicalgt.herschel_graphcg_direction_evidence.v1",
+        "available": bool(available_sources),
+        "source_count": len(sources),
+        "available_source_count": len(available_sources),
+        "required_direction_contract_schema": "tropicalgt.graphcg_direction_evidence.v1",
+        "required_readability_contract_schema": "tropicalgt.graphcg_direction_readability.v1",
+        "total_direction_count": total_direction_count,
+        "total_candidate_count": total_candidate_count,
+        "basis_source_counts": {key: basis_source_counts[key] for key in sorted(basis_source_counts)},
+        "sources": sources,
+        "policy": "Herschel reports GraphCG direction evidence only from recorded graphcg_direction_cosines_payload sidecars with all model-derived directions rendered, exact ids preserved, projection-basis certificate present, and no-proxy/readability contracts. This is steering-basis activity evidence, not a semantic identifiability proof or toric fan certificate.",
+    }
+
+
 def _analogical_query_context_evidence(sidecar_paths: list[str]) -> dict[str, Any]:
     sources: list[dict[str, Any]] = []
     for raw_path in sidecar_paths:
@@ -576,6 +696,7 @@ def summarize_bundle(bundle: dict[str, Any], *, bundle_path: Path | None = None)
             "validator_gap_evidence": validator_gap_evidence,
             "gflownet_branch_selection_evidence": _gflownet_branch_selection_evidence(sidecars),
             "tropical_support_evidence": _tropical_support_evidence(sidecars),
+            "graphcg_direction_evidence": _graphcg_direction_evidence(sidecars),
             "analogical_query_context_evidence": _analogical_query_context_evidence(sidecars),
         },
         "restart_decision": {
@@ -698,6 +819,32 @@ def render_markdown(summary: dict[str, Any]) -> str:
             f"- `{source.get('path', '')}` available=`{source.get('available')}` source=`{source.get('support_probability_source', 'unavailable')}` "
             f"tokens=`{source.get('token_count')}` strict=`{_fmt(source.get('strict_wall_hit_rate'))}` near=`{_fmt(source.get('near_wall_hit_rate'))}` "
             f"status=`{source.get('low_strict_wall_interpretation_status', 'unavailable')}`"
+        )
+        if source.get("reason"):
+            lines.append(f"  - reason: `{source.get('reason')}`")
+    graphcg_direction = artifacts.get("graphcg_direction_evidence", {}) if isinstance(artifacts.get("graphcg_direction_evidence"), dict) else {}
+    lines.extend(
+        [
+            "## GraphCG Direction Evidence",
+            "",
+            f"- Available: `{graphcg_direction.get('available', False)}`",
+            f"- Sources: `{graphcg_direction.get('source_count', 0)}`",
+            f"- Total directions: `{graphcg_direction.get('total_direction_count', 0)}`",
+            f"- Total candidates: `{graphcg_direction.get('total_candidate_count', 0)}`",
+            "",
+            "```json",
+            json.dumps(graphcg_direction.get("basis_source_counts", {}), indent=2),
+            "```",
+            "",
+        ]
+    )
+    for source in graphcg_direction.get("sources", []) if isinstance(graphcg_direction.get("sources"), list) else []:
+        if not isinstance(source, dict):
+            continue
+        lines.append(
+            f"- `{source.get('path', '')}` available=`{source.get('available')}` basis=`{source.get('projection_basis', 'unavailable')}` "
+            f"directions=`{source.get('direction_count')}` candidates=`{source.get('candidate_count')}` "
+            f"active_nonzero=`{source.get('active_rank_nonzero_mean_abs')}` mean_abs_p90=`{_fmt(source.get('mean_abs_p90'))}`"
         )
         if source.get("reason"):
             lines.append(f"  - reason: `{source.get('reason')}`")
@@ -839,6 +986,7 @@ def render_html(summary: dict[str, Any]) -> str:
     validator_counts = validator_gaps.get("combined_category_counts", {}) if isinstance(validator_gaps.get("combined_category_counts"), dict) else {}
     gflownet_branch = artifacts.get("gflownet_branch_selection_evidence", {}) if isinstance(artifacts.get("gflownet_branch_selection_evidence"), dict) else {}
     tropical_support = artifacts.get("tropical_support_evidence", {}) if isinstance(artifacts.get("tropical_support_evidence"), dict) else {}
+    graphcg_direction = artifacts.get("graphcg_direction_evidence", {}) if isinstance(artifacts.get("graphcg_direction_evidence"), dict) else {}
     analogical_query_context = artifacts.get("analogical_query_context_evidence", {}) if isinstance(artifacts.get("analogical_query_context_evidence"), dict) else {}
     validator_sources = validator_gaps.get("sources", []) if isinstance(validator_gaps.get("sources"), list) else []
     sidecars = [str(path) for path in artifacts.get("advanced_sidecars_tail", [])]
@@ -910,6 +1058,24 @@ def render_html(summary: dict[str, Any]) -> str:
         )
     if not tropical_support_rows:
         tropical_support_rows.append("<tr><td colspan='8' class='muted'>No tropical support payload sidecar paths recorded.</td></tr>")
+    graphcg_direction_rows = []
+    for source in graphcg_direction.get("sources", []) if isinstance(graphcg_direction.get("sources"), list) else []:
+        if not isinstance(source, dict):
+            continue
+        graphcg_direction_rows.append(
+            "<tr>"
+            f"<td>{html.escape(str(source.get('path', '')))}</td>"
+            f"<td>{html.escape(str(source.get('available')))}</td>"
+            f"<td>{html.escape(str(source.get('projection_basis', 'unavailable')))}</td>"
+            f"<td>{html.escape(str(source.get('direction_count')))}</td>"
+            f"<td>{html.escape(str(source.get('candidate_count')))}</td>"
+            f"<td>{html.escape(str(source.get('active_rank_nonzero_mean_abs')))}</td>"
+            f"<td>{html.escape(_fmt(source.get('mean_abs_p90')))}</td>"
+            f"<td>{html.escape(str(source.get('reason', '')))}</td>"
+            "</tr>"
+        )
+    if not graphcg_direction_rows:
+        graphcg_direction_rows.append("<tr><td colspan='8' class='muted'>No GraphCG direction-cosine payload sidecar paths recorded.</td></tr>")
     analogical_query_rows = []
     for source in analogical_query_context.get("sources", []) if isinstance(analogical_query_context.get("sources"), list) else []:
         if not isinstance(source, dict):
@@ -965,6 +1131,7 @@ code {{ white-space:break-spaces; }}
 <span class="badge {'ok' if restart_safe else 'warn'}">restart_safe={html.escape(str(bool(restart_safe)))}</span>
 <span class="badge {'ok' if validator_gaps.get('available') else 'warn'}">validator_gap_evidence={html.escape(str(bool(validator_gaps.get('available'))))}</span>
 <span class="badge {'ok' if tropical_support.get('available') else 'warn'}">tropical_support_evidence={html.escape(str(bool(tropical_support.get('available'))))}</span>
+<span class="badge {'ok' if graphcg_direction.get('available') else 'warn'}">graphcg_direction_evidence={html.escape(str(bool(graphcg_direction.get('available'))))}</span>
 </header>
 <main>
 <section class="grid">
@@ -978,10 +1145,12 @@ code {{ white-space:break-spaces; }}
 {_bar_chart_svg(validator_counts, title='Strict Validator Evidence Gaps', chart_id='validator-gap-counts')}
 {_bar_chart_svg(gflownet_branch.get('policy_counts', {}) if isinstance(gflownet_branch, dict) else {}, title='GFlowNet Branch Selection Policies', chart_id='gflownet-branch-selection-policies')}
 {_bar_chart_svg(tropical_support.get('support_probability_source_counts', {}) if isinstance(tropical_support, dict) else {}, title='Tropical Support Probability Sources', chart_id='tropical-support-probability-sources')}
+{_bar_chart_svg(graphcg_direction.get('basis_source_counts', {}) if isinstance(graphcg_direction, dict) else {}, title='GraphCG Projection Basis Sources', chart_id='graphcg-projection-basis-sources')}
 <section class="panel"><h2>Validator Sources</h2><table><thead><tr><th>Name</th><th>JSON path</th><th>Available</th><th>Gaps</th><th>Reason</th></tr></thead><tbody>{''.join(source_rows)}</tbody></table></section>
 <section class="panel"><h2>Validator Gap Actions</h2><table><thead><tr><th>Category</th><th>Count</th><th>Required action</th><th>Examples</th></tr></thead><tbody>{''.join(action_rows)}</tbody></table></section>
 <section class="panel"><h2>GFlowNet Branch Selection Evidence</h2><table><thead><tr><th>Sidecar</th><th>Available</th><th>Valid rows</th><th>Selected actions</th><th>Policies</th><th>Reason</th></tr></thead><tbody>{''.join(gflownet_branch_rows)}</tbody></table></section>
 <section class="panel"><h2>Tropical Support Evidence</h2><table><thead><tr><th>Sidecar</th><th>Available</th><th>Probability source</th><th>Tokens</th><th>Strict wall rate</th><th>Near wall rate</th><th>Status</th><th>Reason</th></tr></thead><tbody>{''.join(tropical_support_rows)}</tbody></table></section>
+<section class="panel"><h2>GraphCG Direction Evidence</h2><table><thead><tr><th>Sidecar</th><th>Available</th><th>Basis</th><th>Directions</th><th>Candidates</th><th>Active nonzero</th><th>Mean |cos| p90</th><th>Reason</th></tr></thead><tbody>{''.join(graphcg_direction_rows)}</tbody></table></section>
 <section class="panel"><h2>Analogical Query Context Evidence</h2><table><thead><tr><th>Sidecar</th><th>Available</th><th>Selected source</th><th>Status</th><th>Probability vertices</th><th>Rejected keys</th><th>Reason</th></tr></thead><tbody>{''.join(analogical_query_rows)}</tbody></table></section>
 <section class="panel"><h2>Blockers And Warnings</h2><div class="grid"><div><h3>Checkpoint</h3><ul>{_html_list(checkpoint.get('warnings', []))}</ul></div><div><h3>Execution</h3><ul>{_html_list(execution.get('issues', []))}</ul></div><div><h3>Advanced BPB</h3><ul>{_html_list(advanced.get('failed_gates', []))}</ul></div><div><h3>Restart</h3><ul>{_html_list(restart.get('blockers', []))}</ul></div></div></section>
 <section class="panel"><h2>Advanced Sidecars Tail</h2><input id="sidecar-filter" type="search" placeholder="Filter sidecar paths"><ul id="sidecar-list">{sidecar_items}</ul></section>

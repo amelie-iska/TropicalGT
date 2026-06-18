@@ -1102,3 +1102,12 @@ CUDA_VISIBLE_DEVICES="" /home/iska/miniconda3/bin/conda run -n tokengt python -m
 - [x] Markdown and HTML reports now expose a `Tropical Support Evidence` section and a probability-source chart while preserving the distinction between model margin-threshold audits and certified normal-fan wall-crossing counts.
 - [x] Missing, unparsable, stale, or unsafe tropical support sidecars remain unavailable and cannot justify a restart, artifact promotion, or hyperparameter change.
 - [x] Verification passed: py-compile; focused Herschel/bundle tests (`11 passed`); broader Herschel/bundle/review-loop/provenance tests (`36 passed`); metric provenance audit (`348 covered, 0 uncovered`); metric provenance tests included in the broader slice.
+
+### Current Objective Update - Herschel GraphCG Direction Evidence Pass
+
+- [x] Added `graphcg_direction_cosines_payload.json` to the Herschel-required audit sidecar inventory when it exists in the latest recorded `got_audit` directory.
+- [x] Added `tropicalgt.herschel_graphcg_direction_evidence.v1` to the Herschel 5K summary, sourced only from recorded GraphCG direction-cosine payload sidecars.
+- [x] Availability now requires `tropicalgt.graphcg_direction_evidence.v1`, `tropicalgt.graphcg_direction_readability.v1`, all model-derived direction rows, exact direction-id preservation, all-direction panels without heatmap sampling, a projection-basis certificate, and no-proxy/no-fallback flags.
+- [x] Markdown and HTML reports now expose `GraphCG Direction Evidence` plus a projection-basis source chart for post-5K review.
+- [x] Missing, unparsable, unsafe, sampled, or certificate-lacking GraphCG payloads remain unavailable and cannot justify restart, promotion, semantic-identifiability, or toric-fan claims.
+- [x] Verification passed: py-compile; focused Herschel/bundle tests (`11 passed`); broader Herschel/bundle/review-loop/provenance tests (`36 passed`); metric provenance audit (`354 covered, 0 uncovered`).

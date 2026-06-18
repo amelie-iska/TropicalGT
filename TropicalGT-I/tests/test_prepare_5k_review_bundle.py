@@ -265,6 +265,58 @@ def test_prepare_review_bundle_defaults_to_periodic_validation_artifacts(tmp_pat
         ),
         encoding="utf-8",
     )
+    (periodic_dir / "got_audit" / "graphcg_direction_cosines_payload.json").write_text(
+        json.dumps(
+            {
+                "available": True,
+                "matrix_shape": [2, 3],
+                "full_rank_direction_count": 3,
+                "active_rank_nonzero_mean_abs": 3,
+                "panel_count": 5,
+                "mean_abs_min": 0.2,
+                "mean_abs_max": 0.8,
+                "mean_abs_p90": 0.7,
+                "graphcg_direction_evidence_contract": {
+                    "schema_version": "tropicalgt.graphcg_direction_evidence.v1",
+                    "source": "candidate.graphcg_projection.all_direction_cosines",
+                    "no_proxy_or_fallback": True,
+                    "all_model_directions_have_rows": True,
+                    "direction_count": 3,
+                    "direction_row_count": 3,
+                    "exact_direction_ids_preserved": True,
+                    "all_directions_rendered_in_heatmap": True,
+                    "all_directions_rendered_in_activity_spectrum": True,
+                    "all_directions_rendered_in_signed_bias_panel": True,
+                    "top_active_direction_panel_count": 2,
+                    "safe_to_render_full_rank_direction_evidence": True,
+                },
+                "graphcg_readability_contract": {
+                    "schema_version": "tropicalgt.graphcg_direction_readability.v1",
+                    "source": "candidate.graphcg_projection",
+                    "no_proxy_or_fallback": True,
+                    "all_model_directions_rendered": True,
+                    "directions_sampled_for_heatmap": False,
+                    "panels_are_separate": True,
+                    "exact_direction_ids_preserved_in_hover_and_payload": True,
+                },
+                "projection_basis_certificate": {
+                    "source": "candidate.graphcg_projection",
+                    "available": True,
+                    "projection_basis": "effective_full_rank_qr",
+                    "basis_source_counts": {"effective_full_rank_qr": 2},
+                    "candidate_count": 2,
+                    "direction_count": 3,
+                    "all_candidates_have_all_direction_cosines": True,
+                },
+                "direction_rows": [
+                    {"direction_id": 0, "no_proxy_or_fallback": True},
+                    {"direction_id": 1, "no_proxy_or_fallback": True},
+                    {"direction_id": 2, "no_proxy_or_fallback": True},
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
     cfg_path = tmp_path / "config.json"
     cfg_path.write_text(
         json.dumps(
@@ -311,6 +363,7 @@ def test_prepare_review_bundle_defaults_to_periodic_validation_artifacts(tmp_pat
     assert any(path.endswith("periodic/step_00005000/got_audit/analogical_simplicial_maps.json") for path in sidecars)
     assert any(path.endswith("periodic/step_00005000/got_audit/inference_scaling_tree.json") for path in sidecars)
     assert any(path.endswith("periodic/step_00005000/got_audit/tropical_support_payload.json") for path in sidecars)
+    assert any(path.endswith("periodic/step_00005000/got_audit/graphcg_direction_cosines_payload.json") for path in sidecars)
     assert bundle["artifact_inventory"]["herschel_required_sidecars_present"]
     persisted_contract = json.loads((module.ROOT / bundle["artifacts"]["contract_json"]).read_text(encoding="utf-8"))
     assert any(
@@ -319,6 +372,10 @@ def test_prepare_review_bundle_defaults_to_periodic_validation_artifacts(tmp_pat
     )
     assert any(
         path.endswith("periodic/step_00005000/got_audit/tropical_support_payload.json")
+        for path in persisted_contract["artifact_inventory"]["advanced_sidecars_tail"]
+    )
+    assert any(
+        path.endswith("periodic/step_00005000/got_audit/graphcg_direction_cosines_payload.json")
         for path in persisted_contract["artifact_inventory"]["advanced_sidecars_tail"]
     )
     gflownet_branch = bundle["herschel_report_summary"]["artifact_evidence"]["gflownet_branch_selection_evidence"]
@@ -331,6 +388,12 @@ def test_prepare_review_bundle_defaults_to_periodic_validation_artifacts(tmp_pat
     assert tropical_support["total_token_count"] == 6
     assert tropical_support["total_valid_support_assignment_count"] == 6
     assert tropical_support["low_strict_wall_interpretation_status_counts"] == {"low_strict_expected_near_wall_ambiguity": 1}
+    graphcg_direction = bundle["herschel_report_summary"]["artifact_evidence"]["graphcg_direction_evidence"]
+    assert graphcg_direction["available"] is True
+    assert graphcg_direction["basis_source_counts"] == {"effective_full_rank_qr": 2}
+    assert graphcg_direction["total_direction_count"] == 3
+    assert graphcg_direction["total_candidate_count"] == 2
+    assert graphcg_direction["sources"][0]["all_model_directions_have_rows"] is True
     analogical_query = bundle["herschel_report_summary"]["artifact_evidence"]["analogical_query_context_evidence"]
     assert analogical_query["available"] is True
     assert analogical_query["sources"][0]["selected_query_complex_source"] == "trajectory_probability_filtered_simplicial_object"

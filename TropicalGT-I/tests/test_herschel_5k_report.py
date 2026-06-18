@@ -159,6 +159,60 @@ def test_write_herschel_report_preserves_blockers_and_sidecar_groups(tmp_path: P
         ),
         encoding="utf-8",
     )
+    graphcg_direction_path = tmp_path / "graphcg_direction_cosines_payload.json"
+    graphcg_direction_path.write_text(
+        json.dumps(
+            {
+                "available": True,
+                "matrix_shape": [3, 4],
+                "full_rank_direction_count": 4,
+                "active_rank_nonzero_mean_abs": 4,
+                "panel_count": 5,
+                "mean_abs_min": 0.1,
+                "mean_abs_max": 0.9,
+                "mean_abs_p90": 0.8,
+                "graphcg_direction_evidence_contract": {
+                    "schema_version": "tropicalgt.graphcg_direction_evidence.v1",
+                    "source": "candidate.graphcg_projection.all_direction_cosines",
+                    "no_proxy_or_fallback": True,
+                    "all_model_directions_have_rows": True,
+                    "direction_count": 4,
+                    "direction_row_count": 4,
+                    "exact_direction_ids_preserved": True,
+                    "all_directions_rendered_in_heatmap": True,
+                    "all_directions_rendered_in_activity_spectrum": True,
+                    "all_directions_rendered_in_signed_bias_panel": True,
+                    "top_active_direction_panel_count": 2,
+                    "safe_to_render_full_rank_direction_evidence": True,
+                },
+                "graphcg_readability_contract": {
+                    "schema_version": "tropicalgt.graphcg_direction_readability.v1",
+                    "source": "candidate.graphcg_projection",
+                    "no_proxy_or_fallback": True,
+                    "all_model_directions_rendered": True,
+                    "directions_sampled_for_heatmap": False,
+                    "panels_are_separate": True,
+                    "exact_direction_ids_preserved_in_hover_and_payload": True,
+                },
+                "projection_basis_certificate": {
+                    "source": "candidate.graphcg_projection",
+                    "available": True,
+                    "projection_basis": "effective_full_rank_qr",
+                    "basis_source_counts": {"effective_full_rank_qr": 3},
+                    "candidate_count": 3,
+                    "direction_count": 4,
+                    "all_candidates_have_all_direction_cosines": True,
+                },
+                "direction_rows": [
+                    {"direction_id": 0, "no_proxy_or_fallback": True},
+                    {"direction_id": 1, "no_proxy_or_fallback": True},
+                    {"direction_id": 2, "no_proxy_or_fallback": True},
+                    {"direction_id": 3, "no_proxy_or_fallback": True},
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
     validator_json = tmp_path / "interactive_validator.json"
     validator_json.write_text(
         json.dumps(
@@ -240,7 +294,7 @@ def test_write_herschel_report_preserves_blockers_and_sidecar_groups(tmp_path: P
                 str(analogical_maps_path),
                 str(inference_scaling_tree_path),
                 str(tropical_support_path),
-                "got_audit/graphcg_report.json",
+                str(graphcg_direction_path),
                 "got_audit/nll_density_grid.json",
                 "got_audit/chart_bundle_metrics.json",
                 "got_audit/chart_bundle_transport_sidecar.json",
@@ -326,6 +380,18 @@ def test_write_herschel_report_preserves_blockers_and_sidecar_groups(tmp_path: P
     assert tropical_support["sources"][0]["near_wall_hit_rate"] == 0.4
     assert tropical_support["sources"][0]["normal_fan_wall_crossing_certified"] is False
     assert tropical_support["sources"][0]["no_proxy_or_fallback"] is True
+    graphcg_direction = summary["artifact_evidence"]["graphcg_direction_evidence"]
+    assert graphcg_direction["schema_version"] == "tropicalgt.herschel_graphcg_direction_evidence.v1"
+    assert graphcg_direction["available"] is True
+    assert graphcg_direction["source_count"] == 1
+    assert graphcg_direction["available_source_count"] == 1
+    assert graphcg_direction["total_direction_count"] == 4
+    assert graphcg_direction["total_candidate_count"] == 3
+    assert graphcg_direction["basis_source_counts"] == {"effective_full_rank_qr": 3}
+    assert graphcg_direction["sources"][0]["projection_basis"] == "effective_full_rank_qr"
+    assert graphcg_direction["sources"][0]["active_rank_nonzero_mean_abs"] == 4
+    assert graphcg_direction["sources"][0]["all_direction_panels_available"] is True
+    assert graphcg_direction["sources"][0]["no_proxy_or_fallback"] is True
     analogical_query = summary["artifact_evidence"]["analogical_query_context_evidence"]
     assert analogical_query["schema_version"] == "tropicalgt.herschel_analogical_query_context_evidence.v1"
     assert analogical_query["available"] is True
@@ -353,6 +419,8 @@ def test_write_herschel_report_preserves_blockers_and_sidecar_groups(tmp_path: P
     assert "## Tropical Support Evidence" in markdown
     assert "model_tropical_support_probabilities" in markdown
     assert "strict_wall_margin_events_observed" in markdown
+    assert "## GraphCG Direction Evidence" in markdown
+    assert "effective_full_rank_qr" in markdown
     assert "## Analogical Query Context Evidence" in markdown
     assert "trajectory_probability_filtered_simplicial_object" in markdown
     assert "probability_filtered_simplicial_object" in markdown
@@ -370,6 +438,9 @@ def test_write_herschel_report_preserves_blockers_and_sidecar_groups(tmp_path: P
     assert "Tropical Support Evidence" in html
     assert "data-chart='tropical-support-probability-sources'" in html
     assert "strict_wall_margin_events_observed" in html
+    assert "GraphCG Direction Evidence" in html
+    assert "data-chart='graphcg-projection-basis-sources'" in html
+    assert "effective_full_rank_qr" in html
     assert "Analogical Query Context Evidence" in html
     assert "valid_query_probability_trajectory_complex" in html
     assert "row 0 missing json analogical_simplex_tree_analogy.json" in html
