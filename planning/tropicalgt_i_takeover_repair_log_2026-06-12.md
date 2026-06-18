@@ -273,3 +273,10 @@ CUDA_VISIBLE_DEVICES="" PYTHONPATH=TropicalGT-I/src /home/iska/miniconda3/envs/t
 - Verified NLL/fitness visualization language and density-cloud contracts: sparse observed anchors are not mislabeled as dense landscapes, Gaussian support samples are interpolation-only and hidden as model states, and actual model anchors/trajectory edges remain separate.
 - Verified simplex-tree visualizations use actual face-to-coface cover edges from GUDHI SimplexTree poset contracts rather than disconnected vertical stripe columns.
 - Marked these already-implemented items complete in the plan. Browser-regeneration and live `sample_001`/`sample_002` inspection remain open because they require current artifact generation/serving and must not disturb GPU work.
+
+
+## 2026-06-18 Two-Parameter Module/Staircase Checklist Reconciliation
+
+- Verified the current two-parameter persistence implementation against the remaining checklist: `write_two_parameter_bifiltration_visualization` renders a Miller-Sturmfels-style primary staircase over `F2[x_level,x_radius]`, with x_radius horizontal, x_level vertical, upward-closed generated regions, quotient-basis lattice points, minimal antichain generators, adjacent structure maps, rank-invariant samples, and scoped adjacent-LCM syzygies.
+- Verified certified algebra tables are separated from chain diagnostics: Macaulay2/CAS Betti, differential, syzygy, Fitting/minor, and Buchsbaum-Eisenbud sections render only certified/unavailable CAS evidence; chain-presentation diagnostics are not substituted for a free resolution.
+- Marked the corresponding bidegree grid, fiber-rank, generator, adjacent-LCM, staircase rendering, and conservative-label checklist items complete. Live browser regeneration remains separate from source-level correctness.
